@@ -2,7 +2,7 @@
  * Client API per il backend tarature
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tarature-backend-production.up.railway.app';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tarature-api-production.up.railway.app';
 
 async function fetchAPI(path: string, options: RequestInit = {}) {
   const url = `${API_URL}${path}`;
