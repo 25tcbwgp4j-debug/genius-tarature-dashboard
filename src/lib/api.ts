@@ -100,11 +100,52 @@ export async function getSessionReports(sessionId: string) {
 }
 
 // === SCADENZARIO ===
-export async function getExpiringCalibrations(days = 30) {
+export async function getExpiringCalibrations(days = 90) {
   return fetchAPI(`/api/schedule/expiring?days=${days}`);
+}
+
+export async function getScheduleStats() {
+  return fetchAPI('/api/schedule/stats');
+}
+
+export async function sendScheduleNotification(scheduleId: string) {
+  return fetchAPI(`/api/schedule/${scheduleId}/notify`, { method: 'POST' });
+}
+
+export async function sendCustomerNotification(customerName: string) {
+  return fetchAPI(`/api/schedule/notify-customer/${encodeURIComponent(customerName)}`, { method: 'POST' });
+}
+
+// === CLIENTI (estesi) ===
+export async function listCustomers(page = 1, perPage = 50, filter?: string) {
+  const qs = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+  if (filter) qs.set('filter', filter);
+  return fetchAPI(`/api/customers?${qs.toString()}`);
+}
+
+export async function updateCustomer(id: string, data: Record<string, unknown>) {
+  return fetchAPI(`/api/customers/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getCustomerDuplicates() {
+  return fetchAPI('/api/customers/duplicates');
+}
+
+export async function getCustomerStats() {
+  return fetchAPI('/api/customers/stats');
 }
 
 // === IMPOSTAZIONI ===
 export async function getSettings() {
   return fetchAPI('/api/settings');
+}
+
+export async function updateSettings(data: Record<string, unknown>) {
+  return fetchAPI('/api/settings', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 }
