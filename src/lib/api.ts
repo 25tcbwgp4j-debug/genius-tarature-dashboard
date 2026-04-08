@@ -49,7 +49,35 @@ export async function getSession(id: string) {
   return fetchAPI(`/api/sessions/${id}`);
 }
 
+// === SESSIONI (estese) ===
+export async function updateSession(id: string, data: Record<string, unknown>) {
+  return fetchAPI(`/api/sessions/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteSession(id: string) {
+  return fetchAPI(`/api/sessions/${id}`, { method: 'DELETE' });
+}
+
 // === STRUMENTI ===
+export async function updateInstrument(id: string, data: Record<string, unknown>) {
+  return fetchAPI(`/api/instruments/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteInstrument(id: string, sessionId?: string) {
+  const qs = sessionId ? `?session_id=${sessionId}` : '';
+  return fetchAPI(`/api/instruments/${id}${qs}`, { method: 'DELETE' });
+}
+
+export async function generateRdts(sessionId: string) {
+  return fetchAPI(`/api/sessions/${sessionId}/generate-rdts`, { method: 'POST' });
+}
+
 export async function addInstrument(data: {
   session_id: string;
   customer_id: string;
