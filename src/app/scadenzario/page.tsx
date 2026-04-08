@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   getExpiringCalibrations,
   getScheduleStats,
@@ -18,6 +19,8 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle,
+  Search,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -43,16 +46,32 @@ interface GroupedCustomer {
   daysLeft: number;
 }
 
+const RANGE_OPTIONS = [
+  { key: "scadute", label: "Scadute", days: -99999 },
+  { key: "30gg", label: "30 giorni", days: 30 },
+  { key: "90gg", label: "90 giorni", days: 90 },
+  { key: "3mesi", label: "3 mesi", days: 90 },
+  { key: "6mesi", label: "6 mesi", days: 183 },
+  { key: "12mesi", label: "12 mesi", days: 365 },
+  { key: "custom", label: "Personalizzato", days: 0 },
+];
+
 export default function ScadenzarioPage() {
   const [entries, setEntries] = useState<ScheduleEntry[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"all" | "scadute" | "30gg" | "90gg">("all");
+  const [filter, setFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [maxDays, setMaxDays] = useState(365);
 
+  // Carica dati con range ampio (12 mesi) per avere tutto
   useEffect(() => {
+    setLoading(true);
     Promise.all([
-      getExpiringCalibrations(90),
+      getExpiringCalibrations(maxDays),
       getScheduleStats(),
     ])
       .then(([expData, statsData]) => {
@@ -61,7 +80,7 @@ export default function ScadenzarioPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [maxDays]);
 
   const getDaysLeft = (dateStr: string) => {
     const diff = new Date(dateStr).getTime() - Date.now();
@@ -69,10 +88,12 @@ export default function ScadenzarioPage() {
   };
 
   // Raggruppa per cliente
-  const grouped: GroupedCustomer[] = (() => {
+  const grouped: GroupedCustomer[] = useMemo(() => {
     const map = new Map<string, GroupedCustomer>();
     for (const e of entries) {
-      const name = (e.customer_name || "Sconosciuto").split(" P.IVA")[0].split(" P-IVA")[0].replace(/\u00a0/g, " ").trim();
+      const name = (e.customer_name || "Sconosciuto")
+        .split(" P.IVA")[0].split(" P-IVA")[0]
+        .replace(/\u00a0/g, " ").trim();
       if (!map.has(name)) {
         map.set(name, {
           name,
@@ -91,15 +112,48 @@ export default function ScadenzarioPage() {
       }
     }
     return Array.from(map.values()).sort((a, b) => a.daysLeft - b.daysLeft);
-  })();
+  }, [entries]);
 
-  // Filtra
-  const filtered = grouped.filter((g) => {
-    if (filter === "scadute") return g.daysLeft < 0;
-    if (filter === "30gg") return g.daysLeft >= 0 && g.daysLeft <= 30;
-    if (filter === "90gg") return g.daysLeft > 30 && g.daysLeft <= 90;
-    return true;
-  });
+  // Filtra per stato temporale
+  const filteredByTime = useMemo(() => {
+    return grouped.filter((g) => {
+      if (filter === "all") return true;
+      if (filter === "scadute") return g.daysLeft < 0;
+      if (filter === "30gg") return g.daysLeft >= 0 && g.daysLeft <= 30;
+      if (filter === "90gg") return g.daysLeft >= 0 && g.daysLeft <= 90;
+      if (filter === "3mesi") return g.daysLeft >= 0 && g.daysLeft <= 90;
+      if (filter === "6mesi") return g.daysLeft >= 0 && g.daysLeft <= 183;
+      if (filter === "12mesi") return g.daysLeft >= 0 && g.daysLeft <= 365;
+      if (filter === "custom") {
+        // Filtra per range date personalizzato
+        for (const inst of g.instruments) {
+          const expiry = inst.expiry_date;
+          if (customFrom && expiry < customFrom) continue;
+          if (customTo && expiry > customTo) continue;
+          return true;
+        }
+        return false;
+      }
+      return true;
+    });
+  }, [grouped, filter, customFrom, customTo]);
+
+  // Filtra per ricerca testuale (nome azienda, numero seriale, RDT)
+  const filtered = useMemo(() => {
+    if (!searchQuery.trim()) return filteredByTime;
+    const q = searchQuery.trim().toLowerCase();
+    return filteredByTime.filter((g) => {
+      // Cerca nel nome cliente
+      if (g.name.toLowerCase().includes(q)) return true;
+      // Cerca negli strumenti (tipo, RDT, seriale)
+      for (const inst of g.instruments) {
+        if ((inst.instrument_type || "").toLowerCase().includes(q)) return true;
+        if ((inst.rdt_number || "").toLowerCase().includes(q)) return true;
+        // Il seriale non e' nella tabella schedule ma cerchiamo comunque nel nome
+      }
+      return false;
+    });
+  }, [filteredByTime, searchQuery]);
 
   const handleNotifyCustomer = async (customerName: string) => {
     setSending(customerName);
@@ -108,7 +162,7 @@ export default function ScadenzarioPage() {
       toast.success(`Notifica inviata a ${customerName}`, {
         description: `WA: ${result.results?.whatsapp ? "OK" : "NO"} | Email: ${result.results?.email ? "OK" : "NO"} | ${result.results?.count} strumenti`,
       });
-    } catch (error) {
+    } catch {
       toast.error(`Errore invio notifica a ${customerName}`);
     }
     setSending(null);
@@ -121,11 +175,28 @@ export default function ScadenzarioPage() {
       toast.success("Notifica inviata", {
         description: `${entry.instrument_type} — WA: ${result.results?.whatsapp ? "OK" : "NO"} | Email: ${result.results?.email ? "OK" : "NO"}`,
       });
-    } catch (error) {
+    } catch {
       toast.error("Errore invio notifica");
     }
     setSending(null);
   };
+
+  const handleFilterChange = (f: string) => {
+    setFilter(f);
+    // Se seleziona range grandi, aumenta il maxDays per caricare piu dati
+    if (f === "6mesi" && maxDays < 183) setMaxDays(183);
+    if (f === "12mesi" && maxDays < 365) setMaxDays(365);
+  };
+
+  // Conteggi rapidi per i badge dei filtri
+  const counts = useMemo(() => {
+    const scadute = grouped.filter((g) => g.daysLeft < 0).length;
+    const e30 = grouped.filter((g) => g.daysLeft >= 0 && g.daysLeft <= 30).length;
+    const e90 = grouped.filter((g) => g.daysLeft >= 0 && g.daysLeft <= 90).length;
+    const e6m = grouped.filter((g) => g.daysLeft >= 0 && g.daysLeft <= 183).length;
+    const e12m = grouped.filter((g) => g.daysLeft >= 0 && g.daysLeft <= 365).length;
+    return { scadute, e30, e90, e6m, e12m, all: grouped.length };
+  }, [grouped]);
 
   return (
     <div className="space-y-6">
@@ -181,31 +252,118 @@ export default function ScadenzarioPage() {
         </div>
       )}
 
-      {/* Filtri */}
-      <div className="flex gap-2">
-        {[
-          { key: "all", label: "Tutti" },
-          { key: "scadute", label: "Scadute" },
-          { key: "30gg", label: "Entro 30gg" },
-          { key: "90gg", label: "Entro 90gg" },
-        ].map((f) => (
-          <Button
-            key={f.key}
-            variant={filter === f.key ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter(f.key as any)}
-          >
-            {f.label}
+      {/* Barra ricerca */}
+      <div className="flex gap-2 max-w-xl">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          <Input
+            placeholder="Cerca per nome azienda, RDT, tipo strumento..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {searchQuery && (
+          <Button variant="ghost" size="sm" onClick={() => setSearchQuery("")}>
+            <X className="w-4 h-4" />
           </Button>
-        ))}
+        )}
       </div>
+
+      {/* Filtri temporali */}
+      <div className="flex gap-2 flex-wrap items-center">
+        <Button
+          variant={filter === "all" ? "default" : "outline"}
+          size="sm"
+          onClick={() => handleFilterChange("all")}
+        >
+          Tutti ({counts.all})
+        </Button>
+        <Button
+          variant={filter === "scadute" ? "default" : "outline"}
+          size="sm"
+          className={filter === "scadute" ? "" : "border-red-300 text-red-600 hover:bg-red-50"}
+          onClick={() => handleFilterChange("scadute")}
+        >
+          Scadute ({counts.scadute})
+        </Button>
+        <Button
+          variant={filter === "30gg" ? "default" : "outline"}
+          size="sm"
+          onClick={() => handleFilterChange("30gg")}
+        >
+          30 giorni ({counts.e30})
+        </Button>
+        <Button
+          variant={filter === "90gg" ? "default" : "outline"}
+          size="sm"
+          onClick={() => handleFilterChange("90gg")}
+        >
+          90 giorni ({counts.e90})
+        </Button>
+        <Button
+          variant={filter === "6mesi" ? "default" : "outline"}
+          size="sm"
+          onClick={() => handleFilterChange("6mesi")}
+        >
+          6 mesi ({counts.e6m})
+        </Button>
+        <Button
+          variant={filter === "12mesi" ? "default" : "outline"}
+          size="sm"
+          onClick={() => handleFilterChange("12mesi")}
+        >
+          12 mesi ({counts.e12m})
+        </Button>
+        <Button
+          variant={filter === "custom" ? "default" : "outline"}
+          size="sm"
+          onClick={() => handleFilterChange("custom")}
+        >
+          Personalizzato
+        </Button>
+      </div>
+
+      {/* Range personalizzato */}
+      {filter === "custom" && (
+        <Card className="p-4 bg-blue-50 border-blue-200">
+          <div className="flex gap-4 items-end">
+            <div>
+              <label className="text-xs text-gray-600 block mb-1">Da (scadenza)</label>
+              <Input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="h-8 w-44"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 block mb-1">A (scadenza)</label>
+              <Input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="h-8 w-44"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setCustomFrom(""); setCustomTo(""); }}
+            >
+              Reset
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Lista clienti */}
       <Card>
         <div className="p-4 border-b flex justify-between items-center">
           <h3 className="font-semibold flex items-center gap-2">
             <CalendarClock className="w-5 h-5" />
-            {filtered.length} clienti con tarature {filter === "scadute" ? "scadute" : filter === "all" ? "scadute/in scadenza" : `in scadenza (${filter})`}
+            {filtered.length} clienti
+            {searchQuery && ` per "${searchQuery}"`}
           </h3>
         </div>
         <div className="divide-y">
@@ -215,7 +373,7 @@ export default function ScadenzarioPage() {
             </div>
           ) : filtered.length === 0 ? (
             <p className="p-8 text-center text-gray-500">
-              Nessuna taratura trovata per questo filtro
+              Nessuna taratura trovata per questi filtri
             </p>
           ) : (
             filtered.map((customer) => (
@@ -226,6 +384,7 @@ export default function ScadenzarioPage() {
                     <p className="text-sm text-gray-500">
                       {customer.email && <span className="mr-3">{customer.email}</span>}
                       {customer.phone && <span>{customer.phone}</span>}
+                      {!customer.email && !customer.phone && <span className="text-red-400">Nessun contatto</span>}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -235,7 +394,9 @@ export default function ScadenzarioPage() {
                           ? "bg-red-100 text-red-800"
                           : customer.daysLeft <= 30
                           ? "bg-orange-100 text-orange-800"
-                          : "bg-yellow-100 text-yellow-800"
+                          : customer.daysLeft <= 90
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-green-100 text-green-800"
                       }
                     >
                       {customer.daysLeft < 0
@@ -259,38 +420,35 @@ export default function ScadenzarioPage() {
                 </div>
                 {/* Lista strumenti */}
                 <div className="ml-4 space-y-1">
-                  {customer.instruments.map((inst) => {
-                    const days = getDaysLeft(inst.expiry_date);
-                    return (
-                      <div
-                        key={inst.id}
-                        className="flex justify-between items-center text-sm py-1 border-b border-gray-100 last:border-0"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-600">{inst.instrument_type}</span>
-                          <span className="text-gray-400">RDT {inst.rdt_number}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-500 text-xs">
-                            Scad. {new Date(inst.expiry_date).toLocaleDateString("it-IT")}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-xs"
-                            onClick={() => handleNotifySingle(inst)}
-                            disabled={sending === inst.id}
-                          >
-                            {sending === inst.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Bell className="w-3 h-3" />
-                            )}
-                          </Button>
-                        </div>
+                  {customer.instruments.map((inst) => (
+                    <div
+                      key={inst.id}
+                      className="flex justify-between items-center text-sm py-1 border-b border-gray-100 last:border-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-600">{inst.instrument_type}</span>
+                        <span className="text-gray-400">RDT {inst.rdt_number}</span>
                       </div>
-                    );
-                  })}
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500 text-xs">
+                          Scad. {new Date(inst.expiry_date).toLocaleDateString("it-IT")}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => handleNotifySingle(inst)}
+                          disabled={sending === inst.id}
+                        >
+                          {sending === inst.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Bell className="w-3 h-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))
