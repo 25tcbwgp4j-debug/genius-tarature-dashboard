@@ -29,6 +29,10 @@ export async function getCustomer(id: string) {
   return fetchAPI(`/api/customers/${id}`);
 }
 
+export async function deleteCustomer(id: string) {
+  return fetchAPI(`/api/customers/${id}`, { method: 'DELETE' });
+}
+
 // === SESSIONI ===
 export async function createSession(customerId: string, operator?: string) {
   return fetchAPI('/api/sessions', {

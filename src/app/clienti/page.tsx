@@ -9,6 +9,7 @@ import {
   searchCustomers,
   listCustomers,
   updateCustomer,
+  deleteCustomer,
   getCustomerStats,
 } from "@/lib/api";
 import {
@@ -25,6 +26,7 @@ import {
   Users,
   AlertCircle,
   Filter,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -63,6 +65,16 @@ export default function ClientiPage() {
     getCustomerStats().then(setStats).catch(() => {});
     loadList(1, "all");
   }, []);
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Eliminare il cliente "${name}"?\nQuesta azione non puo essere annullata.`)) return;
+    try {
+      await deleteCustomer(id);
+      setCustomers((prev) => prev.filter((c) => c.id !== id));
+    } catch (e: any) {
+      alert(e.message || "Errore eliminazione cliente");
+    }
+  };
 
   const handleSearch = async () => {
     if (query.length < 2) return;
@@ -366,9 +378,27 @@ export default function ClientiPage() {
                         )}
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => startEdit(c)}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => startEdit(c)}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Eliminare il cliente "${c.company_name}"?\nQuesta azione non puo essere annullata.`)) return;
+                          try {
+                            await deleteCustomer(c.id);
+                            setCustomers((prev) => prev.filter((x) => x.id !== c.id));
+                            toast.success("Cliente eliminato");
+                          } catch (e: any) {
+                            toast.error(e.message || "Errore eliminazione cliente");
+                          }
+                        }}
+                        className="text-red-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50 transition-colors"
+                        title="Elimina cliente"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
