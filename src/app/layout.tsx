@@ -10,8 +10,8 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Genius Tarature - Dashboard",
-  description: "Sistema gestione tarature strumenti - Genius S.R.L.",
+  title: "AvaTech Tarature - Dashboard",
+  description: "Sistema gestione tarature strumenti - AvaTech Tarature Certificazioni",
 };
 
 export default function RootLayout({

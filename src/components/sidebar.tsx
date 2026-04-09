@@ -10,6 +10,7 @@ import {
   CalendarClock,
   BarChart3,
   Settings,
+  QrCode,
 } from "lucide-react";
 
 const navItems = [
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/rapporti", label: "Rapporti", icon: FileText },
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/statistiche", label: "Statistiche", icon: BarChart3 },
+  { href: "/qrcode", label: "QR Code", icon: QrCode },
   { href: "/impostazioni", label: "Impostazioni", icon: Settings },
 ];
 
@@ -28,8 +30,8 @@ export function Sidebar() {
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
       <div className="p-6 border-b border-gray-200">
-        <h1 className="text-xl font-bold text-gray-900">Genius Tarature</h1>
-        <p className="text-sm text-gray-500 mt-1">Sistema gestione tarature</p>
+        <h1 className="text-xl font-bold text-gray-900">AvaTech Tarature</h1>
+        <p className="text-sm text-gray-500 mt-1">Tarature Certificazioni</p>
       </div>
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map((item) => {
@@ -54,8 +56,8 @@ export function Sidebar() {
         })}
       </nav>
       <div className="p-4 border-t border-gray-200">
-        <p className="text-xs text-gray-400">Genius S.R.L.</p>
-        <p className="text-xs text-gray-400">Viale Somalia 244/248, Roma</p>
+        <p className="text-xs text-gray-400">AvaTech Tarature Certificazioni</p>
+        <p className="text-xs text-gray-400">Viale Somalia, 246 — Roma</p>
       </div>
     </aside>
   );

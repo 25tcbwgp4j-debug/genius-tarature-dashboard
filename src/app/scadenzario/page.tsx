@@ -10,6 +10,7 @@ import {
   getScheduleStats,
   sendScheduleNotification,
   sendCustomerNotification,
+  markScheduleRenewed,
 } from "@/lib/api";
 import {
   CalendarClock,
@@ -21,6 +22,7 @@ import {
   CheckCircle,
   Search,
   X,
+  CheckCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -164,6 +166,20 @@ export default function ScadenzarioPage() {
       });
     } catch {
       toast.error(`Errore invio notifica a ${customerName}`);
+    }
+    setSending(null);
+  };
+
+  const handleMarkRenewed = async (entry: ScheduleEntry) => {
+    if (!confirm(`Marcare come rinnovato RDT ${entry.rdt_number} (${entry.instrument_type})?\nNon apparira piu nello scadenzario.`)) return;
+    setSending(entry.id + "_renew");
+    try {
+      await markScheduleRenewed(entry.id);
+      // Rimuovi dalla lista locale
+      setEntries((prev) => prev.filter((e) => e.id !== entry.id));
+      toast.success(`RDT ${entry.rdt_number} marcato come rinnovato`);
+    } catch {
+      toast.error("Errore nel marcare come rinnovato");
     }
     setSending(null);
   };
@@ -436,9 +452,24 @@ export default function ScadenzarioPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="h-6 px-2 text-xs text-green-600 hover:text-green-800 hover:bg-green-50"
+                          onClick={() => handleMarkRenewed(inst)}
+                          disabled={sending === inst.id + "_renew"}
+                          title="Marca come rinnovato (rimuovi dallo scadenzario)"
+                        >
+                          {sending === inst.id + "_renew" ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <CheckCheck className="w-3 h-3" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="h-6 px-2 text-xs"
                           onClick={() => handleNotifySingle(inst)}
                           disabled={sending === inst.id}
+                          title="Invia notifica per questo strumento"
                         >
                           {sending === inst.id ? (
                             <Loader2 className="w-3 h-3 animate-spin" />

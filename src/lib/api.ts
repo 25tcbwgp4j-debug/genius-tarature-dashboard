@@ -144,6 +144,18 @@ export async function sendCustomerNotification(customerName: string) {
   return fetchAPI(`/api/schedule/notify-customer/${encodeURIComponent(customerName)}`, { method: 'POST' });
 }
 
+export async function markScheduleRenewed(scheduleId: string) {
+  return fetchAPI(`/api/schedule/${scheduleId}/mark-renewed`, { method: 'POST' });
+}
+
+export async function unmarkScheduleRenewed(scheduleId: string) {
+  return fetchAPI(`/api/schedule/${scheduleId}/unmark-renewed`, { method: 'POST' });
+}
+
+export async function getWhatsAppQR() {
+  return fetchAPI('/api/whatsapp-qr');
+}
+
 // === CLIENTI (estesi) ===
 export async function listCustomers(page = 1, perPage = 50, filter?: string) {
   const qs = new URLSearchParams({ page: String(page), per_page: String(perPage) });
