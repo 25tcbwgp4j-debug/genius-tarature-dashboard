@@ -40,6 +40,9 @@ interface ScheduleEntry {
   model: string;
   renewed: boolean;
   source: string;
+  last_notified_at: string | null;
+  notification_count: number;
+  last_notified_via: string | null;
 }
 
 interface GroupedCustomer {
@@ -428,6 +431,11 @@ export default function ScadenzarioPage() {
                         ? `SCADUTA da ${Math.abs(customer.daysLeft)}gg`
                         : `${customer.daysLeft}gg`}
                     </Badge>
+                    {customer.instruments.some(i => i.last_notified_at) && (
+                      <Badge variant="outline" className="text-blue-500 border-blue-300 text-xs">
+                        Notificato
+                      </Badge>
+                    )}
                     <Button
                       size="sm"
                       onClick={() => handleNotifyCustomer(customer.name)}
@@ -461,6 +469,12 @@ export default function ScadenzarioPage() {
                         <span className="text-gray-500 text-xs">
                           Scad. {new Date(inst.expiry_date).toLocaleDateString("it-IT")}
                         </span>
+                        {inst.last_notified_at && (
+                          <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded" title={`Notificato ${inst.notification_count}x via ${inst.last_notified_via}`}>
+                            Notificato {new Date(inst.last_notified_at).toLocaleDateString("it-IT", {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
+                            {inst.notification_count > 1 && ` (${inst.notification_count}x)`}
+                          </span>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
