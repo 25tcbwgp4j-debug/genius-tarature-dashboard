@@ -114,6 +114,9 @@ export default function ScadenzarioPage() {
       }
       const g = map.get(name)!;
       g.instruments.push(e);
+      // Aggiorna email/telefono se questo record li ha e il gruppo no
+      if (!g.email && e.customer_email) g.email = e.customer_email;
+      if (!g.phone && e.customer_phone) g.phone = e.customer_phone;
       if (e.expiry_date < g.minExpiry) {
         g.minExpiry = e.expiry_date;
         g.daysLeft = getDaysLeft(e.expiry_date);
