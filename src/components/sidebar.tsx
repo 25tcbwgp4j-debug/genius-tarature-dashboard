@@ -5,13 +5,13 @@ import { usePathname } from "next/navigation";
 import {
   ClipboardList,
   Users,
+  UserPlus,
   Wrench,
   FileText,
   CalendarClock,
   BarChart3,
   Settings,
   QrCode,
-  UserPlus,
 } from "lucide-react";
 
 const navItems = [

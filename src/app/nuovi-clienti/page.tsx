@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Mail, Phone, Globe, Send, UserCheck, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Search, Mail, Phone, Globe, Send, UserCheck, RefreshCw,
+  ChevronLeft, ChevronRight, Calendar, Users, ArrowRight, Loader2,
+} from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://tarature-api-production.up.railway.app";
 
@@ -29,7 +32,10 @@ interface Stats {
   per_provincia: Record<string, number>;
 }
 
+type Tab = "nuovi" | "email_inviate";
+
 export default function NuoviClientiPage() {
+  const [tab, setTab] = useState<Tab>("nuovi");
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,16 +49,20 @@ export default function NuoviClientiPage() {
   const [editData, setEditData] = useState<Partial<Prospect>>({});
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [moveResult, setMoveResult] = useState<string | null>(null);
 
   const fetchProspects = useCallback(async () => {
     setLoading(true);
     try {
-      let url = `${API_URL}/api/prospects?page=${page}&per_page=30&status=nuovo`;
+      const status = tab === "nuovi" ? "nuovo" : "contattato";
+      let url = `${API_URL}/api/prospects?page=${page}&per_page=30&status=${status}`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
       if (filterProv) url += `&provincia=${filterProv}`;
-      if (filterEmail === "yes") url += `&has_email=true`;
-      if (filterEmail === "no") url += `&has_email=false`;
-
+      if (tab === "nuovi") {
+        if (filterEmail === "yes") url += `&has_email=true`;
+        if (filterEmail === "no") url += `&has_email=false`;
+      }
       const res = await fetch(url);
       const data = await res.json();
       setProspects(data.prospects || []);
@@ -62,7 +72,7 @@ export default function NuoviClientiPage() {
       console.error(e);
     }
     setLoading(false);
-  }, [page, search, filterProv, filterEmail]);
+  }, [page, search, filterProv, filterEmail, tab]);
 
   const fetchStats = async () => {
     try {
@@ -77,6 +87,13 @@ export default function NuoviClientiPage() {
     fetchProspects();
     fetchStats();
   }, [fetchProspects]);
+
+  // Reset pagina quando cambia tab
+  useEffect(() => {
+    setPage(1);
+    setSendResult(null);
+    setMoveResult(null);
+  }, [tab]);
 
   const saveEdit = async (id: string) => {
     try {
@@ -102,10 +119,8 @@ export default function NuoviClientiPage() {
         fetchProspects();
         fetchStats();
       }
-      return data;
     } catch (e) {
       console.error(e);
-      return null;
     }
   };
 
@@ -130,38 +145,86 @@ export default function NuoviClientiPage() {
 
   const moveToClients = async (id: string) => {
     try {
-      await fetch(`${API_URL}/api/prospects/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "cliente" }),
-      });
+      const res = await fetch(`${API_URL}/api/prospects/${id}/move-to-customers`, { method: "POST" });
+      const data = await res.json();
+      if (data.error) {
+        alert(data.detail || data.error);
+      } else {
+        fetchProspects();
+        fetchStats();
+      }
+    } catch (e: any) {
+      alert(e.message || "Errore spostamento");
+    }
+  };
+
+  const moveBatchToClients = async () => {
+    if (!confirm("Trasferire TUTTI i prospect con email inviata a Clienti ordinari?")) return;
+    setMoving(true);
+    setMoveResult(null);
+    try {
+      const res = await fetch(`${API_URL}/api/prospects/move-batch-to-customers`, { method: "POST" });
+      const data = await res.json();
+      setMoveResult(`Spostati: ${data.moved}, Gia presenti: ${data.skipped}, Errori: ${data.errors}`);
       fetchProspects();
       fetchStats();
     } catch (e) {
-      console.error(e);
+      setMoveResult("Errore trasferimento");
+    }
+    setMoving(false);
+  };
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "-";
+    try {
+      return new Date(dateStr).toLocaleDateString("it-IT", {
+        day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      });
+    } catch {
+      return dateStr;
     }
   };
 
   return (
     <div className="p-6 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Nuovi Clienti da Contattare</h1>
           <p className="text-sm text-gray-500 mt-1">Prospect FGAS — aziende certificate nel Lazio</p>
         </div>
-        <button
-          onClick={sendBatchEmails}
-          disabled={sending}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
-        >
-          <Send className="w-4 h-4" />
-          {sending ? "Invio in corso..." : "Invia email a tutti i nuovi con email"}
-        </button>
+        {tab === "nuovi" && (
+          <button
+            onClick={sendBatchEmails}
+            disabled={sending}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+          >
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {sending ? "Invio in corso..." : "Invia email a tutti i nuovi con email"}
+          </button>
+        )}
+        {tab === "email_inviate" && (
+          <button
+            onClick={moveBatchToClients}
+            disabled={moving}
+            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
+          >
+            {moving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+            {moving ? "Trasferimento..." : "Trasferisci tutti a Clienti ordinari"}
+          </button>
+        )}
       </div>
 
+      {/* Risultati operazioni */}
       {sendResult && (
         <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
           {sendResult}
+        </div>
+      )}
+      {moveResult && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg">
+          {moveResult}
         </div>
       )}
 
@@ -191,6 +254,28 @@ export default function NuoviClientiPage() {
         </div>
       )}
 
+      {/* TAB: Nuovi / Email Inviate */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+        <button
+          onClick={() => setTab("nuovi")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            tab === "nuovi" ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Nuovi ({stats?.per_stato?.nuovo || 0})
+        </button>
+        <button
+          onClick={() => setTab("email_inviate")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            tab === "email_inviate" ? "bg-white text-purple-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Mail className="w-4 h-4" />
+          Email Inviate ({stats?.per_stato?.contattato || 0})
+        </button>
+      </div>
+
       {/* Filtri */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[250px]">
@@ -215,22 +300,24 @@ export default function NuoviClientiPage() {
           <option value="VT">Viterbo</option>
           <option value="RI">Rieti</option>
         </select>
-        <select
-          value={filterEmail}
-          onChange={(e) => { setFilterEmail(e.target.value); setPage(1); }}
-          className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
-        >
-          <option value="">Tutti</option>
-          <option value="yes">Con email</option>
-          <option value="no">Senza email</option>
-        </select>
+        {tab === "nuovi" && (
+          <select
+            value={filterEmail}
+            onChange={(e) => { setFilterEmail(e.target.value); setPage(1); }}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+          >
+            <option value="">Tutti</option>
+            <option value="yes">Con email</option>
+            <option value="no">Senza email</option>
+          </select>
+        )}
         <button onClick={() => { fetchProspects(); fetchStats(); }} className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50">
           <RefreshCw className="w-4 h-4" />
         </button>
         <span className="text-sm text-gray-500">{total} risultati</span>
       </div>
 
-      {/* Tabella prospect */}
+      {/* Tabella */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -240,15 +327,22 @@ export default function NuoviClientiPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Comune</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Telefono</th>
+                {tab === "email_inviate" && (
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Data Invio</th>
+                )}
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Stato</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Azioni</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Caricamento...</td></tr>
+                <tr><td colSpan={tab === "email_inviate" ? 7 : 6} className="px-4 py-8 text-center text-gray-400">
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                </td></tr>
               ) : prospects.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Nessun prospect trovato</td></tr>
+                <tr><td colSpan={tab === "email_inviate" ? 7 : 6} className="px-4 py-8 text-center text-gray-400">
+                  {tab === "nuovi" ? "Nessun prospect nuovo trovato" : "Nessun prospect contattato"}
+                </td></tr>
               ) : prospects.map((p) => (
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900 max-w-[250px] truncate">
@@ -265,7 +359,7 @@ export default function NuoviClientiPage() {
                         placeholder="email@azienda.it"
                       />
                     ) : p.email ? (
-                      <span className="flex items-center gap-1 text-blue-600">
+                      <span className="flex items-center gap-1 text-blue-600 text-xs">
                         <Mail className="w-3 h-3" /> {p.email}
                       </span>
                     ) : (
@@ -282,13 +376,21 @@ export default function NuoviClientiPage() {
                         placeholder="06 12345678"
                       />
                     ) : p.telefono ? (
-                      <span className="flex items-center gap-1 text-green-600">
+                      <span className="flex items-center gap-1 text-green-600 text-xs">
                         <Phone className="w-3 h-3" /> {p.telefono}
                       </span>
                     ) : (
                       <span className="text-gray-300 text-xs">-</span>
                     )}
                   </td>
+                  {tab === "email_inviate" && (
+                    <td className="px-4 py-3">
+                      <span className="flex items-center gap-1 text-xs text-gray-600">
+                        <Calendar className="w-3 h-3" />
+                        {formatDate(p.email_sent_at)}
+                      </span>
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     {p.email_sent ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
@@ -320,7 +422,8 @@ export default function NuoviClientiPage() {
                           >
                             Modifica
                           </button>
-                          {p.email && !p.email_sent && (
+                          {/* Tab Nuovi: pulsante invia email singola */}
+                          {tab === "nuovi" && p.email && !p.email_sent && (
                             <button
                               onClick={() => sendEmailToProspect(p.id)}
                               className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
@@ -329,13 +432,14 @@ export default function NuoviClientiPage() {
                               <Send className="w-3 h-3" />
                             </button>
                           )}
-                          {p.email_sent && (
+                          {/* Tab Email Inviate: pulsante sposta a clienti */}
+                          {tab === "email_inviate" && (
                             <button
                               onClick={() => moveToClients(p.id)}
-                              className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
-                              title="Sposta a Clienti"
+                              className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 flex items-center gap-1"
+                              title="Sposta a Clienti ordinari"
                             >
-                              <UserCheck className="w-3 h-3" />
+                              <UserCheck className="w-3 h-3" /> Clienti
                             </button>
                           )}
                           {p.sito_web && (
