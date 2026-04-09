@@ -156,6 +156,10 @@ export async function getWhatsAppQR() {
   return fetchAPI('/api/whatsapp-qr');
 }
 
+export async function getCustomerHistory(customerName: string) {
+  return fetchAPI(`/api/schedule/customer-history/${encodeURIComponent(customerName)}`);
+}
+
 // === CLIENTI (estesi) ===
 export async function listCustomers(page = 1, perPage = 50, filter?: string) {
   const qs = new URLSearchParams({ page: String(page), per_page: String(perPage) });

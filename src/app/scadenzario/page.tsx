@@ -35,6 +35,9 @@ interface ScheduleEntry {
   rdt_number: string;
   calibration_date: string;
   expiry_date: string;
+  serial_number: string;
+  manufacturer: string;
+  model: string;
   renewed: boolean;
   source: string;
 }
@@ -396,7 +399,13 @@ export default function ScadenzarioPage() {
               <div key={customer.name} className="p-4">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <p className="font-semibold text-lg">{customer.name}</p>
+                    <a
+                      href={`/storico/${encodeURIComponent(customer.name)}`}
+                      className="font-semibold text-lg text-blue-700 hover:underline cursor-pointer"
+                      title="Vedi storico completo RDT"
+                    >
+                      {customer.name}
+                    </a>
                     <p className="text-sm text-gray-500">
                       {customer.email && <span className="mr-3">{customer.email}</span>}
                       {customer.phone && <span>{customer.phone}</span>}
@@ -441,8 +450,11 @@ export default function ScadenzarioPage() {
                       key={inst.id}
                       className="flex justify-between items-center text-sm py-1 border-b border-gray-100 last:border-0"
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-gray-600">{inst.instrument_type}</span>
+                        {inst.manufacturer && <span className="text-gray-400">{inst.manufacturer}</span>}
+                        {inst.model && <span className="text-gray-400">{inst.model}</span>}
+                        {inst.serial_number && <span className="text-gray-500 font-mono text-xs bg-gray-100 px-1 rounded">S/N {inst.serial_number}</span>}
                         <span className="text-gray-400">RDT {inst.rdt_number}</span>
                       </div>
                       <div className="flex items-center gap-2">
