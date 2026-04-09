@@ -11,12 +11,14 @@ import {
   BarChart3,
   Settings,
   QrCode,
+  UserPlus,
 } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "Registro", icon: ClipboardList },
   { href: "/sessioni", label: "Sessioni", icon: Wrench },
   { href: "/clienti", label: "Clienti", icon: Users },
+  { href: "/nuovi-clienti", label: "Nuovi Clienti", icon: UserPlus },
   { href: "/rapporti", label: "Rapporti", icon: FileText },
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/statistiche", label: "Statistiche", icon: BarChart3 },
