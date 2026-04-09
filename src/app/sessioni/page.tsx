@@ -57,7 +57,7 @@ export default function SessionsPage() {
       const session = await createSession(customerId);
       toast.success("Sessione creata!");
       setDialogOpen(false);
-      window.location.href = `/sessioni/${session.id}`;
+      window.location.assign(`/sessioni/${session.id}`);
     } catch (err: any) {
       toast.error(err.message);
     }

@@ -66,16 +66,6 @@ export default function ClientiPage() {
     loadList(1, "all");
   }, []);
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Eliminare il cliente "${name}"?\nQuesta azione non puo essere annullata.`)) return;
-    try {
-      await deleteCustomer(id);
-      setCustomers((prev) => prev.filter((c) => c.id !== id));
-    } catch (e: any) {
-      alert(e.message || "Errore eliminazione cliente");
-    }
-  };
-
   const handleSearch = async () => {
     if (query.length < 2) return;
     setLoading(true);

@@ -58,7 +58,6 @@ const RANGE_OPTIONS = [
   { key: "scadute", label: "Scadute", days: -99999 },
   { key: "30gg", label: "30 giorni", days: 30 },
   { key: "90gg", label: "90 giorni", days: 90 },
-  { key: "3mesi", label: "3 mesi", days: 90 },
   { key: "6mesi", label: "6 mesi", days: 183 },
   { key: "12mesi", label: "12 mesi", days: 365 },
   { key: "custom", label: "Personalizzato", days: 0 },
