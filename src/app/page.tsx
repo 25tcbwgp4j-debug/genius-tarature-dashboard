@@ -17,9 +17,13 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 
 export default function Home() {
   const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ oggi: 0, attive: 0, pronti: 0, scadenze: 0 });
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
     listSessions({ limit: 20 })
       .then((data) => {
         const all = data.sessions || [];
@@ -32,7 +36,8 @@ export default function Home() {
           scadenze: 0,
         });
       })
-      .catch(() => {});
+      .catch(() => setError("Errore di connessione al backend. Potrebbe essere in fase di avvio, riprova tra qualche secondo."))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -91,9 +96,13 @@ export default function Home() {
           <h3 className="font-semibold">Sessioni recenti</h3>
         </div>
         <div className="divide-y">
-          {sessions.length === 0 ? (
+          {loading ? (
+            <p className="p-6 text-center text-gray-500">Caricamento sessioni...</p>
+          ) : error ? (
+            <p className="p-6 text-center text-red-500">{error}</p>
+          ) : sessions.length === 0 ? (
             <p className="p-6 text-center text-gray-500">
-              Nessuna sessione trovata. Il backend potrebbe essere in fase di avvio.
+              Nessuna sessione trovata.
             </p>
           ) : (
             sessions.map((session: any) => (

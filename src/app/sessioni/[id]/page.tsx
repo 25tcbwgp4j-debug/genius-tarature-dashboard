@@ -96,8 +96,9 @@ export default function SessionDetail() {
       router.push("/sessioni");
     } catch (err: any) {
       toast.error(err.message || "Errore eliminazione");
+    } finally {
+      setActionLoading(null);
     }
-    setActionLoading(null);
   };
 
   const handleSaveSession = async () => {
@@ -109,8 +110,9 @@ export default function SessionDetail() {
       await loadSession();
     } catch (err: any) {
       toast.error(err.message || "Errore aggiornamento");
+    } finally {
+      setActionLoading(null);
     }
-    setActionLoading(null);
   };
 
   const handleSaveInstrument = async () => {
