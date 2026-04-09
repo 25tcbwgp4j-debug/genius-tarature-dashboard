@@ -15,14 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  registrazione: { label: "Registrazione", color: "bg-yellow-100 text-yellow-800" },
-  in_lavorazione: { label: "In lavorazione", color: "bg-blue-100 text-blue-800" },
-  pronto_ritiro: { label: "Pronto ritiro", color: "bg-green-100 text-green-800" },
-  attesa_pagamento: { label: "Attesa pagamento", color: "bg-orange-100 text-orange-800" },
-  completata: { label: "Completata", color: "bg-gray-100 text-gray-800" },
-};
+import { STATUS_CONFIG } from "@/lib/constants";
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<any[]>([]);

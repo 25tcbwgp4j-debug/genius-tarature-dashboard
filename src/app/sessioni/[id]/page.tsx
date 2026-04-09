@@ -33,14 +33,7 @@ import {
   X,
   FileOutput,
 } from "lucide-react";
-
-const STATUS_CONFIG: Record<string, { label: string; color: string; step: number }> = {
-  registrazione: { label: "Registrazione in corso", color: "bg-yellow-100 text-yellow-800", step: 0 },
-  in_lavorazione: { label: "In lavorazione", color: "bg-blue-100 text-blue-800", step: 1 },
-  pronto_ritiro: { label: "Pronto per ritiro", color: "bg-green-100 text-green-800", step: 2 },
-  attesa_pagamento: { label: "Attesa pagamento", color: "bg-orange-100 text-orange-800", step: 3 },
-  completata: { label: "Completata", color: "bg-gray-100 text-gray-800", step: 4 },
-};
+import { STATUS_CONFIG } from "@/lib/constants";
 
 export default function SessionDetail() {
   const params = useParams();
@@ -422,7 +415,8 @@ export default function SessionDetail() {
             size="lg"
             className="h-20 flex flex-col gap-1 bg-green-600 hover:bg-green-700"
             disabled={currentStep !== 1 || actionLoading !== null}
-            onClick={() =>
+            onClick={() => {
+              if (!confirm("Inviare notifica WhatsApp al cliente?")) return;
               handleAction("ready", () => notifyReady(sessionId),
                 "Cliente notificato: strumenti pronti per il ritiro!")
             }
@@ -436,7 +430,8 @@ export default function SessionDetail() {
             size="lg"
             className="h-20 flex flex-col gap-1 bg-orange-600 hover:bg-orange-700"
             disabled={(currentStep !== 1 && currentStep !== 2) || actionLoading !== null}
-            onClick={() =>
+            onClick={() => {
+              if (!confirm("Inviare proforma via WhatsApp e email al cliente?")) return;
               handleAction("proforma", () => sendProforma(sessionId),
                 "Proforma inviata al cliente!")
             }
@@ -464,7 +459,8 @@ export default function SessionDetail() {
             size="lg"
             className="h-20 flex flex-col gap-1 bg-gray-700 hover:bg-gray-800"
             disabled={currentStep === 4 || currentStep === 0 || actionLoading !== null}
-            onClick={() =>
+            onClick={() => {
+              if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati?")) return;
               handleAction("delivered", () => markDelivered(sessionId),
                 "Sessione completata! Strumenti riconsegnati.")
             }
