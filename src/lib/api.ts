@@ -187,8 +187,13 @@ export async function sendScheduleNotification(scheduleId: string) {
   return fetchAPI(`/api/schedule/${scheduleId}/notify`, { method: 'POST' });
 }
 
-export async function sendCustomerNotification(customerName: string) {
-  return fetchAPI(`/api/schedule/notify-customer/${encodeURIComponent(customerName)}`, { method: 'POST' });
+export async function sendCustomerNotification(customerName: string, customerId?: string) {
+  // Fix F13: passa customer_id come query param se disponibile per evitare ambiguita su omonimi
+  const qs = customerId ? `?customer_id=${encodeURIComponent(customerId)}` : '';
+  return fetchAPI(
+    `/api/schedule/notify-customer/${encodeURIComponent(customerName)}${qs}`,
+    { method: 'POST' }
+  );
 }
 
 export async function markScheduleRenewed(scheduleId: string) {

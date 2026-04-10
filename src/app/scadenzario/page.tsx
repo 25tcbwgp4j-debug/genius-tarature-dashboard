@@ -28,6 +28,7 @@ import { toast } from "sonner";
 
 interface ScheduleEntry {
   id: string;
+  customer_id?: string | null;
   customer_name: string;
   customer_email: string;
   customer_phone: string;
@@ -47,6 +48,7 @@ interface ScheduleEntry {
 
 interface GroupedCustomer {
   name: string;
+  id?: string | null;
   email: string;
   phone: string;
   instruments: ScheduleEntry[];
@@ -104,6 +106,7 @@ export default function ScadenzarioPage() {
       if (!map.has(name)) {
         map.set(name, {
           name,
+          id: e.customer_id || null,
           email: e.customer_email || "",
           phone: e.customer_phone || "",
           instruments: [],
@@ -113,7 +116,8 @@ export default function ScadenzarioPage() {
       }
       const g = map.get(name)!;
       g.instruments.push(e);
-      // Aggiorna email/telefono se questo record li ha e il gruppo no
+      // Aggiorna email/telefono/id se questo record li ha e il gruppo no
+      if (!g.id && e.customer_id) g.id = e.customer_id;
       if (!g.email && e.customer_email) g.email = e.customer_email;
       if (!g.phone && e.customer_phone) g.phone = e.customer_phone;
       if (e.expiry_date < g.minExpiry) {
@@ -165,10 +169,11 @@ export default function ScadenzarioPage() {
     });
   }, [filteredByTime, searchQuery]);
 
-  const handleNotifyCustomer = async (customerName: string) => {
+  const handleNotifyCustomer = async (customerName: string, customerId?: string | null) => {
     setSending(customerName);
     try {
-      const result = await sendCustomerNotification(customerName);
+      // Fix F13: passa customer_id se disponibile per evitare ambiguita
+      const result = await sendCustomerNotification(customerName, customerId || undefined);
       toast.success(`Notifica inviata a ${customerName}`, {
         description: `WA: ${result.results?.whatsapp ? "OK" : "NO"} | Email: ${result.results?.email ? "OK" : "NO"} | ${result.results?.count} strumenti`,
       });
@@ -440,7 +445,7 @@ export default function ScadenzarioPage() {
                     )}
                     <Button
                       size="sm"
-                      onClick={() => handleNotifyCustomer(customer.name)}
+                      onClick={() => handleNotifyCustomer(customer.name, customer.id)}
                       disabled={sending === customer.name || (!customer.phone && !customer.email)}
                       title={!customer.phone && !customer.email ? "Nessun contatto disponibile" : "Invia notifica WhatsApp + Email"}
                     >
