@@ -591,8 +591,8 @@ export default function SessionDetail() {
             onClick={() => {
               if (!confirm("Inviare notifica WhatsApp al cliente?")) return;
               handleAction("ready", () => notifyReady(sessionId),
-                "Cliente notificato: strumenti pronti per il ritiro!")
-            }
+                "Cliente notificato: strumenti pronti per il ritiro!");
+            }}
           >
             {actionLoading === "ready" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Bell className="w-6 h-6" />}
             <span className="text-xs">NOTIFICA PRONTI RITIRO</span>
@@ -606,8 +606,8 @@ export default function SessionDetail() {
             onClick={() => {
               if (!confirm("Inviare proforma via WhatsApp e email al cliente?")) return;
               handleAction("proforma", () => sendProforma(sessionId),
-                "Proforma inviata al cliente!")
-            }
+                "Proforma inviata al cliente!");
+            }}
           >
             {actionLoading === "proforma" ? <Loader2 className="w-6 h-6 animate-spin" /> : <FileText className="w-6 h-6" />}
             <span className="text-xs">INVIA PROFORMA</span>
@@ -635,8 +635,8 @@ export default function SessionDetail() {
             onClick={() => {
               if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati?")) return;
               handleAction("delivered", () => markDelivered(sessionId),
-                "Sessione completata! Strumenti riconsegnati.")
-            }
+                "Sessione completata! Strumenti riconsegnati.");
+            }}
           >
             {actionLoading === "delivered" ? <Loader2 className="w-6 h-6 animate-spin" /> : <PackageCheck className="w-6 h-6" />}
             <span className="text-xs">STRUMENTI RICONSEGNATI</span>
