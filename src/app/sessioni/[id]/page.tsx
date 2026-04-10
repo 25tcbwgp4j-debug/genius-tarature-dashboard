@@ -734,10 +734,11 @@ export default function SessionDetail() {
             size="lg"
             className="h-20 flex flex-col gap-1 bg-blue-600 hover:bg-blue-700"
             disabled={currentStep !== 0 || actionLoading !== null}
-            onClick={() =>
+            onClick={() => {
+              if (!confirm("Completare la registrazione e inviare ricevuta WhatsApp al cliente?")) return;
               handleAction("register", () => registerComplete(sessionId),
                 "Registrazione completata! Ricevuta inviata al cliente.")
-            }
+            }}
           >
             {actionLoading === "register" ? <Loader2 className="w-6 h-6 animate-spin" /> : <ClipboardCheck className="w-6 h-6" />}
             <span className="text-xs">REGISTRAZIONE COMPLETATA</span>

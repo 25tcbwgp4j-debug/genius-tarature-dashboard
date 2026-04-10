@@ -23,14 +23,21 @@ export default function StoricoClientePage() {
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
 
-  const customerName = decodeURIComponent(params.name as string);
+  // Validazione parametro: rimuovi caratteri path/script, limita lunghezza (F9)
+  const rawName = decodeURIComponent((params.name as string) || "");
+  const customerName = rawName.replace(/[<>/\\]/g, "").slice(0, 200).trim();
 
   useEffect(() => {
+    if (!customerName) {
+      toast.error("Nome cliente non valido");
+      router.push("/");
+      return;
+    }
     getCustomerHistory(customerName)
       .then(setData)
       .catch(() => toast.error("Errore nel caricamento"))
       .finally(() => setLoading(false));
-  }, [customerName]);
+  }, [customerName, router]);
 
   const getDaysLeft = (dateStr: string) => {
     const diff = new Date(dateStr).getTime() - Date.now();

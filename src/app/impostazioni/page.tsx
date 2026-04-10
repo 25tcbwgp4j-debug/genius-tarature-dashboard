@@ -12,10 +12,16 @@ import {
   updateInstrumentType,
   deleteInstrumentType,
 } from "@/lib/api";
-import { Settings, Loader2, Pencil, Save, X, Plus, Trash2 } from "lucide-react";
+import { Settings, Loader2, Pencil, Save, X, Plus, Trash2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
-const FIELDS = [
+interface SettingField {
+  key: string;
+  label: string;
+  sensitive?: boolean;
+}
+
+const FIELDS: SettingField[] = [
   { key: "company_name", label: "Ragione sociale" },
   { key: "vat_number", label: "P.IVA" },
   { key: "tax_id", label: "Codice Fiscale" },
@@ -28,12 +34,18 @@ const FIELDS = [
   { key: "calibration_email", label: "Email tarature" },
   { key: "pec", label: "PEC" },
   { key: "sdi_code", label: "Codice SDI" },
-  { key: "iban", label: "IBAN" },
-  { key: "bic", label: "BIC/SWIFT" },
+  { key: "iban", label: "IBAN", sensitive: true },
+  { key: "bic", label: "BIC/SWIFT", sensitive: true },
   { key: "bank_name", label: "Banca" },
-  { key: "paypal_email", label: "PayPal" },
+  { key: "paypal_email", label: "PayPal", sensitive: true },
   { key: "staff_whatsapp", label: "WhatsApp staff" },
 ];
+
+// Maschera dato sensibile lasciando visibili ultimi 4 caratteri (F12)
+function maskSensitive(value: string): string {
+  if (!value || value.length <= 4) return "••••";
+  return "•".repeat(Math.min(value.length - 4, 12)) + value.slice(-4);
+}
 
 interface InstrumentType {
   id: string;
@@ -50,6 +62,7 @@ export default function ImpostazioniPage() {
   const [saving, setSaving] = useState(false);
   const [types, setTypes] = useState<InstrumentType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showSensitive, setShowSensitive] = useState(false);
 
   // Stato editing listino tipi strumento
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
@@ -198,9 +211,20 @@ export default function ImpostazioniPage() {
               Dati aziendali
             </h3>
             {!editing ? (
-              <Button variant="outline" size="sm" onClick={startEdit}>
-                <Pencil className="w-4 h-4 mr-1" /> Modifica
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowSensitive((v) => !v)}
+                  title="Mostra/nascondi dati sensibili (IBAN, BIC, PayPal)"
+                >
+                  {showSensitive ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
+                  {showSensitive ? "Nascondi" : "Mostra"} dati sensibili
+                </Button>
+                <Button variant="outline" size="sm" onClick={startEdit}>
+                  <Pencil className="w-4 h-4 mr-1" /> Modifica
+                </Button>
+              </div>
             ) : (
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={cancelEdit}>
@@ -215,20 +239,26 @@ export default function ImpostazioniPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 text-sm">
-            {FIELDS.map((f) => (
-              <div key={f.key} className="flex flex-col gap-1">
-                <label className="text-gray-500 text-xs">{f.label}</label>
-                {editing ? (
-                  <Input
-                    value={editData?.[f.key] || ""}
-                    onChange={(e) => setEditData({ ...(editData || {}), [f.key]: e.target.value })}
-                    className="h-8 text-sm"
-                  />
-                ) : (
-                  <span className="font-medium">{settings[f.key] || "—"}</span>
-                )}
-              </div>
-            ))}
+            {FIELDS.map((f) => {
+              const rawValue = settings?.[f.key];
+              const displayValue = rawValue
+                ? (f.sensitive && !showSensitive ? maskSensitive(String(rawValue)) : rawValue)
+                : "—";
+              return (
+                <div key={f.key} className="flex flex-col gap-1">
+                  <label className="text-gray-500 text-xs">{f.label}</label>
+                  {editing ? (
+                    <Input
+                      value={editData?.[f.key] || ""}
+                      onChange={(e) => setEditData({ ...(editData || {}), [f.key]: e.target.value })}
+                      className="h-8 text-sm"
+                    />
+                  ) : (
+                    <span className="font-medium font-mono">{displayValue}</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </Card>
       )}

@@ -5,8 +5,12 @@ import {
   Search, Mail, Phone, Globe, Send, UserCheck, RefreshCw,
   ChevronLeft, ChevronRight, Calendar, Users, ArrowRight, Loader2,
 } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://tarature-api-production.up.railway.app";
+import { toast } from "sonner";
+import {
+  listProspects, getProspectStats, updateProspect,
+  sendProspectEmail, sendProspectBatch,
+  moveProspectToCustomer, moveBatchProspectsToCustomers,
+} from "@/lib/api";
 
 interface Prospect {
   id: string;
@@ -56,30 +60,29 @@ export default function NuoviClientiPage() {
     setLoading(true);
     try {
       const status = tab === "nuovi" ? "nuovo" : "contattato";
-      let url = `${API_URL}/api/prospects?page=${page}&per_page=30&status=${status}`;
-      if (search) url += `&search=${encodeURIComponent(search)}`;
-      if (filterProv) url += `&provincia=${filterProv}`;
-      if (tab === "nuovi") {
-        if (filterEmail === "yes") url += `&has_email=true`;
-        if (filterEmail === "no") url += `&has_email=false`;
-      }
-      const res = await fetch(url);
-      const data = await res.json();
+      const params: Parameters<typeof listProspects>[0] = {
+        page,
+        per_page: 30,
+        status,
+      };
+      if (search) params.search = search;
+      if (filterProv) params.provincia = filterProv;
+      const data = await listProspects(params);
       setProspects(data.prospects || []);
       setTotalPages(data.pages || 1);
       setTotal(data.total || 0);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      toast.error(e.message || "Errore caricamento prospect");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, [page, search, filterProv, filterEmail, tab]);
+  }, [page, search, filterProv, tab]);
 
   const fetchStats = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/prospects/stats`);
-      setStats(await res.json());
-    } catch (e) {
-      console.error(e);
+      setStats(await getProspectStats());
+    } catch (e: any) {
+      toast.error(e.message || "Errore caricamento statistiche");
     }
   };
 
@@ -97,30 +100,29 @@ export default function NuoviClientiPage() {
 
   const saveEdit = async (id: string) => {
     try {
-      await fetch(`${API_URL}/api/prospects/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editData),
-      });
+      await updateProspect(id, editData);
+      toast.success("Prospect aggiornato");
       setEditingId(null);
       setEditData({});
       fetchProspects();
       fetchStats();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      toast.error(e.message || "Errore salvataggio");
     }
   };
 
   const sendEmailToProspect = async (id: string) => {
     try {
-      const res = await fetch(`${API_URL}/api/prospects/${id}/send-email`, { method: "POST" });
-      const data = await res.json();
+      const data = await sendProspectEmail(id);
       if (data.result?.success) {
+        toast.success(`Email inviata a ${data.prospect}`);
         fetchProspects();
         fetchStats();
+      } else {
+        toast.error("Invio email fallito");
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      toast.error(e.message || "Errore invio email");
     }
   };
 
@@ -128,33 +130,26 @@ export default function NuoviClientiPage() {
     setSending(true);
     setSendResult(null);
     try {
-      const res = await fetch(`${API_URL}/api/prospects/send-batch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit: 20, provincia: filterProv || undefined }),
-      });
-      const data = await res.json();
+      const data = await sendProspectBatch(20, filterProv || undefined);
       setSendResult(`Inviate: ${data.sent}, Errori: ${data.errors}, Trovati: ${data.total_found}`);
       fetchProspects();
       fetchStats();
-    } catch (e) {
-      setSendResult("Errore invio batch");
+    } catch (e: any) {
+      setSendResult(e.message || "Errore invio batch");
+      toast.error(e.message || "Errore invio batch");
+    } finally {
+      setSending(false);
     }
-    setSending(false);
   };
 
   const moveToClients = async (id: string) => {
     try {
-      const res = await fetch(`${API_URL}/api/prospects/${id}/move-to-customers`, { method: "POST" });
-      const data = await res.json();
-      if (data.error) {
-        alert(data.detail || data.error);
-      } else {
-        fetchProspects();
-        fetchStats();
-      }
+      await moveProspectToCustomer(id);
+      toast.success("Prospect spostato in clienti");
+      fetchProspects();
+      fetchStats();
     } catch (e: any) {
-      alert(e.message || "Errore spostamento");
+      toast.error(e.message || "Errore spostamento");
     }
   };
 
@@ -163,15 +158,16 @@ export default function NuoviClientiPage() {
     setMoving(true);
     setMoveResult(null);
     try {
-      const res = await fetch(`${API_URL}/api/prospects/move-batch-to-customers`, { method: "POST" });
-      const data = await res.json();
+      const data = await moveBatchProspectsToCustomers();
       setMoveResult(`Spostati: ${data.moved}, Gia presenti: ${data.skipped}, Errori: ${data.errors}`);
       fetchProspects();
       fetchStats();
-    } catch (e) {
-      setMoveResult("Errore trasferimento");
+    } catch (e: any) {
+      setMoveResult(e.message || "Errore trasferimento");
+      toast.error(e.message || "Errore trasferimento");
+    } finally {
+      setMoving(false);
     }
-    setMoving(false);
   };
 
   const formatDate = (dateStr: string | null) => {

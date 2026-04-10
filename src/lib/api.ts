@@ -234,3 +234,50 @@ export async function updateSettings(data: Record<string, unknown>) {
     body: JSON.stringify(data),
   });
 }
+
+// === PROSPECT FGAS ===
+export async function listProspects(params: {
+  page?: number;
+  per_page?: number;
+  status?: string;
+  provincia?: string;
+  search?: string;
+}) {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set('page', String(params.page));
+  if (params.per_page) qs.set('per_page', String(params.per_page));
+  if (params.status) qs.set('status', params.status);
+  if (params.provincia) qs.set('provincia', params.provincia);
+  if (params.search) qs.set('search', params.search);
+  return fetchAPI(`/api/prospects?${qs.toString()}`);
+}
+
+export async function getProspectStats() {
+  return fetchAPI('/api/prospects/stats');
+}
+
+export async function updateProspect(id: string, data: Record<string, unknown>) {
+  return fetchAPI(`/api/prospects/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function sendProspectEmail(id: string) {
+  return fetchAPI(`/api/prospects/${id}/send-email`, { method: 'POST' });
+}
+
+export async function sendProspectBatch(limit: number, provincia?: string) {
+  return fetchAPI('/api/prospects/send-batch', {
+    method: 'POST',
+    body: JSON.stringify({ limit, provincia }),
+  });
+}
+
+export async function moveProspectToCustomer(id: string) {
+  return fetchAPI(`/api/prospects/${id}/move-to-customers`, { method: 'POST' });
+}
+
+export async function moveBatchProspectsToCustomers() {
+  return fetchAPI('/api/prospects/move-batch-to-customers', { method: 'POST' });
+}
