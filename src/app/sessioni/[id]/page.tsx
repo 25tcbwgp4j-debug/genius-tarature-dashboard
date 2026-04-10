@@ -20,6 +20,8 @@ import {
   deleteInstrument,
   addInstrument,
   getInstrumentTypes,
+  getCustomerPastInstruments,
+  getReceiptPdfUrl,
 } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -35,6 +37,10 @@ import {
   X,
   FileOutput,
   Plus,
+  Printer,
+  History,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { STATUS_CONFIG } from "@/lib/constants";
 
@@ -43,6 +49,19 @@ interface InstrumentType {
   name: string;
   price: number;
   code?: string;
+}
+
+interface PastInstrument {
+  id: string;
+  instrument_type_id?: string | null;
+  instrument_name?: string;
+  manufacturer?: string;
+  model?: string;
+  serial_number?: string;
+  price?: number;
+  rdt_number?: string | null;
+  calibration_date?: string | null;
+  instrument_types?: { id: string; name: string; price: number } | null;
 }
 
 export default function SessionDetail() {
@@ -66,6 +85,11 @@ export default function SessionDetail() {
   });
   const [instrumentTypes, setInstrumentTypes] = useState<InstrumentType[]>([]);
 
+  // Storico strumenti cliente (per riutilizzo senza re-inserimento)
+  const [pastInstruments, setPastInstruments] = useState<PastInstrument[]>([]);
+  const [showPastInstruments, setShowPastInstruments] = useState(false);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+
   const sessionId = params.id as string;
 
   const loadSession = async () => {
@@ -85,6 +109,52 @@ export default function SessionDetail() {
       .then((data: any) => setInstrumentTypes(data.types || data || []))
       .catch(() => {});
   }, [sessionId]);
+
+  // Quando ho il customer_id carico lo storico strumenti del cliente
+  useEffect(() => {
+    if (!session?.customer_id) return;
+    getCustomerPastInstruments(session.customer_id)
+      .then((data: { instruments?: PastInstrument[] }) => {
+        setPastInstruments(data?.instruments || []);
+      })
+      .catch(() => setPastInstruments([]));
+  }, [session?.customer_id]);
+
+  // Riutilizza uno strumento storico: inserisce nella sessione corrente senza bisogno di reinserirlo
+  const reuseInstrument = async (past: PastInstrument) => {
+    setActionLoading("reuse_" + past.id);
+    try {
+      const typeId = past.instrument_type_id || past.instrument_types?.id || "";
+      const typeName = past.instrument_types?.name || past.instrument_name || "";
+      const price = Number(past.price ?? past.instrument_types?.price ?? 0);
+      await addInstrument({
+        session_id: sessionId,
+        customer_id: session.customer_id,
+        instrument_type_id: typeId || undefined,
+        instrument_name: typeName,
+        manufacturer: past.manufacturer,
+        model: past.model,
+        serial_number: past.serial_number,
+        price,
+      });
+      await loadSession();
+      toast.success(`Strumento "${typeName}" aggiunto dalla storia`);
+    } catch {
+      toast.error("Errore inserimento strumento");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Apre il PDF ricevuta in una nuova tab (per stampa/salvataggio/invio)
+  const openReceiptPdf = () => {
+    setLoadingPdf(true);
+    try {
+      window.open(getReceiptPdfUrl(sessionId), "_blank");
+    } finally {
+      setTimeout(() => setLoadingPdf(false), 1000);
+    }
+  };
 
   const handleAddInstrument = async () => {
     if (!newInstrument.instrument_name) {
@@ -263,6 +333,16 @@ export default function SessionDetail() {
             </>
           )}
           <Button
+            variant="outline"
+            size="sm"
+            onClick={openReceiptPdf}
+            disabled={loadingPdf}
+            className="bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+          >
+            {loadingPdf ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Printer className="w-4 h-4 mr-1" />}
+            Stampa ricevuta
+          </Button>
+          <Button
             variant="destructive"
             size="sm"
             onClick={handleDeleteSession}
@@ -333,6 +413,86 @@ export default function SessionDetail() {
           </div>
         </div>
       </Card>
+
+      {/* Storico strumenti cliente - collapsible */}
+      {pastInstruments.length > 0 && (
+        <Card className="p-4 bg-amber-50 border-amber-200">
+          <button
+            type="button"
+            className="w-full flex items-center justify-between text-left"
+            onClick={() => setShowPastInstruments(!showPastInstruments)}
+          >
+            <div className="flex items-center gap-2">
+              <History className="w-5 h-5 text-amber-700" />
+              <span className="font-semibold text-amber-900">
+                Strumenti gia registrati per questo cliente ({pastInstruments.length})
+              </span>
+              <span className="text-xs text-amber-700">
+                — clicca per riutilizzarli senza reinserirli
+              </span>
+            </div>
+            {showPastInstruments ? (
+              <ChevronUp className="w-5 h-5 text-amber-700" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-amber-700" />
+            )}
+          </button>
+          {showPastInstruments && (
+            <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
+              {pastInstruments.map((past: PastInstrument) => {
+                const alreadyInSession = instruments.some(
+                  (i: { serial_number?: string; model?: string; manufacturer?: string }) =>
+                    (i.serial_number || "").toUpperCase() === (past.serial_number || "").toUpperCase() &&
+                    (i.model || "").toUpperCase() === (past.model || "").toUpperCase() &&
+                    (i.manufacturer || "").toUpperCase() === (past.manufacturer || "").toUpperCase()
+                );
+                const typeName = past.instrument_types?.name || past.instrument_name || "—";
+                const price = Number(past.price ?? past.instrument_types?.price ?? 0);
+                return (
+                  <div
+                    key={past.id}
+                    className="flex items-center justify-between bg-white p-2 rounded border border-amber-200 text-sm"
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium">{typeName}</div>
+                      <div className="text-xs text-gray-600">
+                        {past.manufacturer || "—"} {past.model || ""} - Matr. {past.serial_number || "—"}
+                        {past.rdt_number && (
+                          <span className="ml-2 text-gray-500">(ultimo RDT: {past.rdt_number})</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium text-gray-700">EUR {price.toFixed(2)}</span>
+                      {alreadyInSession ? (
+                        <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded">
+                          Gia nella sessione
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="bg-amber-600 hover:bg-amber-700 h-8"
+                          onClick={() => reuseInstrument(past)}
+                          disabled={actionLoading === "reuse_" + past.id}
+                        >
+                          {actionLoading === "reuse_" + past.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Plus className="w-3 h-3 mr-1" />
+                              Aggiungi
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Strumenti (con aggiunta/modifica/cancella) */}
       <Card className="p-6">

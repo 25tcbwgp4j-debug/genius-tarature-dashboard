@@ -86,6 +86,7 @@ export async function addInstrument(data: {
   session_id: string;
   customer_id: string;
   instrument_name: string;
+  instrument_type_id?: string;
   manufacturer?: string;
   model?: string;
   serial_number?: string;
@@ -104,6 +105,42 @@ export async function getSessionInstruments(sessionId: string) {
 // === CATALOGO ===
 export async function getInstrumentTypes() {
   return fetchAPI('/api/instrument-types');
+}
+
+export async function createInstrumentType(data: {
+  code: string;
+  name: string;
+  price: number;
+  template_type?: string;
+}) {
+  return fetchAPI('/api/instrument-types', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateInstrumentType(id: string, data: {
+  code?: string;
+  name?: string;
+  price?: number;
+  template_type?: string;
+}) {
+  return fetchAPI(`/api/instrument-types/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteInstrumentType(id: string) {
+  return fetchAPI(`/api/instrument-types/${id}`, { method: 'DELETE' });
+}
+
+export async function getCustomerPastInstruments(customerId: string) {
+  return fetchAPI(`/api/customers/${customerId}/past-instruments`);
+}
+
+export function getReceiptPdfUrl(sessionId: string): string {
+  return `${API_URL}/api/sessions/${sessionId}/receipt-pdf`;
 }
 
 // === 4 PULSANTI AZIONE ===
