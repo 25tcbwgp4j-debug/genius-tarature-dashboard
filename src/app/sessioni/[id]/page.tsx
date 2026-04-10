@@ -18,6 +18,8 @@ import {
   deleteSession,
   updateInstrument,
   deleteInstrument,
+  addInstrument,
+  getInstrumentTypes,
 } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -32,8 +34,16 @@ import {
   Save,
   X,
   FileOutput,
+  Plus,
 } from "lucide-react";
 import { STATUS_CONFIG } from "@/lib/constants";
+
+interface InstrumentType {
+  id: string;
+  name: string;
+  price: number;
+  code?: string;
+}
 
 export default function SessionDetail() {
   const params = useParams();
@@ -45,6 +55,16 @@ export default function SessionDetail() {
   const [editInstrumentData, setEditInstrumentData] = useState<any>(null);
   const [editingSession, setEditingSession] = useState(false);
   const [editSessionData, setEditSessionData] = useState<any>(null);
+  const [addingInstrument, setAddingInstrument] = useState(false);
+  const [newInstrument, setNewInstrument] = useState<any>({
+    instrument_type_id: "",
+    instrument_name: "",
+    manufacturer: "",
+    model: "",
+    serial_number: "",
+    price: 0,
+  });
+  const [instrumentTypes, setInstrumentTypes] = useState<InstrumentType[]>([]);
 
   const sessionId = params.id as string;
 
@@ -61,7 +81,55 @@ export default function SessionDetail() {
 
   useEffect(() => {
     loadSession();
+    getInstrumentTypes()
+      .then((data: any) => setInstrumentTypes(data.types || data || []))
+      .catch(() => {});
   }, [sessionId]);
+
+  const handleAddInstrument = async () => {
+    if (!newInstrument.instrument_name) {
+      toast.error("Seleziona un tipo strumento");
+      return;
+    }
+    setActionLoading("add_inst");
+    try {
+      await addInstrument({
+        session_id: sessionId,
+        customer_id: session.customer_id,
+        instrument_name: newInstrument.instrument_name,
+        manufacturer: newInstrument.manufacturer || undefined,
+        model: newInstrument.model || undefined,
+        serial_number: newInstrument.serial_number || undefined,
+        price: newInstrument.price || undefined,
+      });
+      toast.success("Strumento aggiunto");
+      setAddingInstrument(false);
+      setNewInstrument({
+        instrument_type_id: "",
+        instrument_name: "",
+        manufacturer: "",
+        model: "",
+        serial_number: "",
+        price: 0,
+      });
+      await loadSession();
+    } catch (err: any) {
+      toast.error(err.message || "Errore aggiunta strumento");
+    }
+    setActionLoading(null);
+  };
+
+  const handleSelectInstrumentType = (typeId: string) => {
+    const t = instrumentTypes.find((x: InstrumentType) => x.id === typeId);
+    if (t) {
+      setNewInstrument({
+        ...newInstrument,
+        instrument_type_id: t.id,
+        instrument_name: t.name,
+        price: t.price,
+      });
+    }
+  };
 
   const handleAction = async (
     action: string,
@@ -266,16 +334,121 @@ export default function SessionDetail() {
         </div>
       </Card>
 
-      {/* Strumenti (con modifica/cancella) */}
+      {/* Strumenti (con aggiunta/modifica/cancella) */}
       <Card className="p-6">
         <div className="flex justify-between items-center mb-3">
           <h3 className="font-semibold text-lg">
             Strumenti ({instruments.length})
           </h3>
-          <span className="text-lg font-bold text-blue-600">
-            EUR {parseFloat(session.total_amount || 0).toFixed(2)}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-lg font-bold text-blue-600">
+              EUR {parseFloat(session.total_amount || 0).toFixed(2)}
+            </span>
+            {!addingInstrument && (
+              <Button
+                size="sm"
+                onClick={() => setAddingInstrument(true)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Plus className="w-4 h-4 mr-1" /> Aggiungi strumento
+              </Button>
+            )}
+          </div>
         </div>
+
+        {/* Form aggiunta strumento */}
+        {addingInstrument && (
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <h4 className="font-semibold mb-3 text-green-900">Nuovo strumento</h4>
+            <div className="grid grid-cols-6 gap-2 mb-3">
+              <div className="col-span-2">
+                <label className="text-xs text-gray-600">Tipo strumento *</label>
+                <select
+                  className="w-full h-9 text-sm border rounded px-2 bg-white"
+                  value={newInstrument.instrument_type_id}
+                  onChange={(e) => handleSelectInstrumentType(e.target.value)}
+                >
+                  <option value="">-- Seleziona --</option>
+                  {instrumentTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} (EUR {t.price})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">Marca</label>
+                <Input
+                  value={newInstrument.manufacturer}
+                  onChange={(e) => setNewInstrument({ ...newInstrument, manufacturer: e.target.value })}
+                  className="h-9 text-sm"
+                  placeholder="es. Testo"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">Modello</label>
+                <Input
+                  value={newInstrument.model}
+                  onChange={(e) => setNewInstrument({ ...newInstrument, model: e.target.value })}
+                  className="h-9 text-sm"
+                  placeholder="es. 550"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">Seriale/Matr.</label>
+                <Input
+                  value={newInstrument.serial_number}
+                  onChange={(e) => setNewInstrument({ ...newInstrument, serial_number: e.target.value })}
+                  className="h-9 text-sm"
+                  placeholder="es. 12345"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">Prezzo EUR</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={newInstrument.price}
+                  onChange={(e) => setNewInstrument({ ...newInstrument, price: parseFloat(e.target.value) || 0 })}
+                  className="h-9 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setAddingInstrument(false);
+                  setNewInstrument({
+                    instrument_type_id: "",
+                    instrument_name: "",
+                    manufacturer: "",
+                    model: "",
+                    serial_number: "",
+                    price: 0,
+                  });
+                }}
+              >
+                <X className="w-4 h-4 mr-1" /> Annulla
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleAddInstrument}
+                disabled={actionLoading === "add_inst" || !newInstrument.instrument_name}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {actionLoading === "add_inst" ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                ) : (
+                  <Save className="w-4 h-4 mr-1" />
+                )}
+                Salva strumento
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="divide-y">
           {instruments.map((inst: any, i: number) => (
             <div key={inst.id} className="py-3">
