@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import QRCode from "qrcode";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getWhatsAppQR } from "@/lib/api";
@@ -18,7 +19,7 @@ export default function QRCodePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Genera QR code con Canvas API (senza librerie esterne)
+  // Genera QR code localmente con libreria 'qrcode' (no dipendenze esterne) — fix F8
   useEffect(() => {
     if (!qrData || !canvasRef.current) return;
 
@@ -26,43 +27,47 @@ export default function QRCodePage() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Usa API esterna per generare QR (goqr.me)
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      canvas.width = 600;
-      canvas.height = 750;
+    const qrCanvas = document.createElement("canvas");
+    QRCode.toCanvas(qrCanvas, qrData.wa_link, {
+      width: 450,
+      margin: 1,
+      errorCorrectionLevel: "H",
+      color: { dark: "#000000", light: "#FFFFFF" },
+    })
+      .then(() => {
+        canvas.width = 600;
+        canvas.height = 750;
 
-      // Sfondo bianco
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(0, 0, 600, 750);
+        // Sfondo bianco
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, 600, 750);
 
-      // QR Code centrato
-      ctx.drawImage(img, 75, 30, 450, 450);
+        // QR Code centrato
+        ctx.drawImage(qrCanvas, 75, 30, 450, 450);
 
-      // Testo sotto il QR
-      ctx.fillStyle = "#1a1a1a";
-      ctx.font = "bold 28px Arial, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("AvaTech Tarature Certificazioni", 300, 520);
+        // Testo sotto il QR
+        ctx.fillStyle = "#1a1a1a";
+        ctx.font = "bold 28px Arial, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("AvaTech Tarature Certificazioni", 300, 520);
 
-      ctx.font = "20px Arial, sans-serif";
-      ctx.fillStyle = "#444";
-      ctx.fillText("Scansiona il QR per contattarci su WhatsApp", 300, 555);
+        ctx.font = "20px Arial, sans-serif";
+        ctx.fillStyle = "#444";
+        ctx.fillText("Scansiona il QR per contattarci su WhatsApp", 300, 555);
 
-      ctx.font = "18px Arial, sans-serif";
-      ctx.fillStyle = "#666";
-      ctx.fillText(qrData.phone, 300, 590);
+        ctx.font = "18px Arial, sans-serif";
+        ctx.fillStyle = "#666";
+        ctx.fillText(qrData.phone, 300, 590);
 
-      ctx.fillText("Viale Somalia, 246 — 00199 Roma", 300, 620);
-      ctx.fillText("Tel. +39 06 80074880 | Cell. +39 375 7371888", 300, 650);
-      ctx.fillText("LUN-VEN 9:30-13:30 e 15:00-19:00", 300, 680);
+        ctx.fillText("Viale Somalia, 246 — 00199 Roma", 300, 620);
+        ctx.fillText("Tel. +39 06 80074880 | Cell. +39 375 7371888", 300, 650);
+        ctx.fillText("LUN-VEN 9:30-13:30 e 15:00-19:00", 300, 680);
 
-      ctx.fillStyle = "#2563eb";
-      ctx.font = "bold 18px Arial, sans-serif";
-      ctx.fillText("www.avatechlab.it", 300, 720);
-    };
-    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=450x450&data=${encodeURIComponent(qrData.wa_link)}&format=png&margin=10`;
+        ctx.fillStyle = "#2563eb";
+        ctx.font = "bold 18px Arial, sans-serif";
+        ctx.fillText("www.avatechlab.it", 300, 720);
+      })
+      .catch(() => {});
   }, [qrData]);
 
   const handleDownload = () => {
