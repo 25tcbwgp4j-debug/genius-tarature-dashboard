@@ -12,8 +12,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Trash2,
 } from "lucide-react";
-import { listReports } from "@/lib/api";
+import { listReports, deleteReport } from "@/lib/api";
 import { toast } from "sonner";
 
 interface ReportRow {
@@ -48,6 +49,7 @@ export default function RapportiPage() {
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,6 +88,34 @@ export default function RapportiPage() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const handleDelete = async (report: ReportRow) => {
+    const rdt = report.rdt_number || "N/D";
+    const instr = report.instruments?.instrument_name || "strumento";
+    if (
+      !confirm(
+        `Eliminare il rapporto RDT ${rdt} (${instr})?\n\n` +
+          `Verranno cancellati:\n` +
+          `- Il file Excel dallo storage\n` +
+          `- Il record del rapporto\n` +
+          `- Il numero RDT assegnato allo strumento (potrai rigenerarlo)\n\n` +
+          `Operazione irreversibile.`
+      )
+    )
+      return;
+    setDeletingId(report.id);
+    try {
+      await deleteReport(report.id);
+      toast.success(`Rapporto RDT ${rdt} eliminato`);
+      // Ricarica lista
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Errore eliminazione";
+      toast.error(`Errore eliminazione rapporto`, { description: msg });
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -213,6 +243,20 @@ export default function RapportiPage() {
                   ) : (
                     <span className="text-xs text-gray-400 italic">File non disponibile</span>
                   )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDelete(r)}
+                    disabled={deletingId === r.id}
+                    className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                    title="Elimina rapporto"
+                  >
+                    {deletingId === r.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                  </Button>
                 </div>
               </div>
             ))}

@@ -184,6 +184,10 @@ export async function listReports(params?: {
   return fetchAPI(`/api/reports?${qs.toString()}`);
 }
 
+export async function deleteReport(id: string) {
+  return fetchAPI(`/api/reports/${id}`, { method: 'DELETE' });
+}
+
 export async function getSessionReports(sessionId: string) {
   return fetchAPI(`/api/sessions/${sessionId}/reports`);
 }
