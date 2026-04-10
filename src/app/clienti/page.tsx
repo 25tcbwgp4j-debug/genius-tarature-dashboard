@@ -261,6 +261,35 @@ export default function ClientiPage() {
                         />
                       </div>
                       <div>
+                        <label className="text-xs text-gray-500">Codice Fiscale</label>
+                        <Input
+                          value={editData?.tax_id || ""}
+                          onChange={(e) => setEditData({ ...editData, tax_id: e.target.value })}
+                          className="h-8 text-sm"
+                          placeholder="Se diverso dalla P.IVA"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500">Codice SDI</label>
+                        <Input
+                          value={editData?.sdi_code || ""}
+                          onChange={(e) => setEditData({ ...editData, sdi_code: e.target.value.toUpperCase() })}
+                          className="h-8 text-sm font-mono"
+                          placeholder="7 caratteri (es. WP7SE2Q)"
+                          maxLength={7}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500">PEC</label>
+                        <Input
+                          value={editData?.pec || ""}
+                          onChange={(e) => setEditData({ ...editData, pec: e.target.value })}
+                          className="h-8 text-sm"
+                          placeholder="esempio@pec.it"
+                          type="email"
+                        />
+                      </div>
+                      <div>
                         <label className="text-xs text-gray-500">Indirizzo</label>
                         <Input
                           value={editData?.address || ""}
