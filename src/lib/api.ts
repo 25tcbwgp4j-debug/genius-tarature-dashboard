@@ -41,11 +41,17 @@ export async function createSession(customerId: string, operator?: string) {
   });
 }
 
-export async function listSessions(params?: { status?: string; date?: string; limit?: number }) {
+export async function listSessions(params?: {
+  status?: string;
+  date?: string;
+  limit?: number;
+  offset?: number;
+}) {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);
   if (params?.date) qs.set('date', params.date);
   if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
   return fetchAPI(`/api/sessions?${qs.toString()}`);
 }
 

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { listSessions, searchCustomers, createSession } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Plus, Search, Loader2 } from "lucide-react";
+import { Plus, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/dialog";
 import { STATUS_CONFIG } from "@/lib/constants";
 
+const PAGE_SIZE = 50;
+
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,13 +26,21 @@ export default function SessionsPage() {
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    listSessions({ limit: 50 })
-      .then((data) => setSessions(data.sessions || []))
+    setLoading(true);
+    listSessions({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE })
+      .then((data) => {
+        setSessions(data.sessions || []);
+        setTotal(data.total ?? data.count ?? 0);
+      })
       .catch(() => toast.error("Errore caricamento sessioni"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const handleSearch = async () => {
     if (customerQuery.length < 2) return;
@@ -137,6 +147,37 @@ export default function SessionsPage() {
           )}
         </div>
       </Card>
+
+      {/* Paginazione - fix F11 */}
+      {!loading && total > PAGE_SIZE && (
+        <div className="flex justify-between items-center text-sm text-gray-600">
+          <span>
+            {(page - 1) * PAGE_SIZE + 1}-
+            {Math.min(page * PAGE_SIZE, total)} di {total} sessioni
+          </span>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" /> Precedente
+            </Button>
+            <span className="flex items-center px-3">
+              Pag. {page} di {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              Successiva <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
