@@ -3,15 +3,22 @@
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tarature-api-production.up.railway.app';
+// Chiave per endpoint protetti (DELETE clienti, batch email, batch move prospect).
+// Il backend accetta richieste senza chiave per endpoint non protetti.
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 
 async function fetchAPI(path: string, options: RequestInit = {}) {
   const url = `${API_URL}${path}`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> | undefined),
+  };
+  if (API_KEY) {
+    headers['X-API-Key'] = API_KEY;
+  }
   const res = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }));
