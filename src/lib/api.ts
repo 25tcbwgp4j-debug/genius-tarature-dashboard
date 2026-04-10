@@ -162,6 +162,10 @@ export function getLabelsPdfUrl(sessionId: string): string {
   return `${API_URL_DIRECT}/api/sessions/${sessionId}/labels-pdf`;
 }
 
+export function getFatturaXmlUrl(sessionId: string): string {
+  return `${API_URL_DIRECT}/api/sessions/${sessionId}/fattura-xml`;
+}
+
 // === 4 PULSANTI AZIONE ===
 export async function registerComplete(sessionId: string) {
   return fetchAPI(`/api/sessions/${sessionId}/register-complete`, { method: 'POST' });

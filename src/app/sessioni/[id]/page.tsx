@@ -23,6 +23,7 @@ import {
   getCustomerPastInstruments,
   getReceiptPdfUrl,
   getLabelsPdfUrl,
+  getFatturaXmlUrl,
 } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -40,6 +41,7 @@ import {
   Plus,
   Printer,
   Tag,
+  FileDown,
   History,
   ChevronDown,
   ChevronUp,
@@ -161,6 +163,11 @@ export default function SessionDetail() {
   // Apre il PDF etichette (50x30mm per strumento) in una nuova tab per stampa
   const openLabelsPdf = () => {
     window.open(getLabelsPdfUrl(sessionId), "_blank");
+  };
+
+  // Scarica il file XML FatturaPA pre-compilato per l'import in SimplyFatt
+  const downloadFatturaXml = () => {
+    window.location.href = getFatturaXmlUrl(sessionId);
   };
 
   const handleAddInstrument = async () => {
@@ -358,6 +365,16 @@ export default function SessionDetail() {
           >
             <Tag className="w-4 h-4 mr-1" />
             Stampa etichette
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={downloadFatturaXml}
+            className="bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+            title="Scarica XML FatturaPA da importare in SimplyFatt"
+          >
+            <FileDown className="w-4 h-4 mr-1" />
+            Fattura XML
           </Button>
           <Button
             variant="destructive"
