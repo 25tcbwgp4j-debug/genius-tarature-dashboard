@@ -2,20 +2,22 @@
  * Client API per il backend tarature
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tarature-api-production.up.railway.app';
-// Chiave per endpoint protetti (DELETE clienti, batch email, batch move prospect).
-// Il backend accetta richieste senza chiave per endpoint non protetti.
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
+// Per gli endpoint interattivi passiamo dal proxy /api/backend/*
+// (route handler Next.js) che inoltra al backend Railway aggiungendo
+// l'header X-API-Key lato server. L'API_KEY non e' mai esposta al client.
+const API_PROXY = '/api/backend';
+
+// Per i download diretti (PDF ricevuta/etichette) serve l'URL assoluto
+// del backend Railway (il browser apre il link in nuova tab).
+const API_URL_DIRECT =
+  process.env.NEXT_PUBLIC_API_URL || 'https://tarature-api-production.up.railway.app';
 
 async function fetchAPI(path: string, options: RequestInit = {}) {
-  const url = `${API_URL}${path}`;
+  const url = `${API_PROXY}${path}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> | undefined),
   };
-  if (API_KEY) {
-    headers['X-API-Key'] = API_KEY;
-  }
   const res = await fetch(url, {
     ...options,
     headers,
@@ -153,11 +155,11 @@ export async function getCustomerPastInstruments(customerId: string) {
 }
 
 export function getReceiptPdfUrl(sessionId: string): string {
-  return `${API_URL}/api/sessions/${sessionId}/receipt-pdf`;
+  return `${API_URL_DIRECT}/api/sessions/${sessionId}/receipt-pdf`;
 }
 
 export function getLabelsPdfUrl(sessionId: string): string {
-  return `${API_URL}/api/sessions/${sessionId}/labels-pdf`;
+  return `${API_URL_DIRECT}/api/sessions/${sessionId}/labels-pdf`;
 }
 
 // === 4 PULSANTI AZIONE ===
