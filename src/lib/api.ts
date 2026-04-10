@@ -170,6 +170,20 @@ export async function markDelivered(sessionId: string, notes?: string) {
 }
 
 // === RAPPORTI ===
+export async function listReports(params?: {
+  limit?: number;
+  offset?: number;
+  customer_id?: string;
+  search?: string;
+}) {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  if (params?.customer_id) qs.set('customer_id', params.customer_id);
+  if (params?.search) qs.set('search', params.search);
+  return fetchAPI(`/api/reports?${qs.toString()}`);
+}
+
 export async function getSessionReports(sessionId: string) {
   return fetchAPI(`/api/sessions/${sessionId}/reports`);
 }

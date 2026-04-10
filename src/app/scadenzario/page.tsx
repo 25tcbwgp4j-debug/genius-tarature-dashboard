@@ -47,7 +47,8 @@ interface ScheduleEntry {
 }
 
 interface GroupedCustomer {
-  name: string;
+  name: string;           // nome "pulito" (per display)
+  rawName: string;        // nome originale dal DB (per match esatto backend)
   id?: string | null;
   email: string;
   phone: string;
@@ -106,6 +107,7 @@ export default function ScadenzarioPage() {
       if (!map.has(name)) {
         map.set(name, {
           name,
+          rawName: e.customer_name || name,
           id: e.customer_id || null,
           email: e.customer_email || "",
           phone: e.customer_phone || "",
@@ -169,16 +171,22 @@ export default function ScadenzarioPage() {
     });
   }, [filteredByTime, searchQuery]);
 
-  const handleNotifyCustomer = async (customerName: string, customerId?: string | null) => {
-    setSending(customerName);
+  const handleNotifyCustomer = async (customerRawName: string, customerId?: string | null) => {
+    // Nome pulito per display (senza " P.IVA..." in coda)
+    const displayName = (customerRawName || "")
+      .split(" P.IVA")[0]
+      .split(" P-IVA")[0]
+      .trim();
+    setSending(displayName);
     try {
-      // Fix F13: passa customer_id se disponibile per evitare ambiguita
-      const result = await sendCustomerNotification(customerName, customerId || undefined);
-      toast.success(`Notifica inviata a ${customerName}`, {
+      // Fix F13: passa customer_id se disponibile + rawName per match esatto backend
+      const result = await sendCustomerNotification(customerRawName, customerId || undefined);
+      toast.success(`Notifica inviata a ${displayName}`, {
         description: `WA: ${result.results?.whatsapp ? "OK" : "NO"} | Email: ${result.results?.email ? "OK" : "NO"} | ${result.results?.count} strumenti`,
       });
-    } catch {
-      toast.error(`Errore invio notifica a ${customerName}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Errore sconosciuto";
+      toast.error(`Errore invio notifica a ${displayName}`, { description: msg });
     }
     setSending(null);
   };
@@ -445,7 +453,7 @@ export default function ScadenzarioPage() {
                     )}
                     <Button
                       size="sm"
-                      onClick={() => handleNotifyCustomer(customer.name, customer.id)}
+                      onClick={() => handleNotifyCustomer(customer.rawName, customer.id)}
                       disabled={sending === customer.name || (!customer.phone && !customer.email)}
                       title={!customer.phone && !customer.email ? "Nessun contatto disponibile" : "Invia notifica WhatsApp + Email"}
                     >
