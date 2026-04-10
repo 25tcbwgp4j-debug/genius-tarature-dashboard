@@ -22,6 +22,7 @@ import {
   getInstrumentTypes,
   getCustomerPastInstruments,
   getReceiptPdfUrl,
+  getLabelsPdfUrl,
 } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -38,6 +39,7 @@ import {
   FileOutput,
   Plus,
   Printer,
+  Tag,
   History,
   ChevronDown,
   ChevronUp,
@@ -154,6 +156,11 @@ export default function SessionDetail() {
     } finally {
       setTimeout(() => setLoadingPdf(false), 1000);
     }
+  };
+
+  // Apre il PDF etichette (50x30mm per strumento) in una nuova tab per stampa
+  const openLabelsPdf = () => {
+    window.open(getLabelsPdfUrl(sessionId), "_blank");
   };
 
   const handleAddInstrument = async () => {
@@ -341,6 +348,16 @@ export default function SessionDetail() {
           >
             {loadingPdf ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Printer className="w-4 h-4 mr-1" />}
             Stampa ricevuta
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openLabelsPdf}
+            className="bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
+            title="Genera PDF con un'etichetta 50x30mm per ogni strumento"
+          >
+            <Tag className="w-4 h-4 mr-1" />
+            Stampa etichette
           </Button>
           <Button
             variant="destructive"

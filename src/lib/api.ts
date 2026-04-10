@@ -149,6 +149,10 @@ export function getReceiptPdfUrl(sessionId: string): string {
   return `${API_URL}/api/sessions/${sessionId}/receipt-pdf`;
 }
 
+export function getLabelsPdfUrl(sessionId: string): string {
+  return `${API_URL}/api/sessions/${sessionId}/labels-pdf`;
+}
+
 // === 4 PULSANTI AZIONE ===
 export async function registerComplete(sessionId: string) {
   return fetchAPI(`/api/sessions/${sessionId}/register-complete`, { method: 'POST' });
