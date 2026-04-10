@@ -729,11 +729,11 @@ export default function SessionDetail() {
       <Card className="p-6">
         <h3 className="font-semibold text-lg mb-4">Azioni</h3>
         <div className="grid grid-cols-3 gap-4">
-          {/* PULSANTE 1: Registrazione completata */}
+          {/* PULSANTE 1: Registrazione completata — sempre cliccabile (si puo' re-inviare dopo aggiungere strumenti) */}
           <Button
             size="lg"
             className="h-20 flex flex-col gap-1 bg-blue-600 hover:bg-blue-700"
-            disabled={currentStep !== 0 || actionLoading !== null}
+            disabled={actionLoading !== null}
             onClick={() => {
               if (!confirm("Completare la registrazione e inviare ricevuta WhatsApp al cliente?")) return;
               handleAction("register", () => registerComplete(sessionId),
@@ -744,11 +744,11 @@ export default function SessionDetail() {
             <span className="text-xs">REGISTRAZIONE COMPLETATA</span>
           </Button>
 
-          {/* PULSANTE 2: Notifica pronti per ritiro */}
+          {/* PULSANTE 2: Notifica pronti per ritiro — sempre cliccabile */}
           <Button
             size="lg"
             className="h-20 flex flex-col gap-1 bg-green-600 hover:bg-green-700"
-            disabled={currentStep !== 1 || actionLoading !== null}
+            disabled={actionLoading !== null}
             onClick={() => {
               if (!confirm("Inviare notifica WhatsApp al cliente?")) return;
               handleAction("ready", () => notifyReady(sessionId),
@@ -759,11 +759,11 @@ export default function SessionDetail() {
             <span className="text-xs">NOTIFICA PRONTI RITIRO</span>
           </Button>
 
-          {/* PULSANTE 3: Invia proforma */}
+          {/* PULSANTE 3: Invia proforma — sempre cliccabile */}
           <Button
             size="lg"
             className="h-20 flex flex-col gap-1 bg-orange-600 hover:bg-orange-700"
-            disabled={(currentStep !== 1 && currentStep !== 2) || actionLoading !== null}
+            disabled={actionLoading !== null}
             onClick={() => {
               if (!confirm("Inviare proforma via WhatsApp e email al cliente?")) return;
               handleAction("proforma", () => sendProforma(sessionId),
@@ -774,11 +774,11 @@ export default function SessionDetail() {
             <span className="text-xs">INVIA PROFORMA</span>
           </Button>
 
-          {/* PULSANTE 4: Genera rapporti RDT */}
+          {/* PULSANTE 4: Genera rapporti RDT — sempre cliccabile */}
           <Button
             size="lg"
             className="h-20 flex flex-col gap-1 bg-purple-600 hover:bg-purple-700"
-            disabled={currentStep === 0 || actionLoading !== null}
+            disabled={actionLoading !== null}
             onClick={() =>
               handleAction("rdts", () => generateRdts(sessionId),
                 "Rapporti di taratura generati!")
@@ -788,11 +788,11 @@ export default function SessionDetail() {
             <span className="text-xs">GENERA RAPPORTI</span>
           </Button>
 
-          {/* PULSANTE 5: Strumenti riconsegnati */}
+          {/* PULSANTE 5: Strumenti riconsegnati — sempre cliccabile */}
           <Button
             size="lg"
             className="h-20 flex flex-col gap-1 bg-gray-700 hover:bg-gray-800"
-            disabled={currentStep === 4 || currentStep === 0 || actionLoading !== null}
+            disabled={actionLoading !== null}
             onClick={() => {
               if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati?")) return;
               handleAction("delivered", () => markDelivered(sessionId),
