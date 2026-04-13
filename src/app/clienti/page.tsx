@@ -143,6 +143,7 @@ export default function ClientiPage() {
         open={parseOpen}
         onClose={() => setParseOpen(false)}
         onCreated={() => loadList(page, filter)}
+        onUpdated={() => loadList(page, filter)}
       />
 
       {/* Stats */}

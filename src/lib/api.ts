@@ -355,6 +355,13 @@ export async function parseCustomerText(text: string, create = false) {
   });
 }
 
+export async function applyCustomerParsedUpdate(customerId: string, fields: Record<string, string>) {
+  return fetchAPI(`/api/customers/${customerId}/apply-parsed-update`, {
+    method: 'POST',
+    body: JSON.stringify({ fields }),
+  });
+}
+
 export async function moveProspectToCustomer(id: string) {
   return fetchAPI(`/api/prospects/${id}/move-to-customers`, { method: 'POST' });
 }
