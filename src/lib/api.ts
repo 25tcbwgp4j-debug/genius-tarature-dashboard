@@ -362,6 +362,13 @@ export async function applyCustomerParsedUpdate(customerId: string, fields: Reco
   });
 }
 
+export async function parseCustomerImage(imageBase64: string, create = false) {
+  return fetchAPI('/api/customers/parse-image', {
+    method: 'POST',
+    body: JSON.stringify({ image_base64: imageBase64, create }),
+  });
+}
+
 export async function moveProspectToCustomer(id: string) {
   return fetchAPI(`/api/prospects/${id}/move-to-customers`, { method: 'POST' });
 }

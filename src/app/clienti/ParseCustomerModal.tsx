@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Loader2, Sparkles, Save, X, AlertCircle, Check, Plus, GitMerge } from "lucide-react";
+import { Loader2, Sparkles, Save, X, AlertCircle, Check, Plus, GitMerge, FileText, Image as ImageIcon, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { parseCustomerText, applyCustomerParsedUpdate } from "@/lib/api";
+import { parseCustomerText, parseCustomerImage, applyCustomerParsedUpdate } from "@/lib/api";
 
 interface Props {
   open: boolean;
@@ -68,28 +68,67 @@ const STATUS_LABEL: Record<DiffStatus, string> = {
 };
 
 export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Props) {
+  const [mode, setMode] = useState<"text" | "image">("text");
   const [text, setText] = useState("");
+  const [imageB64, setImageB64] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fields, setFields] = useState<ParsedFields | null>(null);
   const [duplicate, setDuplicate] = useState<Duplicate | null>(null);
   const [diff, setDiff] = useState<DiffMap | null>(null);
-  // Scelta campo-per-campo: true = applica il nuovo valore, false = tieni esistente
   const [selection, setSelection] = useState<Record<string, boolean>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cattura paste di immagine da clipboard (Ctrl/Cmd+V) quando il modal e' aperto in tab immagine
+  useEffect(() => {
+    if (!open || mode !== "image") return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const it of Array.from(items)) {
+        if (it.type.startsWith("image/")) {
+          const blob = it.getAsFile();
+          if (blob) {
+            loadImageFile(blob);
+            e.preventDefault();
+            return;
+          }
+        }
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [open, mode]);
+
+  const loadImageFile = (file: File | Blob) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      setImagePreview(result);
+      // Estraggo il base64 puro senza prefisso data:
+      const comma = result.indexOf(",");
+      setImageB64(comma >= 0 ? result.slice(comma + 1) : result);
+      setFields(null); setDuplicate(null); setDiff(null); setSelection({});
+    };
+    reader.readAsDataURL(file);
+  };
 
   if (!open) return null;
 
   const handleParse = async () => {
-    if (!text.trim()) { toast.error("Incolla prima i dati"); return; }
+    if (mode === "text" && !text.trim()) { toast.error("Incolla prima i dati"); return; }
+    if (mode === "image" && !imageB64) { toast.error("Carica prima un'immagine"); return; }
     setParsing(true);
     setFields(null); setDuplicate(null); setDiff(null); setSelection({});
     try {
-      const res = await parseCustomerText(text, false);
+      const res = mode === "text"
+        ? await parseCustomerText(text, false)
+        : await parseCustomerImage(imageB64!, false);
       setFields(res.customer_fields || {});
       setDuplicate(res.duplicate || null);
       setDiff(res.diff || null);
       if (res.duplicate) {
-        // Default: spunta automaticamente tutti i missing, non i conflict
         const sel: Record<string, boolean> = {};
         Object.entries(res.diff || {}).forEach(([k, d]) => {
           const entry = d as DiffEntry;
@@ -163,8 +202,30 @@ export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Prop
   };
 
   const handleClose = () => {
-    setText(""); setFields(null); setDuplicate(null); setDiff(null); setSelection({});
+    setText(""); setImageB64(null); setImagePreview(null);
+    setFields(null); setDuplicate(null); setDiff(null); setSelection({});
     onClose();
+  };
+
+  const handleCreateFromImage = async () => {
+    if (!imageB64 || !fields?.company_name) {
+      toast.error("Ragione sociale obbligatoria"); return;
+    }
+    setSaving(true);
+    try {
+      const res = await parseCustomerImage(imageB64, true);
+      if (res.duplicate) {
+        toast.warning(`Non salvato: duplicato su ${res.duplicate.company_name}`);
+      } else if (res.created?.id) {
+        toast.success(`Cliente creato: ${res.created.company_name}`);
+        onCreated?.(res.created.id);
+        handleClose();
+      } else {
+        toast.error("Creazione fallita");
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Errore salvataggio");
+    } finally { setSaving(false); }
   };
 
   const updateField = (k: keyof ParsedFields, v: string) => {
@@ -202,22 +263,94 @@ export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Prop
           </Button>
         </div>
 
-        <div>
-          <label className="text-sm font-medium text-gray-700 mb-1 block">Testo da analizzare</label>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={6}
-            placeholder={`Esempio:\nROSSI IMPIANTI S.R.L.\nVia Roma 12 - 00100 ROMA (RM)\nP.IVA 01234567890\nCod. Dest. M5UXCR1\nPEC: rossi@legalmail.it\nTel. 06 1234567 - Cell. 333 1234567\nEmail: info@rossiimpianti.it`}
-            className="w-full border rounded p-3 text-sm font-mono resize-y"
-          />
-          <div className="flex justify-end gap-2 mt-2">
-            <Button onClick={handleParse} disabled={parsing || !text.trim()}>
-              {parsing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
-              Estrai campi con AI
-            </Button>
-          </div>
+        {/* Tab selector Testo / Immagine */}
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+          <button
+            type="button"
+            onClick={() => setMode("text")}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              mode === "text" ? "bg-white text-purple-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <FileText className="w-4 h-4" /> Testo
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("image")}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              mode === "image" ? "bg-white text-purple-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <ImageIcon className="w-4 h-4" /> Immagine
+          </button>
         </div>
+
+        {mode === "text" ? (
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Testo da analizzare</label>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={6}
+              placeholder={`Esempio:\nROSSI IMPIANTI S.R.L.\nVia Roma 12 - 00100 ROMA (RM)\nP.IVA 01234567890\nCod. Dest. M5UXCR1\nPEC: rossi@legalmail.it\nTel. 06 1234567 - Cell. 333 1234567\nEmail: info@rossiimpianti.it`}
+              className="w-full border rounded p-3 text-sm font-mono resize-y"
+            />
+            <div className="flex justify-end gap-2 mt-2">
+              <Button onClick={handleParse} disabled={parsing || !text.trim()}>
+                {parsing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
+                Estrai campi con AI
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">
+              Incolla (Ctrl/Cmd+V) o carica un&apos;immagine: biglietto da visita, visura, timbro, screenshot
+            </label>
+            <div
+              onDragOver={(e) => { e.preventDefault(); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const f = e.dataTransfer.files?.[0];
+                if (f && f.type.startsWith("image/")) loadImageFile(f);
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-purple-400 hover:bg-purple-50/30 transition-colors"
+            >
+              {imagePreview ? (
+                <img src={imagePreview} alt="preview" className="max-h-64 mx-auto rounded" />
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-gray-500">
+                  <Upload className="w-8 h-8" />
+                  <div className="text-sm font-medium">Trascina qui un&apos;immagine, oppure clicca per selezionarla</div>
+                  <div className="text-xs">Oppure premi <kbd className="px-1.5 py-0.5 bg-gray-200 rounded">Ctrl</kbd>+<kbd className="px-1.5 py-0.5 bg-gray-200 rounded">V</kbd> per incollare dalla clipboard</div>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) loadImageFile(f);
+                }}
+              />
+            </div>
+            <div className="flex justify-between items-center gap-2 mt-2">
+              {imagePreview && (
+                <Button variant="outline" size="sm" onClick={() => { setImageB64(null); setImagePreview(null); setFields(null); setDuplicate(null); setDiff(null); }}>
+                  <X className="w-3 h-3 mr-1" /> Rimuovi immagine
+                </Button>
+              )}
+              <div className="flex-1" />
+              <Button onClick={handleParse} disabled={parsing || !imageB64}>
+                {parsing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
+                Estrai dati dall&apos;immagine
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* === CASO 1: DUPLICATO -> UI DIFF === */}
         {duplicate && diff && (
@@ -359,7 +492,10 @@ export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Prop
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" onClick={handleClose}>Annulla</Button>
-              <Button onClick={handleCreateNew} disabled={saving || !fields.company_name}>
+              <Button
+                onClick={mode === "image" ? handleCreateFromImage : handleCreateNew}
+                disabled={saving || !fields.company_name}
+              >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
                 Salva nuovo cliente
               </Button>
