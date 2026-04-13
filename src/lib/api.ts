@@ -333,6 +333,21 @@ export async function getAutomationDailyLog(days = 7) {
   return fetchAPI(`/api/automation/daily-log?days=${days}`);
 }
 
+// === MARK PAID + STATISTICHE ===
+export async function markSessionPaid(
+  sessionId: string,
+  data: { payment_method?: string; payment_notes?: string; payment_date?: string } = {},
+) {
+  return fetchAPI(`/api/sessions/${sessionId}/mark-paid`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getStatistics() {
+  return fetchAPI('/api/statistics');
+}
+
 export async function moveProspectToCustomer(id: string) {
   return fetchAPI(`/api/prospects/${id}/move-to-customers`, { method: 'POST' });
 }

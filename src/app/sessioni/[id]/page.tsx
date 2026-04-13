@@ -14,6 +14,7 @@ import {
   sendProforma,
   markDelivered,
   generateRdts,
+  markSessionPaid,
   updateSession,
   deleteSession,
   updateInstrument,
@@ -42,6 +43,7 @@ import {
   Printer,
   Tag,
   FileDown,
+  Euro,
   History,
   ChevronDown,
   ChevronUp,
@@ -846,6 +848,40 @@ export default function SessionDetail() {
             {actionLoading === "delivered" ? <Loader2 className="w-6 h-6 animate-spin" /> : <PackageCheck className="w-6 h-6" />}
             <span className="text-xs">STRUMENTI RICONSEGNATI</span>
           </Button>
+
+          {/* PULSANTE 6: Segna come pagato — visibile solo se non gia' pagato.
+              Utile dopo import fattura su SimplyFatt e ricezione bonifico. */}
+          {session.payment_status !== "pagato" && (
+            <Button
+              size="lg"
+              className="h-20 flex flex-col gap-1 bg-emerald-600 hover:bg-emerald-700"
+              disabled={actionLoading !== null}
+              onClick={async () => {
+                const method = prompt(
+                  "Metodo pagamento? (bonifico, contanti, pos, paypal, assegno, carta)",
+                  "bonifico",
+                );
+                if (!method) return;
+                const notes = prompt("Note opzionali (premi OK per saltare):", "") || undefined;
+                handleAction("mark_paid", () => markSessionPaid(sessionId, {
+                  payment_method: method.toLowerCase(),
+                  payment_notes: notes,
+                }), "Pagamento registrato!");
+              }}
+            >
+              {actionLoading === "mark_paid" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Euro className="w-6 h-6" />}
+              <span className="text-xs">SEGNA COME PAGATO</span>
+            </Button>
+          )}
+          {session.payment_status === "pagato" && (
+            <div className="h-20 flex flex-col items-center justify-center bg-emerald-50 border-2 border-emerald-200 rounded-md text-emerald-700">
+              <Euro className="w-6 h-6" />
+              <span className="text-xs font-semibold">PAGATO</span>
+              {session.payment_method && (
+                <span className="text-[10px] text-emerald-600">{session.payment_method}</span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Timeline stato */}
