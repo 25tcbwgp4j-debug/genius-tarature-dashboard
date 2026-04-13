@@ -794,7 +794,7 @@ export default function SessionDetail() {
             className="h-20 flex flex-col gap-1 bg-green-600 hover:bg-green-700"
             disabled={actionLoading !== null}
             onClick={() => {
-              if (!confirm("Inviare notifica WhatsApp al cliente?")) return;
+              if (!confirm("Inviare notifica pronti al ritiro (WhatsApp + email)?")) return;
               handleAction("ready", () => notifyReady(sessionId),
                 "Cliente notificato: strumenti pronti per il ritiro!");
             }}
