@@ -329,6 +329,10 @@ export async function dispatchEmailNow() {
   return fetchAPI('/api/notifications/dispatch-now', { method: 'POST' });
 }
 
+export async function getAutomationDailyLog(days = 7) {
+  return fetchAPI(`/api/automation/daily-log?days=${days}`);
+}
+
 export async function moveProspectToCustomer(id: string) {
   return fetchAPI(`/api/prospects/${id}/move-to-customers`, { method: 'POST' });
 }
