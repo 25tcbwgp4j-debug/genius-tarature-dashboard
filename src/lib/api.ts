@@ -320,6 +320,15 @@ export async function sendProspectBatch(limit: number, provincia?: string) {
   });
 }
 
+// === NOTIFICHE EMAIL AUTOMATICHE ===
+export async function getEmailQuota() {
+  return fetchAPI('/api/notifications/quota');
+}
+
+export async function dispatchEmailNow() {
+  return fetchAPI('/api/notifications/dispatch-now', { method: 'POST' });
+}
+
 export async function moveProspectToCustomer(id: string) {
   return fetchAPI(`/api/prospects/${id}/move-to-customers`, { method: 'POST' });
 }

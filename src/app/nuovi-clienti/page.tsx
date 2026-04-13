@@ -10,6 +10,7 @@ import {
   listProspects, getProspectStats, updateProspect,
   sendProspectEmail, sendProspectBatch,
   moveProspectToCustomer, moveBatchProspectsToCustomers,
+  getEmailQuota,
 } from "@/lib/api";
 
 interface Prospect {
@@ -55,6 +56,22 @@ export default function NuoviClientiPage() {
   const [sendResult, setSendResult] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
   const [moveResult, setMoveResult] = useState<string | null>(null);
+  const [quota, setQuota] = useState<{
+    daily_cap: number; sent_today_total: number; remaining_total: number;
+    sent_today_scadenzario: number; scadenzario_quota: number;
+    sent_today_prospect: number; prospect_quota: number;
+    pending_scadenzario: number; pending_prospect: number;
+  } | null>(null);
+
+  const fetchQuota = useCallback(async () => {
+    try { setQuota(await getEmailQuota()); } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    fetchQuota();
+    const id = setInterval(fetchQuota, 60000); // refresh ogni minuto
+    return () => clearInterval(id);
+  }, [fetchQuota]);
 
   const fetchProspects = useCallback(async () => {
     setLoading(true);
@@ -130,10 +147,23 @@ export default function NuoviClientiPage() {
     setSending(true);
     setSendResult(null);
     try {
-      const data = await sendProspectBatch(20, filterProv || undefined);
-      setSendResult(`Inviate: ${data.sent}, Errori: ${data.errors}, Trovati: ${data.total_found}`);
+      // Invia un batch immediato (max 5). Lo scheduler continuera'
+      // automaticamente ogni 30 min dalle 09:00 alle 17:30 fino a
+      // esaurimento, rispettando la quota giornaliera (80 email/giorno).
+      const data = await sendProspectBatch(5, filterProv || undefined);
+      const quotaInfo = data.quota_today
+        ? ` | Quota oggi: ${data.quota_today.sent}/${data.quota_today.cap}`
+        : "";
+      const pending = data.pending_prospects_remaining ?? 0;
+      setSendResult(
+        `Batch immediato: ${data.sent} inviate, ${data.errors} errori. ` +
+        `Prospect ancora in coda: ${pending}.${quotaInfo} ` +
+        `Continueranno automaticamente ogni 30 min (09:00-17:30) fino a completamento.`
+      );
+      toast.success(`Batch inviato: ${data.sent}/5. Auto-dispatch attivo.`);
       fetchProspects();
       fetchStats();
+      fetchQuota();
     } catch (e: any) {
       setSendResult(e.message || "Errore invio batch");
       toast.error(e.message || "Errore invio batch");
@@ -197,7 +227,7 @@ export default function NuoviClientiPage() {
             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
           >
             {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            {sending ? "Invio in corso..." : "Invia email a tutti i nuovi con email"}
+            {sending ? "Invio in corso..." : "Avvia invio (batch 5 + auto-dispatch)"}
           </button>
         )}
         {tab === "email_inviate" && (
@@ -221,6 +251,61 @@ export default function NuoviClientiPage() {
       {moveResult && (
         <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg">
           {moveResult}
+        </div>
+      )}
+
+      {/* Pannello Quota Email Automatiche */}
+      {quota && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <Mail className="w-4 h-4 text-blue-600" />
+                Email automatiche giornaliere
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Auto-dispatch ogni 30 min (09:00–17:30 Europe/Rome), 5 email/batch, max {quota.daily_cap}/giorno
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold text-blue-700">
+                {quota.sent_today_total}/{quota.daily_cap}
+              </div>
+              <div className="text-xs text-gray-500">inviate oggi</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white rounded-lg p-3 border border-blue-100">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-gray-700">Scadenzario</span>
+                <span className="text-xs text-gray-500">
+                  {quota.sent_today_scadenzario}/{quota.scadenzario_quota}
+                </span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-1.5">
+                <div
+                  className="bg-orange-500 h-1.5 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, (quota.sent_today_scadenzario / quota.scadenzario_quota) * 100)}%` }}
+                />
+              </div>
+              <div className="text-xs text-gray-400 mt-1">In coda: {quota.pending_scadenzario}</div>
+            </div>
+            <div className="bg-white rounded-lg p-3 border border-blue-100">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-gray-700">Prospect FGAS</span>
+                <span className="text-xs text-gray-500">
+                  {quota.sent_today_prospect}/{quota.prospect_quota}
+                </span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-1.5">
+                <div
+                  className="bg-purple-500 h-1.5 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, (quota.sent_today_prospect / quota.prospect_quota) * 100)}%` }}
+                />
+              </div>
+              <div className="text-xs text-gray-400 mt-1">In coda: {quota.pending_prospect}</div>
+            </div>
+          </div>
         </div>
       )}
 
