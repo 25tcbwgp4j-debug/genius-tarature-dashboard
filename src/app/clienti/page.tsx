@@ -27,8 +27,10 @@ import {
   AlertCircle,
   Filter,
   Trash2,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ParseCustomerModal } from "./ParseCustomerModal";
 
 export default function ClientiPage() {
   const [query, setQuery] = useState("");
@@ -43,6 +45,7 @@ export default function ClientiPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [parseOpen, setParseOpen] = useState(false);
 
   // Carica lista paginata
   const loadList = async (p: number, f: string) => {
@@ -126,7 +129,21 @@ export default function ClientiPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Clienti</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-gray-900">Clienti</h2>
+        <Button
+          onClick={() => setParseOpen(true)}
+          className="bg-purple-600 hover:bg-purple-700 text-white"
+        >
+          <Sparkles className="w-4 h-4 mr-2" />
+          Incolla dati (AI)
+        </Button>
+      </div>
+      <ParseCustomerModal
+        open={parseOpen}
+        onClose={() => setParseOpen(false)}
+        onCreated={() => loadList(page, filter)}
+      />
 
       {/* Stats */}
       {stats && (

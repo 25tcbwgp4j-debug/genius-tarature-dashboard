@@ -348,6 +348,13 @@ export async function getStatistics() {
   return fetchAPI('/api/statistics');
 }
 
+export async function parseCustomerText(text: string, create = false) {
+  return fetchAPI('/api/customers/parse-text', {
+    method: 'POST',
+    body: JSON.stringify({ text, create }),
+  });
+}
+
 export async function moveProspectToCustomer(id: string) {
   return fetchAPI(`/api/prospects/${id}/move-to-customers`, { method: 'POST' });
 }
