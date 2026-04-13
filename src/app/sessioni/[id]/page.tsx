@@ -47,6 +47,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { STATUS_CONFIG } from "@/lib/constants";
+import { RecipientPanel } from "./RecipientPanel";
 
 interface InstrumentType {
   id: string;
@@ -427,7 +428,7 @@ export default function SessionDetail() {
 
       {/* Info cliente */}
       <Card className="p-6">
-        <h3 className="font-semibold text-lg mb-3">Cliente</h3>
+        <h3 className="font-semibold text-lg mb-3">Cliente (chi paga)</h3>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <span className="text-gray-500">Ragione sociale:</span>
@@ -447,6 +448,15 @@ export default function SessionDetail() {
           </div>
         </div>
       </Card>
+
+      {/* Destinatario diverso (proprietario strumento) */}
+      <RecipientPanel
+        sessionId={sessionId}
+        session={session}
+        customer={customer}
+        onSaved={loadSession}
+      />
+
 
       {/* Storico strumenti cliente - collapsible */}
       {pastInstruments.length > 0 && (
