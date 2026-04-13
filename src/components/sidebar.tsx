@@ -13,6 +13,7 @@ import {
   Settings,
   QrCode,
   Activity,
+  Zap,
   LogOut,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/rapporti", label: "Rapporti", icon: FileText },
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/automazioni", label: "Automazioni", icon: Activity },
+  { href: "/enrichment", label: "Arricchimento", icon: Zap },
   { href: "/statistiche", label: "Statistiche", icon: BarChart3 },
   { href: "/qrcode", label: "QR Code", icon: QrCode },
   { href: "/impostazioni", label: "Impostazioni", icon: Settings },

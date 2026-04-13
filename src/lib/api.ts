@@ -369,6 +369,25 @@ export async function parseCustomerImage(imageBase64: string, create = false) {
   });
 }
 
+// === ENRICHMENT CONTATTI ===
+export async function getEnrichmentStats() {
+  return fetchAPI('/api/enrichment/stats');
+}
+
+export async function runEnrichmentProspects(limit = 40) {
+  return fetchAPI('/api/enrichment/prospects/run', {
+    method: 'POST',
+    body: JSON.stringify({ limit }),
+  });
+}
+
+export async function runEnrichmentCustomers(limit = 30) {
+  return fetchAPI('/api/enrichment/customers/run', {
+    method: 'POST',
+    body: JSON.stringify({ limit }),
+  });
+}
+
 export async function moveProspectToCustomer(id: string) {
   return fetchAPI(`/api/prospects/${id}/move-to-customers`, { method: 'POST' });
 }
