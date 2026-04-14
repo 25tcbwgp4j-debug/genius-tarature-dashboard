@@ -218,7 +218,9 @@ export function ReconcileModal({ open, onClose, onMerged }: Props) {
                       <td className="px-2 py-2">
                         <input type="radio" checked={m.id === masterId} onChange={() => handleChangeMaster(m.id)} className="w-4 h-4" />
                         {m.id === current.suggested_master_id && (
-                          <Crown className="w-3 h-3 inline ml-1 text-amber-500" title="Suggerito (piu' completo)" />
+                          <span title="Suggerito (piu' completo)">
+                            <Crown className="w-3 h-3 inline ml-1 text-amber-500" />
+                          </span>
                         )}
                       </td>
                       <td className="px-2 py-2 font-medium">{m.company_name}</td>
