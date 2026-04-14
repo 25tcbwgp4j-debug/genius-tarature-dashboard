@@ -269,7 +269,7 @@ export function ReconcileModal({ open, onClose, onMerged }: Props) {
                           {duplicates.map((d) => {
                             const val = d[f.key] as string | null | undefined;
                             const selected = pick[f.key] === d.id;
-                            const same = masterVal && val && String(masterVal).toLowerCase() === String(val).toLowerCase();
+                            const same = !!(masterVal && val && String(masterVal).toLowerCase() === String(val).toLowerCase());
                             return (
                               <td key={d.id} className="px-2 py-2">
                                 {val ? (
