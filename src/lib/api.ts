@@ -158,8 +158,9 @@ export function getReceiptPdfUrl(sessionId: string): string {
   return `${API_URL_DIRECT}/api/sessions/${sessionId}/receipt-pdf`;
 }
 
-export function getLabelsPdfUrl(sessionId: string): string {
-  return `${API_URL_DIRECT}/api/sessions/${sessionId}/labels-pdf`;
+export function getLabelsPdfUrl(sessionId: string, fmt: "default" | "brother_ql710" = "default"): string {
+  const qs = fmt === "default" ? "" : `?fmt=${fmt}`;
+  return `${API_URL_DIRECT}/api/sessions/${sessionId}/labels-pdf${qs}`;
 }
 
 export function getFatturaXmlUrl(sessionId: string): string {
