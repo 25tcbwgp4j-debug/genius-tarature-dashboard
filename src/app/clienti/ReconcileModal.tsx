@@ -270,6 +270,10 @@ export function ReconcileModal({ open, onClose, onMerged }: Props) {
                             const val = d[f.key] as string | null | undefined;
                             const selected = pick[f.key] === d.id;
                             const same = !!(masterVal && val && String(masterVal).toLowerCase() === String(val).toLowerCase());
+                            // Radio disabilitata SOLO se i due valori sono identici (niente da importare).
+                            // Se master ha valore diverso: la radio resta cliccabile e
+                            // il valore del duplicato SOVRASCRIVE il master al merge.
+                            const isOverwrite = !!masterVal && !same;
                             return (
                               <td key={d.id} className="px-2 py-2">
                                 {val ? (
@@ -278,12 +282,18 @@ export function ReconcileModal({ open, onClose, onMerged }: Props) {
                                       type="radio"
                                       name={`pick-${f.key}`}
                                       checked={selected}
-                                      disabled={!!masterVal || same}
+                                      disabled={same}
                                       onChange={() => setPick({ ...pick, [f.key]: d.id })}
                                       className="w-3.5 h-3.5"
                                     />
-                                    <span className={`text-xs ${selected ? "font-semibold text-emerald-700" : same ? "text-gray-400" : "text-gray-700"}`}>
+                                    <span className={`text-xs ${
+                                      selected ? (isOverwrite ? "font-semibold text-orange-700" : "font-semibold text-emerald-700")
+                                               : same ? "text-gray-400"
+                                               : isOverwrite ? "text-orange-600"
+                                               : "text-gray-700"
+                                    }`}>
                                       {val}
+                                      {isOverwrite && <span className="ml-1 text-[10px] text-orange-500">(sovrascrive master)</span>}
                                     </span>
                                   </label>
                                 ) : (
