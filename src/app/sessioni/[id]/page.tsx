@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { STATUS_CONFIG } from "@/lib/constants";
 import { RecipientPanel } from "./RecipientPanel";
+import { ChangeCustomerDialog } from "./ChangeCustomerDialog";
 
 interface InstrumentType {
   id: string;
@@ -430,7 +431,17 @@ export default function SessionDetail() {
 
       {/* Info cliente */}
       <Card className="p-6">
-        <h3 className="font-semibold text-lg mb-3">Cliente (chi paga)</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-lg">Cliente (chi paga)</h3>
+        </div>
+        <div className="flex justify-end mb-2">
+          <ChangeCustomerDialog
+            sessionId={sessionId}
+            currentCustomerId={customer.id}
+            currentCustomerName={customer.company_name}
+            onChanged={loadSession}
+          />
+        </div>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <span className="text-gray-500">Ragione sociale:</span>

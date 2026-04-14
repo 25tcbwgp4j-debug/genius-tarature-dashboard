@@ -388,6 +388,29 @@ export async function runEnrichmentCustomers(limit = 30) {
   });
 }
 
+// === RICONCILIAZIONE CLIENTI ===
+export async function findDuplicateCustomers() {
+  return fetchAPI('/api/customers/duplicates');
+}
+
+export async function mergeCustomers(masterId: string, duplicateIds: string[], fieldsToImport: Record<string, string>) {
+  return fetchAPI('/api/customers/merge', {
+    method: 'POST',
+    body: JSON.stringify({
+      master_id: masterId,
+      duplicate_ids: duplicateIds,
+      fields_to_import: fieldsToImport,
+    }),
+  });
+}
+
+export async function changeSessionCustomer(sessionId: string, customerId: string) {
+  return fetchAPI(`/api/sessions/${sessionId}/change-customer`, {
+    method: 'POST',
+    body: JSON.stringify({ customer_id: customerId }),
+  });
+}
+
 export async function moveProspectToCustomer(id: string) {
   return fetchAPI(`/api/prospects/${id}/move-to-customers`, { method: 'POST' });
 }

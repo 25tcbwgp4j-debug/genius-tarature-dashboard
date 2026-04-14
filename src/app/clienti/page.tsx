@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ParseCustomerModal } from "./ParseCustomerModal";
+import { ReconcileModal } from "./ReconcileModal";
+import { GitMerge } from "lucide-react";
 
 export default function ClientiPage() {
   const [query, setQuery] = useState("");
@@ -46,6 +48,7 @@ export default function ClientiPage() {
   const [editData, setEditData] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [parseOpen, setParseOpen] = useState(false);
+  const [reconcileOpen, setReconcileOpen] = useState(false);
 
   // Carica lista paginata
   const loadList = async (p: number, f: string) => {
@@ -131,19 +134,33 @@ export default function ClientiPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Clienti</h2>
-        <Button
-          onClick={() => setParseOpen(true)}
-          className="bg-purple-600 hover:bg-purple-700 text-white"
-        >
-          <Sparkles className="w-4 h-4 mr-2" />
-          Incolla dati (AI)
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setReconcileOpen(true)}
+            className="bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            <GitMerge className="w-4 h-4 mr-2" />
+            Riconciliazione clienti
+          </Button>
+          <Button
+            onClick={() => setParseOpen(true)}
+            className="bg-purple-600 hover:bg-purple-700 text-white"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            Incolla dati (AI)
+          </Button>
+        </div>
       </div>
       <ParseCustomerModal
         open={parseOpen}
         onClose={() => setParseOpen(false)}
         onCreated={() => loadList(page, filter)}
         onUpdated={() => loadList(page, filter)}
+      />
+      <ReconcileModal
+        open={reconcileOpen}
+        onClose={() => setReconcileOpen(false)}
+        onMerged={() => loadList(page, filter)}
       />
 
       {/* Stats */}
