@@ -399,20 +399,10 @@ export default function SessionDetail() {
             size="sm"
             onClick={openLabelsPdf}
             className="bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
-            title="Genera PDF con un'etichetta 50x30mm per ogni strumento"
+            title="Genera PDF etichette di taratura 50x22mm per ogni strumento"
           >
             <Tag className="w-4 h-4 mr-1" />
-            Etichette 50x30
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.open(getLabelsPdfUrl(sessionId, "brother_ql710"), "_blank")}
-            className="bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100"
-            title="Genera PDF 62x29mm ottimizzato per Brother QL-710W con rotolo DK-22205"
-          >
-            <Tag className="w-4 h-4 mr-1" />
-            Etichette Brother QL
+            Stampa etichette
           </Button>
           <Button
             variant="outline"
