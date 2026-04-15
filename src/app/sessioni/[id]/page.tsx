@@ -74,6 +74,26 @@ interface PastInstrument {
   instrument_types?: { id: string; name: string; price: number } | null;
 }
 
+// Formatta ISO date string in "DD/MM/YYYY HH:MM" per timestamp UI
+function formatItDateTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleString("it-IT", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  } catch { return null; }
+}
+
+function ActionTimestamp({ ts }: { ts: string | null | undefined }) {
+  const f = formatItDateTime(ts);
+  return (
+    <p className="text-[10px] text-center text-gray-500 h-3">
+      {f ? <>Inviato: <span className="font-medium text-gray-700">{f}</span></> : <span className="text-gray-300">—</span>}
+    </p>
+  );
+}
+
 export default function SessionDetail() {
   const params = useParams();
   const router = useRouter();
@@ -326,6 +346,16 @@ export default function SessionDetail() {
           <Badge className={STATUS_CONFIG[session.status]?.color || ""}>
             {STATUS_CONFIG[session.status]?.label || session.status}
           </Badge>
+          {/* Badge pagamento: verde se pagato, arancio se attesa, grigio altrimenti */}
+          {session.payment_status === "pagato" ? (
+            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">
+              PAGATO{session.payment_method ? ` · ${session.payment_method}` : ""}
+            </Badge>
+          ) : session.payment_status === "in_attesa" ? (
+            <Badge className="bg-orange-100 text-orange-800 border-orange-300">
+              Da pagare
+            </Badge>
+          ) : null}
         </div>
         <div className="flex gap-2">
           {!editingSession ? (
@@ -824,35 +854,41 @@ export default function SessionDetail() {
       <Card className="p-6">
         <h3 className="font-semibold text-lg mb-4">Azioni</h3>
         <div className="grid grid-cols-3 gap-4">
-          {/* PULSANTE 1: Registrazione completata — sempre cliccabile (si puo' re-inviare dopo aggiungere strumenti) */}
-          <Button
-            size="lg"
-            className="h-20 flex flex-col gap-1 bg-blue-600 hover:bg-blue-700"
-            disabled={actionLoading !== null}
-            onClick={() => {
-              if (!confirm("Completare la registrazione e inviare ricevuta WhatsApp al cliente?")) return;
-              handleAction("register", () => registerComplete(sessionId),
-                "Registrazione completata! Ricevuta inviata al cliente.")
-            }}
-          >
-            {actionLoading === "register" ? <Loader2 className="w-6 h-6 animate-spin" /> : <ClipboardCheck className="w-6 h-6" />}
-            <span className="text-xs">REGISTRAZIONE COMPLETATA</span>
-          </Button>
+          {/* PULSANTE 1: Registrazione completata */}
+          <div className="flex flex-col gap-1">
+            <Button
+              size="lg"
+              className="h-20 flex flex-col gap-1 bg-blue-600 hover:bg-blue-700"
+              disabled={actionLoading !== null}
+              onClick={() => {
+                if (!confirm("Completare la registrazione e inviare ricevuta WhatsApp al cliente?")) return;
+                handleAction("register", () => registerComplete(sessionId),
+                  "Registrazione completata! Ricevuta inviata al cliente.")
+              }}
+            >
+              {actionLoading === "register" ? <Loader2 className="w-6 h-6 animate-spin" /> : <ClipboardCheck className="w-6 h-6" />}
+              <span className="text-xs">REGISTRAZIONE COMPLETATA</span>
+            </Button>
+            <ActionTimestamp ts={session.registered_at} />
+          </div>
 
-          {/* PULSANTE 2: Notifica pronti per ritiro — sempre cliccabile */}
-          <Button
-            size="lg"
-            className="h-20 flex flex-col gap-1 bg-green-600 hover:bg-green-700"
-            disabled={actionLoading !== null}
-            onClick={() => {
-              if (!confirm("Inviare notifica pronti al ritiro (WhatsApp + email)?")) return;
-              handleAction("ready", () => notifyReady(sessionId),
-                "Cliente notificato: strumenti pronti per il ritiro!");
-            }}
-          >
-            {actionLoading === "ready" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Bell className="w-6 h-6" />}
-            <span className="text-xs">NOTIFICA PRONTI RITIRO</span>
-          </Button>
+          {/* PULSANTE 2: Notifica pronti per ritiro */}
+          <div className="flex flex-col gap-1">
+            <Button
+              size="lg"
+              className="h-20 flex flex-col gap-1 bg-green-600 hover:bg-green-700"
+              disabled={actionLoading !== null}
+              onClick={() => {
+                if (!confirm("Inviare notifica pronti al ritiro (WhatsApp + email)?")) return;
+                handleAction("ready", () => notifyReady(sessionId),
+                  "Cliente notificato: strumenti pronti per il ritiro!");
+              }}
+            >
+              {actionLoading === "ready" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Bell className="w-6 h-6" />}
+              <span className="text-xs">NOTIFICA PRONTI RITIRO</span>
+            </Button>
+            <ActionTimestamp ts={session.ready_at} />
+          </div>
 
           {/* PULSANTE 3: Invia proforma + input numero SimplyFatt */}
           <div className="flex flex-col gap-1">
@@ -889,68 +925,87 @@ export default function SessionDetail() {
                 className="h-7 text-xs text-center font-mono"
               />
             </div>
+            <ActionTimestamp ts={session.proforma_sent_at} />
           </div>
 
-          {/* PULSANTE 4: Genera rapporti RDT — sempre cliccabile */}
-          <Button
-            size="lg"
-            className="h-20 flex flex-col gap-1 bg-purple-600 hover:bg-purple-700"
-            disabled={actionLoading !== null}
-            onClick={() =>
-              handleAction("rdts", () => generateRdts(sessionId),
-                "Rapporti di taratura generati!")
-            }
-          >
-            {actionLoading === "rdts" ? <Loader2 className="w-6 h-6 animate-spin" /> : <FileOutput className="w-6 h-6" />}
-            <span className="text-xs">GENERA RAPPORTI</span>
-          </Button>
-
-          {/* PULSANTE 5: Strumenti riconsegnati — sempre cliccabile */}
-          <Button
-            size="lg"
-            className="h-20 flex flex-col gap-1 bg-gray-700 hover:bg-gray-800"
-            disabled={actionLoading !== null}
-            onClick={() => {
-              if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati?")) return;
-              handleAction("delivered", () => markDelivered(sessionId),
-                "Sessione completata! Strumenti riconsegnati.");
-            }}
-          >
-            {actionLoading === "delivered" ? <Loader2 className="w-6 h-6 animate-spin" /> : <PackageCheck className="w-6 h-6" />}
-            <span className="text-xs">STRUMENTI RICONSEGNATI</span>
-          </Button>
-
-          {/* PULSANTE 6: Segna come pagato — visibile solo se non gia' pagato.
-              Utile dopo import fattura su SimplyFatt e ricezione bonifico. */}
-          {session.payment_status !== "pagato" && (
+          {/* PULSANTE 4: Genera rapporti RDT */}
+          <div className="flex flex-col gap-1">
             <Button
               size="lg"
-              className="h-20 flex flex-col gap-1 bg-emerald-600 hover:bg-emerald-700"
+              className="h-20 flex flex-col gap-1 bg-purple-600 hover:bg-purple-700"
               disabled={actionLoading !== null}
-              onClick={async () => {
-                const method = prompt(
-                  "Metodo pagamento? (bonifico, contanti, pos, paypal, assegno, carta)",
-                  "bonifico",
-                );
-                if (!method) return;
-                const notes = prompt("Note opzionali (premi OK per saltare):", "") || undefined;
-                handleAction("mark_paid", () => markSessionPaid(sessionId, {
-                  payment_method: method.toLowerCase(),
-                  payment_notes: notes,
-                }), "Pagamento registrato!");
+              onClick={() =>
+                handleAction("rdts", () => generateRdts(sessionId),
+                  "Rapporti di taratura generati!")
+              }
+            >
+              {actionLoading === "rdts" ? <Loader2 className="w-6 h-6 animate-spin" /> : <FileOutput className="w-6 h-6" />}
+              <span className="text-xs">GENERA RAPPORTI</span>
+            </Button>
+            {/* Ultimo RDT generato: max rdt_generated_at fra gli strumenti della sessione */}
+            <ActionTimestamp ts={
+              (instruments || [])
+                .map((i: { rdt_generated_at?: string | null }) => i.rdt_generated_at || "")
+                .filter((v: string) => !!v)
+                .sort()
+                .pop()
+            } />
+          </div>
+
+          {/* PULSANTE 5: Strumenti riconsegnati */}
+          <div className="flex flex-col gap-1">
+            <Button
+              size="lg"
+              className="h-20 flex flex-col gap-1 bg-gray-700 hover:bg-gray-800"
+              disabled={actionLoading !== null}
+              onClick={() => {
+                if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati?")) return;
+                handleAction("delivered", () => markDelivered(sessionId),
+                  "Sessione completata! Strumenti riconsegnati.");
               }}
             >
-              {actionLoading === "mark_paid" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Euro className="w-6 h-6" />}
-              <span className="text-xs">SEGNA COME PAGATO</span>
+              {actionLoading === "delivered" ? <Loader2 className="w-6 h-6 animate-spin" /> : <PackageCheck className="w-6 h-6" />}
+              <span className="text-xs">STRUMENTI RICONSEGNATI</span>
             </Button>
+            <ActionTimestamp ts={session.delivered_at} />
+          </div>
+
+          {/* PULSANTE 6: Segna come pagato — visibile solo se non gia' pagato. */}
+          {session.payment_status !== "pagato" && (
+            <div className="flex flex-col gap-1">
+              <Button
+                size="lg"
+                className="h-20 flex flex-col gap-1 bg-emerald-600 hover:bg-emerald-700"
+                disabled={actionLoading !== null}
+                onClick={async () => {
+                  const method = prompt(
+                    "Metodo pagamento? (bonifico, contanti, pos, paypal, assegno, carta)",
+                    "bonifico",
+                  );
+                  if (!method) return;
+                  const notes = prompt("Note opzionali (premi OK per saltare):", "") || undefined;
+                  handleAction("mark_paid", () => markSessionPaid(sessionId, {
+                    payment_method: method.toLowerCase(),
+                    payment_notes: notes,
+                  }), "Pagamento registrato!");
+                }}
+              >
+                {actionLoading === "mark_paid" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Euro className="w-6 h-6" />}
+                <span className="text-xs">SEGNA COME PAGATO</span>
+              </Button>
+              <ActionTimestamp ts={session.payment_date} />
+            </div>
           )}
           {session.payment_status === "pagato" && (
-            <div className="h-20 flex flex-col items-center justify-center bg-emerald-50 border-2 border-emerald-200 rounded-md text-emerald-700">
-              <Euro className="w-6 h-6" />
-              <span className="text-xs font-semibold">PAGATO</span>
-              {session.payment_method && (
-                <span className="text-[10px] text-emerald-600">{session.payment_method}</span>
-              )}
+            <div className="flex flex-col gap-1">
+              <div className="h-20 flex flex-col items-center justify-center bg-emerald-50 border-2 border-emerald-200 rounded-md text-emerald-700">
+                <Euro className="w-6 h-6" />
+                <span className="text-xs font-semibold">PAGATO</span>
+                {session.payment_method && (
+                  <span className="text-[10px] text-emerald-600">{session.payment_method}</span>
+                )}
+              </div>
+              <ActionTimestamp ts={session.payment_date} />
             </div>
           )}
         </div>
