@@ -78,6 +78,8 @@ export default function SessionDetail() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // Suffix proforma SimplyFatt (1-2 cifre): completa la causale come 'PF-AAAA-00XX'
+  const [proformaSuffix, setProformaSuffix] = useState<string>("");
   const [editingInstrument, setEditingInstrument] = useState<string | null>(null);
   const [editInstrumentData, setEditInstrumentData] = useState<any>(null);
   const [editingSession, setEditingSession] = useState(false);
@@ -826,20 +828,42 @@ export default function SessionDetail() {
             <span className="text-xs">NOTIFICA PRONTI RITIRO</span>
           </Button>
 
-          {/* PULSANTE 3: Invia proforma — sempre cliccabile */}
-          <Button
-            size="lg"
-            className="h-20 flex flex-col gap-1 bg-orange-600 hover:bg-orange-700"
-            disabled={actionLoading !== null}
-            onClick={() => {
-              if (!confirm("Inviare proforma via WhatsApp e email al cliente?")) return;
-              handleAction("proforma", () => sendProforma(sessionId),
-                "Proforma inviata al cliente!");
-            }}
-          >
-            {actionLoading === "proforma" ? <Loader2 className="w-6 h-6 animate-spin" /> : <FileText className="w-6 h-6" />}
-            <span className="text-xs">INVIA PROFORMA</span>
-          </Button>
+          {/* PULSANTE 3: Invia proforma + input numero SimplyFatt */}
+          <div className="flex flex-col gap-1">
+            <Button
+              size="lg"
+              className="h-16 flex flex-col gap-0.5 bg-orange-600 hover:bg-orange-700"
+              disabled={actionLoading !== null}
+              onClick={() => {
+                const suffix = proformaSuffix.trim();
+                const year = new Date().getFullYear();
+                const causale = suffix
+                  ? `Pro Forma PF-${year}-00${suffix.padStart(2, "0")}`
+                  : "Pro Forma (numero interno DB)";
+                if (!confirm(
+                  `Inviare proforma via WhatsApp e email al cliente?\n\n` +
+                  `Causale bonifico: ${causale}`
+                )) return;
+                handleAction("proforma", () => sendProforma(sessionId, suffix),
+                  "Proforma inviata al cliente!");
+              }}
+            >
+              {actionLoading === "proforma" ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
+              <span className="text-xs">INVIA PROFORMA</span>
+            </Button>
+            <div className="flex items-center gap-1">
+              <label className="text-[10px] text-gray-500 whitespace-nowrap">N° SimplyFatt:</label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                maxLength={2}
+                placeholder="es. 03"
+                value={proformaSuffix}
+                onChange={(e) => setProformaSuffix(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                className="h-7 text-xs text-center font-mono"
+              />
+            </div>
+          </div>
 
           {/* PULSANTE 4: Genera rapporti RDT — sempre cliccabile */}
           <Button

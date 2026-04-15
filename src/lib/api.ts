@@ -176,8 +176,11 @@ export async function notifyReady(sessionId: string) {
   return fetchAPI(`/api/sessions/${sessionId}/notify-ready`, { method: 'POST' });
 }
 
-export async function sendProforma(sessionId: string) {
-  return fetchAPI(`/api/sessions/${sessionId}/send-proforma`, { method: 'POST' });
+export async function sendProforma(sessionId: string, proformaSuffix = "") {
+  return fetchAPI(`/api/sessions/${sessionId}/send-proforma`, {
+    method: 'POST',
+    body: JSON.stringify({ proforma_suffix: proformaSuffix }),
+  });
 }
 
 export async function markDelivered(sessionId: string, notes?: string) {
