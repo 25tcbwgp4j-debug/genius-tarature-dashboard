@@ -26,6 +26,10 @@ export default function SessionsPage() {
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+  // Anti-double-submit sul pulsante "Crea sessione": indica il customer_id in
+  // corso di creazione. Blocca ulteriori click sui risultati finche' la POST
+  // non si risolve (risolve bug sessioni duplicate create entro 200ms).
+  const [creatingFor, setCreatingFor] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
@@ -56,13 +60,18 @@ export default function SessionsPage() {
   };
 
   const handleCreateSession = async (customerId: string) => {
+    // Anti-double-submit: se gia' in corso una creazione, ignora i click
+    // successivi (risolve bug sessioni duplicate da doppio click rapido).
+    if (creatingFor) return;
+    setCreatingFor(customerId);
     try {
       const session = await createSession(customerId);
       toast.success("Sessione creata!");
       setDialogOpen(false);
       window.location.assign(`/sessioni/${session.id}`);
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Errore creazione sessione");
+      setCreatingFor(null);
     }
   };
 
@@ -92,18 +101,28 @@ export default function SessionsPage() {
                 </Button>
               </div>
               <div className="max-h-60 overflow-auto divide-y">
-                {customerResults.map((c) => (
-                  <button
-                    key={c.id}
-                    className="w-full text-left p-3 hover:bg-gray-50 transition-colors"
-                    onClick={() => handleCreateSession(c.id)}
-                  >
-                    <p className="font-medium">{c.company_name}</p>
-                    <p className="text-sm text-gray-500">
-                      P.IVA: {c.vat_number || "N/D"} - {c.city || ""}
-                    </p>
-                  </button>
-                ))}
+                {customerResults.map((c) => {
+                  const isCreating = creatingFor === c.id;
+                  const disabled = !!creatingFor;
+                  return (
+                    <button
+                      key={c.id}
+                      disabled={disabled}
+                      className={`w-full text-left p-3 transition-colors ${
+                        disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                      }`}
+                      onClick={() => handleCreateSession(c.id)}
+                    >
+                      <p className="font-medium flex items-center gap-2">
+                        {c.company_name}
+                        {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        P.IVA: {c.vat_number || "N/D"} - {c.city || ""}
+                      </p>
+                    </button>
+                  );
+                })}
                 {customerResults.length === 0 && customerQuery.length >= 2 && !searching && (
                   <p className="p-3 text-gray-500 text-center">Nessun risultato</p>
                 )}

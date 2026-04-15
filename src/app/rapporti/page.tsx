@@ -16,7 +16,7 @@ import {
   Building2,
   Sparkles,
 } from "lucide-react";
-import { listReports, deleteReport } from "@/lib/api";
+import { listReports, deleteReport, getSessionReportsZipUrl } from "@/lib/api";
 import { toast } from "sonner";
 
 interface ReportRow {
@@ -355,6 +355,17 @@ export default function RapportiPage() {
                       <div className="text-sm text-emerald-700 font-medium">
                         {items.length} rapport{items.length === 1 ? "o" : "i"}
                       </div>
+                      {items.length > 1 && items[0].session_id && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                          title="Scarica tutti i rapporti RDT della sessione in un unico file ZIP"
+                          onClick={() => window.open(getSessionReportsZipUrl(items[0].session_id), "_blank")}
+                        >
+                          <Download className="w-4 h-4 mr-1" /> Scarica tutti ZIP
+                        </Button>
+                      )}
                     </div>
                     <div className="divide-y divide-emerald-100 bg-white">
                       {items.map(renderReportRow)}
