@@ -34,6 +34,19 @@ export async function searchCustomers(query: string, limit = 10) {
   return fetchAPI(`/api/customers/search?q=${encodeURIComponent(query)}&limit=${limit}`);
 }
 
+// Ricerca unificata: customers + fgas_prospects + cold_leads.
+// Ogni risultato ha un campo `source` ('customer' | 'fgas_prospect' | 'cold_lead')
+// e un `lead_id` (usabile con promoteLead per i non-customer).
+export async function searchLeads(query: string, limit = 15) {
+  return fetchAPI(`/api/search-leads?q=${encodeURIComponent(query)}&limit=${limit}`);
+}
+
+// Promuove un fgas_prospect o cold_lead a customer. Ritorna {customer_id, name}.
+// Idempotente: se gia' promosso ritorna il customer esistente.
+export async function promoteLead(source: 'fgas_prospect' | 'cold_lead', leadId: string | number) {
+  return fetchAPI(`/api/leads/${source}/${leadId}/promote`, { method: 'POST' });
+}
+
 export async function getCustomer(id: string) {
   return fetchAPI(`/api/customers/${id}`);
 }

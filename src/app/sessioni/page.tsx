@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { listSessions, searchCustomers, createSession } from "@/lib/api";
+import { listSessions, searchLeads, promoteLead, createSession } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
 import { Plus, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
@@ -50,8 +50,8 @@ export default function SessionsPage() {
     if (customerQuery.length < 2) return;
     setSearching(true);
     try {
-      const data = await searchCustomers(customerQuery);
-      setCustomerResults(data.customers || []);
+      const data = await searchLeads(customerQuery);
+      setCustomerResults(data.results || []);
     } catch {
       toast.error("Errore ricerca");
     } finally {
@@ -59,12 +59,30 @@ export default function SessionsPage() {
     }
   };
 
-  const handleCreateSession = async (customerId: string) => {
-    // Anti-double-submit: se gia' in corso una creazione, ignora i click
-    // successivi (risolve bug sessioni duplicate da doppio click rapido).
+  // Crea sessione a partire da un risultato unificato. Se il lead non e'
+  // ancora un customer (fgas_prospect / cold_lead), prima lo promuove.
+  const handleCreateSession = async (lead: {
+    id: string | null;
+    lead_id: string | number;
+    source: 'customer' | 'fgas_prospect' | 'cold_lead';
+    company_name: string;
+  }) => {
+    // Anti-double-submit: se gia' in corso una creazione, ignora i click.
+    const key = String(lead.id || lead.lead_id);
     if (creatingFor) return;
-    setCreatingFor(customerId);
+    setCreatingFor(key);
     try {
+      let customerId = lead.id as string | null;
+      if (!customerId || lead.source !== 'customer') {
+        // Promuovi il lead a customer (idempotente)
+        const prom = await promoteLead(
+          lead.source as 'fgas_prospect' | 'cold_lead',
+          lead.lead_id,
+        );
+        customerId = prom.customer_id;
+        toast.success(`${lead.company_name} promosso a cliente`);
+      }
+      if (!customerId) throw new Error("customer_id mancante");
       const session = await createSession(customerId);
       toast.success("Sessione creata!");
       setDialogOpen(false);
@@ -102,23 +120,30 @@ export default function SessionsPage() {
               </div>
               <div className="max-h-60 overflow-auto divide-y">
                 {customerResults.map((c) => {
-                  const isCreating = creatingFor === c.id;
+                  const key = String(c.id || c.lead_id);
+                  const isCreating = creatingFor === key;
                   const disabled = !!creatingFor;
+                  const badge = c.source === 'customer'
+                    ? { label: 'Cliente', cls: 'bg-green-100 text-green-800' }
+                    : c.source === 'fgas_prospect'
+                      ? { label: 'Prospect F-GAS', cls: 'bg-blue-100 text-blue-800' }
+                      : { label: 'Nuovo lead', cls: 'bg-purple-100 text-purple-800' };
                   return (
                     <button
-                      key={c.id}
+                      key={`${c.source}-${key}`}
                       disabled={disabled}
                       className={`w-full text-left p-3 transition-colors ${
                         disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
                       }`}
-                      onClick={() => handleCreateSession(c.id)}
+                      onClick={() => handleCreateSession(c)}
                     >
                       <p className="font-medium flex items-center gap-2">
                         {c.company_name}
+                        <span className={`text-xs px-2 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
                         {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
                       </p>
                       <p className="text-sm text-gray-500">
-                        P.IVA: {c.vat_number || "N/D"} - {c.city || ""}
+                        {c.email ? `${c.email} - ` : ''}{c.city || ""}{c.province ? ` (${c.province})` : ''}
                       </p>
                     </button>
                   );
