@@ -183,6 +183,13 @@ export async function sendProforma(sessionId: string, proformaSuffix = "") {
   });
 }
 
+export async function sendLatCertificates(sessionId: string, overrideTo?: string) {
+  return fetchAPI(`/api/sessions/${sessionId}/send-lat-certificates`, {
+    method: 'POST',
+    body: JSON.stringify(overrideTo ? { to: overrideTo } : {}),
+  });
+}
+
 export async function markDelivered(sessionId: string, notes?: string) {
   return fetchAPI(`/api/sessions/${sessionId}/mark-delivered`, {
     method: 'POST',

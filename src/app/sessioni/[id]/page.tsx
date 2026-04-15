@@ -15,6 +15,7 @@ import {
   markDelivered,
   generateRdts,
   markSessionPaid,
+  sendLatCertificates,
   updateSession,
   deleteSession,
   updateInstrument,
@@ -44,6 +45,7 @@ import {
   Tag,
   FileDown,
   Euro,
+  ShieldCheck,
   History,
   ChevronDown,
   ChevronUp,
@@ -391,6 +393,30 @@ export default function SessionDetail() {
           >
             <FileDown className="w-4 h-4 mr-1" />
             Fattura XML
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={actionLoading === "lat_cert"}
+            onClick={async () => {
+              if (!confirm(
+                "Inviare via email al cliente tutti i certificati LAT/ACCREDIA dei nostri campioni di riferimento?\n\n" +
+                "Saranno allegati tutti i PDF archiviati (~7MB totali)."
+              )) return;
+              try {
+                setActionLoading("lat_cert");
+                const r = await sendLatCertificates(sessionId);
+                toast.success(`${r.attachments_count} certificati LAT inviati a ${r.recipient}`);
+              } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : "Errore invio";
+                toast.error(msg);
+              } finally { setActionLoading(null); }
+            }}
+            className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+            title="Invia al cliente via email tutti i certificati LAT/ACCREDIA dei campioni di riferimento"
+          >
+            {actionLoading === "lat_cert" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ShieldCheck className="w-4 h-4 mr-1" />}
+            Invia certificati LAT
           </Button>
           <Button
             variant="destructive"
