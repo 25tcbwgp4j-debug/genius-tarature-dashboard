@@ -163,8 +163,11 @@ export function getSessionReportsZipUrl(sessionId: string): string {
 }
 
 export function getLabelsPdfUrl(sessionId: string, fmt: "default" | "brother_ql710" = "default"): string {
-  const qs = fmt === "default" ? "" : `?fmt=${fmt}`;
-  return `${API_URL_DIRECT}/api/sessions/${sessionId}/labels-pdf${qs}`;
+  // Cache-busting: timestamp forza sempre download fresco del PDF.
+  // Risolve problema tab Chrome aperta che serve PDF vecchio cached.
+  const ts = Date.now();
+  const params = fmt === "default" ? `?t=${ts}` : `?fmt=${fmt}&t=${ts}`;
+  return `${API_URL_DIRECT}/api/sessions/${sessionId}/labels-pdf${params}`;
 }
 
 export function getFatturaXmlUrl(sessionId: string): string {
