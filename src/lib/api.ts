@@ -431,6 +431,11 @@ export async function runEnrichmentColdLeads(limit = 30) {
 }
 
 // === RICONCILIAZIONE CLIENTI ===
+export async function getReconciliationToday() {
+  return fetchAPI('/api/reconciliation/today');
+}
+
+// === RICONCILIAZIONE CLIENTI ===
 export async function findDuplicateCustomers() {
   return fetchAPI('/api/customers/duplicates');
 }

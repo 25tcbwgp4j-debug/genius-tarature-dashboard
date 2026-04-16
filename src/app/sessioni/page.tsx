@@ -118,39 +118,63 @@ export default function SessionsPage() {
                   {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 </Button>
               </div>
-              <div className="max-h-60 overflow-auto divide-y">
-                {customerResults.map((c) => {
-                  const key = String(c.id || c.lead_id);
-                  const isCreating = creatingFor === key;
-                  const disabled = !!creatingFor;
-                  const badge = c.source === 'customer'
-                    ? { label: 'Cliente', cls: 'bg-green-100 text-green-800' }
-                    : c.source === 'fgas_prospect'
-                      ? { label: 'Prospect F-GAS', cls: 'bg-blue-100 text-blue-800' }
-                      : { label: 'Nuovo lead', cls: 'bg-purple-100 text-purple-800' };
+              <div className="max-h-80 overflow-auto">
+                {(() => {
+                  const inRubrica = customerResults.filter((c: any) => c.source === 'customer');
+                  const nuovi = customerResults.filter((c: any) => c.source !== 'customer');
+                  const renderRow = (c: any) => {
+                    const key = String(c.id || c.lead_id);
+                    const isCreating = creatingFor === key;
+                    const disabled = !!creatingFor;
+                    const badge = c.source === 'customer'
+                      ? { label: 'In rubrica', cls: 'bg-green-100 text-green-800' }
+                      : c.source === 'fgas_prospect'
+                        ? { label: 'F-GAS', cls: 'bg-blue-100 text-blue-800' }
+                        : { label: 'Places', cls: 'bg-fuchsia-100 text-fuchsia-800' };
+                    return (
+                      <button
+                        key={`${c.source}-${key}`}
+                        disabled={disabled}
+                        className={`w-full text-left p-3 border-b last:border-b-0 transition-colors ${
+                          disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                        }`}
+                        onClick={() => handleCreateSession(c)}
+                      >
+                        <p className="font-medium flex items-center gap-2">
+                          {c.company_name}
+                          <span className={`text-xs px-2 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
+                          {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {c.email ? `${c.email} · ` : ''}{c.city || ""}{c.province ? ` (${c.province})` : ''}
+                        </p>
+                      </button>
+                    );
+                  };
                   return (
-                    <button
-                      key={`${c.source}-${key}`}
-                      disabled={disabled}
-                      className={`w-full text-left p-3 transition-colors ${
-                        disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
-                      }`}
-                      onClick={() => handleCreateSession(c)}
-                    >
-                      <p className="font-medium flex items-center gap-2">
-                        {c.company_name}
-                        <span className={`text-xs px-2 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
-                        {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {c.email ? `${c.email} - ` : ''}{c.city || ""}{c.province ? ` (${c.province})` : ''}
-                      </p>
-                    </button>
+                    <>
+                      {inRubrica.length > 0 && (
+                        <div>
+                          <div className="px-3 py-2 text-xs font-semibold text-green-800 bg-green-50 border-y border-green-200 uppercase tracking-wide">
+                            ✅ Già in rubrica clienti · {inRubrica.length}
+                          </div>
+                          {inRubrica.map(renderRow)}
+                        </div>
+                      )}
+                      {nuovi.length > 0 && (
+                        <div>
+                          <div className="px-3 py-2 text-xs font-semibold text-purple-800 bg-purple-50 border-y border-purple-200 uppercase tracking-wide">
+                            🆕 Nuovi lead (verranno aggiunti alla rubrica al primo utilizzo) · {nuovi.length}
+                          </div>
+                          {nuovi.map(renderRow)}
+                        </div>
+                      )}
+                      {customerResults.length === 0 && customerQuery.length >= 2 && !searching && (
+                        <p className="p-3 text-gray-500 text-center">Nessun risultato</p>
+                      )}
+                    </>
                   );
-                })}
-                {customerResults.length === 0 && customerQuery.length >= 2 && !searching && (
-                  <p className="p-3 text-gray-500 text-center">Nessun risultato</p>
-                )}
+                })()}
               </div>
             </div>
           </DialogContent>

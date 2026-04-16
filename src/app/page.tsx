@@ -3,33 +3,47 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { listSessions } from "@/lib/api";
-import { ClipboardList, Wrench, Package, AlertTriangle } from "lucide-react";
+import { listSessions, getReconciliationToday } from "@/lib/api";
+import { ClipboardList, Wrench, Package, AlertTriangle, Users } from "lucide-react";
 import Link from "next/link";
 import { STATUS_CONFIG } from "@/lib/constants";
+
+interface ReconciliationSnapshot {
+  total_groups?: number;
+  total_records_to_merge?: number;
+  snapshot_date?: string | null;
+}
 
 export default function Home() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ oggi: 0, attive: 0, pronti: 0, scadenze: 0 });
+  const [reconciliation, setReconciliation] = useState<ReconciliationSnapshot | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    listSessions({ limit: 20 })
-      .then((data) => {
-        const all = data.sessions || [];
-        setSessions(all);
-        const today = new Date().toISOString().split("T")[0];
-        setStats({
-          oggi: all.filter((s: any) => s.session_date === today).length,
-          attive: all.filter((s: any) => s.status !== "completata").length,
-          pronti: all.filter((s: any) => s.status === "pronto_ritiro").length,
-          scadenze: 0,
-        });
+    Promise.all([
+      listSessions({ limit: 20 }).catch(() => null),
+      getReconciliationToday().catch(() => null),
+    ])
+      .then(([data, recon]) => {
+        if (data) {
+          const all = data.sessions || [];
+          setSessions(all);
+          const today = new Date().toISOString().split("T")[0];
+          setStats({
+            oggi: all.filter((s: any) => s.session_date === today).length,
+            attive: all.filter((s: any) => s.status !== "completata").length,
+            pronti: all.filter((s: any) => s.status === "pronto_ritiro").length,
+            scadenze: 0,
+          });
+        } else {
+          setError("Errore di connessione al backend. Potrebbe essere in fase di avvio, riprova tra qualche secondo.");
+        }
+        if (recon) setReconciliation(recon);
       })
-      .catch(() => setError("Errore di connessione al backend. Potrebbe essere in fase di avvio, riprova tra qualche secondo."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -83,6 +97,29 @@ export default function Home() {
           </div>
         </Card>
       </div>
+
+      {reconciliation && (reconciliation.total_groups ?? 0) > 0 && (
+        <Link href="/clienti?riconciliazione=1">
+          <Card className="p-4 border-amber-300 bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-200 rounded-lg">
+                <Users className="w-5 h-5 text-amber-800" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-amber-900">
+                  Riconciliazione clienti: {reconciliation.total_groups} gruppi duplicati
+                </p>
+                <p className="text-sm text-amber-800">
+                  {reconciliation.total_records_to_merge} record da mergere
+                  {reconciliation.snapshot_date && ` · snapshot del ${reconciliation.snapshot_date}`}
+                  · clicca per aprire
+                </p>
+              </div>
+              <div className="text-amber-700 font-bold">→</div>
+            </div>
+          </Card>
+        </Link>
+      )}
 
       <Card>
         <div className="p-4 border-b">
