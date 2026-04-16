@@ -419,6 +419,17 @@ export async function runEnrichmentCustomers(limit = 30) {
   });
 }
 
+export async function getColdLeadsStats() {
+  return fetchAPI('/api/cold-leads/stats');
+}
+
+export async function runEnrichmentColdLeads(limit = 30) {
+  return fetchAPI('/api/cold-leads/enrich', {
+    method: 'POST',
+    body: JSON.stringify({ limit }),
+  });
+}
+
 // === RICONCILIAZIONE CLIENTI ===
 export async function findDuplicateCustomers() {
   return fetchAPI('/api/customers/duplicates');

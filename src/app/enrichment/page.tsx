@@ -8,7 +8,10 @@ import {
   CheckCircle2, Clock, XCircle, TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getEnrichmentStats, runEnrichmentProspects, runEnrichmentCustomers } from "@/lib/api";
+import {
+  getEnrichmentStats, runEnrichmentProspects, runEnrichmentCustomers,
+  getColdLeadsStats, runEnrichmentColdLeads,
+} from "@/lib/api";
 
 interface Counts {
   pending: number;
@@ -23,6 +26,10 @@ interface Stats {
   customers: Counts;
 }
 
+interface ColdStats extends Counts {
+  promoted?: number;
+}
+
 const STATUS_CFG: Record<keyof Counts, { label: string; color: string; icon: React.ElementType }> = {
   pending: { label: "Da processare", color: "bg-gray-100 text-gray-700", icon: Clock },
   enriched: { label: "Email trovata", color: "bg-emerald-100 text-emerald-800", icon: CheckCircle2 },
@@ -33,13 +40,18 @@ const STATUS_CFG: Record<keyof Counts, { label: string; color: string; icon: Rea
 
 export default function EnrichmentPage() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [coldStats, setColdStats] = useState<ColdStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [runningProspects, setRunningProspects] = useState(false);
   const [runningCustomers, setRunningCustomers] = useState(false);
+  const [runningCold, setRunningCold] = useState(false);
 
   const fetchStats = useCallback(async () => {
-    try { setStats(await getEnrichmentStats()); }
-    catch (e: unknown) { toast.error(e instanceof Error ? e.message : "Errore stats"); }
+    try {
+      const [s, cs] = await Promise.all([getEnrichmentStats(), getColdLeadsStats()]);
+      setStats(s);
+      setColdStats(cs);
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : "Errore stats"); }
     finally { setLoading(false); }
   }, []);
 
@@ -52,9 +64,8 @@ export default function EnrichmentPage() {
   const runProspects = async () => {
     setRunningProspects(true);
     try {
-      const r = await runEnrichmentProspects(40);
-      toast.success(`Batch prospect: ${r.enriched} email, ${r.partial} solo tel, ${r.not_found} non trovati, ${r.errors} errori`);
-      await fetchStats();
+      await runEnrichmentProspects(40);
+      toast.success("Batch prospect avviato in background. Le stats si aggiornano automaticamente fra 2-5 min.");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Errore batch prospect");
     } finally { setRunningProspects(false); }
@@ -63,12 +74,21 @@ export default function EnrichmentPage() {
   const runCustomers = async () => {
     setRunningCustomers(true);
     try {
-      const r = await runEnrichmentCustomers(30);
-      toast.success(`Batch clienti: ${r.enriched} email, ${r.partial} solo tel, ${r.not_found} non trovati, ${r.errors} errori`);
-      await fetchStats();
+      await runEnrichmentCustomers(30);
+      toast.success("Batch clienti avviato in background. Le stats si aggiornano automaticamente fra 2-5 min.");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Errore batch clienti");
     } finally { setRunningCustomers(false); }
+  };
+
+  const runCold = async () => {
+    setRunningCold(true);
+    try {
+      await runEnrichmentColdLeads(30);
+      toast.success("Batch cold leads avviato in background.");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Errore batch cold leads");
+    } finally { setRunningCold(false); }
   };
 
   if (loading) {
@@ -80,6 +100,12 @@ export default function EnrichmentPage() {
   const totalCustomers = Object.values(stats.customers).reduce((a, b) => a + b, 0);
   const progressProspects = totalProspects > 0 ? Math.round((1 - stats.prospects.pending / totalProspects) * 100) : 0;
   const progressCustomers = totalCustomers > 0 ? Math.round((1 - stats.customers.pending / totalCustomers) * 100) : 0;
+  const coldCountsOnly: Counts | null = coldStats ? {
+    pending: coldStats.pending, enriched: coldStats.enriched,
+    partial: coldStats.partial, not_found: coldStats.not_found, error: coldStats.error,
+  } : null;
+  const totalCold = coldCountsOnly ? Object.values(coldCountsOnly).reduce((a, b) => a + b, 0) : 0;
+  const progressCold = totalCold > 0 && coldCountsOnly ? Math.round((1 - coldCountsOnly.pending / totalCold) * 100) : 0;
 
   const renderBlock = (
     title: string,
@@ -139,7 +165,7 @@ export default function EnrichmentPage() {
           <TrendingUp className="w-6 h-6 text-purple-600" /> Arricchimento contatti
         </h1>
         <p className="text-sm text-gray-500 mt-1">
-          Ricerca automatica email e telefoni mancanti via scraping sito + DuckDuckGo.
+          Ricerca automatica email + scoperta nuovi clienti via Google Places + scraping sito con Serper.
         </p>
       </div>
 
@@ -147,10 +173,10 @@ export default function EnrichmentPage() {
       <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
         <Mail className="w-5 h-5 text-blue-600" />
         <div className="flex-1 text-sm">
-          <div className="font-medium text-blue-900">Auto-dispatch scheduler</div>
+          <div className="font-medium text-blue-900">Scheduler automatico (zero intervento)</div>
           <div className="text-blue-700 text-xs">
-            Prospect FGAS: cron 08/12/16/20 (40 record/batch) &middot;
-            Clienti: cron 10/14/18/22 (30 record/batch)
+            Prospect FGAS: 08/12/16/20 &middot; Clienti: 10/14/18/22 &middot; Cold leads: 11/15/19/23 &middot;
+            Discovery nuovi leads Places: ogni 30 min 24/7 (rotazione 15 categorie &times; 50 citt&agrave;)
           </div>
         </div>
         <Button onClick={fetchStats} variant="outline" size="sm">
@@ -176,6 +202,16 @@ export default function EnrichmentPage() {
         runCustomers,
         runningCustomers,
         "text-emerald-600",
+      )}
+
+      {coldCountsOnly && renderBlock(
+        `Nuovi lead (cold, Places)${coldStats?.promoted ? ` - ${coldStats.promoted} gi\u00e0 promossi a cliente` : ''}`,
+        coldCountsOnly,
+        totalCold,
+        progressCold,
+        runCold,
+        runningCold,
+        "text-fuchsia-600",
       )}
 
       <div className="text-xs text-gray-500 bg-gray-50 rounded p-3">
