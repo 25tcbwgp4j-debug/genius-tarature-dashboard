@@ -37,7 +37,8 @@ export function ChangeCustomerDialog({ sessionId, currentCustomerId, currentCust
       setSearching(true);
       try {
         const r = await searchCustomers(query, 10);
-        setResults((r as CustomerRow[]).filter((c) => c.id !== currentCustomerId));
+        const rows = ((r?.customers ?? r) as CustomerRow[]) || [];
+        setResults(rows.filter((c) => c.id !== currentCustomerId));
       } catch { /* ignore */ } finally { setSearching(false); }
     }, 250);
     return () => clearTimeout(t);

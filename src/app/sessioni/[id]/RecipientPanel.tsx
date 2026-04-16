@@ -64,7 +64,7 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
       setSearching(true);
       try {
         const r = await searchCustomers(query, 8);
-        setResults(r as Customer[]);
+        setResults(((r?.customers ?? r) as Customer[]) || []);
       } catch { /* ignore */ } finally { setSearching(false); }
     }, 250);
     return () => clearTimeout(t);
