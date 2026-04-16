@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,12 @@ export default function ClientiPage() {
   const [saving, setSaving] = useState(false);
   const [parseOpen, setParseOpen] = useState(false);
   const [reconcileOpen, setReconcileOpen] = useState(false);
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("riconciliazione") === "1") {
+      setReconcileOpen(true);
+    }
+  }, [searchParams]);
 
   // Carica lista paginata
   const loadList = async (p: number, f: string) => {
