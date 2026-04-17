@@ -505,7 +505,7 @@ export default function SessionDetail() {
             onChanged={loadSession}
           />
         </div>
-        <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-sm">
           <div>
             <span className="text-gray-500">Ragione sociale:</span>
             <p className="font-medium">{customer.company_name}</p>
@@ -515,12 +515,40 @@ export default function SessionDetail() {
             <p className="font-medium">{customer.vat_number || "N/D"}</p>
           </div>
           <div>
-            <span className="text-gray-500">Indirizzo:</span>
-            <p>{customer.address}, {customer.zip_code} {customer.city}</p>
+            <span className="text-gray-500">Codice fiscale:</span>
+            <p>{customer.tax_id || "N/D"}</p>
           </div>
           <div>
-            <span className="text-gray-500">Contatti:</span>
-            <p>{customer.email || customer.mobile || customer.phone1 || "N/D"}</p>
+            <span className="text-gray-500">Codice SDI:</span>
+            <p>{customer.sdi_code || "N/D"}</p>
+          </div>
+          <div>
+            <span className="text-gray-500">PEC:</span>
+            <p>{customer.pec || "N/D"}</p>
+          </div>
+          <div>
+            <span className="text-gray-500">Email:</span>
+            <p>{customer.email || "N/D"}</p>
+          </div>
+          <div>
+            <span className="text-gray-500">Indirizzo:</span>
+            <p>{customer.address || "N/D"}{customer.zip_code ? `, ${customer.zip_code}` : ""} {customer.city || ""}{customer.province ? ` (${customer.province})` : ""}</p>
+          </div>
+          <div>
+            <span className="text-gray-500">Tel. fisso:</span>
+            <p>{customer.phone1 || "N/D"}</p>
+          </div>
+          <div>
+            <span className="text-gray-500">Cellulare:</span>
+            <p>{customer.mobile || "N/D"}</p>
+          </div>
+          <div>
+            <span className="text-gray-500">WhatsApp:</span>
+            <p>{customer.whatsapp_phone || "N/D"}</p>
+          </div>
+          <div>
+            <span className="text-gray-500">Referente:</span>
+            <p>{customer.contact_person || "N/D"}</p>
           </div>
         </div>
       </Card>
