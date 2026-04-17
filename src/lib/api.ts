@@ -440,6 +440,13 @@ export async function findDuplicateCustomers() {
   return fetchAPI('/api/customers/duplicates');
 }
 
+export async function dismissDuplicateGroup(customerIds: string[]) {
+  return fetchAPI('/api/customers/duplicates/dismiss', {
+    method: 'POST',
+    body: JSON.stringify({ customer_ids: customerIds }),
+  });
+}
+
 export async function mergeCustomers(masterId: string, duplicateIds: string[], fieldsToImport: Record<string, string>) {
   return fetchAPI('/api/customers/merge', {
     method: 'POST',

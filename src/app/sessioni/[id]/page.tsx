@@ -53,6 +53,7 @@ import {
 import { STATUS_CONFIG } from "@/lib/constants";
 import { RecipientPanel } from "./RecipientPanel";
 import { ChangeCustomerDialog } from "./ChangeCustomerDialog";
+import { EditCustomerDialog } from "./EditCustomerDialog";
 
 interface InstrumentType {
   id: string;
@@ -492,7 +493,11 @@ export default function SessionDetail() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-lg">Cliente (chi paga)</h3>
         </div>
-        <div className="flex justify-end mb-2">
+        <div className="flex justify-end mb-2 gap-2">
+          <EditCustomerDialog
+            customer={customer}
+            onSaved={loadSession}
+          />
           <ChangeCustomerDialog
             sessionId={sessionId}
             currentCustomerId={customer.id}

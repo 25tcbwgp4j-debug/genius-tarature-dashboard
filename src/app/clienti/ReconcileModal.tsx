@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, X, Users, GitMerge, Crown, AlertCircle, Check } from "lucide-react";
 import { toast } from "sonner";
-import { findDuplicateCustomers, mergeCustomers } from "@/lib/api";
+import { findDuplicateCustomers, mergeCustomers, dismissDuplicateGroup } from "@/lib/api";
 
 interface Customer {
   id: string;
@@ -58,6 +58,7 @@ export function ReconcileModal({ open, onClose, onMerged }: Props) {
   const [groups, setGroups] = useState<DupGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
   const [idx, setIdx] = useState(0);
   const [masterId, setMasterId] = useState<string | null>(null);
   // Per ogni campo, da quale member id importare il valore nel master (null = non importare)
@@ -146,6 +147,30 @@ export function ReconcileModal({ open, onClose, onMerged }: Props) {
   const handleSkip = () => {
     if (idx + 1 < groups.length) setIdx(idx + 1);
     else { toast.info("Fine lista"); onClose(); }
+  };
+
+  const handleDismiss = async () => {
+    if (!current) return;
+    const names = current.members.map((m) => m.company_name).join("\n• ");
+    if (!confirm(
+      `Confermi che questi clienti sono DISTINTI e SEPARATI?\n\n• ${names}\n\n` +
+      `Non verranno piu' proposti come duplicati.`
+    )) return;
+    setDismissing(true);
+    try {
+      const ids = current.members.map((m) => m.id);
+      await dismissDuplicateGroup(ids);
+      toast.success("Clienti marcati come distinti. Non verranno piu' proposti.");
+      const newGroups = groups.filter((_, i) => i !== idx);
+      setGroups(newGroups);
+      setIdx(Math.min(idx, newGroups.length - 1));
+      if (newGroups.length === 0) {
+        toast.info("Nessun altro duplicato trovato");
+        onClose();
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Errore dismiss");
+    } finally { setDismissing(false); }
   };
 
   if (!open) return null;
@@ -316,13 +341,23 @@ export function ReconcileModal({ open, onClose, onMerged }: Props) {
 
             <div className="flex justify-between items-center pt-2 border-t">
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleSkip} disabled={merging}>
+                <Button variant="outline" size="sm" onClick={handleSkip} disabled={merging || dismissing}>
                   Salta gruppo
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDismiss}
+                  disabled={merging || dismissing}
+                  className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                >
+                  {dismissing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Users className="w-4 h-4 mr-1" />}
+                  Considera come clienti distinti
                 </Button>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={onClose} disabled={merging}>Annulla</Button>
-                <Button onClick={handleMerge} disabled={merging || !masterId} className="bg-amber-600 hover:bg-amber-700">
+                <Button variant="outline" onClick={onClose} disabled={merging || dismissing}>Annulla</Button>
+                <Button onClick={handleMerge} disabled={merging || dismissing || !masterId} className="bg-amber-600 hover:bg-amber-700">
                   {merging ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <GitMerge className="w-4 h-4 mr-1" />}
                   Riconcilia
                 </Button>
