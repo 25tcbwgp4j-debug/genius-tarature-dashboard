@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   ClipboardList,
   Users,
@@ -15,11 +16,14 @@ import {
   Activity,
   Zap,
   LogOut,
+  MessageSquare,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
+import { getStats } from "@/lib/chat-api";
 
 const navItems = [
   { href: "/", label: "Registro", icon: ClipboardList },
+  { href: "/chat", label: "Chat WhatsApp", icon: MessageSquare },
   { href: "/sessioni", label: "Sessioni", icon: Wrench },
   { href: "/clienti", label: "Clienti", icon: Users },
   { href: "/nuovi-clienti", label: "Nuovi Clienti", icon: UserPlus },
@@ -34,6 +38,25 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    if (pathname === "/login" || pathname.startsWith("/login/")) return;
+    let cancelled = false;
+    const fetchCount = () => {
+      getStats()
+        .then((r) => {
+          if (!cancelled) setUnread(r.unread_count || 0);
+        })
+        .catch(() => undefined);
+    };
+    fetchCount();
+    const id = setInterval(fetchCount, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [pathname]);
 
   // Non mostrare la sidebar sulla pagina login
   if (pathname === "/login" || pathname.startsWith("/login/")) {
@@ -52,6 +75,7 @@ export function Sidebar() {
             pathname === item.href ||
             (item.href !== "/" && pathname.startsWith(item.href));
           const Icon = item.icon;
+          const showBadge = item.href === "/chat" && unread > 0;
           return (
             <Link
               key={item.href}
@@ -63,7 +87,12 @@ export function Sidebar() {
               }`}
             >
               <Icon className="w-5 h-5" />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {showBadge && (
+                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[10px] font-semibold">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
             </Link>
           );
         })}
