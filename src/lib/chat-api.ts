@@ -395,6 +395,31 @@ export async function getAnalytics(days = 30) {
   return apiGet<Analytics>(`/analytics?days=${days}`);
 }
 
+export async function registerCustomer(payload: {
+  phone: string;
+  company_name: string;
+  vat_number?: string;
+  tax_id?: string;
+  email?: string;
+  address?: string;
+  zip_code?: string;
+  city?: string;
+  province?: string;
+  notes?: string;
+}) {
+  return apiPost<{ ok: boolean; created?: boolean; already_exists?: boolean; customer: Record<string, unknown> }>(
+    "/register-customer",
+    payload,
+  );
+}
+
+export async function startSession(payload: { phone: string; customer_id?: string; operator?: string }) {
+  return apiPost<{ ok: boolean; session: { id: string; status: string } }>(
+    "/start-session",
+    payload,
+  );
+}
+
 export function formatDuration(seconds: number | null | undefined) {
   if (!seconds) return "—";
   if (seconds < 60) return `${seconds}s`;

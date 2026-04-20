@@ -1,17 +1,40 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { X, Building2, Phone, Mail, MapPin, Wrench, FileText } from "lucide-react";
+import { X, Building2, Phone, Mail, MapPin, Wrench, FileText, UserPlus, PlusCircle } from "lucide-react";
 import type { ConversationContext } from "@/lib/chat-api";
-import { sourceBadge } from "@/lib/chat-api";
+import { sourceBadge, startSession } from "@/lib/chat-api";
+import { RegisterCustomerModal } from "./RegisterCustomerModal";
 
 export function CustomerSidebar({
   context,
   onClose,
+  onChanged,
 }: {
   context: ConversationContext;
   onClose?: () => void;
+  onChanged?: () => void;
 }) {
+  const [showRegister, setShowRegister] = useState(false);
+  const [creatingSession, setCreatingSession] = useState(false);
+
+  async function handleCreateSession() {
+    if (!context.customer_id) return;
+    setCreatingSession(true);
+    try {
+      const r = await startSession({ phone: context.phone, customer_id: context.customer_id });
+      if (r.ok) {
+        // Redirect al link sessione
+        window.open(`/sessioni/${r.session.id}`, "_blank");
+        onChanged?.();
+      }
+    } catch (e) {
+      alert(`Errore: ${(e as Error).message}`);
+    } finally {
+      setCreatingSession(false);
+    }
+  }
   const badge = sourceBadge(context.lead_source);
   const customer = context.customer as
     | {
@@ -109,16 +132,35 @@ export function CustomerSidebar({
         )}
 
         {!customer && context.lead_source !== "staff" && (
-          <section className="p-3 bg-amber-50 rounded-lg text-xs text-amber-800">
-            Contatto non ancora registrato come cliente.
-            {context.lead_id && (
-              <Link
-                href="/nuovi-clienti"
-                className="block mt-2 text-center px-3 py-1.5 rounded bg-emerald-500 text-white hover:bg-emerald-600 font-medium"
-              >
-                Promuovi a cliente
-              </Link>
-            )}
+          <section className="p-3 bg-amber-50 rounded-lg text-xs text-amber-800 space-y-2">
+            <div>
+              Contatto non ancora registrato come cliente.
+              {context.lead_source === "unknown" && " Numero sconosciuto, nessun lead trovato."}
+              {context.lead_source === "fgas" && " Presente nei prospect F-GAS."}
+              {context.lead_source === "cold" && " Presente nei cold lead Places."}
+            </div>
+            <button
+              onClick={() => setShowRegister(true)}
+              className="w-full text-center px-3 py-2 rounded bg-emerald-500 text-white hover:bg-emerald-600 font-medium flex items-center justify-center gap-1.5"
+            >
+              <UserPlus className="w-4 h-4" />
+              Registra come cliente
+            </button>
+          </section>
+        )}
+
+        {/* Crea sessione taratura se customer esiste e non c'è sessione attiva */}
+        {customer && !session?.id && (
+          <section className="p-3 bg-blue-50 rounded-lg text-xs text-blue-800 space-y-2">
+            <div>Nessuna sessione di taratura attiva per questo cliente.</div>
+            <button
+              onClick={handleCreateSession}
+              disabled={creatingSession}
+              className="w-full text-center px-3 py-2 rounded bg-blue-500 text-white hover:bg-blue-600 font-medium disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              <PlusCircle className="w-4 h-4" />
+              {creatingSession ? "Creo..." : "Crea sessione di taratura"}
+            </button>
           </section>
         )}
 
@@ -148,6 +190,19 @@ export function CustomerSidebar({
               </Link>
             </div>
           </section>
+        )}
+
+        {showRegister && (
+          <RegisterCustomerModal
+            phone={context.phone}
+            prefillName={context.sender_name}
+            onClose={() => setShowRegister(false)}
+            onRegistered={() => {
+              onChanged?.();
+              // Forza reload finestra per refresh context
+              window.location.reload();
+            }}
+          />
         )}
 
         {/* Ultimi rapporti */}

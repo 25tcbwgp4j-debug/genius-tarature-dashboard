@@ -444,6 +444,10 @@ export function ChatPanel({
         <CustomerSidebar
           context={context}
           onClose={() => setShowSidebar(false)}
+          onChanged={() => {
+            loadMessages();
+            onChanged?.();
+          }}
         />
       )}
 
