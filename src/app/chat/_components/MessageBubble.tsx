@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CheckCheck, AlertTriangle, FileText, Download } from "lucide-react";
+import { Check, CheckCheck, AlertTriangle, FileText, Download, Star, Forward, StickyNote } from "lucide-react";
 import type { ChatMessage } from "@/lib/chat-api";
 
 function StatusTicks({ msg }: { msg: ChatMessage }) {
@@ -14,17 +14,62 @@ function StatusTicks({ msg }: { msg: ChatMessage }) {
   return <Check className="w-3.5 h-3.5 text-gray-400" aria-label="Inviato" />;
 }
 
-export function MessageBubble({ msg, onImageClick }: { msg: ChatMessage; onImageClick?: (url: string) => void }) {
+export function MessageBubble({
+  msg,
+  onImageClick,
+  onStar,
+  onForward,
+}: {
+  msg: ChatMessage;
+  onImageClick?: (url: string) => void;
+  onStar?: (msg: ChatMessage) => void;
+  onForward?: (msg: ChatMessage) => void;
+}) {
   const isOut = msg.direction === "outbound";
+  const isNote = (msg as ChatMessage & { internal_note?: boolean }).internal_note;
+  const starred = (msg as ChatMessage & { starred?: boolean }).starred;
   const time = new Date(msg.created_at).toLocaleTimeString("it-IT", {
     hour: "2-digit",
     minute: "2-digit",
   });
 
+  if (isNote) {
+    return (
+      <div className="flex justify-center my-2">
+        <div className="max-w-[80%] bg-yellow-50 border border-yellow-300 rounded-lg px-3 py-2 text-xs text-yellow-900 shadow-sm">
+          <div className="flex items-center gap-1.5 font-medium mb-0.5">
+            <StickyNote className="w-3 h-3" />
+            Nota interna {msg.operator_email && `· ${msg.operator_email}`}
+          </div>
+          <div className="whitespace-pre-wrap">{msg.body}</div>
+          <div className="text-[10px] text-yellow-700 mt-1">{time}</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`flex ${isOut ? "justify-end" : "justify-start"} mb-1`}>
+    <div className={`group flex ${isOut ? "justify-end" : "justify-start"} mb-1`}>
+      {!isOut && (
+        <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1 mr-1 self-start mt-2">
+          <button
+            onClick={() => onStar?.(msg)}
+            className="p-1 rounded hover:bg-white/60"
+            title="Star"
+          >
+            <Star className={`w-3.5 h-3.5 ${starred ? "fill-yellow-400 text-yellow-500" : "text-gray-400"}`} />
+          </button>
+          <button
+            onClick={() => onForward?.(msg)}
+            className="p-1 rounded hover:bg-white/60"
+            title="Forward"
+          >
+            <Forward className="w-3.5 h-3.5 text-gray-400" />
+          </button>
+        </div>
+      )}
       <div
-        className={`max-w-[75%] rounded-2xl px-3 py-2 shadow-sm ${
+        className={`relative max-w-[75%] rounded-2xl px-3 py-2 shadow-sm ${
           isOut
             ? "bg-emerald-100 text-gray-900 rounded-br-sm"
             : "bg-white text-gray-900 rounded-bl-sm"
@@ -90,10 +135,29 @@ export function MessageBubble({ msg, onImageClick }: { msg: ChatMessage; onImage
             isOut ? "text-gray-500" : "text-gray-400"
           }`}
         >
+          {starred && <Star className="w-3 h-3 fill-yellow-400 text-yellow-500" />}
           <span>{time}</span>
           <StatusTicks msg={msg} />
         </div>
       </div>
+      {isOut && (
+        <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1 ml-1 self-start mt-2">
+          <button
+            onClick={() => onStar?.(msg)}
+            className="p-1 rounded hover:bg-white/60"
+            title="Star"
+          >
+            <Star className={`w-3.5 h-3.5 ${starred ? "fill-yellow-400 text-yellow-500" : "text-gray-400"}`} />
+          </button>
+          <button
+            onClick={() => onForward?.(msg)}
+            className="p-1 rounded hover:bg-white/60"
+            title="Forward"
+          >
+            <Forward className="w-3.5 h-3.5 text-gray-400" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

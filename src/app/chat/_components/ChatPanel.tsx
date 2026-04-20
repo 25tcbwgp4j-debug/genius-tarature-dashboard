@@ -9,12 +9,21 @@ import {
   AlertTriangle,
   Info,
   FileText,
+  Sparkles,
+  FilePlus,
+  Calculator,
+  UserPlus,
+  Mail,
 } from "lucide-react";
 import {
   listMessages,
   markRead,
   exportUrl,
   getContext,
+  starMessage,
+  aiSummarize,
+  promoteLead,
+  sendEmail,
   type ChatMessage,
   type ConversationContext,
   sourceBadge,
@@ -24,6 +33,11 @@ import {
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
 import { CustomerSidebar } from "./CustomerSidebar";
+import { ConversationToolbar } from "./ConversationToolbar";
+import { ForwardModal } from "./ForwardModal";
+import { ScheduleSendModal } from "./ScheduleSendModal";
+import { SendRDTModal } from "./SendRDTModal";
+import { SendQuoteModal } from "./SendQuoteModal";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 
 function groupByDay(messages: ChatMessage[]) {
@@ -64,7 +78,46 @@ export function ChatPanel({
   const [showMenu, setShowMenu] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: string; body: string | null } | null>(null);
+  const [forwardMsg, setForwardMsg] = useState<ChatMessage | null>(null);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [showRdt, setShowRdt] = useState(false);
+  const [showQuote, setShowQuote] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  async function handleStar(msg: ChatMessage) {
+    const newStarred = !(msg as ChatMessage & { starred?: boolean }).starred;
+    await starMessage(msg.id, newStarred);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msg.id ? ({ ...m, starred: newStarred } as ChatMessage) : m,
+      ),
+    );
+  }
+
+  async function handleSummarize() {
+    setSummaryLoading(true);
+    try {
+      const r = await aiSummarize(phone);
+      setAiSummary(r.summary);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
+
+  async function handlePromote() {
+    try {
+      const r = await promoteLead(phone);
+      if (r.ok) {
+        alert(r.already_customer ? "Già cliente" : "Promosso a cliente!");
+        loadMessages();
+      }
+    } catch (e) {
+      alert(`Errore: ${(e as Error).message}`);
+    }
+  }
 
   const loadMessages = useCallback(async () => {
     setLoading(true);
@@ -196,20 +249,76 @@ export function ChatPanel({
               <MoreVertical className="w-5 h-5" />
             </button>
             {showMenu && (
-              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-52 z-20">
+              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-56 z-20">
+                <button
+                  onClick={() => {
+                    setShowRdt(true);
+                    setShowMenu(false);
+                  }}
+                  disabled={!context?.customer_id}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 text-left disabled:opacity-40"
+                >
+                  <FilePlus className="w-4 h-4 text-emerald-600" />
+                  Invia RDT
+                </button>
+                <button
+                  onClick={() => {
+                    setShowQuote(true);
+                    setShowMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 text-left"
+                >
+                  <Calculator className="w-4 h-4 text-emerald-600" />
+                  Invia preventivo
+                </button>
+                {context?.lead_source && context.lead_source !== "customer" && context.lead_source !== "staff" && (
+                  <button
+                    onClick={() => {
+                      handlePromote();
+                      setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 text-left"
+                  >
+                    <UserPlus className="w-4 h-4 text-purple-600" />
+                    Promuovi a cliente
+                  </button>
+                )}
+                {(context?.customer as { email?: string } | null)?.email && (
+                  <button
+                    onClick={() => {
+                      setShowEmailModal(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 text-left"
+                  >
+                    <Mail className="w-4 h-4 text-blue-600" />
+                    Rispondi via email
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    handleSummarize();
+                    setShowMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 text-left"
+                >
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                  Riassumi conversazione
+                </button>
+                <div className="border-t my-1" />
                 <a
                   href={exportUrl(phone, "txt")}
                   className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50"
                 >
                   <Download className="w-4 h-4" />
-                  Esporta conversazione (TXT)
+                  Esporta (TXT)
                 </a>
                 <a
                   href={exportUrl(phone, "json")}
                   className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50"
                 >
                   <FileText className="w-4 h-4" />
-                  Esporta JSON
+                  Esporta (JSON)
                 </a>
                 <button
                   onClick={() => {
@@ -225,6 +334,8 @@ export function ChatPanel({
             )}
           </div>
         </div>
+
+        <ConversationToolbar phone={phone} onChanged={onChanged} />
 
         {/* 24h banner */}
         {outside24h && lastInbound && (
@@ -271,8 +382,13 @@ export function ChatPanel({
                 </div>
                 {g.items.map((m) => (
                   <div key={m.id} className="group relative">
-                    <MessageBubble msg={m} onImageClick={setLightboxUrl} />
-                    {m.wa_message_id && (
+                    <MessageBubble
+                      msg={m}
+                      onImageClick={setLightboxUrl}
+                      onStar={handleStar}
+                      onForward={setForwardMsg}
+                    />
+                    {m.wa_message_id && !(m as ChatMessage & { internal_note?: boolean }).internal_note && (
                       <button
                         onClick={() => setReplyTo({ id: m.wa_message_id!, body: m.body })}
                         className="absolute top-1 right-2 opacity-0 group-hover:opacity-100 text-xs text-emerald-700 bg-white rounded px-2 py-0.5 shadow-sm border border-gray-200 transition"
@@ -297,8 +413,32 @@ export function ChatPanel({
             onChanged?.();
           }}
           operatorEmail={operatorEmail}
+          onRequestSchedule={() => setShowSchedule(true)}
         />
       </div>
+
+      {/* AI Summary Panel */}
+      {(aiSummary || summaryLoading) && (
+        <div className="absolute top-20 left-4 right-4 lg:right-auto lg:w-96 bg-white rounded-xl shadow-xl border border-purple-200 p-4 z-30">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 font-semibold text-sm text-purple-900">
+              <Sparkles className="w-4 h-4" /> Riassunto AI
+            </div>
+            <button onClick={() => setAiSummary(null)} className="text-gray-400 hover:text-gray-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {summaryLoading ? (
+            <div className="space-y-2 animate-pulse">
+              <div className="h-3 bg-purple-100 rounded w-full" />
+              <div className="h-3 bg-purple-100 rounded w-5/6" />
+              <div className="h-3 bg-purple-100 rounded w-4/6" />
+            </div>
+          ) : (
+            <div className="text-sm text-gray-700 whitespace-pre-wrap">{aiSummary}</div>
+          )}
+        </div>
+      )}
 
       {showSidebar && context && (
         <CustomerSidebar
@@ -326,6 +466,140 @@ export function ChatPanel({
           />
         </div>
       )}
+
+      {forwardMsg && (
+        <ForwardModal
+          sourceMessageId={forwardMsg.id}
+          onClose={() => setForwardMsg(null)}
+        />
+      )}
+
+      {showSchedule && (
+        <ScheduleSendModal
+          phone={phone}
+          operatorEmail={operatorEmail}
+          onClose={() => setShowSchedule(false)}
+        />
+      )}
+
+      {showRdt && context && (
+        <SendRDTModal
+          phone={phone}
+          operatorEmail={operatorEmail}
+          context={context}
+          onClose={() => {
+            setShowRdt(false);
+            loadMessages();
+          }}
+        />
+      )}
+
+      {showQuote && (
+        <SendQuoteModal
+          phone={phone}
+          operatorEmail={operatorEmail}
+          onClose={() => {
+            setShowQuote(false);
+            loadMessages();
+          }}
+        />
+      )}
+
+      {showEmailModal && context?.customer && (
+        <EmailQuickModal
+          phone={phone}
+          email={((context.customer as { email?: string }).email) || ""}
+          operatorEmail={operatorEmail}
+          onClose={() => setShowEmailModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function EmailQuickModal({
+  phone,
+  email,
+  operatorEmail,
+  onClose,
+}: {
+  phone: string;
+  email: string;
+  operatorEmail?: string;
+  onClose: () => void;
+}) {
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+
+  async function send() {
+    if (!subject.trim() || !body.trim()) return;
+    setSending(true);
+    try {
+      await sendEmail({ phone, subject, body, operator_email: operatorEmail });
+      onClose();
+    } catch (e) {
+      alert(`Errore: ${(e as Error).message}`);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="font-semibold flex items-center gap-2">
+            <Mail className="w-5 h-5 text-blue-600" />
+            Rispondi via email
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="text-xs text-gray-600">A</label>
+            <div className="p-2 bg-gray-50 rounded-lg text-sm">{email}</div>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Oggetto</label>
+            <input
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="w-full p-2 bg-gray-50 rounded-lg text-sm outline-none"
+              placeholder="Genius S.R.L. — Risposta a Sua richiesta"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Messaggio</label>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={8}
+              className="w-full p-2 bg-gray-50 rounded-lg text-sm outline-none"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+            >
+              Annulla
+            </button>
+            <button
+              onClick={send}
+              disabled={!subject.trim() || !body.trim() || sending}
+              className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+            >
+              {sending ? "Invio..." : "Invia email"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

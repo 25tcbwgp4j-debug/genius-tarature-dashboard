@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Paperclip, Send, X, FileText as FileIcon, Zap } from "lucide-react";
+import { Paperclip, Send, X, FileText as FileIcon, Zap, Sparkles, StickyNote, Clock } from "lucide-react";
 import {
   sendText,
   sendMedia,
   listTemplates,
+  aiSuggest,
+  addInternalNote,
   type ChatTemplate,
 } from "@/lib/chat-api";
 
@@ -17,6 +19,7 @@ export function Composer({
   onClearReply,
   onSent,
   operatorEmail,
+  onRequestSchedule,
 }: {
   phone: string;
   disabled?: boolean;
@@ -25,6 +28,7 @@ export function Composer({
   onClearReply?: () => void;
   onSent?: () => void;
   operatorEmail?: string;
+  onRequestSchedule?: () => void;
 }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -33,8 +37,27 @@ export function Composer({
   const [showTemplates, setShowTemplates] = useState(false);
   const [templates, setTemplates] = useState<ChatTemplate[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [noteMode, setNoteMode] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleAISuggest() {
+    setAiLoading(true);
+    try {
+      const r = await aiSuggest(phone);
+      if (r.suggestion) {
+        setText(r.suggestion);
+        textareaRef.current?.focus();
+      } else {
+        alert("Nessun suggerimento disponibile");
+      }
+    } catch (e) {
+      alert(`Errore AI: ${(e as Error).message}`);
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   useEffect(() => {
     listTemplates()
@@ -80,10 +103,23 @@ export function Composer({
   }, []);
 
   async function handleSend() {
-    if (sending || disabled) return;
+    if (sending) return;
     if (!text.trim() && !file) return;
     setSending(true);
     try {
+      if (noteMode) {
+        // Salva come nota interna
+        await addInternalNote({
+          phone,
+          body: text.trim(),
+          operator_email: operatorEmail,
+        });
+        setText("");
+        setNoteMode(false);
+        onSent?.();
+        return;
+      }
+      if (disabled) return;
       if (file) {
         const res = await sendMedia({
           phone,
@@ -137,11 +173,20 @@ export function Composer({
     if (dropped) setFile(dropped);
   }
 
-  if (disabled) {
+  // Se fuori 24h e NON in note mode, mostra banner ma consenti switch a note
+  if (disabled && !noteMode) {
     return (
-      <div className="border-t border-gray-200 bg-amber-50 p-4 text-sm text-amber-800">
-        <strong>Messaggio diretto disabilitato.</strong>{" "}
-        {disabledReason || "Fuori dalla finestra 24h — invia un template approvato Meta."}
+      <div className="border-t border-gray-200 bg-amber-50 p-4 text-sm text-amber-800 flex items-center justify-between gap-3">
+        <div>
+          <strong>Messaggio diretto disabilitato.</strong>{" "}
+          {disabledReason || "Fuori dalla finestra 24h — invia un template approvato Meta."}
+        </div>
+        <button
+          onClick={() => setNoteMode(true)}
+          className="flex-shrink-0 px-3 py-1.5 bg-yellow-500 text-white rounded-lg text-xs font-medium hover:bg-yellow-600 flex items-center gap-1"
+        >
+          <StickyNote className="w-3 h-3" /> Aggiungi nota interna
+        </button>
       </div>
     );
   }
@@ -217,7 +262,22 @@ export function Composer({
         </div>
       )}
 
-      <div className="flex items-end gap-2 p-3">
+      {noteMode && (
+        <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-200 text-xs text-yellow-800 flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <StickyNote className="w-3.5 h-3.5" />
+            Modalità nota interna — solo staff vedrà questo testo
+          </span>
+          <button
+            onClick={() => setNoteMode(false)}
+            className="text-yellow-900 hover:underline"
+          >
+            Annulla
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-end gap-1 p-3">
         <button
           onClick={() => setShowTemplates((v) => !v)}
           className={`p-2 rounded-full hover:bg-gray-100 text-gray-500 ${showTemplates ? "bg-emerald-50 text-emerald-600" : ""}`}
@@ -227,10 +287,34 @@ export function Composer({
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
+          disabled={noteMode}
+          className="p-2 rounded-full hover:bg-gray-100 text-gray-500 disabled:opacity-30"
           title="Allega file"
         >
           <Paperclip className="w-5 h-5" />
+        </button>
+        <button
+          onClick={handleAISuggest}
+          disabled={aiLoading}
+          className="p-2 rounded-full hover:bg-purple-50 text-purple-600"
+          title="Suggerisci risposta AI"
+        >
+          <Sparkles className={`w-5 h-5 ${aiLoading ? "animate-pulse" : ""}`} />
+        </button>
+        <button
+          onClick={() => setNoteMode((v) => !v)}
+          className={`p-2 rounded-full hover:bg-yellow-50 text-gray-500 ${noteMode ? "bg-yellow-100 text-yellow-700" : ""}`}
+          title="Nota interna (non inviata al cliente)"
+        >
+          <StickyNote className="w-5 h-5" />
+        </button>
+        <button
+          onClick={onRequestSchedule}
+          disabled={noteMode}
+          className="p-2 rounded-full hover:bg-gray-100 text-gray-500 disabled:opacity-30"
+          title="Invio programmato"
+        >
+          <Clock className="w-5 h-5" />
         </button>
         <input
           ref={fileInputRef}
@@ -246,15 +330,27 @@ export function Composer({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onTextKeyDown}
-          placeholder={file ? "Aggiungi una didascalia..." : "Scrivi un messaggio..."}
+          placeholder={
+            noteMode
+              ? "Nota interna (solo staff)..."
+              : file
+                ? "Aggiungi una didascalia..."
+                : "Scrivi un messaggio..."
+          }
           rows={1}
-          className="flex-1 resize-none bg-gray-50 rounded-2xl px-4 py-2 text-sm outline-none border border-transparent focus:border-gray-300 focus:bg-white max-h-40"
+          className={`flex-1 resize-none rounded-2xl px-4 py-2 text-sm outline-none border max-h-40 ${
+            noteMode
+              ? "bg-yellow-50 border-yellow-300 focus:border-yellow-400"
+              : "bg-gray-50 border-transparent focus:border-gray-300 focus:bg-white"
+          }`}
         />
         <button
           onClick={handleSend}
           disabled={sending || (!text.trim() && !file)}
-          className="p-2 rounded-full bg-emerald-500 text-white disabled:bg-gray-300 hover:bg-emerald-600 transition"
-          title="Invia (Enter)"
+          className={`p-2 rounded-full text-white disabled:bg-gray-300 transition ${
+            noteMode ? "bg-yellow-500 hover:bg-yellow-600" : "bg-emerald-500 hover:bg-emerald-600"
+          }`}
+          title={noteMode ? "Salva nota" : "Invia (Enter)"}
         >
           <Send className="w-5 h-5" />
         </button>

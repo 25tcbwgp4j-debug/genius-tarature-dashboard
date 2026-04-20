@@ -181,6 +181,228 @@ export function exportUrl(phone: string, format: "txt" | "json" = "txt") {
   return `${BASE}/export?phone=${encodeURIComponent(phone)}&format=${format}`;
 }
 
+// ===== v2: Types =====
+
+export interface ConversationState {
+  phone_number: string;
+  assigned_to: string | null;
+  archived: boolean;
+  archived_at: string | null;
+  snoozed_until: string | null;
+  tags: string[];
+  priority: number;
+  last_operator_response_at: string | null;
+  first_response_time_seconds: number | null;
+  notes: string | null;
+  updated_at: string;
+}
+
+export interface ChatTag {
+  id: string;
+  slug: string;
+  label: string;
+  color: string;
+}
+
+export interface ScheduledMessage {
+  id: string;
+  phone_number: string;
+  body: string | null;
+  send_at: string;
+  operator_email: string | null;
+  status: string;
+  sent_at: string | null;
+  error: string | null;
+  broadcast_id: string | null;
+}
+
+export interface Broadcast {
+  id: string;
+  title: string;
+  segment: Record<string, unknown>;
+  body: string | null;
+  total_targets: number;
+  sent_count: number;
+  failed_count: number;
+  status: string;
+  scheduled_for: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface Analytics {
+  days: number;
+  totals: { inbound: number; outbound: number };
+  sla_avg_seconds: number | null;
+}
+
+// ===== v2: API =====
+
+export async function setConversationState(payload: {
+  phone: string;
+  assigned_to?: string | null;
+  archived?: boolean;
+  snoozed_until?: string | null;
+  tags?: string[];
+  priority?: number;
+  notes?: string;
+}) {
+  return apiPost<{ ok: boolean; state: ConversationState }>("/conversation-state", payload);
+}
+
+export async function getConversationState(phone: string) {
+  return apiGet<{ state: ConversationState | null }>(
+    `/conversation-state?phone=${encodeURIComponent(phone)}`,
+  );
+}
+
+export async function starMessage(messageId: string, starred: boolean) {
+  return apiPost<{ ok: boolean }>("/star", { message_id: messageId, starred });
+}
+
+export async function listStarred() {
+  return apiGet<{ messages: ChatMessage[]; count: number }>("/starred");
+}
+
+export async function forwardMessage(payload: {
+  source_message_id: string;
+  to_phone: string;
+  operator_email?: string;
+}) {
+  return apiPost<{ ok: boolean; result: unknown }>("/forward", payload);
+}
+
+export async function addInternalNote(payload: {
+  phone: string;
+  body: string;
+  operator_email?: string;
+}) {
+  return apiPost<{ ok: boolean; note: ChatMessage }>("/note", payload);
+}
+
+export async function listTags() {
+  return apiGet<{ tags: ChatTag[] }>("/tags");
+}
+
+export async function upsertTag(tag: Partial<ChatTag> & { label: string }) {
+  return apiPost<{ ok: boolean; tag: ChatTag }>("/tags", tag);
+}
+
+export async function deleteTag(tagId: string) {
+  const res = await fetch(`${BASE}/tags/${tagId}`, { method: "DELETE" });
+  return res.ok;
+}
+
+export async function aiClassify(body: string, messageId?: string) {
+  return apiPost<{ intent?: string; sentiment?: string; urgency?: boolean }>(
+    "/ai/classify",
+    { body, message_id: messageId },
+  );
+}
+
+export async function aiSuggest(phone: string) {
+  return apiPost<{ suggestion: string | null }>("/ai/suggest", { phone });
+}
+
+export async function aiSummarize(phone: string) {
+  return apiPost<{ summary: string | null }>("/ai/summarize", { phone });
+}
+
+export async function scheduleSend(payload: {
+  phone: string;
+  body?: string;
+  send_at: string;
+  operator_email?: string;
+  template_id?: string;
+}) {
+  return apiPost<{ ok: boolean; scheduled: ScheduledMessage }>("/schedule-send", payload);
+}
+
+export async function listScheduled(status = "pending") {
+  return apiGet<{ scheduled: ScheduledMessage[]; count: number }>(
+    `/scheduled?status=${status}`,
+  );
+}
+
+export async function cancelScheduled(id: string) {
+  const res = await fetch(`${BASE}/scheduled/${id}`, { method: "DELETE" });
+  return res.ok;
+}
+
+export async function createBroadcast(payload: {
+  title: string;
+  segment: Record<string, unknown>;
+  body?: string;
+  template_id?: string;
+  scheduled_for?: string;
+  operator_email?: string;
+}) {
+  return apiPost<{
+    ok: boolean;
+    broadcast: Broadcast;
+    preview_count: number;
+    preview_sample: Array<Record<string, unknown>>;
+  }>("/broadcast", payload);
+}
+
+export async function sendBroadcast(id: string) {
+  return apiPost<{ ok: boolean; scheduled: number; total: number }>(
+    `/broadcast/${id}/send`,
+    {},
+  );
+}
+
+export async function listBroadcasts() {
+  return apiGet<{ broadcasts: Broadcast[] }>("/broadcast");
+}
+
+export async function sendRdt(payload: {
+  phone: string;
+  rdt_id: string;
+  caption?: string;
+  operator_email?: string;
+}) {
+  return apiPost<{ ok: boolean; result: unknown }>("/send-rdt", payload);
+}
+
+export async function sendQuote(payload: {
+  phone: string;
+  instruments: Array<{ type: string; brand?: string; qty: number }>;
+  operator_email?: string;
+  discount_percent?: number;
+}) {
+  return apiPost<{ ok: boolean; body: string; total: number }>("/send-quote", payload);
+}
+
+export async function promoteLead(phone: string) {
+  return apiPost<{ ok: boolean; customer_id?: string; already_customer?: boolean }>(
+    "/promote-lead",
+    { phone },
+  );
+}
+
+export async function sendEmail(payload: {
+  phone: string;
+  subject: string;
+  body: string;
+  operator_email?: string;
+}) {
+  return apiPost<{ ok: boolean; email: string }>("/send-email", payload);
+}
+
+export async function getAnalytics(days = 30) {
+  return apiGet<Analytics>(`/analytics?days=${days}`);
+}
+
+export function formatDuration(seconds: number | null | undefined) {
+  if (!seconds) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}g`;
+}
+
 // ===== Utility =====
 
 export function sourceBadge(source: LeadSource) {
