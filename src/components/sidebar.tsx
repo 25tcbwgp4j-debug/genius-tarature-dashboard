@@ -17,6 +17,7 @@ import {
   Zap,
   LogOut,
   MessageSquare,
+  BookUser,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -24,6 +25,7 @@ import { getStats } from "@/lib/chat-api";
 const navItems = [
   { href: "/", label: "Registro", icon: ClipboardList },
   { href: "/chat", label: "Chat WhatsApp", icon: MessageSquare },
+  { href: "/rubrica", label: "Rubrica", icon: BookUser },
   { href: "/sessioni", label: "Sessioni", icon: Wrench },
   { href: "/clienti", label: "Clienti", icon: Users },
   { href: "/nuovi-clienti", label: "Nuovi Clienti", icon: UserPlus },

@@ -472,3 +472,48 @@ export function formatPhone(phone: string) {
   if (n.length === 10) return `+39 ${n.slice(0, 3)} ${n.slice(3, 6)} ${n.slice(6)}`;
   return `+${phone}`;
 }
+
+
+// ===== Rubrica CardDAV sync iPhone staff =====
+
+export interface Contact {
+  id: string;
+  company_name: string | null;
+  email: string | null;
+  mobile: string | null;
+  phone1: string | null;
+  whatsapp_phone: string | null;
+  vat_number: string | null;
+  whatsapp_active: boolean | null;
+  created_at: string;
+}
+
+export async function listContacts(q?: string, limit = 200, offset = 0) {
+  const qs = new URLSearchParams();
+  if (q) qs.set("q", q);
+  qs.set("limit", String(limit));
+  qs.set("offset", String(offset));
+  return apiGet<{ contacts: Contact[]; total: number; limit: number; offset: number }>(
+    `/contacts?${qs.toString()}`
+  );
+}
+
+export async function renameContact(phone: string, newName: string) {
+  const res = await fetch(`${BASE}/contacts/${encodeURIComponent(phone)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ new_name: newName }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `API ${res.status}`);
+  }
+  return res.json() as Promise<{ ok: boolean; customer: Contact | null }>;
+}
+
+export async function reconcileContacts(limit = 5000) {
+  return apiPost<{ ok: boolean; stats: { total: number; ok: number; failed: number; skipped: number } }>(
+    `/reconcile-contacts?limit=${limit}`,
+    {}
+  );
+}
