@@ -14,6 +14,7 @@ import {
   Calculator,
   UserPlus,
   Mail,
+  Send,
 } from "lucide-react";
 import {
   listMessages,
@@ -38,6 +39,7 @@ import { ForwardModal } from "./ForwardModal";
 import { ScheduleSendModal } from "./ScheduleSendModal";
 import { SendRDTModal } from "./SendRDTModal";
 import { SendQuoteModal } from "./SendQuoteModal";
+import { SendTemplateModal } from "./SendTemplateModal";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 
 function groupByDay(messages: ChatMessage[]) {
@@ -82,6 +84,7 @@ export function ChatPanel({
   const [showSchedule, setShowSchedule] = useState(false);
   const [showRdt, setShowRdt] = useState(false);
   const [showQuote, setShowQuote] = useState(false);
+  const [showTemplate, setShowTemplate] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -270,6 +273,16 @@ export function ChatPanel({
                 >
                   <Calculator className="w-4 h-4 text-emerald-600" />
                   Invia preventivo
+                </button>
+                <button
+                  onClick={() => {
+                    setShowTemplate(true);
+                    setShowMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 text-left"
+                >
+                  <Send className="w-4 h-4 text-indigo-600" />
+                  Invia template
                 </button>
                 {context?.lead_source && context.lead_source !== "customer" && context.lead_source !== "staff" && (
                   <button
@@ -506,6 +519,20 @@ export function ChatPanel({
             setShowQuote(false);
             loadMessages();
           }}
+        />
+      )}
+
+      {showTemplate && (
+        <SendTemplateModal
+          phone={phone}
+          customerName={
+            (context?.customer as { company_name?: string; first_name?: string } | null)?.company_name ||
+            (context?.customer as { first_name?: string } | null)?.first_name ||
+            null
+          }
+          operatorEmail={operatorEmail}
+          onClose={() => setShowTemplate(false)}
+          onSent={() => loadMessages()}
         />
       )}
 

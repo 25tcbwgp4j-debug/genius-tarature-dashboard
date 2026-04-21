@@ -517,3 +517,26 @@ export async function reconcileContacts(limit = 5000) {
     {}
   );
 }
+
+// ===== Meta Templates (outbound) =====
+
+export interface MetaTemplate {
+  name: string;
+  category: "UTILITY" | "MARKETING" | "AUTHENTICATION";
+  params: string[];
+  description: string;
+}
+
+export async function listMetaTemplates() {
+  return apiGet<{ templates: MetaTemplate[] }>("/templates");
+}
+
+export async function sendMetaTemplate(payload: {
+  phone: string;
+  template_name: string;
+  parameters: string[];
+  language?: string;
+  operator_email?: string;
+}) {
+  return apiPost<{ ok: boolean; result: unknown }>("/send-template", payload);
+}
