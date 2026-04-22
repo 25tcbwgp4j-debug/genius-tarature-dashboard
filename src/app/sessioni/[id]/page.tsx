@@ -884,9 +884,9 @@ export default function SessionDetail() {
               className="h-20 flex flex-col gap-1 bg-blue-600 hover:bg-blue-700"
               disabled={actionLoading !== null}
               onClick={() => {
-                if (!confirm("Completare la registrazione e inviare ricevuta WhatsApp al cliente?")) return;
+                if (!confirm("Completare la registrazione e inviare ricevuta al cliente (WhatsApp + email)?")) return;
                 handleAction("register", () => registerComplete(sessionId),
-                  "Registrazione completata! Ricevuta inviata al cliente.")
+                  "Registrazione completata! Ricevuta inviata via WhatsApp + email.")
               }}
             >
               {actionLoading === "register" ? <Loader2 className="w-6 h-6 animate-spin" /> : <ClipboardCheck className="w-6 h-6" />}
@@ -982,9 +982,9 @@ export default function SessionDetail() {
               className="h-20 flex flex-col gap-1 bg-gray-700 hover:bg-gray-800"
               disabled={actionLoading !== null}
               onClick={() => {
-                if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati?")) return;
+                if (!confirm("Chiudere la sessione, marcare gli strumenti come riconsegnati e inviare conferma al cliente (WhatsApp + email)?")) return;
                 handleAction("delivered", () => markDelivered(sessionId),
-                  "Sessione completata! Strumenti riconsegnati.");
+                  "Sessione completata! Strumenti riconsegnati e conferma inviata via WhatsApp + email.");
               }}
             >
               {actionLoading === "delivered" ? <Loader2 className="w-6 h-6 animate-spin" /> : <PackageCheck className="w-6 h-6" />}
