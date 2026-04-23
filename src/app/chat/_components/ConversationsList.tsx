@@ -120,11 +120,21 @@ export function ConversationsList({
             const badge = sourceBadge(c.lead_source);
             const isActive = selectedPhone === c.phone_number;
             const displayName = c.sender_name || formatPhone(c.phone_number);
+            const typeLabel: Record<string, string> = {
+              template: "📨 Template",
+              image: "📷 Foto",
+              document: "📄 Documento",
+              audio: "🎤 Audio",
+              video: "🎬 Video",
+              system: "⚙️ Sistema",
+              text: "Messaggio",
+            };
             const preview = c.last_message_body
               ? c.last_direction === "outbound"
                 ? `Tu: ${c.last_message_body}`
                 : c.last_message_body
-              : `[${c.last_message_type}]`;
+              : (c.last_direction === "outbound" ? "Tu: " : "") +
+                (typeLabel[c.last_message_type] || `[${c.last_message_type}]`);
 
             return (
               <button

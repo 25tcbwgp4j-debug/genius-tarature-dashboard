@@ -69,6 +69,7 @@ export interface ChatMessage {
   created_at: string;
   delivered_at: string | null;
   read_at: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface ChatTemplate {

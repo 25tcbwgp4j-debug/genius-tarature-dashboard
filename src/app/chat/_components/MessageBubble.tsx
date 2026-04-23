@@ -1,17 +1,63 @@
 "use client";
 
-import { Check, CheckCheck, AlertTriangle, FileText, Download, Star, Forward, StickyNote } from "lucide-react";
+import { Check, CheckCheck, AlertTriangle, FileText, Download, Star, Forward, StickyNote, MessageSquare } from "lucide-react";
 import type { ChatMessage } from "@/lib/chat-api";
 
 function StatusTicks({ msg }: { msg: ChatMessage }) {
   if (msg.direction !== "outbound") return null;
-  if (msg.status === "failed")
-    return <AlertTriangle className="w-3.5 h-3.5 text-red-500" aria-label="Fallito" />;
+  if (msg.status === "failed") {
+    const reason = msg.error_msg || "Consegna fallita";
+    return (
+      <span title={reason} className="inline-flex items-center">
+        <AlertTriangle className="w-3.5 h-3.5 text-red-500" aria-label={`Fallito: ${reason}`} />
+      </span>
+    );
+  }
   if (msg.status === "read")
     return <CheckCheck className="w-3.5 h-3.5 text-blue-500" aria-label="Letto" />;
   if (msg.status === "delivered")
     return <CheckCheck className="w-3.5 h-3.5 text-gray-400" aria-label="Consegnato" />;
   return <Check className="w-3.5 h-3.5 text-gray-400" aria-label="Inviato" />;
+}
+
+function getTemplateName(msg: ChatMessage): string | null {
+  const md = msg.metadata;
+  if (!md || typeof md !== "object") return null;
+  const rec = md as Record<string, unknown>;
+  const name = rec.template_name || rec.name || rec.template;
+  return typeof name === "string" ? name : null;
+}
+
+function humanTemplateName(name: string): string {
+  return name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function TemplatePlaceholder({ msg }: { msg: ChatMessage }) {
+  const name = getTemplateName(msg);
+  const label = name ? humanTemplateName(name) : "Template";
+  const isFailed = msg.status === "failed";
+  return (
+    <div
+      className={`flex items-start gap-2 text-sm leading-relaxed ${
+        isFailed ? "text-red-700" : "text-emerald-900"
+      }`}
+    >
+      <MessageSquare className="w-4 h-4 flex-shrink-0 mt-0.5 opacity-70" />
+      <div className="min-w-0">
+        <div className="font-medium">📨 {label}</div>
+        <div className={`text-xs italic ${isFailed ? "text-red-600" : "text-gray-600"}`}>
+          {isFailed
+            ? `Non consegnato${msg.error_msg ? ` · ${msg.error_msg}` : ""}`
+            : "Template inviato (testo non archiviato)"}
+        </div>
+        {name && (
+          <div className="text-[10px] text-gray-500 font-mono mt-0.5 select-all">
+            {name}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function MessageBubble({
@@ -128,6 +174,10 @@ export function MessageBubble({
           <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
             {msg.body}
           </div>
+        )}
+
+        {!msg.body && msg.message_type === "template" && isOut && (
+          <TemplatePlaceholder msg={msg} />
         )}
 
         <div
