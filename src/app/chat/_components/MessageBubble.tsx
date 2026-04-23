@@ -2,6 +2,7 @@
 
 import { Check, CheckCheck, AlertTriangle, FileText, Download, Star, Forward, StickyNote, MessageSquare } from "lucide-react";
 import type { ChatMessage } from "@/lib/chat-api";
+import { renderTemplate } from "@/lib/template-snapshot";
 
 function StatusTicks({ msg }: { msg: ChatMessage }) {
   if (msg.direction !== "outbound") return null;
@@ -20,12 +21,15 @@ function StatusTicks({ msg }: { msg: ChatMessage }) {
   return <Check className="w-3.5 h-3.5 text-gray-400" aria-label="Inviato" />;
 }
 
-function getTemplateName(msg: ChatMessage): string | null {
+function getTemplateMeta(msg: ChatMessage): { name: string | null; params: unknown[] } {
   const md = msg.metadata;
-  if (!md || typeof md !== "object") return null;
+  if (!md || typeof md !== "object") return { name: null, params: [] };
   const rec = md as Record<string, unknown>;
-  const name = rec.template_name || rec.name || rec.template;
-  return typeof name === "string" ? name : null;
+  const rawName = rec.template_name || rec.name || rec.template;
+  const name = typeof rawName === "string" ? rawName : null;
+  const rawParams = rec.parameters ?? rec.params;
+  const params = Array.isArray(rawParams) ? rawParams : [];
+  return { name, params };
 }
 
 function humanTemplateName(name: string): string {
@@ -33,29 +37,54 @@ function humanTemplateName(name: string): string {
 }
 
 function TemplatePlaceholder({ msg }: { msg: ChatMessage }) {
-  const name = getTemplateName(msg);
+  const { name, params } = getTemplateMeta(msg);
   const label = name ? humanTemplateName(name) : "Template";
   const isFailed = msg.status === "failed";
+  const rendered = name ? renderTemplate(name, params) : null;
+
   return (
     <div
-      className={`flex items-start gap-2 text-sm leading-relaxed ${
-        isFailed ? "text-red-700" : "text-emerald-900"
+      className={`flex flex-col gap-1.5 text-sm leading-relaxed ${
+        isFailed ? "text-red-800" : "text-emerald-900"
       }`}
     >
-      <MessageSquare className="w-4 h-4 flex-shrink-0 mt-0.5 opacity-70" />
-      <div className="min-w-0">
-        <div className="font-medium">📨 {label}</div>
-        <div className={`text-xs italic ${isFailed ? "text-red-600" : "text-gray-600"}`}>
-          {isFailed
-            ? `Non consegnato${msg.error_msg ? ` · ${msg.error_msg}` : ""}`
-            : "Template inviato (testo non archiviato)"}
-        </div>
-        {name && (
-          <div className="text-[10px] text-gray-500 font-mono mt-0.5 select-all">
-            {name}
-          </div>
+      <div className="flex items-center gap-1.5 font-medium">
+        <MessageSquare className="w-4 h-4 flex-shrink-0 opacity-70" />
+        <span>📨 {label}</span>
+        {isFailed && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">
+            NON CONSEGNATO
+          </span>
         )}
       </div>
+
+      {rendered ? (
+        <div
+          className={`whitespace-pre-wrap break-words rounded-md px-2 py-1.5 text-sm ${
+            isFailed
+              ? "bg-red-50 border border-red-200 text-gray-800"
+              : "bg-white/70 border border-emerald-200 text-gray-900"
+          }`}
+        >
+          {rendered}
+        </div>
+      ) : (
+        <div className={`text-xs italic ${isFailed ? "text-red-600" : "text-gray-600"}`}>
+          Template inviato (testo non archiviato · template non noto al frontend)
+        </div>
+      )}
+
+      {isFailed && msg.error_msg && (
+        <div className="text-[11px] italic text-red-600">
+          Motivo fallimento: {msg.error_msg}
+        </div>
+      )}
+
+      {name && (
+        <div className="text-[10px] text-gray-500 font-mono select-all">
+          {name}
+        </div>
+      )}
     </div>
   );
 }
