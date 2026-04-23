@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Paperclip, Send, X, FileText as FileIcon, Zap, Sparkles, StickyNote, Clock } from "lucide-react";
+import { Paperclip, Send, X, FileText as FileIcon, Zap, Sparkles, StickyNote, Clock, MessageSquare } from "lucide-react";
 import {
   sendText,
   sendMedia,
@@ -20,6 +20,7 @@ export function Composer({
   onSent,
   operatorEmail,
   onRequestSchedule,
+  onRequestTemplate,
 }: {
   phone: string;
   disabled?: boolean;
@@ -29,6 +30,7 @@ export function Composer({
   onSent?: () => void;
   operatorEmail?: string;
   onRequestSchedule?: () => void;
+  onRequestTemplate?: () => void;
 }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -173,20 +175,33 @@ export function Composer({
     if (dropped) setFile(dropped);
   }
 
-  // Se fuori 24h e NON in note mode, mostra banner ma consenti switch a note
+  // Se fuori 24h e NON in note mode, mostra pulsante Invia template + nota interna
   if (disabled && !noteMode) {
     return (
-      <div className="border-t border-gray-200 bg-amber-50 p-4 text-sm text-amber-800 flex items-center justify-between gap-3">
-        <div>
-          <strong>Messaggio diretto disabilitato.</strong>{" "}
-          {disabledReason || "Fuori dalla finestra 24h — invia un template approvato Meta."}
+      <div className="border-t border-gray-200 bg-amber-50 p-3 flex flex-col gap-2">
+        <div className="text-xs text-amber-800 flex items-center gap-2">
+          <span>ℹ️</span>
+          <span>
+            <strong>Fuori dalla finestra 24h Meta.</strong>{" "}
+            Puoi inviare un <strong>template approvato</strong> oppure aggiungere una nota interna.
+          </span>
         </div>
-        <button
-          onClick={() => setNoteMode(true)}
-          className="flex-shrink-0 px-3 py-1.5 bg-yellow-500 text-white rounded-lg text-xs font-medium hover:bg-yellow-600 flex items-center gap-1"
-        >
-          <StickyNote className="w-3 h-3" /> Aggiungi nota interna
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onRequestTemplate}
+            disabled={!onRequestTemplate}
+            className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-2 shadow-sm"
+          >
+            <MessageSquare className="w-4 h-4" /> Invia template
+          </button>
+          <button
+            onClick={() => setNoteMode(true)}
+            className="px-3 py-2 bg-yellow-500 text-white rounded-lg text-sm font-medium hover:bg-yellow-600 flex items-center gap-1.5"
+            title="Nota interna"
+          >
+            <StickyNote className="w-4 h-4" /> Nota
+          </button>
+        </div>
       </div>
     );
   }

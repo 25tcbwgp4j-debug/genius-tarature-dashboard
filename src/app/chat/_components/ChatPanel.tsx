@@ -427,6 +427,7 @@ export function ChatPanel({
           }}
           operatorEmail={operatorEmail}
           onRequestSchedule={() => setShowSchedule(true)}
+          onRequestTemplate={() => setShowTemplate(true)}
         />
       </div>
 
