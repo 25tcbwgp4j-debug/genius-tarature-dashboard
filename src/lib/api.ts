@@ -196,10 +196,21 @@ export async function notifyReady(sessionId: string) {
   return fetchAPI(`/api/sessions/${sessionId}/notify-ready`, { method: 'POST' });
 }
 
-export async function sendProforma(sessionId: string, proformaSuffix = "") {
+export async function sendProforma(
+  sessionId: string,
+  proformaSuffix = "",
+  shipping?: { included: boolean; amount?: number },
+) {
+  const payload: Record<string, unknown> = { proforma_suffix: proformaSuffix };
+  if (shipping?.included) {
+    payload.shipping_included = true;
+    if (typeof shipping.amount === "number" && !Number.isNaN(shipping.amount)) {
+      payload.shipping_amount = shipping.amount;
+    }
+  }
   return fetchAPI(`/api/sessions/${sessionId}/send-proforma`, {
     method: 'POST',
-    body: JSON.stringify({ proforma_suffix: proformaSuffix }),
+    body: JSON.stringify(payload),
   });
 }
 

@@ -103,6 +103,9 @@ export default function SessionDetail() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   // Suffix proforma SimplyFatt (1-2 cifre): completa la causale come 'PF-AAAA-00XX'
   const [proformaSuffix, setProformaSuffix] = useState<string>("");
+  // Spese di spedizione (porto IVA), default 36.60 EUR lordo, modificabile
+  const [shippingIncluded, setShippingIncluded] = useState<boolean>(false);
+  const [shippingAmount, setShippingAmount] = useState<string>("36.60");
   const [editingInstrument, setEditingInstrument] = useState<string | null>(null);
   const [editInstrumentData, setEditInstrumentData] = useState<any>(null);
   const [editingSession, setEditingSession] = useState(false);
@@ -913,7 +916,7 @@ export default function SessionDetail() {
             <ActionTimestamp ts={session.ready_at} />
           </div>
 
-          {/* PULSANTE 3: Invia proforma + input numero SimplyFatt */}
+          {/* PULSANTE 3: Invia proforma + input numero SimplyFatt + spedizione */}
           <div className="flex flex-col gap-1">
             <Button
               size="lg"
@@ -925,12 +928,24 @@ export default function SessionDetail() {
                 const causale = suffix
                   ? `Pro Forma PF-${year}-00${suffix.padStart(2, "0")}`
                   : "Pro Forma (numero interno DB)";
+                const shipAmt = parseFloat(shippingAmount.replace(",", ".")) || 0;
+                const shipLine = shippingIncluded
+                  ? `\n\nSpese di spedizione (porto IVA): EUR ${shipAmt.toFixed(2)} (sommate al totale)`
+                  : "";
                 if (!confirm(
                   `Inviare proforma via WhatsApp e email al cliente?\n\n` +
-                  `Causale bonifico: ${causale}`
+                  `Causale bonifico: ${causale}` + shipLine
                 )) return;
-                handleAction("proforma", () => sendProforma(sessionId, suffix),
-                  "Proforma inviata al cliente!");
+                handleAction(
+                  "proforma",
+                  () => sendProforma(sessionId, suffix, {
+                    included: shippingIncluded,
+                    amount: shippingIncluded ? shipAmt : undefined,
+                  }),
+                  shippingIncluded
+                    ? `Proforma inviata (con spedizione EUR ${shipAmt.toFixed(2)})!`
+                    : "Proforma inviata al cliente!"
+                );
               }}
             >
               {actionLoading === "proforma" ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
@@ -947,6 +962,31 @@ export default function SessionDetail() {
                 onChange={(e) => setProformaSuffix(e.target.value.replace(/\D/g, "").slice(0, 2))}
                 className="h-7 text-xs text-center font-mono"
               />
+            </div>
+            {/* Spedizione opzionale: checkbox + importo modificabile (default 36.60 lordo) */}
+            <label className="flex items-center gap-1 mt-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={shippingIncluded}
+                onChange={(e) => setShippingIncluded(e.target.checked)}
+                className="h-3 w-3"
+              />
+              <span className="text-[10px] text-gray-700 leading-tight">
+                + Spedizione (porto IVA)
+              </span>
+            </label>
+            <div className="flex items-center gap-1">
+              <Input
+                type="text"
+                inputMode="decimal"
+                placeholder="36.60"
+                value={shippingAmount}
+                onChange={(e) => setShippingAmount(e.target.value.replace(/[^\d,.]/g, ""))}
+                disabled={!shippingIncluded}
+                className="h-7 text-xs text-right font-mono disabled:bg-gray-100 disabled:text-gray-400"
+                title="Importo lordo spedizione (IVA inclusa). Default 36,60 EUR."
+              />
+              <span className="text-[10px] text-gray-500">EUR</span>
             </div>
             <ActionTimestamp ts={session.proforma_sent_at} />
           </div>
