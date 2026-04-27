@@ -126,5 +126,23 @@
   }
   html {
     @apply font-sans;
+    /* Anti-zoom involontario iOS */
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
   }
+  /* Input text-size 16px+ per evitare zoom auto su iOS Safari */
+  input[type="text"], input[type="search"], input[type="email"], input[type="tel"],
+  input[type="number"], input[type="password"], input[type="url"], textarea, select {
+    font-size: 16px;
+  }
+  @media (min-width: 640px) {
+    input[type="text"], input[type="search"], input[type="email"], input[type="tel"],
+    input[type="number"], input[type="password"], input[type="url"], textarea, select {
+      font-size: inherit;
+    }
+  }
+  /* Safe area helpers per notch iPhone */
+  .safe-top { padding-top: env(safe-area-inset-top); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-x { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 }

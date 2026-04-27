@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Paperclip, Send, X, FileText as FileIcon, Zap, Sparkles, StickyNote, Clock, MessageSquare } from "lucide-react";
+import { Paperclip, Send, X, FileText as FileIcon, Zap, Sparkles, StickyNote, Clock, MessageSquare, Bolt } from "lucide-react";
 import {
   sendText,
   sendMedia,
   listTemplates,
+  listQuickReplies,
+  useQuickReply,
   aiSuggest,
   addInternalNote,
   type ChatTemplate,
+  type QuickReply,
 } from "@/lib/chat-api";
 
 export function Composer({
@@ -38,6 +41,8 @@ export function Composer({
   const [sending, setSending] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [templates, setTemplates] = useState<ChatTemplate[]>([]);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [noteMode, setNoteMode] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -65,7 +70,17 @@ export function Composer({
     listTemplates()
       .then((r) => setTemplates(r.templates))
       .catch(() => setTemplates([]));
+    listQuickReplies()
+      .then((r) => setQuickReplies(r.items))
+      .catch(() => setQuickReplies([]));
   }, []);
+
+  function applyQuickReply(qr: QuickReply) {
+    setText((prev) => (prev ? prev + "\n" + qr.body : qr.body));
+    setShowQuickReplies(false);
+    useQuickReply(qr.id).catch(() => undefined);
+    textareaRef.current?.focus();
+  }
 
   useEffect(() => {
     if (file && file.type.startsWith("image/")) {
@@ -260,7 +275,7 @@ export function Composer({
       )}
 
       {showTemplates && (
-        <div className="px-4 pt-2 border-b border-gray-100 max-h-48 overflow-y-auto">
+        <div className="px-4 pt-2 border-b border-gray-100 dark:border-gray-700 max-h-48 overflow-y-auto">
           {templates.length === 0 && (
             <div className="text-xs text-gray-500 py-2">Nessun template disponibile</div>
           )}
@@ -268,10 +283,31 @@ export function Composer({
             <button
               key={t.id}
               onClick={() => applyTemplate(t)}
-              className="w-full text-left px-2 py-2 hover:bg-emerald-50 rounded"
+              className="w-full text-left px-2 py-2 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded"
             >
-              <div className="text-sm font-medium text-gray-900">{t.title}</div>
-              <div className="text-xs text-gray-500 truncate">{t.body}</div>
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{t.title}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{t.body}</div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showQuickReplies && (
+        <div className="px-4 pt-2 border-b border-gray-100 dark:border-gray-700 max-h-56 overflow-y-auto">
+          <div className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 px-1 pb-1">
+            Risposte rapide italiane
+          </div>
+          {quickReplies.length === 0 && (
+            <div className="text-xs text-gray-500 py-2">Nessuna risposta rapida disponibile</div>
+          )}
+          {quickReplies.map((qr) => (
+            <button
+              key={qr.id}
+              onClick={() => applyQuickReply(qr)}
+              className="w-full text-left px-2 py-2 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded"
+            >
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">⚡ {qr.label}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{qr.body}</div>
             </button>
           ))}
         </div>
@@ -292,13 +328,20 @@ export function Composer({
         </div>
       )}
 
-      <div className="flex items-end gap-1 p-3">
+      <div className="flex items-end gap-1 p-3" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
         <button
-          onClick={() => setShowTemplates((v) => !v)}
-          className={`p-2 rounded-full hover:bg-gray-100 text-gray-500 ${showTemplates ? "bg-emerald-50 text-emerald-600" : ""}`}
-          title="Template rapidi"
+          onClick={() => { setShowTemplates((v) => !v); setShowQuickReplies(false); }}
+          className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 ${showTemplates ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400" : ""}`}
+          title="Template Meta (fuori 24h)"
         >
           <Zap className="w-5 h-5" />
+        </button>
+        <button
+          onClick={() => { setShowQuickReplies((v) => !v); setShowTemplates(false); }}
+          className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 ${showQuickReplies ? "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400" : ""}`}
+          title="Risposte rapide italiane preset"
+        >
+          <Bolt className="w-5 h-5" />
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}

@@ -196,6 +196,9 @@ export interface ConversationState {
   first_response_time_seconds: number | null;
   notes: string | null;
   updated_at: string;
+  bot_paused?: boolean;
+  bot_paused_at?: string | null;
+  bot_paused_by?: string | null;
 }
 
 export interface ChatTag {
@@ -256,6 +259,64 @@ export async function getConversationState(phone: string) {
   return apiGet<{ state: ConversationState | null }>(
     `/conversation-state?phone=${encodeURIComponent(phone)}`,
   );
+}
+
+export async function setBotPaused(payload: {
+  phone: string;
+  paused: boolean;
+  operator_email?: string;
+}) {
+  return apiPost<{ ok: boolean; paused: boolean; state: ConversationState }>(
+    "/pause-bot",
+    payload,
+  );
+}
+
+export async function getBotStatus(phone: string) {
+  return apiGet<{ phone: string; paused: boolean }>(
+    `/pause-bot?phone=${encodeURIComponent(phone)}`,
+  );
+}
+
+// ===== Quick replies preset =====
+
+export interface QuickReply {
+  id: string;
+  slug: string;
+  label: string;
+  body: string;
+  category: string;
+  usage_count: number;
+  sort_order: number;
+}
+
+export async function listQuickReplies(category?: string) {
+  const qs = category ? `?category=${encodeURIComponent(category)}` : "";
+  return apiGet<{ items: QuickReply[]; count: number }>(`/quick-replies${qs}`);
+}
+
+export async function useQuickReply(id: string) {
+  return apiPost<{ ok: boolean }>("/quick-replies/use", { id });
+}
+
+// ===== Web Push subscriptions (VAPID) =====
+
+export async function getVapidPublicKey() {
+  return apiGet<{ key: string }>("/push/vapid-public-key");
+}
+
+export async function pushSubscribe(payload: {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  user_email?: string;
+  user_agent?: string;
+}) {
+  return apiPost<{ ok: boolean }>("/push/subscribe", payload);
+}
+
+export async function pushUnsubscribe(endpoint: string) {
+  return apiPost<{ ok: boolean }>("/push/unsubscribe", { endpoint });
 }
 
 export async function starMessage(messageId: string, starred: boolean) {

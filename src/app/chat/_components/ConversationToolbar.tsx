@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Archive, Clock, Tag, User, Flag, AlertCircle, X } from "lucide-react";
+import { Check, Archive, Clock, Tag, User, Flag, AlertCircle, X, Bot, BotOff } from "lucide-react";
 import {
   getConversationState,
   setConversationState,
+  setBotPaused,
   listTags,
   type ConversationState,
   type ChatTag,
@@ -199,6 +200,22 @@ export function ConversationToolbar({
           </div>
         )}
       </div>
+
+      {/* Pause bot toggle */}
+      <button
+        onClick={async () => {
+          const next = !state?.bot_paused;
+          const r = await setBotPaused({ phone, paused: next });
+          if (r.state) setState(r.state);
+          onChanged?.();
+        }}
+        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white border border-transparent hover:border-gray-200 ${
+          state?.bot_paused ? "text-amber-600" : ""
+        }`}
+        title={state?.bot_paused ? "Bot in pausa — clicca per riattivare" : "Pausa bot per questa conversazione"}
+      >
+        {state?.bot_paused ? <BotOff className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+      </button>
 
       {/* Archive */}
       <button
