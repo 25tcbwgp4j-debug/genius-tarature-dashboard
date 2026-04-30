@@ -241,7 +241,7 @@ export default function ScadenzarioPage() {
 
       {/* Statistiche */}
       {stats && (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <Card className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-red-100 rounded-lg">
@@ -364,23 +364,23 @@ export default function ScadenzarioPage() {
       {/* Range personalizzato */}
       {filter === "custom" && (
         <Card className="p-4 bg-blue-50 border-blue-200">
-          <div className="flex gap-4 items-end">
-            <div>
+          <div className="flex gap-3 sm:gap-4 items-end flex-wrap">
+            <div className="flex-1 min-w-[150px]">
               <label className="text-xs text-gray-600 block mb-1">Da (scadenza)</label>
               <Input
                 type="date"
                 value={customFrom}
                 onChange={(e) => setCustomFrom(e.target.value)}
-                className="h-8 w-44"
+                className="h-9 w-full sm:w-44"
               />
             </div>
-            <div>
+            <div className="flex-1 min-w-[150px]">
               <label className="text-xs text-gray-600 block mb-1">A (scadenza)</label>
               <Input
                 type="date"
                 value={customTo}
                 onChange={(e) => setCustomTo(e.target.value)}
-                className="h-8 w-44"
+                className="h-9 w-full sm:w-44"
               />
             </div>
             <Button

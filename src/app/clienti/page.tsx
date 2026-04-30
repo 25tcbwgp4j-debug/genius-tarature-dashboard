@@ -173,7 +173,7 @@ export default function ClientiPage() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <Card className="p-4">
             <div className="flex items-center gap-3">
               <Users className="w-5 h-5 text-blue-600" />
@@ -224,7 +224,7 @@ export default function ClientiPage() {
 
       {/* Filtri */}
       {mode === "list" && (
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap">
           <Filter className="w-4 h-4 text-gray-500" />
           {[
             { key: "all", label: "Tutti" },
