@@ -22,10 +22,13 @@ import {
   Moon,
   Menu,
   X,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
 import { useTheme } from "@/components/theme-provider";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 const navItems = [
   { href: "/", label: "Registro", icon: ClipboardList },
@@ -48,6 +51,7 @@ export function Sidebar() {
   const [unread, setUnread] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const push = usePushNotifications();
 
   // Chiude il drawer mobile quando cambia rotta
   useEffect(() => {
@@ -158,6 +162,27 @@ export function Sidebar() {
             {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             {theme === "dark" ? "Tema chiaro" : "Tema scuro"}
           </button>
+          {push.status !== "unsupported" && (
+            <button
+              type="button"
+              onClick={() => (push.status === "subscribed" ? push.unsubscribe() : push.subscribe())}
+              disabled={push.busy || push.status === "denied"}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-colors disabled:opacity-50"
+              aria-label={push.status === "subscribed" ? "Disattiva notifiche" : "Attiva notifiche"}
+              title={push.status === "denied" ? "Permesso negato dal browser" : ""}
+            >
+              {push.status === "subscribed" ? (
+                <Bell className="w-5 h-5 text-emerald-500" />
+              ) : (
+                <BellOff className="w-5 h-5" />
+              )}
+              {push.status === "subscribed"
+                ? "Notifiche attive"
+                : push.status === "denied"
+                  ? "Notifiche bloccate"
+                  : "Attiva notifiche"}
+            </button>
+          )}
           <form action={logout}>
             <button
               type="submit"
