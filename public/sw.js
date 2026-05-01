@@ -66,9 +66,16 @@ self.addEventListener('push', (event) => {
     body: data.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
+    image: data.image,
     data: data.url || '/chat',
     tag: data.tag || 'tarature-msg',
     renotify: true,
+    vibrate: [200, 100, 200, 100, 200],
+    requireInteraction: false,
+    actions: [
+      { action: 'open', title: '👀 Apri' },
+      { action: 'dismiss', title: '✕ Ignora' },
+    ],
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
