@@ -35,5 +35,5 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Escludi asset statici e favicon dal proxy (non servono auth)
-  matcher: ["/((?!_next/static|_next/image|_next/data|favicon.ico|robots.txt|sitemap.xml).*)"],
+  matcher: ["/((?!_next/static|_next/image|_next/data|favicon.ico|robots.txt|sitemap.xml|manifest.json|sw.js|workbox-.*|icon-.*\\.png|apple-touch-icon.*\\.png).*)"],
 };
