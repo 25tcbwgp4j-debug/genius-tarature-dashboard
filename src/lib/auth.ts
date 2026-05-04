@@ -1,14 +1,22 @@
-// Autenticazione dashboard tarature: sign/verify HMAC token per cookie sessione.
-// Usa Web Crypto API per essere compatibile con l'Edge runtime del proxy.
+// Auth dashboard Tarature: verifica JWT HS256 emesso dal backend FastAPI.
+// Il secret AUTH_JWT_SECRET deve essere identico fra backend Railway e frontend Vercel.
+// Il cookie httpOnly "gt-auth" contiene il JWT (3 parti header.payload.sig in base64url).
+//
+// Sostituisce il vecchio token HMAC-only custom: ora ogni token e' associato a uno
+// specifico utente (sub/email/role) e cosi' la dashboard puo' mostrare il nome
+// dell'utente loggato + nascondere features in base al ruolo.
 
 export const AUTH_COOKIE_NAME = "gt-auth";
-const TOKEN_TTL_DAYS = 30;
 
-function base64url(buf: ArrayBuffer | Uint8Array): string {
-  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+export type UserRole = "admin" | "operator";
+
+export interface JwtPayload {
+  sub: string;
+  email: string;
+  role: UserRole;
+  full_name?: string | null;
+  iat: number;
+  exp: number;
 }
 
 function base64urlDecode(s: string): Uint8Array {
@@ -26,40 +34,39 @@ async function getKey(secret: string): Promise<CryptoKey> {
     new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign", "verify"],
+    ["verify"],
   );
 }
 
-export async function signToken(secret: string): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const payload = { iat: now, exp: now + TOKEN_TTL_DAYS * 86400 };
-  const payloadB64 = base64url(new TextEncoder().encode(JSON.stringify(payload)));
-  const key = await getKey(secret);
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payloadB64));
-  return `${payloadB64}.${base64url(sig)}`;
-}
-
-export async function verifyToken(token: string, secret: string): Promise<boolean> {
+export async function verifyJwt(token: string, secret: string): Promise<JwtPayload | null> {
   try {
-    const [payloadB64, sigB64] = token.split(".");
-    if (!payloadB64 || !sigB64) return false;
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const [headerB64, payloadB64, sigB64] = parts;
     const key = await getKey(secret);
     const sigBytes = base64urlDecode(sigB64);
-    // Copia in un ArrayBuffer fresco per evitare il tipo SharedArrayBuffer
     const sigBuffer = new ArrayBuffer(sigBytes.byteLength);
     new Uint8Array(sigBuffer).set(sigBytes);
     const valid = await crypto.subtle.verify(
       "HMAC",
       key,
       sigBuffer,
-      new TextEncoder().encode(payloadB64),
+      new TextEncoder().encode(`${headerB64}.${payloadB64}`),
     );
-    if (!valid) return false;
+    if (!valid) return null;
     const payloadJson = new TextDecoder().decode(base64urlDecode(payloadB64));
-    const payload = JSON.parse(payloadJson) as { exp?: number };
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return false;
-    return true;
+    const payload = JSON.parse(payloadJson) as JwtPayload;
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    if (payload.role !== "admin" && payload.role !== "operator") return null;
+    return payload;
   } catch {
-    return false;
+    return null;
   }
+}
+
+// Ritrocompat: il vecchio token HMAC custom (signToken/verifyToken pre-v2026-05-04)
+// non e' piu' valido. Chi ha un cookie vecchio viene ridiretto al login.
+export async function verifyToken(token: string, secret: string): Promise<boolean> {
+  const payload = await verifyJwt(token, secret);
+  return payload !== null;
 }

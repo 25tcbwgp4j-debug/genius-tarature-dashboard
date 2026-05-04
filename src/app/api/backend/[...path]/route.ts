@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AUTH_COOKIE_NAME } from "@/lib/auth";
 
 /**
- * Proxy server-side: inoltra le richieste del frontend al backend Railway
- * aggiungendo l'header X-API-Key lato server (mai esposto al client).
+ * Proxy server-side: inoltra le richieste del frontend al backend Railway.
  *
- * Il frontend chiama /api/backend/api/prospects/send-batch invece di
- * https://tarature-api-production.up.railway.app/api/prospects/send-batch
- * Così la chiave API resta segreta nel server Next.js (env var API_KEY
- * senza prefisso NEXT_PUBLIC_).
+ * Auth a 2 livelli:
+ *   1) Bearer JWT — letto dal cookie httpOnly "gt-auth" (utente loggato).
+ *      Il backend identifica l'utente e applica il ruolo (admin/operator).
+ *   2) Fallback X-API-Key (env API_KEY senza prefisso NEXT_PUBLIC_) per
+ *      endpoint che il frontend chiama prima del login (es. health probe)
+ *      o per backward compat durante migrazione.
+ *
+ * Cosi' la dashboard fa azioni come l'utente loggato (con audit log corretto)
+ * e i DELETE admin-only fallano per gli operatori, non per la chiave globale.
  */
 
 const BACKEND_URL =
@@ -50,6 +55,12 @@ async function forward(
     if (FORWARDED_REQ_HEADERS.has(k.toLowerCase())) {
       outHeaders.set(k, v);
     }
+  }
+  // Auth: preferisci JWT utente (cookie) → identifica l'utente lato backend.
+  // Fallback X-API-Key per chiamate pre-login (health) o legacy compat.
+  const userJwt = request.cookies.get(AUTH_COOKIE_NAME)?.value;
+  if (userJwt) {
+    outHeaders.set("Authorization", `Bearer ${userJwt}`);
   }
   if (API_KEY) {
     outHeaders.set("X-API-Key", API_KEY);
