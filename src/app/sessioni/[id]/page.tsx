@@ -254,8 +254,27 @@ export default function SessionDetail() {
   ) => {
     setActionLoading(action);
     try {
-      await fn();
-      toast.success(successMsg);
+      const res = await fn();
+      // Estrai il canale WhatsApp usato (template Meta vs free text) dalla
+      // risposta del backend per dare feedback chiaro all'operatore.
+      const wa = res?.notifications?.whatsapp;
+      let detail = successMsg;
+      if (wa && typeof wa === "object") {
+        if (wa.ok) {
+          if (wa.mode === "template") {
+            detail = wa.forced
+              ? `${successMsg} — template Meta inviato (apertura conversazione)`
+              : `${successMsg} — template Meta inviato (cliente fuori finestra 24h)`;
+          } else if (wa.mode === "free_text") {
+            detail = `${successMsg} — messaggio diretto (finestra 24h aperta)`;
+          }
+        } else if (wa.error) {
+          toast.error(`WhatsApp: ${String(wa.error).slice(0, 200)}`);
+          await loadSession();
+          return;
+        }
+      }
+      toast.success(detail);
       await loadSession();
     } catch (err: any) {
       toast.error(err.message || "Errore nell'operazione");
