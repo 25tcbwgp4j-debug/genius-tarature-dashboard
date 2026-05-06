@@ -198,16 +198,23 @@ export async function registerComplete(
   });
 }
 
-export async function notifyReady(sessionId: string) {
-  return fetchAPI(`/api/sessions/${sessionId}/notify-ready`, { method: 'POST' });
+export async function notifyReady(
+  sessionId: string,
+  channel: 'email' | 'whatsapp' | 'both' = 'both',
+) {
+  return fetchAPI(`/api/sessions/${sessionId}/notify-ready`, {
+    method: 'POST',
+    body: JSON.stringify({ channel }),
+  });
 }
 
 export async function sendProforma(
   sessionId: string,
   proformaSuffix = "",
   shipping?: { included: boolean; amount?: number },
+  channel: 'email' | 'whatsapp' | 'both' = 'both',
 ) {
-  const payload: Record<string, unknown> = { proforma_suffix: proformaSuffix };
+  const payload: Record<string, unknown> = { proforma_suffix: proformaSuffix, channel };
   if (shipping?.included) {
     payload.shipping_included = true;
     if (typeof shipping.amount === "number" && !Number.isNaN(shipping.amount)) {
@@ -227,10 +234,14 @@ export async function sendLatCertificates(sessionId: string, overrideTo?: string
   });
 }
 
-export async function markDelivered(sessionId: string, notes?: string) {
+export async function markDelivered(
+  sessionId: string,
+  notes?: string,
+  channel: 'email' | 'whatsapp' | 'both' = 'both',
+) {
   return fetchAPI(`/api/sessions/${sessionId}/mark-delivered`, {
     method: 'POST',
-    body: JSON.stringify({ session_id: sessionId, notes }),
+    body: JSON.stringify({ session_id: sessionId, notes, channel }),
   });
 }
 

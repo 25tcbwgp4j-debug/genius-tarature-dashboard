@@ -87,11 +87,13 @@ function formatItDateTime(iso: string | null | undefined): string | null {
   } catch { return null; }
 }
 
-function ActionTimestamp({ ts }: { ts: string | null | undefined }) {
+function ActionTimestamp({ ts, prefix }: { ts: string | null | undefined; prefix?: string }) {
   const f = formatItDateTime(ts);
   return (
     <p className="text-[10px] text-center text-gray-500 h-3">
-      {f ? <>Inviato: <span className="font-medium text-gray-700">{f}</span></> : <span className="text-gray-300">—</span>}
+      {f
+        ? <>{prefix ? `${prefix} ` : ""}Inviato: <span className="font-medium text-gray-700">{f}</span></>
+        : <span className="text-gray-300">{prefix ? `${prefix} —` : "—"}</span>}
     </p>
   );
 }
@@ -900,110 +902,141 @@ export default function SessionDetail() {
       <Card className="p-6">
         <h3 className="font-semibold text-lg mb-4">Azioni</h3>
         <div className="grid grid-cols-3 gap-4">
-          {/* PULSANTE 1: Registrazione completata — 2 canali separati per
-               permettere retry WhatsApp senza spammare l'email del cliente */}
+          {/* PULSANTE 1: Registrazione completata — split Email/WhatsApp + timestamp per canale */}
           <div className="flex flex-col gap-1">
             <div className="grid grid-cols-2 gap-1.5">
-              <Button
-                size="lg"
-                className="h-20 flex flex-col gap-1 bg-sky-600 hover:bg-sky-700"
-                disabled={actionLoading !== null}
-                title="Invia SOLO email di registrazione (utile per retry email)"
-                onClick={() => {
-                  if (!confirm("Inviare SOLO l'email di registrazione completata al cliente?")) return;
-                  handleAction(
-                    "register_email",
-                    () => registerComplete(sessionId, "email"),
-                    "Email registrazione completata inviata"
-                  );
-                }}
-              >
-                {actionLoading === "register_email" ? (
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                ) : (
-                  <Mail className="w-6 h-6" />
-                )}
-                <span className="text-xs leading-tight">REGISTRAZ.<br/>EMAIL</span>
-              </Button>
-              <Button
-                size="lg"
-                className="h-20 flex flex-col gap-1 bg-emerald-600 hover:bg-emerald-700"
-                disabled={actionLoading !== null}
-                title="Invia SOLO template Meta WhatsApp (utile per retry FAIL Meta)"
-                onClick={() => {
-                  if (!confirm("Inviare SOLO il template WhatsApp di registrazione completata al cliente?")) return;
-                  handleAction(
-                    "register_wa",
-                    () => registerComplete(sessionId, "whatsapp"),
-                    "Template WhatsApp registrazione completata inviato"
-                  );
-                }}
-              >
-                {actionLoading === "register_wa" ? (
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                ) : (
-                  <MessageCircle className="w-6 h-6" />
-                )}
-                <span className="text-xs leading-tight">REGISTRAZ.<br/>WHATSAPP</span>
-              </Button>
+              <div className="flex flex-col gap-0.5">
+                <Button
+                  size="lg"
+                  className="h-20 flex flex-col gap-1 bg-sky-600 hover:bg-sky-700"
+                  disabled={actionLoading !== null}
+                  title="Invia SOLO email registrazione (retry indipendente)"
+                  onClick={() => {
+                    if (!confirm("Inviare SOLO l'email di registrazione completata al cliente?")) return;
+                    handleAction("register_email", () => registerComplete(sessionId, "email"),
+                      "Email registrazione completata inviata");
+                  }}
+                >
+                  {actionLoading === "register_email" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Mail className="w-6 h-6" />}
+                  <span className="text-xs leading-tight">REGISTRAZ.<br/>EMAIL</span>
+                </Button>
+                <ActionTimestamp ts={session.receipt_email_at} prefix="📧" />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <Button
+                  size="lg"
+                  className="h-20 flex flex-col gap-1 bg-emerald-600 hover:bg-emerald-700"
+                  disabled={actionLoading !== null}
+                  title="Invia SOLO template Meta WhatsApp (retry indipendente)"
+                  onClick={() => {
+                    if (!confirm("Inviare SOLO il template WhatsApp di registrazione completata al cliente?")) return;
+                    handleAction("register_wa", () => registerComplete(sessionId, "whatsapp"),
+                      "Template WhatsApp registrazione completata inviato");
+                  }}
+                >
+                  {actionLoading === "register_wa" ? <Loader2 className="w-6 h-6 animate-spin" /> : <MessageCircle className="w-6 h-6" />}
+                  <span className="text-xs leading-tight">REGISTRAZ.<br/>WHATSAPP</span>
+                </Button>
+                <ActionTimestamp ts={session.receipt_whatsapp_at} prefix="💬" />
+              </div>
             </div>
-            <ActionTimestamp ts={session.registered_at} />
           </div>
 
-          {/* PULSANTE 2: Notifica pronti per ritiro */}
+          {/* PULSANTE 2: Notifica pronti per ritiro — split Email/WhatsApp + timestamp per canale */}
           <div className="flex flex-col gap-1">
-            <Button
-              size="lg"
-              className="h-20 flex flex-col gap-1 bg-green-600 hover:bg-green-700"
-              disabled={actionLoading !== null}
-              onClick={() => {
-                if (!confirm("Inviare notifica pronti al ritiro (WhatsApp + email)?")) return;
-                handleAction("ready", () => notifyReady(sessionId),
-                  "Cliente notificato: strumenti pronti per il ritiro!");
-              }}
-            >
-              {actionLoading === "ready" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Bell className="w-6 h-6" />}
-              <span className="text-xs">NOTIFICA PRONTI RITIRO</span>
-            </Button>
-            <ActionTimestamp ts={session.ready_at} />
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="flex flex-col gap-0.5">
+                <Button
+                  size="lg"
+                  className="h-20 flex flex-col gap-1 bg-green-600 hover:bg-green-700"
+                  disabled={actionLoading !== null}
+                  title="Invia SOLO email pronti al ritiro (retry indipendente)"
+                  onClick={() => {
+                    if (!confirm("Inviare SOLO l'email pronti al ritiro al cliente?")) return;
+                    handleAction("ready_email", () => notifyReady(sessionId, "email"),
+                      "Email pronti al ritiro inviata");
+                  }}
+                >
+                  {actionLoading === "ready_email" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Mail className="w-6 h-6" />}
+                  <span className="text-xs leading-tight">PRONTI<br/>EMAIL</span>
+                </Button>
+                <ActionTimestamp ts={session.ready_email_at} prefix="📧" />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <Button
+                  size="lg"
+                  className="h-20 flex flex-col gap-1 bg-green-700 hover:bg-green-800"
+                  disabled={actionLoading !== null}
+                  title="Invia SOLO template WhatsApp pronti al ritiro (retry indipendente)"
+                  onClick={() => {
+                    if (!confirm("Inviare SOLO il template WhatsApp pronti al ritiro al cliente?")) return;
+                    handleAction("ready_wa", () => notifyReady(sessionId, "whatsapp"),
+                      "Template WhatsApp pronti al ritiro inviato");
+                  }}
+                >
+                  {actionLoading === "ready_wa" ? <Loader2 className="w-6 h-6 animate-spin" /> : <MessageCircle className="w-6 h-6" />}
+                  <span className="text-xs leading-tight">PRONTI<br/>WHATSAPP</span>
+                </Button>
+                <ActionTimestamp ts={session.ready_whatsapp_at} prefix="💬" />
+              </div>
+            </div>
           </div>
 
-          {/* PULSANTE 3: Invia proforma + input numero SimplyFatt + spedizione */}
+          {/* PULSANTE 3: Invia proforma — split Email/WhatsApp + timestamp + input causale/spedizione condivisi */}
           <div className="flex flex-col gap-1">
-            <Button
-              size="lg"
-              className="h-16 flex flex-col gap-0.5 bg-orange-600 hover:bg-orange-700"
-              disabled={actionLoading !== null}
-              onClick={() => {
-                const suffix = proformaSuffix.trim();
-                const year = new Date().getFullYear();
-                const causale = suffix
-                  ? `Pro Forma PF-${year}-00${suffix.padStart(2, "0")}`
-                  : "Pro Forma (numero interno DB)";
-                const shipAmt = parseFloat(shippingAmount.replace(",", ".")) || 0;
-                const shipLine = shippingIncluded
-                  ? `\n\nSpese di spedizione (porto IVA): EUR ${shipAmt.toFixed(2)} (sommate al totale)`
-                  : "";
-                if (!confirm(
-                  `Inviare proforma via WhatsApp e email al cliente?\n\n` +
-                  `Causale bonifico: ${causale}` + shipLine
-                )) return;
-                handleAction(
-                  "proforma",
-                  () => sendProforma(sessionId, suffix, {
-                    included: shippingIncluded,
-                    amount: shippingIncluded ? shipAmt : undefined,
-                  }),
-                  shippingIncluded
-                    ? `Proforma inviata (con spedizione EUR ${shipAmt.toFixed(2)})!`
-                    : "Proforma inviata al cliente!"
-                );
-              }}
-            >
-              {actionLoading === "proforma" ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
-              <span className="text-xs">INVIA PROFORMA</span>
-            </Button>
-            <div className="flex items-center gap-1">
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="flex flex-col gap-0.5">
+                <Button
+                  size="lg"
+                  className="h-16 flex flex-col gap-0.5 bg-orange-600 hover:bg-orange-700"
+                  disabled={actionLoading !== null}
+                  title="Invia SOLO email proforma (retry indipendente)"
+                  onClick={() => {
+                    const suffix = proformaSuffix.trim();
+                    const shipAmt = parseFloat(shippingAmount.replace(",", ".")) || 0;
+                    if (!confirm("Inviare SOLO l'email proforma al cliente?")) return;
+                    handleAction(
+                      "proforma_email",
+                      () => sendProforma(sessionId, suffix, {
+                        included: shippingIncluded,
+                        amount: shippingIncluded ? shipAmt : undefined,
+                      }, "email"),
+                      "Email proforma inviata"
+                    );
+                  }}
+                >
+                  {actionLoading === "proforma_email" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
+                  <span className="text-xs leading-tight">PROFORMA<br/>EMAIL</span>
+                </Button>
+                <ActionTimestamp ts={session.proforma_email_at} prefix="📧" />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <Button
+                  size="lg"
+                  className="h-16 flex flex-col gap-0.5 bg-orange-700 hover:bg-orange-800"
+                  disabled={actionLoading !== null}
+                  title="Invia SOLO template WhatsApp proforma (retry indipendente)"
+                  onClick={() => {
+                    const suffix = proformaSuffix.trim();
+                    const shipAmt = parseFloat(shippingAmount.replace(",", ".")) || 0;
+                    if (!confirm("Inviare SOLO il template WhatsApp proforma al cliente?")) return;
+                    handleAction(
+                      "proforma_wa",
+                      () => sendProforma(sessionId, suffix, {
+                        included: shippingIncluded,
+                        amount: shippingIncluded ? shipAmt : undefined,
+                      }, "whatsapp"),
+                      "Template WhatsApp proforma inviato"
+                    );
+                  }}
+                >
+                  {actionLoading === "proforma_wa" ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageCircle className="w-5 h-5" />}
+                  <span className="text-xs leading-tight">PROFORMA<br/>WHATSAPP</span>
+                </Button>
+                <ActionTimestamp ts={session.proforma_whatsapp_at} prefix="💬" />
+              </div>
+            </div>
+            <div className="flex items-center gap-1 mt-1">
               <label className="text-[10px] text-gray-500 whitespace-nowrap">N° SimplyFatt:</label>
               <Input
                 type="text"
@@ -1040,7 +1073,6 @@ export default function SessionDetail() {
               />
               <span className="text-[10px] text-gray-500">EUR</span>
             </div>
-            <ActionTimestamp ts={session.proforma_sent_at} />
           </div>
 
           {/* PULSANTE 4: Genera rapporti RDT */}
@@ -1067,22 +1099,23 @@ export default function SessionDetail() {
             } />
           </div>
 
-          {/* PULSANTE 5: Strumenti riconsegnati */}
+          {/* PULSANTE 5: Strumenti riconsegnati — solo WhatsApp (email disattivata
+               su richiesta utente: RDT consegnati in cartaceo) */}
           <div className="flex flex-col gap-1">
             <Button
               size="lg"
               className="h-20 flex flex-col gap-1 bg-gray-700 hover:bg-gray-800"
               disabled={actionLoading !== null}
               onClick={() => {
-                if (!confirm("Chiudere la sessione, marcare gli strumenti come riconsegnati e inviare conferma al cliente (WhatsApp + email)?")) return;
-                handleAction("delivered", () => markDelivered(sessionId),
-                  "Sessione completata! Strumenti riconsegnati e conferma inviata via WhatsApp + email.");
+                if (!confirm("Chiudere la sessione, marcare gli strumenti come riconsegnati e inviare template WhatsApp di conferma?")) return;
+                handleAction("delivered_wa", () => markDelivered(sessionId, undefined, "whatsapp"),
+                  "Sessione completata! Template WhatsApp di consegna inviato.");
               }}
             >
-              {actionLoading === "delivered" ? <Loader2 className="w-6 h-6 animate-spin" /> : <PackageCheck className="w-6 h-6" />}
-              <span className="text-xs">STRUMENTI RICONSEGNATI</span>
+              {actionLoading === "delivered_wa" ? <Loader2 className="w-6 h-6 animate-spin" /> : <PackageCheck className="w-6 h-6" />}
+              <span className="text-xs leading-tight">RICONSEGNATI<br/>WHATSAPP</span>
             </Button>
-            <ActionTimestamp ts={session.delivered_at} />
+            <ActionTimestamp ts={session.delivered_whatsapp_at} prefix="💬" />
           </div>
 
           {/* PULSANTE 6: Segna come pagato — visibile solo se non gia' pagato. */}
