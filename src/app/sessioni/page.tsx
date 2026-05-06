@@ -32,17 +32,37 @@ export default function SessionsPage() {
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  // Filtri sessioni (audit P1.14): chip status + data + search testuale
+  const [statusFilter, setStatusFilter] = useState<string>(""); // "" = tutti
+  const [dateFilter, setDateFilter] = useState<string>(""); // YYYY-MM-DD
+  const [searchInput, setSearchInput] = useState<string>("");
+  const [search, setSearch] = useState<string>("");
 
   useEffect(() => {
     setLoading(true);
-    listSessions({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE })
+    const opts: Record<string, string | number | undefined> = {
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE,
+    };
+    if (statusFilter) opts.status = statusFilter;
+    if (dateFilter) opts.date = dateFilter;
+    listSessions(opts as Parameters<typeof listSessions>[0])
       .then((data) => {
-        setSessions(data.sessions || []);
+        let rows = data.sessions || [];
+        if (search.trim()) {
+          const q = search.trim().toLowerCase();
+          rows = rows.filter((s: { customers?: { company_name?: string; vat_number?: string } | null; operator?: string }) =>
+            (s.customers?.company_name || "").toLowerCase().includes(q) ||
+            (s.customers?.vat_number || "").toLowerCase().includes(q) ||
+            (s.operator || "").toLowerCase().includes(q),
+          );
+        }
+        setSessions(rows);
         setTotal(data.total ?? data.count ?? 0);
       })
       .catch(() => toast.error("Errore caricamento sessioni"))
       .finally(() => setLoading(false));
-  }, [page]);
+  }, [page, statusFilter, dateFilter, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -181,6 +201,99 @@ export default function SessionsPage() {
         </Dialog>
       </div>
 
+      {/* Barra filtri (audit P1.14) */}
+      <Card className="p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status filter chips */}
+          <div className="flex flex-wrap gap-1">
+            {[
+              { key: "", label: "Tutte" },
+              { key: "registrazione", label: "Registr." },
+              { key: "in_lavorazione", label: "In lavoraz." },
+              { key: "pronto_ritiro", label: "Pronto" },
+              { key: "attesa_pagamento", label: "Att. pag." },
+              { key: "completata", label: "Compl." },
+            ].map((s) => (
+              <Button
+                key={s.key}
+                size="sm"
+                variant={statusFilter === s.key ? "default" : "outline"}
+                onClick={() => {
+                  setPage(1);
+                  setStatusFilter(s.key);
+                }}
+                className="h-7 text-xs"
+              >
+                {s.label}
+              </Button>
+            ))}
+          </div>
+          {/* Date filter */}
+          <Input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => {
+              setPage(1);
+              setDateFilter(e.target.value);
+            }}
+            className="w-auto h-7 text-xs"
+            title="Filtra per data sessione"
+          />
+          {dateFilter && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={() => {
+                setPage(1);
+                setDateFilter("");
+              }}
+            >
+              ✕ data
+            </Button>
+          )}
+          {/* Search testuale (cliente/operator) */}
+          <div className="flex items-center gap-1 flex-1 min-w-[200px]">
+            <Input
+              placeholder="Cerca cliente / P.IVA / operatore..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  setPage(1);
+                  setSearch(searchInput.trim());
+                }
+              }}
+              className="h-7 text-xs"
+            />
+            <Button
+              size="sm"
+              onClick={() => {
+                setPage(1);
+                setSearch(searchInput.trim());
+              }}
+              className="h-7 text-xs"
+            >
+              <Search className="w-3 h-3 mr-1" /> Cerca
+            </Button>
+            {search && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => {
+                  setSearchInput("");
+                  setSearch("");
+                  setPage(1);
+                }}
+              >
+                ✕
+              </Button>
+            )}
+          </div>
+        </div>
+      </Card>
+
       <Card>
         <div className="divide-y">
           {loading ? (
@@ -188,7 +301,11 @@ export default function SessionsPage() {
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
             </div>
           ) : sessions.length === 0 ? (
-            <p className="p-8 text-center text-gray-500">Nessuna sessione</p>
+            <p className="p-8 text-center text-gray-500">
+              {statusFilter || dateFilter || search
+                ? "Nessuna sessione con questi filtri"
+                : "Nessuna sessione"}
+            </p>
           ) : (
             sessions.map((s) => (
               <Link

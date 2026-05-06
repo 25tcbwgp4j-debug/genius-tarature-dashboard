@@ -51,7 +51,7 @@ export default function Home() {
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Registro giornaliero</h2>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">

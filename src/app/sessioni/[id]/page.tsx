@@ -901,7 +901,8 @@ export default function SessionDetail() {
       {/* 5 PULSANTI AZIONE */}
       <Card className="p-6">
         <h3 className="font-semibold text-lg mb-4">Azioni</h3>
-        <div className="grid grid-cols-3 gap-4">
+        {/* Audit P1.13: responsive — 1 col su mobile, 2 su tablet, 3 su desktop */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* PULSANTE 1: Registrazione completata — split Email/WhatsApp + timestamp per canale */}
           <div className="flex flex-col gap-1">
             <div className="grid grid-cols-2 gap-1.5">
@@ -1182,7 +1183,7 @@ export default function SessionDetail() {
 
         {/* Timeline stato */}
         <Separator className="my-4" />
-        <div className="grid grid-cols-4 gap-2 text-xs text-gray-500">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs text-gray-500">
           <div className={currentStep >= 1 ? "text-blue-600 font-medium" : ""}>
             {session.registered_at
               ? `Registrato: ${new Date(session.registered_at).toLocaleString("it-IT")}`
@@ -1208,7 +1209,7 @@ export default function SessionDetail() {
 
       {/* Info aggiuntive */}
       <Card className="p-4">
-        <div className="grid grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
           <div>
             <span className="text-gray-500">ID:</span>
             <p className="font-mono text-xs">{session.id?.substring(0, 8)}</p>
