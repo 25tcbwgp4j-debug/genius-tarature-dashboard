@@ -101,12 +101,31 @@ export default function RapportiPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  // Split: rapporti di oggi vs precedenti. Ricerca attiva bypassa split.
-  const { todayReports, previousReports, todayByCustomer } = useMemo(() => {
+  // Split: rapporti di oggi vs precedenti. Ricerca attiva bypassa split ma
+  // mantiene il raggruppamento per cliente (stesso layout uniforme).
+  const { todayReports, previousReports, todayByCustomer, prevByCustomer, searchByCustomer } = useMemo(() => {
+    const groupByCustomer = (rows: ReportRow[]): Map<string, ReportRow[]> => {
+      // Preserva ordine di prima occorrenza del cliente; gli RDT dentro
+      // ogni gruppo restano nell'ordine già ordinato (RDT desc).
+      const m = new Map<string, ReportRow[]>();
+      for (const r of rows) {
+        const key = r.customer_id || "sconosciuto";
+        const arr = m.get(key) || [];
+        arr.push(r);
+        m.set(key, arr);
+      }
+      return m;
+    };
+
     if (search) {
-      // In modalità ricerca: lista piatta ordinata per RDT desc
       const flat = [...reports].sort(sortByRdtDesc);
-      return { todayReports: [] as ReportRow[], previousReports: flat, todayByCustomer: new Map<string, ReportRow[]>() };
+      return {
+        todayReports: [] as ReportRow[],
+        previousReports: [] as ReportRow[],
+        todayByCustomer: new Map<string, ReportRow[]>(),
+        prevByCustomer: new Map<string, ReportRow[]>(),
+        searchByCustomer: groupByCustomer(flat),
+      };
     }
     const today: ReportRow[] = [];
     const prev: ReportRow[] = [];
@@ -120,15 +139,13 @@ export default function RapportiPage() {
     today.sort(sortByRdtDesc);
     prev.sort(sortByRdtDesc);
 
-    // Raggruppa oggi per cliente (preservando ordine di prima occorrenza)
-    const byCustomer = new Map<string, ReportRow[]>();
-    for (const r of today) {
-      const key = r.customer_id || "sconosciuto";
-      const arr = byCustomer.get(key) || [];
-      arr.push(r);
-      byCustomer.set(key, arr);
-    }
-    return { todayReports: today, previousReports: prev, todayByCustomer: byCustomer };
+    return {
+      todayReports: today,
+      previousReports: prev,
+      todayByCustomer: groupByCustomer(today),
+      prevByCustomer: groupByCustomer(prev),
+      searchByCustomer: new Map<string, ReportRow[]>(),
+    };
   }, [reports, search]);
 
   const handleSearch = () => {
@@ -376,24 +393,107 @@ export default function RapportiPage() {
             </div>
           )}
 
-          {/* SEZIONE RAPPORTI PRECEDENTI */}
-          {previousReports.length > 0 && (
+          {/* SEZIONE RAPPORTI PRECEDENTI — raggruppati per cliente come "oggi" */}
+          {!search && previousReports.length > 0 && (
             <div className="space-y-3">
-              {!search && todayReports.length > 0 && (
+              {todayReports.length > 0 && (
                 <div className="flex items-center gap-2 pt-2">
                   <h3 className="text-lg font-bold text-gray-700">
                     Rapporti precedenti
                   </h3>
                   <span className="text-sm text-gray-500">
-                    ({previousReports.length} in questa pagina)
+                    ({previousReports.length} rapport{previousReports.length === 1 ? "o" : "i"} su{" "}
+                    {prevByCustomer.size} client{prevByCustomer.size === 1 ? "e" : "i"} in questa pagina)
                   </span>
                 </div>
               )}
-              <Card>
-                <div className="divide-y">
-                  {previousReports.map(renderReportRow)}
-                </div>
-              </Card>
+
+              {Array.from(prevByCustomer.entries()).map(([customerId, items]) => {
+                const firstCustomer = items[0].customers;
+                return (
+                  <Card key={customerId} className="border-gray-200 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b border-gray-200">
+                      <Building2 className="w-5 h-5 text-gray-600" />
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-900">
+                          {firstCustomer?.company_name || "Cliente N/D"}
+                        </div>
+                        {firstCustomer?.vat_number && (
+                          <div className="text-xs text-gray-600">
+                            P.IVA {firstCustomer.vat_number}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-700 font-medium">
+                        {items.length} rapport{items.length === 1 ? "o" : "i"}
+                      </div>
+                      {items.length > 1 && items[0].session_id && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
+                          title="Scarica tutti i rapporti RDT della sessione in un unico file ZIP"
+                          onClick={() => window.open(getSessionReportsZipUrl(items[0].session_id), "_blank")}
+                        >
+                          <Download className="w-4 h-4 mr-1" /> Scarica tutti ZIP
+                        </Button>
+                      )}
+                    </div>
+                    <div className="divide-y bg-white">
+                      {items.map(renderReportRow)}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* SEZIONE RICERCA — raggruppati per cliente */}
+          {search && searchByCustomer.size > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-gray-700">
+                  Risultati ricerca
+                </h3>
+                <span className="text-sm text-gray-500">
+                  ({searchByCustomer.size} client{searchByCustomer.size === 1 ? "e" : "i"})
+                </span>
+              </div>
+              {Array.from(searchByCustomer.entries()).map(([customerId, items]) => {
+                const firstCustomer = items[0].customers;
+                return (
+                  <Card key={customerId} className="border-gray-200 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b border-gray-200">
+                      <Building2 className="w-5 h-5 text-gray-600" />
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-900">
+                          {firstCustomer?.company_name || "Cliente N/D"}
+                        </div>
+                        {firstCustomer?.vat_number && (
+                          <div className="text-xs text-gray-600">
+                            P.IVA {firstCustomer.vat_number}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-700 font-medium">
+                        {items.length} rapport{items.length === 1 ? "o" : "i"}
+                      </div>
+                      {items.length > 1 && items[0].session_id && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
+                          title="Scarica tutti i rapporti RDT della sessione in un unico file ZIP"
+                          onClick={() => window.open(getSessionReportsZipUrl(items[0].session_id), "_blank")}
+                        >
+                          <Download className="w-4 h-4 mr-1" /> Scarica tutti ZIP
+                        </Button>
+                      )}
+                    </div>
+                    <div className="divide-y bg-white">{items.map(renderReportRow)}</div>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </>
