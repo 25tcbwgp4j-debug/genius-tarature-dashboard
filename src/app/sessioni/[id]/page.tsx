@@ -1118,57 +1118,64 @@ export default function SessionDetail() {
             <ActionTimestamp ts={session.delivered_whatsapp_at} prefix="💬" />
           </div>
 
-          {/* PULSANTE 6: Segna come pagato — 3 opzioni Bonifico/Contanti/POS */}
-          {session.payment_status !== "pagato" && (
-            <div className="flex flex-col gap-1">
-              <div className="grid grid-cols-3 gap-1">
-                {([
-                  { method: "bonifico", label: "BONIFICO" },
-                  { method: "contanti", label: "CONTANTI" },
-                  { method: "pos", label: "POS" },
-                ] as const).map(({ method, label }) => {
-                  const loadingKey = `mark_paid_${method}`;
-                  return (
-                    <Button
-                      key={method}
-                      size="lg"
-                      className="h-20 flex flex-col gap-0.5 bg-emerald-600 hover:bg-emerald-700 px-1"
-                      disabled={actionLoading !== null}
-                      title={`Marca come pagato — metodo: ${label}`}
-                      onClick={() => {
-                        if (!confirm(`Confermare pagamento ricevuto via ${label}?`)) return;
-                        handleAction(
-                          loadingKey,
-                          () => markSessionPaid(sessionId, { payment_method: method }),
-                          `Pagamento registrato (${label})!`,
-                        );
-                      }}
-                    >
-                      {actionLoading === loadingKey ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <Euro className="w-5 h-5" />
-                      )}
-                      <span className="text-[10px] leading-tight font-bold">{label}</span>
-                    </Button>
-                  );
-                })}
-              </div>
-              <ActionTimestamp ts={session.payment_date} />
+          {/* PULSANTE 6: Pagamento — 3 mini-pulsanti SEMPRE visibili.
+               Il metodo attualmente registrato è evidenziato (bordo emerald-700
+               + check); cliccando su uno diverso si modifica la modalità. */}
+          <div className="flex flex-col gap-1">
+            <div className="grid grid-cols-3 gap-1">
+              {([
+                { method: "bonifico", label: "BONIFICO" },
+                { method: "contanti", label: "CONTANTI" },
+                { method: "pos", label: "POS" },
+              ] as const).map(({ method, label }) => {
+                const loadingKey = `mark_paid_${method}`;
+                const isActive = session.payment_status === "pagato" && session.payment_method === method;
+                const isPaid = session.payment_status === "pagato";
+                return (
+                  <Button
+                    key={method}
+                    size="lg"
+                    className={`h-20 flex flex-col gap-0.5 px-1 transition-all ${
+                      isActive
+                        ? "bg-emerald-700 hover:bg-emerald-800 ring-2 ring-emerald-900 ring-offset-1"
+                        : isPaid
+                        ? "bg-emerald-400 hover:bg-emerald-500 opacity-70"
+                        : "bg-emerald-600 hover:bg-emerald-700"
+                    }`}
+                    disabled={actionLoading !== null || isActive}
+                    title={
+                      isActive
+                        ? `Pagato via ${label} (attuale)`
+                        : isPaid
+                        ? `Modificare il metodo a ${label}`
+                        : `Marca come pagato — ${label}`
+                    }
+                    onClick={() => {
+                      const confirmMsg = isPaid
+                        ? `Modificare il metodo di pagamento da "${session.payment_method?.toUpperCase() || "—"}" a "${label}"?`
+                        : `Confermare pagamento ricevuto via ${label}?`;
+                      if (!confirm(confirmMsg)) return;
+                      handleAction(
+                        loadingKey,
+                        () => markSessionPaid(sessionId, { payment_method: method }),
+                        isPaid ? `Metodo aggiornato a ${label}!` : `Pagamento registrato (${label})!`,
+                      );
+                    }}
+                  >
+                    {actionLoading === loadingKey ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Euro className="w-5 h-5" />
+                    )}
+                    <span className="text-[10px] leading-tight font-bold">
+                      {isActive ? `✓ ${label}` : label}
+                    </span>
+                  </Button>
+                );
+              })}
             </div>
-          )}
-          {session.payment_status === "pagato" && (
-            <div className="flex flex-col gap-1">
-              <div className="h-20 flex flex-col items-center justify-center bg-emerald-50 border-2 border-emerald-200 rounded-md text-emerald-700">
-                <Euro className="w-6 h-6" />
-                <span className="text-xs font-semibold">PAGATO</span>
-                {session.payment_method && (
-                  <span className="text-[10px] text-emerald-600">{session.payment_method}</span>
-                )}
-              </div>
-              <ActionTimestamp ts={session.payment_date} />
-            </div>
-          )}
+            <ActionTimestamp ts={session.payment_date} />
+          </div>
         </div>
 
         {/* Timeline stato */}
