@@ -1118,29 +1118,42 @@ export default function SessionDetail() {
             <ActionTimestamp ts={session.delivered_whatsapp_at} prefix="💬" />
           </div>
 
-          {/* PULSANTE 6: Segna come pagato — visibile solo se non gia' pagato. */}
+          {/* PULSANTE 6: Segna come pagato — 3 opzioni Bonifico/Contanti/POS */}
           {session.payment_status !== "pagato" && (
             <div className="flex flex-col gap-1">
-              <Button
-                size="lg"
-                className="h-20 flex flex-col gap-1 bg-emerald-600 hover:bg-emerald-700"
-                disabled={actionLoading !== null}
-                onClick={async () => {
-                  const method = prompt(
-                    "Metodo pagamento? (bonifico, contanti, pos, paypal, assegno, carta)",
-                    "bonifico",
+              <div className="grid grid-cols-3 gap-1">
+                {([
+                  { method: "bonifico", label: "BONIFICO" },
+                  { method: "contanti", label: "CONTANTI" },
+                  { method: "pos", label: "POS" },
+                ] as const).map(({ method, label }) => {
+                  const loadingKey = `mark_paid_${method}`;
+                  return (
+                    <Button
+                      key={method}
+                      size="lg"
+                      className="h-20 flex flex-col gap-0.5 bg-emerald-600 hover:bg-emerald-700 px-1"
+                      disabled={actionLoading !== null}
+                      title={`Marca come pagato — metodo: ${label}`}
+                      onClick={() => {
+                        if (!confirm(`Confermare pagamento ricevuto via ${label}?`)) return;
+                        handleAction(
+                          loadingKey,
+                          () => markSessionPaid(sessionId, { payment_method: method }),
+                          `Pagamento registrato (${label})!`,
+                        );
+                      }}
+                    >
+                      {actionLoading === loadingKey ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Euro className="w-5 h-5" />
+                      )}
+                      <span className="text-[10px] leading-tight font-bold">{label}</span>
+                    </Button>
                   );
-                  if (!method) return;
-                  const notes = prompt("Note opzionali (premi OK per saltare):", "") || undefined;
-                  handleAction("mark_paid", () => markSessionPaid(sessionId, {
-                    payment_method: method.toLowerCase(),
-                    payment_notes: notes,
-                  }), "Pagamento registrato!");
-                }}
-              >
-                {actionLoading === "mark_paid" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Euro className="w-6 h-6" />}
-                <span className="text-xs">SEGNA COME PAGATO</span>
-              </Button>
+                })}
+              </div>
               <ActionTimestamp ts={session.payment_date} />
             </div>
           )}

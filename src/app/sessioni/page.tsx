@@ -206,9 +206,19 @@ export default function SessionsPage() {
                   <span className="text-sm font-medium">
                     EUR {parseFloat(s.total_amount || 0).toFixed(2)}
                   </span>
-                  <Badge className={STATUS_CONFIG[s.status]?.color || ""}>
-                    {STATUS_CONFIG[s.status]?.label || s.status}
-                  </Badge>
+                  {/* Badge: se payment_status='pagato' mostra "Pagato" verde
+                       anche se status sessione e' ancora "attesa_pagamento"
+                       (l'operatore deve poi cliccare "Riconsegnati" per
+                       chiudere a "completata") */}
+                  {s.payment_status === "pagato" && s.status !== "completata" ? (
+                    <Badge className="bg-emerald-100 text-emerald-800">
+                      Pagato {s.payment_method ? `(${s.payment_method})` : ""}
+                    </Badge>
+                  ) : (
+                    <Badge className={STATUS_CONFIG[s.status]?.color || ""}>
+                      {STATUS_CONFIG[s.status]?.label || s.status}
+                    </Badge>
+                  )}
                 </div>
               </Link>
             ))
