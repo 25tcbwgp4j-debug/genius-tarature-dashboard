@@ -234,14 +234,11 @@ export async function sendLatCertificates(sessionId: string, overrideTo?: string
   });
 }
 
-export async function markDelivered(
-  sessionId: string,
-  notes?: string,
-  channel: 'email' | 'whatsapp' | 'both' = 'both',
-) {
+export async function markDelivered(sessionId: string, notes?: string) {
+  // Operazione interna: nessuna comunicazione al cliente.
   return fetchAPI(`/api/sessions/${sessionId}/mark-delivered`, {
     method: 'POST',
-    body: JSON.stringify({ session_id: sessionId, notes, channel }),
+    body: JSON.stringify({ session_id: sessionId, notes }),
   });
 }
 

@@ -1099,23 +1099,25 @@ export default function SessionDetail() {
             } />
           </div>
 
-          {/* PULSANTE 5: Strumenti riconsegnati — solo WhatsApp (email disattivata
-               su richiesta utente: RDT consegnati in cartaceo) */}
+          {/* PULSANTE 5: Strumenti riconsegnati — operazione INTERNA staff.
+               Christian 06/05: NESSUNA comunicazione al cliente (ne' WA ne' email).
+               Solo cambio status a 'completata' + creazione voci scadenzario
+               +365gg per ogni strumento. */}
           <div className="flex flex-col gap-1">
             <Button
               size="lg"
               className="h-20 flex flex-col gap-1 bg-gray-700 hover:bg-gray-800"
               disabled={actionLoading !== null}
               onClick={() => {
-                if (!confirm("Chiudere la sessione, marcare gli strumenti come riconsegnati e inviare template WhatsApp di conferma?")) return;
-                handleAction("delivered_wa", () => markDelivered(sessionId, undefined, "whatsapp"),
-                  "Sessione completata! Template WhatsApp di consegna inviato.");
+                if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati? (operazione interna, nessuna comunicazione al cliente)")) return;
+                handleAction("delivered", () => markDelivered(sessionId),
+                  "Sessione completata! Strumenti riconsegnati.");
               }}
             >
-              {actionLoading === "delivered_wa" ? <Loader2 className="w-6 h-6 animate-spin" /> : <PackageCheck className="w-6 h-6" />}
-              <span className="text-xs leading-tight">RICONSEGNATI<br/>WHATSAPP</span>
+              {actionLoading === "delivered" ? <Loader2 className="w-6 h-6 animate-spin" /> : <PackageCheck className="w-6 h-6" />}
+              <span className="text-xs">STRUMENTI RICONSEGNATI</span>
             </Button>
-            <ActionTimestamp ts={session.delivered_whatsapp_at} prefix="💬" />
+            <ActionTimestamp ts={session.delivered_at} />
           </div>
 
           {/* PULSANTE 6: Pagamento — 3 mini-pulsanti SEMPRE visibili.
