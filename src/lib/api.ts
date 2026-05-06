@@ -188,8 +188,14 @@ export function getFatturaXmlUrl(sessionId: string): string {
 }
 
 // === 4 PULSANTI AZIONE ===
-export async function registerComplete(sessionId: string) {
-  return fetchAPI(`/api/sessions/${sessionId}/register-complete`, { method: 'POST' });
+export async function registerComplete(
+  sessionId: string,
+  channel: 'email' | 'whatsapp' | 'both' = 'both'
+) {
+  return fetchAPI(`/api/sessions/${sessionId}/register-complete`, {
+    method: 'POST',
+    body: JSON.stringify({ channel }),
+  });
 }
 
 export async function notifyReady(sessionId: string) {

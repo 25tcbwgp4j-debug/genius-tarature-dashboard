@@ -29,7 +29,6 @@ import {
 } from "@/lib/api";
 import { toast } from "sonner";
 import {
-  ClipboardCheck,
   Bell,
   FileText,
   PackageCheck,
@@ -49,6 +48,8 @@ import {
   History,
   ChevronDown,
   ChevronUp,
+  Mail,
+  MessageCircle,
 } from "lucide-react";
 import { STATUS_CONFIG } from "@/lib/constants";
 import { RecipientPanel } from "./RecipientPanel";
@@ -899,21 +900,53 @@ export default function SessionDetail() {
       <Card className="p-6">
         <h3 className="font-semibold text-lg mb-4">Azioni</h3>
         <div className="grid grid-cols-3 gap-4">
-          {/* PULSANTE 1: Registrazione completata */}
+          {/* PULSANTE 1: Registrazione completata — 2 canali separati per
+               permettere retry WhatsApp senza spammare l'email del cliente */}
           <div className="flex flex-col gap-1">
-            <Button
-              size="lg"
-              className="h-20 flex flex-col gap-1 bg-blue-600 hover:bg-blue-700"
-              disabled={actionLoading !== null}
-              onClick={() => {
-                if (!confirm("Completare la registrazione e inviare ricevuta al cliente (WhatsApp + email)?")) return;
-                handleAction("register", () => registerComplete(sessionId),
-                  "Registrazione completata! Ricevuta inviata via WhatsApp + email.")
-              }}
-            >
-              {actionLoading === "register" ? <Loader2 className="w-6 h-6 animate-spin" /> : <ClipboardCheck className="w-6 h-6" />}
-              <span className="text-xs">REGISTRAZIONE COMPLETATA</span>
-            </Button>
+            <div className="grid grid-cols-2 gap-1.5">
+              <Button
+                size="lg"
+                className="h-20 flex flex-col gap-1 bg-sky-600 hover:bg-sky-700"
+                disabled={actionLoading !== null}
+                title="Invia SOLO email di registrazione (utile per retry email)"
+                onClick={() => {
+                  if (!confirm("Inviare SOLO l'email di registrazione completata al cliente?")) return;
+                  handleAction(
+                    "register_email",
+                    () => registerComplete(sessionId, "email"),
+                    "Email registrazione completata inviata"
+                  );
+                }}
+              >
+                {actionLoading === "register_email" ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : (
+                  <Mail className="w-6 h-6" />
+                )}
+                <span className="text-xs leading-tight">REGISTRAZ.<br/>EMAIL</span>
+              </Button>
+              <Button
+                size="lg"
+                className="h-20 flex flex-col gap-1 bg-emerald-600 hover:bg-emerald-700"
+                disabled={actionLoading !== null}
+                title="Invia SOLO template Meta WhatsApp (utile per retry FAIL Meta)"
+                onClick={() => {
+                  if (!confirm("Inviare SOLO il template WhatsApp di registrazione completata al cliente?")) return;
+                  handleAction(
+                    "register_wa",
+                    () => registerComplete(sessionId, "whatsapp"),
+                    "Template WhatsApp registrazione completata inviato"
+                  );
+                }}
+              >
+                {actionLoading === "register_wa" ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : (
+                  <MessageCircle className="w-6 h-6" />
+                )}
+                <span className="text-xs leading-tight">REGISTRAZ.<br/>WHATSAPP</span>
+              </Button>
+            </div>
             <ActionTimestamp ts={session.registered_at} />
           </div>
 
