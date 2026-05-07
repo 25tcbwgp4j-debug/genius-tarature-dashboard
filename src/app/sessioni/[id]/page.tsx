@@ -369,9 +369,21 @@ export default function SessionDetail() {
             Indietro
           </Button>
           <h2 className="text-2xl font-bold text-gray-900">Dettaglio sessione</h2>
-          <Badge className={STATUS_CONFIG[session.status]?.color || ""}>
-            {STATUS_CONFIG[session.status]?.label || session.status}
-          </Badge>
+          {/* Bug fix Christian 07/05 v2: effective status per UX —
+              se payment_status='pagato' e status='attesa_pagamento',
+              mostra "Pronto al ritiro" perche' il cliente ha pagato
+              e manca solo il ritiro fisico. */}
+          {(() => {
+            const isPaidWaiting =
+              session.payment_status === "pagato" &&
+              session.status === "attesa_pagamento";
+            const effective = isPaidWaiting ? "pronto_ritiro" : session.status;
+            return (
+              <Badge className={STATUS_CONFIG[effective]?.color || ""}>
+                {STATUS_CONFIG[effective]?.label || effective}
+              </Badge>
+            );
+          })()}
           {/* Badge pagamento: verde se pagato, arancio se attesa, grigio altrimenti */}
           {session.payment_status === "pagato" ? (
             <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">

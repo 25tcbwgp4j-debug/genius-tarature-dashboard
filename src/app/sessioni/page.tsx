@@ -323,19 +323,30 @@ export default function SessionsPage() {
                   <span className="text-sm font-medium">
                     EUR {parseFloat(s.total_amount || 0).toFixed(2)}
                   </span>
-                  {/* Bug fix Christian 07/05: mostra ENTRAMBI status sessione
-                       + pagamento. Una sessione puo' essere SIA "Pronto al
-                       ritiro" SIA "Pagato (bonifico)" finche' non viene
-                       riconsegnata. Prima il badge "Pagato" nascondeva lo
-                       stato workflow → Christian non sapeva se ritirare. */}
-                  <Badge className={STATUS_CONFIG[s.status]?.color || ""}>
-                    {STATUS_CONFIG[s.status]?.label || s.status}
-                  </Badge>
-                  {s.payment_status === "pagato" && s.status !== "completata" && (
-                    <Badge className="bg-emerald-100 text-emerald-800">
-                      Pagato {s.payment_method ? `(${s.payment_method})` : ""}
-                    </Badge>
-                  )}
+                  {/* Bug fix Christian 07/05 v2: dopo pagamento, lo status
+                       workflow deve essere "Pronto al ritiro" non "Attesa
+                       pagamento" (il cliente ha gia' pagato, manca solo che
+                       venga a ritirare). Effective status: se
+                       payment_status=pagato AND status=attesa_pagamento,
+                       l'operatore vede "Pronto al ritiro" + "Pagato (metodo)". */}
+                  {(() => {
+                    const isPaidWaiting =
+                      s.payment_status === "pagato" &&
+                      s.status === "attesa_pagamento";
+                    const effectiveStatus = isPaidWaiting ? "pronto_ritiro" : s.status;
+                    return (
+                      <>
+                        <Badge className={STATUS_CONFIG[effectiveStatus]?.color || ""}>
+                          {STATUS_CONFIG[effectiveStatus]?.label || effectiveStatus}
+                        </Badge>
+                        {s.payment_status === "pagato" && s.status !== "completata" && (
+                          <Badge className="bg-emerald-100 text-emerald-800">
+                            Pagato {s.payment_method ? `(${s.payment_method})` : ""}
+                          </Badge>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </Link>
             ))
