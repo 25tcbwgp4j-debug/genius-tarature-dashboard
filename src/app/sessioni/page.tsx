@@ -319,21 +319,21 @@ export default function SessionsPage() {
                     {s.session_date} - {s.total_instruments || 0} strumenti - {s.operator || ""}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 flex-wrap justify-end">
                   <span className="text-sm font-medium">
                     EUR {parseFloat(s.total_amount || 0).toFixed(2)}
                   </span>
-                  {/* Badge: se payment_status='pagato' mostra "Pagato" verde
-                       anche se status sessione e' ancora "attesa_pagamento"
-                       (l'operatore deve poi cliccare "Riconsegnati" per
-                       chiudere a "completata") */}
-                  {s.payment_status === "pagato" && s.status !== "completata" ? (
+                  {/* Bug fix Christian 07/05: mostra ENTRAMBI status sessione
+                       + pagamento. Una sessione puo' essere SIA "Pronto al
+                       ritiro" SIA "Pagato (bonifico)" finche' non viene
+                       riconsegnata. Prima il badge "Pagato" nascondeva lo
+                       stato workflow → Christian non sapeva se ritirare. */}
+                  <Badge className={STATUS_CONFIG[s.status]?.color || ""}>
+                    {STATUS_CONFIG[s.status]?.label || s.status}
+                  </Badge>
+                  {s.payment_status === "pagato" && s.status !== "completata" && (
                     <Badge className="bg-emerald-100 text-emerald-800">
                       Pagato {s.payment_method ? `(${s.payment_method})` : ""}
-                    </Badge>
-                  ) : (
-                    <Badge className={STATUS_CONFIG[s.status]?.color || ""}>
-                      {STATUS_CONFIG[s.status]?.label || s.status}
                     </Badge>
                   )}
                 </div>
