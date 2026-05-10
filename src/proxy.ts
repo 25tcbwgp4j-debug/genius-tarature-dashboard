@@ -11,7 +11,7 @@ import { verifyJwt, AUTH_COOKIE_NAME } from "@/lib/auth";
 // che operatori trovino logout improvviso al 31° giorno di uso silenzioso.
 
 const PUBLIC_PATHS = ["/login"];
-const ADMIN_ONLY_PATHS = ["/utenti"];
+const ADMIN_ONLY_PATHS = ["/utenti", "/audit"];
 // Soglia refresh: rinnova se mancano <7gg alla scadenza
 const REFRESH_THRESHOLD_SEC = 7 * 24 * 60 * 60;
 
