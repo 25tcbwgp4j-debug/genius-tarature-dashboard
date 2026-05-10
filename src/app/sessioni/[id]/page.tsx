@@ -1190,6 +1190,47 @@ export default function SessionDetail() {
               })}
             </div>
             <ActionTimestamp ts={session.payment_date} />
+            {/* Stripe Checkout link — round 5 max-power 10/05.
+                Se non ancora pagata, mostra bottone per generare link condivisibile. */}
+            {session.payment_status !== "pagato" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-1 h-7 text-[11px] border-purple-300 text-purple-700 hover:bg-purple-50"
+                disabled={actionLoading !== null}
+                title="Genera link Stripe Checkout — il cliente paga in 1 click via carta"
+                onClick={async () => {
+                  if (!confirm("Generare un link Stripe Checkout? Il cliente potrà pagare con carta in 1 click. Riceverai notifica Telegram al pagamento.")) return;
+                  setActionLoading("stripe_link");
+                  try {
+                    const r = await fetch(
+                      `${process.env.NEXT_PUBLIC_API_URL || ""}/api/backend/sessions/${sessionId}/checkout-link`,
+                      { method: "POST" }
+                    );
+                    if (!r.ok) throw new Error(`Backend ${r.status}`);
+                    const data = await r.json();
+                    // Copia URL in clipboard + apri nuova tab + toast persistente
+                    if (data.url) {
+                      try { await navigator.clipboard.writeText(data.url); } catch { /* noop */ }
+                      window.open(data.url, "_blank");
+                      toast.success("Link Stripe generato e copiato in clipboard", {
+                        description: `EUR ${data.amount_eur?.toFixed(2)} — Condividi via WhatsApp/email`,
+                        duration: 10000,
+                      });
+                    } else {
+                      toast.error("Errore: nessun URL ricevuto");
+                    }
+                  } catch (e: unknown) {
+                    toast.error(`Errore generazione link: ${(e as Error).message}`);
+                  } finally {
+                    setActionLoading(null);
+                  }
+                }}
+              >
+                {actionLoading === "stripe_link" ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
+                💳 Genera link Stripe (paga online)
+              </Button>
+            )}
           </div>
         </div>
 
