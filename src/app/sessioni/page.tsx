@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { listSessions, searchLeads, promoteLead, createSession } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Plus, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Search, Loader2, ChevronLeft, ChevronRight, FileDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +37,23 @@ export default function SessionsPage() {
   const [dateFilter, setDateFilter] = useState<string>(""); // YYYY-MM-DD
   const [searchInput, setSearchInput] = useState<string>("");
   const [search, setSearch] = useState<string>("");
+  // Bulk selection (P2.8 round 4 max-power 10/05)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState<string | null>(null);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (selectedIds.size === sessions.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(sessions.map((s) => s.id)));
+  };
+  const clearSelection = () => setSelectedIds(new Set());
 
   useEffect(() => {
     setLoading(true);
@@ -294,8 +311,111 @@ export default function SessionsPage() {
         </div>
       </Card>
 
+      {/* Bulk action toolbar (P2.8 round 4) — visibile quando >0 selezionati */}
+      {selectedIds.size > 0 && (
+        <Card className="p-3 bg-emerald-50 border-emerald-200 sticky top-0 z-10">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-emerald-900">
+              {selectedIds.size} selezionate
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={clearSelection}
+            >
+              Deseleziona
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs bg-blue-600 hover:bg-blue-700"
+              disabled={bulkRunning !== null}
+              onClick={async () => {
+                if (!confirm(`Inviare notifica "Pronti al ritiro" a ${selectedIds.size} sessioni? Verranno inviati Email + WhatsApp con rate-limit 1/sec.`)) return;
+                setBulkRunning("notify-ready");
+                try {
+                  const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/backend/sessions/bulk-action`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "notify-ready", session_ids: Array.from(selectedIds) }),
+                  });
+                  const data = await r.json();
+                  toast.success(`Bulk completato: ${data.success}/${data.total} OK`);
+                  clearSelection();
+                } catch (e) {
+                  toast.error("Bulk fallito: " + (e as Error).message);
+                } finally {
+                  setBulkRunning(null);
+                }
+              }}
+            >
+              {bulkRunning === "notify-ready" ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+              Notifica pronti
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700"
+              disabled={bulkRunning !== null}
+              onClick={async () => {
+                const method = prompt("Metodo pagamento per tutte le sessioni? (bonifico/contanti/pos)", "bonifico");
+                if (!method || !["bonifico","contanti","pos"].includes(method)) {
+                  toast.error("Metodo non valido");
+                  return;
+                }
+                if (!confirm(`Marcare ${selectedIds.size} sessioni come pagate via ${method}?`)) return;
+                setBulkRunning("mark-paid");
+                try {
+                  const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/backend/sessions/bulk-action`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "mark-paid", session_ids: Array.from(selectedIds), extra: { payment_method: method } }),
+                  });
+                  const data = await r.json();
+                  toast.success(`${data.success}/${data.total} marcati come pagati (${method})`);
+                  clearSelection();
+                } catch (e) {
+                  toast.error("Bulk fallito: " + (e as Error).message);
+                } finally {
+                  setBulkRunning(null);
+                }
+              }}
+            >
+              {bulkRunning === "mark-paid" ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+              Marca pagato
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              title="Esporta sessioni filtrate in Excel XLSX"
+              onClick={() => {
+                const params = new URLSearchParams();
+                if (statusFilter) params.set("status", statusFilter);
+                if (dateFilter) params.set("date_from", dateFilter);
+                window.open(`/api/backend/sessions/export.xlsx?${params}`, "_blank");
+              }}
+            >
+              <FileDown className="w-3 h-3 mr-1" /> Excel
+            </Button>
+          </div>
+        </Card>
+      )}
+
       <Card>
         <div className="divide-y">
+          {/* Header con select-all */}
+          {sessions.length > 0 && !loading && (
+            <div className="flex items-center gap-3 p-3 bg-gray-50 border-b text-xs text-gray-600">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={selectedIds.size === sessions.length && sessions.length > 0}
+                onChange={toggleSelectAll}
+                aria-label="Seleziona tutte le sessioni"
+              />
+              <span>Seleziona tutte ({sessions.length})</span>
+            </div>
+          )}
           {loading ? (
             <div className="p-8 text-center">
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
@@ -308,47 +428,53 @@ export default function SessionsPage() {
             </p>
           ) : (
             sessions.map((s) => (
-              <Link
+              <div
                 key={s.id}
-                href={`/sessioni/${s.id}`}
-                className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors"
               >
-                <div>
-                  <p className="font-medium">{s.customers?.company_name || "N/D"}</p>
-                  <p className="text-sm text-gray-500">
-                    {s.session_date} - {s.total_instruments || 0} strumenti - {s.operator || ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap justify-end">
-                  <span className="text-sm font-medium">
-                    EUR {parseFloat(s.total_amount || 0).toFixed(2)}
-                  </span>
-                  {/* Bug fix Christian 07/05 v2: dopo pagamento, lo status
-                       workflow deve essere "Pronto al ritiro" non "Attesa
-                       pagamento" (il cliente ha gia' pagato, manca solo che
-                       venga a ritirare). Effective status: se
-                       payment_status=pagato AND status=attesa_pagamento,
-                       l'operatore vede "Pronto al ritiro" + "Pagato (metodo)". */}
-                  {(() => {
-                    const isPaidWaiting =
-                      s.payment_status === "pagato" &&
-                      s.status === "attesa_pagamento";
-                    const effectiveStatus = isPaidWaiting ? "pronto_ritiro" : s.status;
-                    return (
-                      <>
-                        <Badge className={STATUS_CONFIG[effectiveStatus]?.color || ""}>
-                          {STATUS_CONFIG[effectiveStatus]?.label || effectiveStatus}
-                        </Badge>
-                        {s.payment_status === "pagato" && s.status !== "completata" && (
-                          <Badge className="bg-emerald-100 text-emerald-800">
-                            Pagato {s.payment_method ? `(${s.payment_method})` : ""}
+                {/* Bulk select checkbox FUORI dal Link (P2.8) */}
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 flex-shrink-0"
+                  checked={selectedIds.has(s.id)}
+                  onChange={() => toggleSelect(s.id)}
+                  aria-label={`Seleziona sessione ${s.customers?.company_name || s.id}`}
+                />
+                <Link
+                  href={`/sessioni/${s.id}`}
+                  className="flex flex-1 items-center justify-between"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium">{s.customers?.company_name || "N/D"}</p>
+                    <p className="text-sm text-gray-500">
+                      {s.session_date} - {s.total_instruments || 0} strumenti - {s.operator || ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <span className="text-sm font-medium">
+                      EUR {parseFloat(s.total_amount || 0).toFixed(2)}
+                    </span>
+                    {(() => {
+                      const isPaidWaiting =
+                        s.payment_status === "pagato" &&
+                        s.status === "attesa_pagamento";
+                      const effectiveStatus = isPaidWaiting ? "pronto_ritiro" : s.status;
+                      return (
+                        <>
+                          <Badge className={STATUS_CONFIG[effectiveStatus]?.color || ""}>
+                            {STATUS_CONFIG[effectiveStatus]?.label || effectiveStatus}
                           </Badge>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              </Link>
+                          {s.payment_status === "pagato" && s.status !== "completata" && (
+                            <Badge className="bg-emerald-100 text-emerald-800">
+                              Pagato {s.payment_method ? `(${s.payment_method})` : ""}
+                            </Badge>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </Link>
+              </div>
             ))
           )}
         </div>
