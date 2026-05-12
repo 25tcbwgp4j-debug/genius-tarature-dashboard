@@ -12,6 +12,7 @@ interface Customer {
   id: string;
   company_name: string;
   vat_number?: string | null;
+  tax_id?: string | null;
   address?: string | null;
   zip_code?: string | null;
   city?: string | null;
@@ -23,6 +24,7 @@ interface SessionLike {
   recipient_customer_id?: string | null;
   recipient_company_name?: string | null;
   recipient_vat_number?: string | null;
+  recipient_tax_id?: string | null;
   recipient_address?: string | null;
   recipient_zip_code?: string | null;
   recipient_city?: string | null;
@@ -51,6 +53,7 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
   const [manual, setManual] = useState({
     company_name: session.recipient_company_name || "",
     vat_number: session.recipient_vat_number || "",
+    tax_id: session.recipient_tax_id || "",
     address: session.recipient_address || "",
     zip_code: session.recipient_zip_code || "",
     city: session.recipient_city || "",
@@ -77,6 +80,7 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
     setManual({
       company_name: c.company_name,
       vat_number: c.vat_number || "",
+      tax_id: c.tax_id || "",
       address: c.address || "",
       zip_code: c.zip_code || "",
       city: c.city || "",
@@ -101,6 +105,7 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
           recipient_customer_id: null,
           recipient_company_name: null,
           recipient_vat_number: null,
+          recipient_tax_id: null,
           recipient_address: null,
           recipient_zip_code: null,
           recipient_city: null,
@@ -123,6 +128,7 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
           // Salva anche snapshot per persistenza/diagnostica (non strettamente necessario)
           recipient_company_name: manual.company_name || null,
           recipient_vat_number: manual.vat_number || null,
+          recipient_tax_id: manual.tax_id || null,
           recipient_address: manual.address || null,
           recipient_zip_code: manual.zip_code || null,
           recipient_city: manual.city || null,
@@ -139,6 +145,7 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
           recipient_customer_id: null,
           recipient_company_name: manual.company_name.trim(),
           recipient_vat_number: manual.vat_number.trim() || null,
+          recipient_tax_id: manual.tax_id.trim().toUpperCase() || null,
           recipient_address: manual.address.trim() || null,
           recipient_zip_code: manual.zip_code.trim() || null,
           recipient_city: manual.city.trim() || null,
@@ -258,7 +265,7 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <label className="text-xs text-gray-500">Ragione sociale *</label>
+                <label className="text-xs text-gray-500">Ragione sociale / Nome e Cognome *</label>
                 <Input
                   value={manual.company_name}
                   onChange={(e) => setManual({ ...manual, company_name: e.target.value })}
@@ -274,11 +281,13 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500">Provincia</label>
+                <label className="text-xs text-gray-500">Codice Fiscale</label>
                 <Input
-                  value={manual.province}
-                  onChange={(e) => setManual({ ...manual, province: e.target.value })}
-                  className="h-9"
+                  value={manual.tax_id}
+                  onChange={(e) => setManual({ ...manual, tax_id: e.target.value.toUpperCase() })}
+                  placeholder="RSSMRA80A01H501Z"
+                  className="h-9 uppercase"
+                  maxLength={16}
                 />
               </div>
               <div className="col-span-2">
@@ -303,6 +312,15 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
                   value={manual.city}
                   onChange={(e) => setManual({ ...manual, city: e.target.value })}
                   className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Provincia</label>
+                <Input
+                  value={manual.province}
+                  onChange={(e) => setManual({ ...manual, province: e.target.value.toUpperCase() })}
+                  className="h-9 uppercase"
+                  maxLength={2}
                 />
               </div>
             </div>
