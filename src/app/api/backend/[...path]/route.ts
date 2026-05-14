@@ -49,21 +49,33 @@ async function forward(
   const search = request.nextUrl.search || "";
   const url = `${BACKEND_URL}${pathname}${search}`;
 
-  // Prepara headers da inoltrare al backend
+  // Prepara headers da inoltrare al backend.
+  // Headers.set() lancia TypeError "The string did not match the expected pattern"
+  // se il valore contiene caratteri non-token (newline, null, control chars).
+  // Wrap in try/catch per non bloccare richiesta su cookie/header corrotti.
   const outHeaders = new Headers();
+  const safeSet = (name: string, value: string) => {
+    try {
+      // Strip newline/CR/null (WebIDL bytestring violators) per evitare reject
+      const sanitized = value.replace(/[\r\n\0]/g, "").trim();
+      if (sanitized) outHeaders.set(name, sanitized);
+    } catch {
+      // Skip header malformato (es. JWT con caratteri non-ASCII)
+    }
+  };
   for (const [k, v] of request.headers.entries()) {
     if (FORWARDED_REQ_HEADERS.has(k.toLowerCase())) {
-      outHeaders.set(k, v);
+      safeSet(k, v);
     }
   }
   // Auth: preferisci JWT utente (cookie) → identifica l'utente lato backend.
   // Fallback X-API-Key per chiamate pre-login (health) o legacy compat.
   const userJwt = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (userJwt) {
-    outHeaders.set("Authorization", `Bearer ${userJwt}`);
+    safeSet("Authorization", `Bearer ${userJwt}`);
   }
   if (API_KEY) {
-    outHeaders.set("X-API-Key", API_KEY);
+    safeSet("X-API-Key", API_KEY);
   }
 
   // Corpo richiesta (solo per POST/PUT/PATCH/DELETE con body)

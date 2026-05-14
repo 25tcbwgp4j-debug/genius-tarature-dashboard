@@ -13,6 +13,8 @@ interface Customer {
   company_name: string;
   vat_number?: string | null;
   tax_id?: string | null;
+  pec?: string | null;
+  sdi_code?: string | null;
   address?: string | null;
   zip_code?: string | null;
   city?: string | null;
@@ -25,6 +27,8 @@ interface SessionLike {
   recipient_company_name?: string | null;
   recipient_vat_number?: string | null;
   recipient_tax_id?: string | null;
+  recipient_pec?: string | null;
+  recipient_sdi_code?: string | null;
   recipient_address?: string | null;
   recipient_zip_code?: string | null;
   recipient_city?: string | null;
@@ -54,6 +58,8 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
     company_name: session.recipient_company_name || "",
     vat_number: session.recipient_vat_number || "",
     tax_id: session.recipient_tax_id || "",
+    pec: session.recipient_pec || "",
+    sdi_code: session.recipient_sdi_code || "",
     address: session.recipient_address || "",
     zip_code: session.recipient_zip_code || "",
     city: session.recipient_city || "",
@@ -81,6 +87,8 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
       company_name: c.company_name,
       vat_number: c.vat_number || "",
       tax_id: c.tax_id || "",
+      pec: c.pec || "",
+      sdi_code: c.sdi_code || "",
       address: c.address || "",
       zip_code: c.zip_code || "",
       city: c.city || "",
@@ -106,6 +114,8 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
           recipient_company_name: null,
           recipient_vat_number: null,
           recipient_tax_id: null,
+          recipient_pec: null,
+          recipient_sdi_code: null,
           recipient_address: null,
           recipient_zip_code: null,
           recipient_city: null,
@@ -129,6 +139,8 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
           recipient_company_name: manual.company_name || null,
           recipient_vat_number: manual.vat_number || null,
           recipient_tax_id: manual.tax_id || null,
+          recipient_pec: manual.pec || null,
+          recipient_sdi_code: manual.sdi_code || null,
           recipient_address: manual.address || null,
           recipient_zip_code: manual.zip_code || null,
           recipient_city: manual.city || null,
@@ -146,6 +158,8 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
           recipient_company_name: manual.company_name.trim(),
           recipient_vat_number: manual.vat_number.trim() || null,
           recipient_tax_id: manual.tax_id.trim().toUpperCase() || null,
+          recipient_pec: manual.pec.trim().toLowerCase() || null,
+          recipient_sdi_code: manual.sdi_code.trim().toUpperCase() || null,
           recipient_address: manual.address.trim() || null,
           recipient_zip_code: manual.zip_code.trim() || null,
           recipient_city: manual.city.trim() || null,
@@ -288,6 +302,26 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
                   placeholder="RSSMRA80A01H501Z"
                   className="h-9 uppercase"
                   maxLength={16}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">PEC (fatturazione SDI)</label>
+                <Input
+                  type="email"
+                  value={manual.pec}
+                  onChange={(e) => setManual({ ...manual, pec: e.target.value.toLowerCase() })}
+                  placeholder="azienda@pec.it"
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Codice SDI</label>
+                <Input
+                  value={manual.sdi_code}
+                  onChange={(e) => setManual({ ...manual, sdi_code: e.target.value.toUpperCase() })}
+                  placeholder="0000000"
+                  className="h-9 uppercase"
+                  maxLength={7}
                 />
               </div>
               <div className="col-span-2">
