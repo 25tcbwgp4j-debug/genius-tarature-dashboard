@@ -103,7 +103,7 @@ export default function QRCodePage() {
     }
   }, [phoneData]);
 
-  const downloadQR = (canvasRef: React.RefObject<HTMLCanvasElement>, kind: QRKind) => {
+  const downloadQR = (canvasRef: React.RefObject<HTMLCanvasElement | null>, kind: QRKind) => {
     if (!canvasRef.current) return;
     const link = document.createElement("a");
     link.download = `AvaTech-Tarature-QRCode-${kind === "whatsapp" ? "WhatsApp" : "Telefono"}.png`;
