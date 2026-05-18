@@ -4,10 +4,10 @@ import { useEffect, useState, useRef } from "react";
 import QRCode from "qrcode";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getWhatsAppQR, getPhoneQR } from "@/lib/api";
-import { Loader2, Download, QrCode, Smartphone, Phone } from "lucide-react";
+import { getWhatsAppQR, getStaffWhatsAppQR } from "@/lib/api";
+import { Loader2, Download, QrCode, Smartphone, Bot } from "lucide-react";
 
-type QRKind = "whatsapp" | "phone";
+type QRKind = "bot" | "staff";
 
 interface QRData {
   link: string;
@@ -59,32 +59,32 @@ function renderQRToCanvas(canvas: HTMLCanvasElement, data: QRData) {
 }
 
 export default function QRCodePage() {
-  const [whatsappData, setWhatsappData] = useState<QRData | null>(null);
-  const [phoneData, setPhoneData] = useState<QRData | null>(null);
+  const [botData, setBotData] = useState<QRData | null>(null);
+  const [staffData, setStaffData] = useState<QRData | null>(null);
   const [loading, setLoading] = useState(true);
-  const whatsappCanvasRef = useRef<HTMLCanvasElement>(null);
-  const phoneCanvasRef = useRef<HTMLCanvasElement>(null);
+  const botCanvasRef = useRef<HTMLCanvasElement>(null);
+  const staffCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     Promise.all([
       getWhatsAppQR().catch(() => null),
-      getPhoneQR().catch(() => null),
+      getStaffWhatsAppQR().catch(() => null),
     ])
-      .then(([wa, ph]) => {
-        if (wa) {
-          setWhatsappData({
-            link: wa.wa_link,
-            phone: wa.phone,
-            title: "QR Code WhatsApp",
-            subtitle: "Scansiona per contattarci su WhatsApp",
+      .then(([bot, staff]) => {
+        if (bot) {
+          setBotData({
+            link: bot.wa_link,
+            phone: bot.phone,
+            title: "Bot WhatsApp",
+            subtitle: "Scansiona per parlare con l'assistente AI",
           });
         }
-        if (ph) {
-          setPhoneData({
-            link: ph.tel_link,
-            phone: ph.phone,
-            title: "QR Code Telefono",
-            subtitle: "Scansiona per chiamarci direttamente",
+        if (staff) {
+          setStaffData({
+            link: staff.wa_link,
+            phone: staff.phone,
+            title: "Staff WhatsApp",
+            subtitle: "Scansiona per parlare direttamente con lo staff",
           });
         }
       })
@@ -92,21 +92,21 @@ export default function QRCodePage() {
   }, []);
 
   useEffect(() => {
-    if (whatsappData && whatsappCanvasRef.current) {
-      renderQRToCanvas(whatsappCanvasRef.current, whatsappData).catch(() => {});
+    if (botData && botCanvasRef.current) {
+      renderQRToCanvas(botCanvasRef.current, botData).catch(() => {});
     }
-  }, [whatsappData]);
+  }, [botData]);
 
   useEffect(() => {
-    if (phoneData && phoneCanvasRef.current) {
-      renderQRToCanvas(phoneCanvasRef.current, phoneData).catch(() => {});
+    if (staffData && staffCanvasRef.current) {
+      renderQRToCanvas(staffCanvasRef.current, staffData).catch(() => {});
     }
-  }, [phoneData]);
+  }, [staffData]);
 
   const downloadQR = (canvasRef: React.RefObject<HTMLCanvasElement | null>, kind: QRKind) => {
     if (!canvasRef.current) return;
     const link = document.createElement("a");
-    link.download = `AvaTech-Tarature-QRCode-${kind === "whatsapp" ? "WhatsApp" : "Telefono"}.png`;
+    link.download = `AvaTech-Tarature-QRCode-${kind === "bot" ? "BotWhatsApp" : "StaffWhatsApp"}.png`;
     link.href = canvasRef.current.toDataURL("image/png");
     link.click();
   };
@@ -132,72 +132,72 @@ export default function QRCodePage() {
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* QR WhatsApp */}
+        {/* QR Bot WhatsApp */}
         <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-green-700">
-            <Smartphone className="w-5 h-5" />
-            WhatsApp
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-purple-700">
+            <Bot className="w-5 h-5" />
+            Bot WhatsApp (Assistente AI)
           </h3>
           <div className="text-center space-y-4">
             <div className="flex justify-center">
               <canvas
-                ref={whatsappCanvasRef}
+                ref={botCanvasRef}
                 className="border rounded-lg shadow-lg max-w-full"
                 style={{ maxWidth: "400px" }}
               />
             </div>
             <div className="flex gap-3 justify-center flex-wrap">
-              <Button onClick={() => downloadQR(whatsappCanvasRef, "whatsapp")}>
+              <Button onClick={() => downloadQR(botCanvasRef, "bot")}>
                 <Download className="w-4 h-4 mr-2" />
                 Scarica PNG
               </Button>
-              {whatsappData && (
+              {botData && (
                 <Button
                   variant="outline"
-                  onClick={() => window.open(whatsappData.link, "_blank")}
+                  onClick={() => window.open(botData.link, "_blank")}
                 >
-                  <Smartphone className="w-4 h-4 mr-2" />
-                  Apri WhatsApp
+                  <Bot className="w-4 h-4 mr-2" />
+                  Apri Bot
                 </Button>
               )}
             </div>
-            {whatsappData && (
-              <p className="text-xs text-gray-400 break-all">{whatsappData.link}</p>
+            {botData && (
+              <p className="text-xs text-gray-400 break-all">{botData.phone}</p>
             )}
           </div>
         </Card>
 
-        {/* QR Telefono */}
+        {/* QR Staff WhatsApp */}
         <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-blue-700">
-            <Phone className="w-5 h-5" />
-            Telefono
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-green-700">
+            <Smartphone className="w-5 h-5" />
+            Staff WhatsApp (diretto)
           </h3>
           <div className="text-center space-y-4">
             <div className="flex justify-center">
               <canvas
-                ref={phoneCanvasRef}
+                ref={staffCanvasRef}
                 className="border rounded-lg shadow-lg max-w-full"
                 style={{ maxWidth: "400px" }}
               />
             </div>
             <div className="flex gap-3 justify-center flex-wrap">
-              <Button onClick={() => downloadQR(phoneCanvasRef, "phone")}>
+              <Button onClick={() => downloadQR(staffCanvasRef, "staff")}>
                 <Download className="w-4 h-4 mr-2" />
                 Scarica PNG
               </Button>
-              {phoneData && (
+              {staffData && (
                 <Button
                   variant="outline"
-                  onClick={() => window.open(phoneData.link, "_self")}
+                  onClick={() => window.open(staffData.link, "_blank")}
                 >
-                  <Phone className="w-4 h-4 mr-2" />
-                  Chiama
+                  <Smartphone className="w-4 h-4 mr-2" />
+                  Apri Staff
                 </Button>
               )}
             </div>
-            {phoneData && (
-              <p className="text-xs text-gray-400 break-all">{phoneData.link}</p>
+            {staffData && (
+              <p className="text-xs text-gray-400 break-all">{staffData.phone}</p>
             )}
           </div>
         </Card>
@@ -211,13 +211,12 @@ export default function QRCodePage() {
         </h3>
         <ol className="list-decimal list-inside space-y-2 text-sm text-gray-600">
           <li>
-            <b>WhatsApp:</b> il cliente scansiona, si apre WhatsApp con messaggio
-            pre-compilato; può inviare dati, foto biglietto, intestazione → bot
-            registra cliente + notifica Telegram allo staff.
+            <b>Bot WhatsApp:</b> il cliente scansiona e parla con l&apos;assistente AI
+            che registra i dati, gestisce richieste 24/7 e notifica lo staff.
           </li>
           <li>
-            <b>Telefono:</b> il cliente scansiona, si apre direttamente la
-            chiamata in uscita verso il numero ordinario AvaTech.
+            <b>Staff WhatsApp:</b> chat diretta con lo staff in laboratorio,
+            senza bot intermedio. Per casi urgenti o complessi.
           </li>
         </ol>
       </Card>

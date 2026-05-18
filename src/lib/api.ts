@@ -299,8 +299,8 @@ export async function getWhatsAppQR() {
   return fetchAPI('/api/whatsapp-qr');
 }
 
-export async function getPhoneQR() {
-  return fetchAPI('/api/phone-qr');
+export async function getStaffWhatsAppQR() {
+  return fetchAPI('/api/staff-whatsapp-qr');
 }
 
 export async function getCustomerHistory(customerName: string) {
