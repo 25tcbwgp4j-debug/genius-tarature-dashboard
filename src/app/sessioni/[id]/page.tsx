@@ -789,11 +789,36 @@ export default function SessionDetail() {
           {instruments.map((inst: any, i: number) => (
             <div key={inst.id} className="py-3">
               {editingInstrument === inst.id ? (
-                /* Modifica strumento */
+                /* Modifica strumento — 20/05 ora include conversione TIPO */
                 <div className="space-y-2">
-                  <div className="grid grid-cols-5 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
+                    <div className="sm:col-span-2">
+                      <label className="text-xs text-gray-500">
+                        Tipo strumento <span className="text-purple-600 font-semibold">(conversione)</span>
+                      </label>
+                      <select
+                        value={editInstrumentData?.instrument_type_id || ""}
+                        onChange={(e) => {
+                          const newTypeId = e.target.value;
+                          const t = instrumentTypes.find((x: InstrumentType) => x.id === newTypeId);
+                          setEditInstrumentData({
+                            ...editInstrumentData,
+                            instrument_type_id: newTypeId || null,
+                            instrument_name: t?.name || editInstrumentData?.instrument_name || "",
+                            price: t ? parseFloat(String(t.price)) : (editInstrumentData?.price || 0),
+                          });
+                        }}
+                        className="h-8 text-sm w-full border rounded px-2"
+                        title="Cambia tipo strumento (es. CERCAFUGHE -> BILANCIA): aggiorna nome+prezzo automaticamente"
+                      >
+                        <option value="">— Nessuno —</option>
+                        {instrumentTypes.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name} (EUR {parseFloat(String(t.price)).toFixed(2)})</option>
+                        ))}
+                      </select>
+                    </div>
                     <div>
-                      <label className="text-xs text-gray-500">Tipo</label>
+                      <label className="text-xs text-gray-500">Nome (override)</label>
                       <Input
                         value={editInstrumentData?.instrument_name || ""}
                         onChange={(e) => setEditInstrumentData({ ...editInstrumentData, instrument_name: e.target.value })}
@@ -872,6 +897,7 @@ export default function SessionDetail() {
                       onClick={() => {
                         setEditingInstrument(inst.id);
                         setEditInstrumentData({
+                          instrument_type_id: inst.instrument_type_id || inst.instrument_types?.id || "",
                           instrument_name: inst.instrument_name || "",
                           manufacturer: inst.manufacturer || "",
                           model: inst.model || "",
