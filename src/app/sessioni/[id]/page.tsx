@@ -369,12 +369,25 @@ export default function SessionDetail() {
             Indietro
           </Button>
           <h2 className="text-2xl font-bold text-gray-900">Dettaglio sessione</h2>
-          {/* 20/05: il pagamento e' indipendente dallo stato lavorazione.
-              Christian: "pronto al ritiro" lo invio io quando il lavoro
-              e' davvero finito (anche se cliente ha pagato in anticipo). */}
-          <Badge className={STATUS_CONFIG[session.status]?.color || ""}>
-            {STATUS_CONFIG[session.status]?.label || session.status}
-          </Badge>
+          {/* 22/05 ripristino logica 7c053b9: se la sessione e' in
+              "attesa_pagamento" (proforma inviata, lavoro gia' finito) e il
+              cliente HA PAGATO, il badge workflow mostra "Pronto al ritiro"
+              perche' manca solo il ritiro fisico. Backend invariato: la
+              transizione di stato resta manuale (attesa_pagamento -> completata
+              via "Strumenti riconsegnati"). Per status diversi da
+              attesa_pagamento (es. in_lavorazione + pagato in anticipo) il
+              badge resta quello reale: il pagamento NON implica fine lavoro. */}
+          {(() => {
+            const isPaidWaiting =
+              session.payment_status === "pagato" &&
+              session.status === "attesa_pagamento";
+            const effective = isPaidWaiting ? "pronto_ritiro" : session.status;
+            return (
+              <Badge className={STATUS_CONFIG[effective]?.color || ""}>
+                {STATUS_CONFIG[effective]?.label || effective}
+              </Badge>
+            );
+          })()}
           {/* Badge pagamento: verde se pagato, arancio se attesa, grigio altrimenti */}
           {session.payment_status === "pagato" ? (
             <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">

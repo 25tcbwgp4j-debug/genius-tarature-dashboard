@@ -455,12 +455,18 @@ export default function SessionsPage() {
                       EUR {parseFloat(s.total_amount || 0).toFixed(2)}
                     </span>
                     {(() => {
-                      // 20/05: status e payment_status sono indipendenti.
-                      // "Pronto al ritiro" e' uno step manuale, non e' implicato dal pagamento.
+                      // 22/05 ripristino logica 7c053b9: se status=attesa_pagamento
+                      // e payment_status=pagato, mostra "Pronto al ritiro" (workflow
+                      // di fatto: lavoro finito + cliente ha pagato = solo ritiro fisico).
+                      // Per altri status (es. in_lavorazione) il pagato non altera il badge.
+                      const isPaidWaiting =
+                        s.payment_status === "pagato" &&
+                        s.status === "attesa_pagamento";
+                      const effectiveStatus = isPaidWaiting ? "pronto_ritiro" : s.status;
                       return (
                         <>
-                          <Badge className={STATUS_CONFIG[s.status]?.color || ""}>
-                            {STATUS_CONFIG[s.status]?.label || s.status}
+                          <Badge className={STATUS_CONFIG[effectiveStatus]?.color || ""}>
+                            {STATUS_CONFIG[effectiveStatus]?.label || effectiveStatus}
                           </Badge>
                           {s.payment_status === "pagato" && s.status !== "completata" && (
                             <Badge className="bg-emerald-100 text-emerald-800">
