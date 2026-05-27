@@ -242,6 +242,29 @@ export async function markDelivered(sessionId: string, notes?: string) {
   });
 }
 
+// === RICHIESTA RECENSIONE ===
+export async function getReviewStatus(sessionId: string) {
+  return fetchAPI(`/api/sessions/${sessionId}/review-status`);
+}
+
+export async function sendReviewRequest(sessionId: string) {
+  return fetchAPI(`/api/sessions/${sessionId}/send-review-request`, {
+    method: 'POST',
+    body: JSON.stringify({ channels: ['email', 'whatsapp'] }),
+  });
+}
+
+export async function markReviewReceived(
+  sessionId: string,
+  received: boolean,
+  score?: number,
+) {
+  return fetchAPI(`/api/sessions/${sessionId}/mark-review-received`, {
+    method: 'POST',
+    body: JSON.stringify({ received, score }),
+  });
+}
+
 // === RAPPORTI ===
 export async function listReports(params?: {
   limit?: number;

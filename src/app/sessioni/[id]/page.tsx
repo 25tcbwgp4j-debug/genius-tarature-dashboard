@@ -26,6 +26,9 @@ import {
   getReceiptPdfUrl,
   getLabelsPdfUrl,
   getFatturaXmlUrl,
+  getReviewStatus,
+  sendReviewRequest,
+  markReviewReceived,
 } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -50,6 +53,10 @@ import {
   ChevronUp,
   Mail,
   MessageCircle,
+  Star,
+  Send,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { STATUS_CONFIG } from "@/lib/constants";
 import { RecipientPanel } from "./RecipientPanel";
@@ -1290,6 +1297,12 @@ export default function SessionDetail() {
         </div>
       </Card>
 
+      {/* === SEZIONE RICHIESTA RECENSIONE ===
+           Visibile per sessioni completate o con review già inviata. */}
+      {(session.delivered_at || session.review_request_sent_at) && (
+        <ReviewRequestSection sessionId={sessionId} delivered={!!session.delivered_at} />
+      )}
+
       {/* Info aggiuntive */}
       <Card className="p-4">
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
@@ -1312,5 +1325,195 @@ export default function SessionDetail() {
         </div>
       </Card>
     </div>
+  );
+}
+
+
+// === Componente sezione richiesta recensione ===
+function ReviewRequestSection({ sessionId, delivered }: { sessionId: string; delivered: boolean }) {
+  const [status, setStatus] = useState<{
+    review_request_due_at: string | null;
+    review_request_sent_at: string | null;
+    review_received: boolean;
+    review_score: number | null;
+    review_received_at: string | null;
+    email: { sent_at: string | null; status: string | null; recipient: string | null; error: string | null };
+    whatsapp: { sent_at: string | null; status: string | null; recipient: string | null; error: string | null };
+  } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await getReviewStatus(sessionId);
+      setStatus(data);
+    } catch {
+      // ignora errori (probabilmente sessione senza review)
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, [sessionId]);
+
+  const handleSend = async () => {
+    if (!confirm("Inviare richiesta recensione via Email e WhatsApp al cliente?")) return;
+    setSending(true);
+    try {
+      await sendReviewRequest(sessionId);
+      toast.success("Richiesta recensione inviata!");
+      await load();
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      toast.error(err?.message || "Errore invio richiesta recensione");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleMarkReceived = async (score: number) => {
+    setSending(true);
+    try {
+      await markReviewReceived(sessionId, true, score);
+      toast.success(`Recensione ${score}⭐ registrata`);
+      await load();
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      toast.error(err?.message || "Errore registrazione recensione");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleClearReceived = async () => {
+    if (!confirm("Rimuovere la conferma di recensione ricevuta?")) return;
+    setSending(true);
+    try {
+      await markReviewReceived(sessionId, false);
+      toast.success("Recensione rimossa");
+      await load();
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      toast.error(err?.message || "Errore");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const sentAtAny = status?.review_request_sent_at || status?.email.sent_at || status?.whatsapp.sent_at;
+  const dueAt = status?.review_request_due_at;
+  const emailOk = status?.email.status === "inviata";
+  const waOk = status?.whatsapp.status === "inviata";
+
+  return (
+    <Card className="p-4 border-l-4 border-l-yellow-400 bg-yellow-50/30">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Star className="w-5 h-5 text-yellow-500" />
+          <h3 className="font-semibold text-base">Richiesta recensione Google</h3>
+        </div>
+        {status?.review_received ? (
+          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">
+            ✅ Recensione ricevuta {status.review_score ? `${status.review_score}⭐` : ""}
+          </Badge>
+        ) : sentAtAny ? (
+          <Badge className="bg-blue-100 text-blue-800">Inviata</Badge>
+        ) : dueAt ? (
+          <Badge className="bg-gray-100 text-gray-700">
+            Programmata: {new Date(dueAt).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+          </Badge>
+        ) : (
+          <Badge className="bg-gray-100 text-gray-600">Non ancora richiesta</Badge>
+        )}
+      </div>
+
+      {loading && <p className="text-xs text-gray-500">Caricamento...</p>}
+
+      {!loading && status && (
+        <>
+          {/* Timeline canali */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            {/* Email */}
+            <div className="flex items-start gap-2 p-2 rounded bg-white border">
+              <Mail className="w-4 h-4 text-blue-600 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium">Email</div>
+                {status.email.sent_at ? (
+                  <>
+                    <div className="text-xs text-gray-600">
+                      {emailOk ? <CheckCircle2 className="w-3 h-3 inline text-emerald-600 mr-1" /> : <AlertCircle className="w-3 h-3 inline text-red-600 mr-1" />}
+                      {new Date(status.email.sent_at).toLocaleString("it-IT")}
+                    </div>
+                    {status.email.recipient && <div className="text-xs text-gray-500 truncate">{status.email.recipient}</div>}
+                    {status.email.error && <div className="text-xs text-red-600">{status.email.error}</div>}
+                  </>
+                ) : (
+                  <div className="text-xs text-gray-400">Non inviata</div>
+                )}
+              </div>
+            </div>
+            {/* WhatsApp */}
+            <div className="flex items-start gap-2 p-2 rounded bg-white border">
+              <MessageCircle className="w-4 h-4 text-green-600 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium">WhatsApp</div>
+                {status.whatsapp.sent_at ? (
+                  <>
+                    <div className="text-xs text-gray-600">
+                      {waOk ? <CheckCircle2 className="w-3 h-3 inline text-emerald-600 mr-1" /> : <AlertCircle className="w-3 h-3 inline text-red-600 mr-1" />}
+                      {new Date(status.whatsapp.sent_at).toLocaleString("it-IT")}
+                    </div>
+                    {status.whatsapp.recipient && <div className="text-xs text-gray-500 truncate">{status.whatsapp.recipient}</div>}
+                    {status.whatsapp.error && <div className="text-xs text-red-600">{status.whatsapp.error}</div>}
+                  </>
+                ) : (
+                  <div className="text-xs text-gray-400">Non inviato</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Azioni */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={sending || !delivered}
+              onClick={handleSend}
+              title={!delivered ? "Disponibile dopo 'Strumenti riconsegnati'" : "Invia richiesta recensione ora (email + WA)"}
+            >
+              {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+              {sentAtAny ? "Re-invia richiesta" : "Richiedi recensione"}
+            </Button>
+
+            {/* Score selector */}
+            {!status.review_received ? (
+              <div className="flex items-center gap-1 ml-auto">
+                <span className="text-xs text-gray-500 mr-1">Recensione ricevuta?</span>
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={sending}
+                    onClick={() => handleMarkReceived(s)}
+                    className="text-yellow-400 hover:text-yellow-500 disabled:opacity-50"
+                    title={`Marca ${s} stelle`}
+                  >
+                    <Star className="w-5 h-5" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={handleClearReceived} disabled={sending} className="ml-auto text-xs">
+                Annulla recensione
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
