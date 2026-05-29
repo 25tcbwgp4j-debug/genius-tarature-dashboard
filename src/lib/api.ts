@@ -242,6 +242,22 @@ export async function markDelivered(sessionId: string, notes?: string) {
   });
 }
 
+// === BLACKLIST DO NOT CONTACT ===
+export async function markCustomerDoNotContact(
+  customerId: string,
+  enabled: boolean,
+  reason?: string,
+) {
+  return fetchAPI(`/api/customers/${customerId}/mark-do-not-contact`, {
+    method: 'POST',
+    body: JSON.stringify({ enabled, reason: reason || '' }),
+  });
+}
+
+export async function listDoNotContact() {
+  return fetchAPI('/api/customers/do-not-contact-list');
+}
+
 // === RICHIESTA RECENSIONE ===
 export async function getReviewStatus(sessionId: string) {
   return fetchAPI(`/api/sessions/${sessionId}/review-status`);

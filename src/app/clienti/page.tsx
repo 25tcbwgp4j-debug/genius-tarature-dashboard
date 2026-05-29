@@ -10,6 +10,7 @@ import {
   listCustomers,
   updateCustomer,
   deleteCustomer,
+  markCustomerDoNotContact,
   getCustomerStats,
 } from "@/lib/api";
 import {
@@ -28,6 +29,8 @@ import {
   Filter,
   Trash2,
   Sparkles,
+  Ban,
+  UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ParseCustomerModal } from "./ParseCustomerModal";
@@ -405,10 +408,24 @@ export default function ClientiPage() {
                   // Modalita visualizzazione
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="font-semibold text-gray-900">{c.company_name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-gray-900">{c.company_name}</p>
+                        {c.do_not_contact && (
+                          <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">
+                            <Ban className="w-3 h-3 mr-1" />
+                            NON CONTATTARE
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-500">
                         Cod. {c.legacy_code} | P.IVA: {c.vat_number || "N/D"}
                       </p>
+                      {c.do_not_contact && c.do_not_contact_reason && (
+                        <p className="text-xs text-red-600 mt-0.5">
+                          Motivo opt-out: {c.do_not_contact_reason}
+                          {c.do_not_contact_at && ` · ${new Date(c.do_not_contact_at).toLocaleDateString("it-IT")}`}
+                        </p>
+                      )}
                       <div className="flex gap-4 mt-1 text-sm text-gray-600 flex-wrap">
                         {c.address && (
                           <span className="flex items-center gap-1">
@@ -446,13 +463,48 @@ export default function ClientiPage() {
                       </Button>
                       <button
                         onClick={async () => {
+                          const enable = !c.do_not_contact;
+                          const reason = enable
+                            ? prompt(`Motivo opt-out per "${c.company_name}":\n(es. "risposta email", "telefonata", "spam complaint")`, "")
+                            : null;
+                          if (enable && reason === null) return; // user cancelled
+                          try {
+                            await markCustomerDoNotContact(c.id, enable, reason || "");
+                            setCustomers((prev) => prev.map((x) =>
+                              x.id === c.id
+                                ? {
+                                    ...x,
+                                    do_not_contact: enable,
+                                    do_not_contact_reason: enable ? (reason || "") : null,
+                                    do_not_contact_at: enable ? new Date().toISOString() : null,
+                                  }
+                                : x
+                            ));
+                            toast.success(enable ? "Cliente marcato NON CONTATTARE" : "Cliente riabilitato ai contatti");
+                          } catch (e: unknown) {
+                            const err = e as { message?: string };
+                            toast.error(err?.message || "Errore aggiornamento blacklist");
+                          }
+                        }}
+                        className={
+                          c.do_not_contact
+                            ? "text-emerald-500 hover:text-emerald-700 p-1.5 rounded hover:bg-emerald-50 transition-colors"
+                            : "text-orange-400 hover:text-orange-600 p-1.5 rounded hover:bg-orange-50 transition-colors"
+                        }
+                        title={c.do_not_contact ? "Riabilita contatti" : "Marca NON CONTATTARE"}
+                      >
+                        {c.do_not_contact ? <UserCheck className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={async () => {
                           if (!confirm(`Eliminare il cliente "${c.company_name}"?\nQuesta azione non puo essere annullata.`)) return;
                           try {
                             await deleteCustomer(c.id);
                             setCustomers((prev) => prev.filter((x) => x.id !== c.id));
                             toast.success("Cliente eliminato");
-                          } catch (e: any) {
-                            toast.error(e.message || "Errore eliminazione cliente");
+                          } catch (e: unknown) {
+                            const err = e as { message?: string };
+                            toast.error(err?.message || "Errore eliminazione cliente");
                           }
                         }}
                         className="text-red-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50 transition-colors"
