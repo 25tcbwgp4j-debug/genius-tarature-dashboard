@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { STATUS_CONFIG } from "@/lib/constants";
+import { STATUS_CONFIG, getStatusConfig } from "@/lib/constants";
 
 const PAGE_SIZE = 50;
 
@@ -463,10 +463,11 @@ export default function SessionsPage() {
                         s.payment_status === "pagato" &&
                         s.status === "attesa_pagamento";
                       const effectiveStatus = isPaidWaiting ? "pronto_ritiro" : s.status;
+                      const cfg = getStatusConfig(effectiveStatus, { shippingIncluded: !!s.shipping_included });
                       return (
                         <>
-                          <Badge className={STATUS_CONFIG[effectiveStatus]?.color || ""}>
-                            {STATUS_CONFIG[effectiveStatus]?.label || effectiveStatus}
+                          <Badge className={cfg.color}>
+                            {cfg.label}
                           </Badge>
                           {s.payment_status === "pagato" && s.status !== "completata" && (
                             <Badge className="bg-emerald-100 text-emerald-800">

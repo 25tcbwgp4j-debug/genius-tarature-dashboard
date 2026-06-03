@@ -6,3 +6,19 @@ export const STATUS_CONFIG: Record<string, { label: string; color: string; step:
   attesa_pagamento: { label: "Attesa pagamento", color: "bg-orange-100 text-orange-800", step: 3 },
   completata: { label: "Completata", color: "bg-gray-100 text-gray-800", step: 4 },
 };
+
+/**
+ * Restituisce il config di stato considerando la modalità di consegna.
+ * Quando una sessione ha `shipping_included=true`, lo step "pronto_ritiro" viene
+ * etichettato come "Pronto alla spedizione" (cosmetico, no migration DB enum).
+ */
+export function getStatusConfig(
+  status: string,
+  opts?: { shippingIncluded?: boolean },
+): { label: string; color: string; step: number } {
+  const base = STATUS_CONFIG[status] || { label: status, color: "bg-gray-100 text-gray-800", step: 0 };
+  if (status === "pronto_ritiro" && opts?.shippingIncluded) {
+    return { ...base, label: "Pronto alla spedizione" };
+  }
+  return base;
+}

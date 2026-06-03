@@ -58,7 +58,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { STATUS_CONFIG } from "@/lib/constants";
+import { STATUS_CONFIG, getStatusConfig } from "@/lib/constants";
 import { RecipientPanel } from "./RecipientPanel";
 import { ChangeCustomerDialog } from "./ChangeCustomerDialog";
 import { EditCustomerDialog } from "./EditCustomerDialog";
@@ -116,6 +116,28 @@ export default function SessionDetail() {
   // Spese di spedizione (porto IVA), default 36.60 EUR lordo, modificabile
   const [shippingIncluded, setShippingIncluded] = useState<boolean>(false);
   const [shippingAmount, setShippingAmount] = useState<string>("36.60");
+  // Preview proforma modal — mostra anteprima totali (con/senza spedizione) PRIMA dell'invio
+  const [proformaPreview, setProformaPreview] = useState<null | {
+    channel: 'email' | 'whatsapp';
+    suffix: string;
+    shippingIncluded: boolean;
+    shippingAmount: number;
+    items?: Array<{ description: string; unit_price_gross?: number; total?: number; is_shipping?: boolean }>;
+    items_count?: number;
+    instruments_subtotal_gross?: number;
+    discount_percent?: number;
+    discount_amount_gross?: number;
+    shipping_amount_gross?: number;
+    shipping_label?: string;
+    subtotal_no_vat?: number;
+    vat_amount?: number;
+    vat_rate?: number;
+    total_gross?: number;
+    proforma_number_next?: string;
+    proforma_number_existing?: string;
+    resent?: boolean;
+  }>(null);
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
   const [editingInstrument, setEditingInstrument] = useState<string | null>(null);
   const [editInstrumentData, setEditInstrumentData] = useState<any>(null);
   const [editingSession, setEditingSession] = useState(false);
@@ -389,9 +411,10 @@ export default function SessionDetail() {
               session.payment_status === "pagato" &&
               session.status === "attesa_pagamento";
             const effective = isPaidWaiting ? "pronto_ritiro" : session.status;
+            const cfg = getStatusConfig(effective, { shippingIncluded: !!session.shipping_included });
             return (
-              <Badge className={STATUS_CONFIG[effective]?.color || ""}>
-                {STATUS_CONFIG[effective]?.label || effective}
+              <Badge className={cfg.color}>
+                {cfg.label}
               </Badge>
             );
           })()}
@@ -1032,30 +1055,43 @@ export default function SessionDetail() {
             </div>
           </div>
 
-          {/* PULSANTE 3: Invia proforma — split Email/WhatsApp + timestamp + input causale/spedizione condivisi */}
+          {/* PULSANTE 3: Invia proforma — apre modal preview con totale, poi conferma → invio reale */}
           <div className="flex flex-col gap-1">
             <div className="grid grid-cols-2 gap-1.5">
               <div className="flex flex-col gap-0.5">
                 <Button
                   size="lg"
                   className="h-16 flex flex-col gap-0.5 bg-orange-600 hover:bg-orange-700"
-                  disabled={actionLoading !== null}
-                  title="Invia SOLO email proforma (retry indipendente)"
-                  onClick={() => {
+                  disabled={actionLoading !== null || previewLoading}
+                  title="Mostra anteprima totale proforma prima dell'invio email"
+                  onClick={async () => {
                     const suffix = proformaSuffix.trim();
                     const shipAmt = parseFloat(shippingAmount.replace(",", ".")) || 0;
-                    if (!confirm("Inviare SOLO l'email proforma al cliente?")) return;
-                    handleAction(
-                      "proforma_email",
-                      () => sendProforma(sessionId, suffix, {
-                        included: shippingIncluded,
-                        amount: shippingIncluded ? shipAmt : undefined,
-                      }, "email"),
-                      "Email proforma inviata"
-                    );
+                    setPreviewLoading(true);
+                    try {
+                      const r = await sendProforma(
+                        sessionId,
+                        suffix,
+                        { included: shippingIncluded, amount: shippingIncluded ? shipAmt : undefined },
+                        "email",
+                        true, // dry_run
+                      ) as { preview?: Record<string, unknown> };
+                      const p = r?.preview || {};
+                      setProformaPreview({
+                        channel: 'email',
+                        suffix,
+                        shippingIncluded,
+                        shippingAmount: shipAmt,
+                        ...(p as Record<string, unknown>),
+                      } as typeof proformaPreview extends null ? never : NonNullable<typeof proformaPreview>);
+                    } catch (e) {
+                      toast.error("Errore anteprima: " + (e as Error).message);
+                    } finally {
+                      setPreviewLoading(false);
+                    }
                   }}
                 >
-                  {actionLoading === "proforma_email" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
+                  {previewLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
                   <span className="text-xs leading-tight">PROFORMA<br/>EMAIL</span>
                 </Button>
                 <ActionTimestamp ts={session.proforma_email_at} prefix="📧" />
@@ -1064,23 +1100,36 @@ export default function SessionDetail() {
                 <Button
                   size="lg"
                   className="h-16 flex flex-col gap-0.5 bg-orange-700 hover:bg-orange-800"
-                  disabled={actionLoading !== null}
-                  title="Invia SOLO template WhatsApp proforma (retry indipendente)"
-                  onClick={() => {
+                  disabled={actionLoading !== null || previewLoading}
+                  title="Mostra anteprima totale proforma prima dell'invio WhatsApp"
+                  onClick={async () => {
                     const suffix = proformaSuffix.trim();
                     const shipAmt = parseFloat(shippingAmount.replace(",", ".")) || 0;
-                    if (!confirm("Inviare SOLO il template WhatsApp proforma al cliente?")) return;
-                    handleAction(
-                      "proforma_wa",
-                      () => sendProforma(sessionId, suffix, {
-                        included: shippingIncluded,
-                        amount: shippingIncluded ? shipAmt : undefined,
-                      }, "whatsapp"),
-                      "Template WhatsApp proforma inviato"
-                    );
+                    setPreviewLoading(true);
+                    try {
+                      const r = await sendProforma(
+                        sessionId,
+                        suffix,
+                        { included: shippingIncluded, amount: shippingIncluded ? shipAmt : undefined },
+                        "whatsapp",
+                        true, // dry_run
+                      ) as { preview?: Record<string, unknown> };
+                      const p = r?.preview || {};
+                      setProformaPreview({
+                        channel: 'whatsapp',
+                        suffix,
+                        shippingIncluded,
+                        shippingAmount: shipAmt,
+                        ...(p as Record<string, unknown>),
+                      } as typeof proformaPreview extends null ? never : NonNullable<typeof proformaPreview>);
+                    } catch (e) {
+                      toast.error("Errore anteprima: " + (e as Error).message);
+                    } finally {
+                      setPreviewLoading(false);
+                    }
                   }}
                 >
-                  {actionLoading === "proforma_wa" ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageCircle className="w-5 h-5" />}
+                  {previewLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageCircle className="w-5 h-5" />}
                   <span className="text-xs leading-tight">PROFORMA<br/>WHATSAPP</span>
                 </Button>
                 <ActionTimestamp ts={session.proforma_whatsapp_at} prefix="💬" />
@@ -1324,6 +1373,115 @@ export default function SessionDetail() {
           </div>
         </div>
       </Card>
+
+      {/* Modal preview proforma: mostra totale (con/senza spedizione) PRIMA dell'invio reale.
+          Si apre da PROFORMA EMAIL / WHATSAPP. Conferma → invio reale, Annulla → close. */}
+      {proformaPreview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setProformaPreview(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b sticky top-0 bg-white">
+              <h3 className="text-lg font-semibold">
+                Anteprima proforma — {proformaPreview.channel === 'email' ? 'EMAIL' : 'WHATSAPP'}
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Verifica l&apos;importo prima di confermare l&apos;invio
+                {proformaPreview.shippingIncluded && (
+                  <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px]">
+                    📦 CON SPEDIZIONE
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="px-5 py-4 space-y-2 text-sm">
+              {proformaPreview.proforma_number_existing && (
+                <div className="text-xs px-2 py-1.5 bg-yellow-50 border border-yellow-200 rounded">
+                  ⚠️ Proforma già esistente <b>{proformaPreview.proforma_number_existing}</b> — verrà <b>solo rinviata</b> (no nuova proforma)
+                </div>
+              )}
+              {proformaPreview.proforma_number_next && (
+                <div className="text-xs text-gray-500">
+                  Numero proforma: <span className="font-mono">{proformaPreview.proforma_number_next}</span>
+                </div>
+              )}
+              <div className="border rounded">
+                <table className="w-full text-xs">
+                  <tbody>
+                    {(proformaPreview.items || []).map((it, idx) => (
+                      <tr key={idx} className={"border-b last:border-0 " + (it.is_shipping ? "bg-blue-50" : "")}>
+                        <td className="px-2 py-1.5">
+                          {it.is_shipping && <span className="mr-1">📦</span>}
+                          {it.description}
+                        </td>
+                        <td className="px-2 py-1.5 text-right font-mono whitespace-nowrap">
+                          {(it.unit_price_gross ?? it.total ?? 0).toFixed(2)} EUR
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {(proformaPreview.discount_percent ?? 0) > 0 && (
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>Sconto cliente ({proformaPreview.discount_percent}%)</span>
+                  <span className="font-mono">− {(proformaPreview.discount_amount_gross ?? 0).toFixed(2)} EUR</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs text-gray-600">
+                <span>Imponibile (no IVA)</span>
+                <span className="font-mono">{(proformaPreview.subtotal_no_vat ?? 0).toFixed(2)} EUR</span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-600">
+                <span>IVA {proformaPreview.vat_rate ?? 22}%</span>
+                <span className="font-mono">{(proformaPreview.vat_amount ?? 0).toFixed(2)} EUR</span>
+              </div>
+              <div className="flex justify-between text-base font-bold border-t-2 border-orange-600 pt-2 mt-2">
+                <span>TOTALE (IVA incl.)</span>
+                <span className="font-mono text-orange-700">
+                  {(proformaPreview.total_gross ?? 0).toFixed(2)} EUR
+                </span>
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t bg-gray-50 flex gap-2 sticky bottom-0">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setProformaPreview(null)}
+              >
+                Annulla
+              </Button>
+              <Button
+                className="flex-1 bg-orange-600 hover:bg-orange-700"
+                disabled={actionLoading !== null}
+                onClick={() => {
+                  const preview = proformaPreview;
+                  setProformaPreview(null);
+                  handleAction(
+                    preview.channel === 'email' ? 'proforma_email' : 'proforma_wa',
+                    () => sendProforma(
+                      sessionId,
+                      preview.suffix,
+                      {
+                        included: preview.shippingIncluded,
+                        amount: preview.shippingIncluded ? preview.shippingAmount : undefined,
+                      },
+                      preview.channel,
+                    ),
+                    `Proforma ${preview.channel === 'email' ? 'email' : 'WhatsApp'} inviata`,
+                  );
+                }}
+              >
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Conferma e invia"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

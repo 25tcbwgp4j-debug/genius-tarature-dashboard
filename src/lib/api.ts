@@ -213,6 +213,7 @@ export async function sendProforma(
   proformaSuffix = "",
   shipping?: { included: boolean; amount?: number },
   channel: 'email' | 'whatsapp' | 'both' = 'both',
+  dryRun = false,
 ) {
   const payload: Record<string, unknown> = { proforma_suffix: proformaSuffix, channel };
   if (shipping?.included) {
@@ -221,6 +222,7 @@ export async function sendProforma(
       payload.shipping_amount = shipping.amount;
     }
   }
+  if (dryRun) payload.dry_run = true;
   return fetchAPI(`/api/sessions/${sessionId}/send-proforma`, {
     method: 'POST',
     body: JSON.stringify(payload),

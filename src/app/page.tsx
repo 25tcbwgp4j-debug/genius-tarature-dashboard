@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { listSessions, getReconciliationToday } from "@/lib/api";
 import { ClipboardList, Wrench, Package, AlertTriangle, Users } from "lucide-react";
 import Link from "next/link";
-import { STATUS_CONFIG } from "@/lib/constants";
+import { STATUS_CONFIG, getStatusConfig } from "@/lib/constants";
 
 interface ReconciliationSnapshot {
   total_groups?: number;
@@ -153,13 +153,14 @@ export default function Home() {
                   <span className="text-sm font-medium">
                     EUR {parseFloat(session.total_amount || 0).toFixed(2)}
                   </span>
-                  <Badge
-                    className={
-                      STATUS_CONFIG[session.status]?.color || "bg-gray-100"
-                    }
-                  >
-                    {STATUS_CONFIG[session.status]?.label || session.status}
-                  </Badge>
+                  {(() => {
+                    const cfg = getStatusConfig(session.status, { shippingIncluded: !!session.shipping_included });
+                    return (
+                      <Badge className={cfg.color}>
+                        {cfg.label}
+                      </Badge>
+                    );
+                  })()}
                 </div>
               </Link>
             ))
