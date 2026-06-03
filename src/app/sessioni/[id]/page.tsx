@@ -1471,9 +1471,11 @@ export default function SessionDetail() {
                   ⚠️ Proforma già esistente <b>{proformaPreview.proforma_number_existing}</b> — verrà <b>solo rinviata</b> (no nuova proforma)
                 </div>
               )}
-              {proformaPreview.proforma_number_next && (
+              {/* In dry_run NON consumiamo il progressivo fiscale: il numero
+                  viene assegnato solo al submit reale. */}
+              {!proformaPreview.proforma_number_existing && (
                 <div className="text-xs text-gray-500">
-                  Numero proforma: <span className="font-mono">{proformaPreview.proforma_number_next}</span>
+                  Numero proforma: <span className="italic">assegnato al momento dell&apos;invio</span>
                 </div>
               )}
               <div className="border rounded">
