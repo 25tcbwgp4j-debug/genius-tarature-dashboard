@@ -164,10 +164,42 @@ export default function SessionDetail() {
     try {
       const data = await getSession(sessionId);
       setSession(data);
+      // Pre-popola toggle/input spedizione dai valori persistiti su DB,
+      // cosi' la scelta dell'operatore resta visibile dopo refresh / ritorno
+      // sulla pagina (fix UX: prima il flag era client-only).
+      if (typeof data?.shipping_included === "boolean") {
+        setShippingIncluded(!!data.shipping_included);
+      }
+      const amt = data?.shipping_amount_gross;
+      if (typeof amt === "number" && amt > 0) {
+        setShippingAmount(amt.toFixed(2));
+      }
     } catch {
       toast.error("Errore nel caricamento della sessione");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Persiste i campi shipping_included / shipping_amount_gross su DB:
+  // la sessione resta marcata "con spedizione" anche dopo refresh, il
+  // badge mostra "Pronto alla spedizione", e PDF/ricevuta/fattura
+  // continuano a includere la voce spedizione.
+  const handleSaveShipping = async () => {
+    const amt = parseFloat(shippingAmount.replace(",", ".")) || 0;
+    try {
+      await updateSession(sessionId, {
+        shipping_included: shippingIncluded,
+        shipping_amount_gross: shippingIncluded ? amt : 0,
+      });
+      toast.success(
+        shippingIncluded
+          ? `Spedizione salvata: ${amt.toFixed(2)} EUR`
+          : "Spedizione disattivata",
+      );
+      await loadSession();
+    } catch (e) {
+      toast.error("Errore salvataggio spedizione: " + (e as Error).message);
     }
   };
 
@@ -1171,7 +1203,42 @@ export default function SessionDetail() {
                 title="Importo lordo spedizione (IVA inclusa). Default 36,60 EUR."
               />
               <span className="text-[10px] text-gray-500">EUR</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[10px]"
+                disabled={actionLoading !== null}
+                onClick={handleSaveShipping}
+                title="Persiste la scelta spedizione sulla sessione (badge 'Pronto alla spedizione' + voce in PDF/email)"
+              >
+                💾 Salva
+              </Button>
             </div>
+            {/* Stato persistenza: indica se i valori correnti combaciano con quanto salvato sul DB */}
+            {(() => {
+              const savedIncluded = !!session?.shipping_included;
+              const savedAmt = Number(session?.shipping_amount_gross || 0);
+              const currentAmt = parseFloat(shippingAmount.replace(",", ".")) || 0;
+              const dirty =
+                savedIncluded !== shippingIncluded ||
+                (shippingIncluded && Math.abs(savedAmt - currentAmt) > 0.005);
+              if (dirty) {
+                return (
+                  <p className="text-[10px] text-orange-600">
+                    ⚠️ Modifiche non salvate — clicca 💾 Salva
+                  </p>
+                );
+              }
+              if (savedIncluded) {
+                return (
+                  <p className="text-[10px] text-emerald-700">
+                    ✅ Salvato: spedizione {savedAmt.toFixed(2)} EUR
+                  </p>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           {/* PULSANTE 4: Genera rapporti RDT */}
