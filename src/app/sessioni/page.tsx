@@ -455,15 +455,7 @@ export default function SessionsPage() {
                       EUR {parseFloat(s.total_amount || 0).toFixed(2)}
                     </span>
                     {(() => {
-                      // 22/05 ripristino logica 7c053b9: se status=attesa_pagamento
-                      // e payment_status=pagato, mostra "Pronto al ritiro" (workflow
-                      // di fatto: lavoro finito + cliente ha pagato = solo ritiro fisico).
-                      // Per altri status (es. in_lavorazione) il pagato non altera il badge.
-                      const isPaidWaiting =
-                        s.payment_status === "pagato" &&
-                        s.status === "attesa_pagamento";
-                      const effectiveStatus = isPaidWaiting ? "pronto_ritiro" : s.status;
-                      const cfg = getStatusConfig(effectiveStatus, { shippingIncluded: !!s.shipping_included });
+                      const cfg = getStatusConfig(s.status, { shippingIncluded: !!s.shipping_included });
                       return (
                         <>
                           <Badge className={cfg.color}>

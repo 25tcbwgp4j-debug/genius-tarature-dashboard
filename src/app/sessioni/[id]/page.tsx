@@ -430,20 +430,8 @@ export default function SessionDetail() {
             Indietro
           </Button>
           <h2 className="text-2xl font-bold text-gray-900">Dettaglio sessione</h2>
-          {/* 22/05 ripristino logica 7c053b9: se la sessione e' in
-              "attesa_pagamento" (proforma inviata, lavoro gia' finito) e il
-              cliente HA PAGATO, il badge workflow mostra "Pronto al ritiro"
-              perche' manca solo il ritiro fisico. Backend invariato: la
-              transizione di stato resta manuale (attesa_pagamento -> completata
-              via "Strumenti riconsegnati"). Per status diversi da
-              attesa_pagamento (es. in_lavorazione + pagato in anticipo) il
-              badge resta quello reale: il pagamento NON implica fine lavoro. */}
           {(() => {
-            const isPaidWaiting =
-              session.payment_status === "pagato" &&
-              session.status === "attesa_pagamento";
-            const effective = isPaidWaiting ? "pronto_ritiro" : session.status;
-            const cfg = getStatusConfig(effective, { shippingIncluded: !!session.shipping_included });
+            const cfg = getStatusConfig(session.status, { shippingIncluded: !!session.shipping_included });
             return (
               <Badge className={cfg.color}>
                 {cfg.label}

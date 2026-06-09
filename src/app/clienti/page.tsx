@@ -35,7 +35,8 @@ import {
 import { toast } from "sonner";
 import { ParseCustomerModal } from "./ParseCustomerModal";
 import { ReconcileModal } from "./ReconcileModal";
-import { GitMerge } from "lucide-react";
+import { SimplyfattSyncModal } from "./SimplyfattSyncModal";
+import { GitMerge, RefreshCw } from "lucide-react";
 
 export default function ClientiPage() {
   const [query, setQuery] = useState("");
@@ -52,6 +53,7 @@ export default function ClientiPage() {
   const [saving, setSaving] = useState(false);
   const [parseOpen, setParseOpen] = useState(false);
   const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [sfSyncOpen, setSfSyncOpen] = useState(false);
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -160,6 +162,13 @@ export default function ClientiPage() {
             <Sparkles className="w-4 h-4 mr-2" />
             Incolla dati (AI)
           </Button>
+          <Button
+            onClick={() => setSfSyncOpen(true)}
+            className="bg-teal-600 hover:bg-teal-700 text-white"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Sync SimplyFatt
+          </Button>
         </div>
       </div>
       <ParseCustomerModal
@@ -172,6 +181,11 @@ export default function ClientiPage() {
         open={reconcileOpen}
         onClose={() => setReconcileOpen(false)}
         onMerged={() => loadList(page, filter)}
+      />
+      <SimplyfattSyncModal
+        open={sfSyncOpen}
+        onClose={() => setSfSyncOpen(false)}
+        onSynced={() => loadList(page, filter)}
       />
 
       {/* Stats */}
