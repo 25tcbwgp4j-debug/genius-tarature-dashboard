@@ -24,6 +24,7 @@ import {
   X,
   Bell,
   BellOff,
+  Handshake,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -37,6 +38,7 @@ const navItems = [
   { href: "/sessioni", label: "Sessioni", icon: Wrench },
   { href: "/clienti", label: "Clienti", icon: Users },
   { href: "/nuovi-clienti", label: "Nuovi Clienti", icon: UserPlus },
+  { href: "/partner", label: "Partner B2B", icon: Handshake },
   { href: "/rapporti", label: "Rapporti", icon: FileText },
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/automazioni", label: "Automazioni", icon: Activity },

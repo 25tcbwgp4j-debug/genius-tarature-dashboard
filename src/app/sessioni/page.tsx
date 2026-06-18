@@ -15,7 +15,41 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { STATUS_CONFIG, getStatusConfig } from "@/lib/constants";
+import { getStatusConfig, getPaymentConfig } from "@/lib/constants";
+
+// Chip singolo notifica: verde se inviato, grigio se non ancora fatto
+function NotifChip({ label, sent }: { label: string; sent: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+        sent ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
+      }`}
+    >
+      {sent ? "✓" : "–"} {label}
+    </span>
+  );
+}
+
+// Riga notifiche compatta per ogni sessione nel registro
+function NotificationChips({ s }: { s: Record<string, unknown> }) {
+  return (
+    <div className="flex flex-wrap gap-1 mt-0.5" onClick={(e) => e.preventDefault()}>
+      {/* Registrazione */}
+      <NotifChip label="Reg.✉"  sent={!!(s.receipt_email_at    || s.receipt_email_sent)} />
+      <NotifChip label="Reg.📱" sent={!!(s.receipt_whatsapp_at || s.receipt_whatsapp_sent)} />
+      {/* Pronto al ritiro */}
+      <NotifChip label="Pronto✉"  sent={!!(s.ready_email_at    || s.ready_email_sent)} />
+      <NotifChip label="Pronto📱" sent={!!(s.ready_whatsapp_at || s.ready_whatsapp_sent)} />
+      {/* Proforma */}
+      <NotifChip label="PF✉"  sent={!!(s.proforma_email_at    || s.proforma_email_sent)} />
+      <NotifChip label="PF📱" sent={!!(s.proforma_whatsapp_at || s.proforma_whatsapp_sent)} />
+      {/* Pagamento */}
+      <NotifChip label="Pagato" sent={s.payment_status === "pagato"} />
+      {/* Consegnato */}
+      <NotifChip label="Consegnato" sent={!!(s.delivered_at)} />
+    </div>
+  );
+}
 
 const PAGE_SIZE = 50;
 
@@ -228,7 +262,6 @@ export default function SessionsPage() {
               { key: "registrazione", label: "Registr." },
               { key: "in_lavorazione", label: "In lavoraz." },
               { key: "pronto_ritiro", label: "Pronto" },
-              { key: "attesa_pagamento", label: "Att. pag." },
               { key: "completata", label: "Compl." },
             ].map((s) => (
               <Button
@@ -442,34 +475,35 @@ export default function SessionsPage() {
                 />
                 <Link
                   href={`/sessioni/${s.id}`}
-                  className="flex flex-1 items-center justify-between"
+                  className="flex flex-1 flex-col gap-1 min-w-0"
                 >
-                  <div className="flex-1">
-                    <p className="font-medium">{s.customers?.company_name || "N/D"}</p>
-                    <p className="text-sm text-gray-500">
-                      {s.session_date} - {s.total_instruments || 0} strumenti - {s.operator || ""}
-                    </p>
+                  {/* Riga 1: cliente + importo + badge stato + badge pagamento */}
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium truncate">{s.customers?.company_name || "N/D"}</p>
+                    <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                      <span className="text-sm font-semibold text-gray-700">
+                        EUR {parseFloat(s.total_amount || 0).toFixed(2)}
+                      </span>
+                      {/* Badge stato sessione */}
+                      {(() => {
+                        const cfg = getStatusConfig(s.status, { shippingIncluded: !!s.shipping_included });
+                        return <Badge className={`${cfg.color} text-xs`}>{cfg.label}</Badge>;
+                      })()}
+                      {/* Badge pagamento — nascosto per completata (pagamento implicito) */}
+                      {s.status !== "completata" && (() => {
+                        const pcfg = getPaymentConfig(s.payment_status, s.payment_method);
+                        return <Badge className={`${pcfg.color} text-xs`}>{pcfg.label}</Badge>;
+                      })()}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap justify-end">
-                    <span className="text-sm font-medium">
-                      EUR {parseFloat(s.total_amount || 0).toFixed(2)}
-                    </span>
-                    {(() => {
-                      const cfg = getStatusConfig(s.status, { shippingIncluded: !!s.shipping_included });
-                      return (
-                        <>
-                          <Badge className={cfg.color}>
-                            {cfg.label}
-                          </Badge>
-                          {s.payment_status === "pagato" && s.status !== "completata" && (
-                            <Badge className="bg-emerald-100 text-emerald-800">
-                              Pagato {s.payment_method ? `(${s.payment_method})` : ""}
-                            </Badge>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
+
+                  {/* Riga 2: meta-info */}
+                  <p className="text-xs text-gray-500">
+                    {s.session_date} · {s.total_instruments || 0} strum. · {s.operator || "—"}
+                  </p>
+
+                  {/* Riga 3: notifiche inviate + RDT */}
+                  <NotificationChips s={s} />
                 </Link>
               </div>
             ))

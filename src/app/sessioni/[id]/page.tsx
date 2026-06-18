@@ -58,7 +58,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { STATUS_CONFIG, getStatusConfig } from "@/lib/constants";
+import { STATUS_CONFIG, getStatusConfig, getPaymentConfig } from "@/lib/constants";
 import { RecipientPanel } from "./RecipientPanel";
 import { ChangeCustomerDialog } from "./ChangeCustomerDialog";
 import { EditCustomerDialog } from "./EditCustomerDialog";
@@ -438,16 +438,15 @@ export default function SessionDetail() {
               </Badge>
             );
           })()}
-          {/* Badge pagamento: verde se pagato, arancio se attesa, grigio altrimenti */}
-          {session.payment_status === "pagato" ? (
-            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">
-              PAGATO{session.payment_method ? ` · ${session.payment_method}` : ""}
-            </Badge>
-          ) : session.payment_status === "in_attesa" ? (
-            <Badge className="bg-orange-100 text-orange-800 border-orange-300">
-              Da pagare
-            </Badge>
-          ) : null}
+          {/* Badge pagamento — SEMPRE visibile, indipendente dallo stato sessione */}
+          {(() => {
+            const pcfg = getPaymentConfig(session.payment_status, session.payment_method);
+            return (
+              <Badge className={`${pcfg.color} border`}>
+                {pcfg.label}
+              </Badge>
+            );
+          })()}
         </div>
         <div className="flex gap-2">
           {!editingSession ? (

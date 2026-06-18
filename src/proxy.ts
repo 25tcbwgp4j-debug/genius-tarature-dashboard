@@ -10,7 +10,7 @@ import { verifyJwt, AUTH_COOKIE_NAME } from "@/lib/auth";
 // /api/auth/refresh per ottenere un nuovo cookie con TTL fresco. Evita
 // che operatori trovino logout improvviso al 31° giorno di uso silenzioso.
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"];
 const ADMIN_ONLY_PATHS = ["/utenti", "/audit"];
 // Soglia refresh: rinnova se mancano <7gg alla scadenza
 const REFRESH_THRESHOLD_SEC = 7 * 24 * 60 * 60;
@@ -32,14 +32,23 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Per chiamate API (fetch dal client), restituisci 401 JSON invece di redirect HTML
+  const isApiCall = pathname.startsWith('/api/');
+
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (!token) {
+    if (isApiCall) {
+      return NextResponse.json({ detail: 'Non autenticato' }, { status: 401 });
+    }
     const url = new URL("/login", request.url);
     if (pathname !== "/") url.searchParams.set("from", pathname);
     return NextResponse.redirect(url);
   }
   const payload = await verifyJwt(token, secret);
   if (!payload) {
+    if (isApiCall) {
+      return NextResponse.json({ detail: 'Sessione scaduta' }, { status: 401 });
+    }
     const url = new URL("/login", request.url);
     if (pathname !== "/") url.searchParams.set("from", pathname);
     return NextResponse.redirect(url);

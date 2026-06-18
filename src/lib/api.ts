@@ -7,10 +7,6 @@
 // l'header X-API-Key lato server. L'API_KEY non e' mai esposta al client.
 const API_PROXY = '/api/backend';
 
-// Per i download diretti (PDF ricevuta/etichette) serve l'URL assoluto
-// del backend Railway (il browser apre il link in nuova tab).
-const API_URL_DIRECT =
-  process.env.NEXT_PUBLIC_API_URL || 'https://tarature-api-production.up.railway.app';
 
 async function fetchAPI(path: string, options: RequestInit = {}) {
   const url = `${API_PROXY}${path}`;
@@ -23,8 +19,16 @@ async function fetchAPI(path: string, options: RequestInit = {}) {
     headers,
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      // Sessione scaduta: redirect a login (solo lato client)
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login?error=session_expired';
+      }
+      throw new Error('Sessione scaduta — effettua di nuovo il login');
+    }
     const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || `API Error: ${res.status}`);
+    const detail = error.detail;
+    throw new Error(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map((e: any) => e.msg || JSON.stringify(e)).join('; ') : `API Error: ${res.status}`));
   }
   return res.json();
 }
@@ -140,6 +144,10 @@ export async function createInstrumentType(data: {
   name: string;
   price: number;
   template_type?: string;
+  category?: string;
+  measurement_unit?: string;
+  calibration_validity_months?: number;
+  notes?: string;
 }) {
   return fetchAPI('/api/instrument-types', {
     method: 'POST',
@@ -152,6 +160,11 @@ export async function updateInstrumentType(id: string, data: {
   name?: string;
   price?: number;
   template_type?: string;
+  category?: string;
+  measurement_unit?: string;
+  calibration_validity_months?: number;
+  notes?: string;
+  active?: boolean;
 }) {
   return fetchAPI(`/api/instrument-types/${id}`, {
     method: 'PUT',
@@ -168,23 +181,21 @@ export async function getCustomerPastInstruments(customerId: string) {
 }
 
 export function getReceiptPdfUrl(sessionId: string): string {
-  return `${API_URL_DIRECT}/api/sessions/${sessionId}/receipt-pdf`;
+  return `${API_PROXY}/api/sessions/${sessionId}/receipt-pdf`;
 }
 
 export function getSessionReportsZipUrl(sessionId: string): string {
-  return `${API_URL_DIRECT}/api/sessions/${sessionId}/reports-zip`;
+  return `${API_PROXY}/api/sessions/${sessionId}/reports-zip`;
 }
 
 export function getLabelsPdfUrl(sessionId: string, fmt: "default" | "brother_ql710" = "default"): string {
-  // Cache-busting: timestamp forza sempre download fresco del PDF.
-  // Risolve problema tab Chrome aperta che serve PDF vecchio cached.
   const ts = Date.now();
   const params = fmt === "default" ? `?t=${ts}` : `?fmt=${fmt}&t=${ts}`;
-  return `${API_URL_DIRECT}/api/sessions/${sessionId}/labels-pdf${params}`;
+  return `${API_PROXY}/api/sessions/${sessionId}/labels-pdf${params}`;
 }
 
 export function getFatturaXmlUrl(sessionId: string): string {
-  return `${API_URL_DIRECT}/api/sessions/${sessionId}/fattura-xml`;
+  return `${API_PROXY}/api/sessions/${sessionId}/fattura-xml`;
 }
 
 // === 4 PULSANTI AZIONE ===
@@ -382,6 +393,21 @@ export async function updateSettings(data: Record<string, unknown>) {
   });
 }
 
+// === TEMPLATE MESSAGGI ===
+export async function listTemplates() {
+  return fetchAPI('/api/templates');
+}
+
+export async function updateTemplate(
+  templateKey: string,
+  data: { subject?: string; body?: string; notes?: string },
+) {
+  return fetchAPI(`/api/templates/${encodeURIComponent(templateKey)}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
 // === PROSPECT FGAS ===
 export async function listProspects(params: {
   page?: number;
@@ -541,4 +567,79 @@ export async function moveProspectToCustomer(id: string) {
 
 export async function moveBatchProspectsToCustomers() {
   return fetchAPI('/api/prospects/move-batch-to-customers', { method: 'POST' });
+}
+
+// ===========================================================================
+// Partner B2B: rivenditori termoidraulica + centri certificazione F-Gas
+// ===========================================================================
+
+export interface Partner {
+  id: number;
+  partner_type: 'rivenditore' | 'centro_fgas';
+  name: string;
+  city?: string;
+  province?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  rating?: number;
+  enrichment_status?: string;
+  email_status?: string;
+  email_sent_at?: string;
+  partnership_status?: string;
+  commission_tier?: number;
+  do_not_contact?: boolean;
+  notes?: string;
+  created_at?: string;
+}
+
+export async function listPartners(params: {
+  partner_type?: string;
+  partnership_status?: string;
+  enrichment_status?: string;
+  city?: string;
+  page?: number;
+  per_page?: number;
+} = {}) {
+  const qs = new URLSearchParams();
+  if (params.partner_type) qs.set('partner_type', params.partner_type);
+  if (params.partnership_status) qs.set('partnership_status', params.partnership_status);
+  if (params.enrichment_status) qs.set('enrichment_status', params.enrichment_status);
+  if (params.city) qs.set('city', params.city);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.per_page) qs.set('per_page', String(params.per_page));
+  return fetchAPI(`/api/partners?${qs.toString()}`);
+}
+
+export async function getPartnersStats() {
+  return fetchAPI('/api/partners/stats');
+}
+
+export async function triggerPartnerDiscovery() {
+  return fetchAPI('/api/partners/discover', { method: 'POST' });
+}
+
+export async function triggerPartnerEnrich() {
+  return fetchAPI('/api/partners/enrich', { method: 'POST' });
+}
+
+export async function triggerPartnerSendBatch() {
+  return fetchAPI('/api/partners/send-batch', { method: 'POST' });
+}
+
+export async function sendPartnerEmailSingle(partnerId: number) {
+  return fetchAPI(`/api/partners/${partnerId}/send-email`, { method: 'POST' });
+}
+
+export async function updatePartner(partnerId: number, data: {
+  commission_tier?: number;
+  partnership_status?: string;
+  notes?: string;
+  do_not_contact?: boolean;
+  do_not_contact_reason?: string;
+}) {
+  return fetchAPI(`/api/partners/${partnerId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 }

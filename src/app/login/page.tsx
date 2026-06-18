@@ -1,8 +1,9 @@
 import { login } from "./actions";
 import { LogIn } from "lucide-react";
+import Link from "next/link";
 
 interface LoginPageProps {
-  searchParams: Promise<{ error?: string; from?: string }>;
+  searchParams: Promise<{ error?: string; from?: string; reset?: string }>;
 }
 
 function errorMessage(code?: string): string | null {
@@ -19,6 +20,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const error = errorMessage(params.error);
   const from = params.from || "/";
+  const resetSuccess = params.reset === "1";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 p-4">
@@ -30,6 +32,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <h1 className="text-2xl font-bold text-gray-900">AvaTech Tarature</h1>
           <p className="text-sm text-gray-500 mt-1">Dashboard di gestione</p>
         </div>
+
+        {resetSuccess && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
+            Password aggiornata. Accedi con le nuove credenziali.
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -76,10 +84,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </button>
         </form>
 
-        <p className="text-xs text-gray-400 text-center mt-6">
+        <div className="mt-5 text-center">
+          <Link href="/forgot-password" className="text-sm text-blue-600 hover:underline">
+            Password dimenticata?
+          </Link>
+        </div>
+
+        <p className="text-xs text-gray-400 text-center mt-3">
           Accesso riservato allo staff. La sessione scade dopo 30 giorni.
-          <br />
-          Hai dimenticato la password? Contatta l&apos;amministratore.
         </p>
       </div>
     </div>
