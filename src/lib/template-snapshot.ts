@@ -124,6 +124,47 @@ export const TEMPLATE_BODIES: Record<string, string> = {
     "💶 Importo saldato: {{5}}€\n" +
     "Ticket: #{{6}}\n" +
     "Per qualsiasi domanda rispondi qui.",
+  review_request_tarature:
+    "Gentile {{1}},\n\n" +
+    "grazie per aver scelto AvaTech Tarature per la taratura dei suoi strumenti.\n\n" +
+    "Una sua recensione su Google ci aiuterebbe a far conoscere il nostro servizio ad altri operatori F-GAS. Bastano 30 secondi:\n\n" +
+    "{{2}}\n\n" +
+    "Grazie!\n" +
+    "AvaTech Tarature Certificazioni - Genius Lab s.r.l.s.",
+  review_request_tarature_v2:
+    "Buongiorno {{1}} 👋\n\n" +
+    "Grazie per aver scelto il nostro laboratorio per la taratura dei suoi strumenti F-GAS.\n\n" +
+    "Una sua recensione su Google ci aiuterebbe moltissimo a far conoscere il nostro lavoro ad altri operatori del settore.\n\n" +
+    "Bastano 30 secondi del suo tempo. 🙏\n\n" +
+    "Grazie di cuore,\n" +
+    "Christian Avantifiori\n" +
+    "Direttore",
+  cold_calibration_intro:
+    "Buongiorno {{1}}! 👋\n\n" +
+    "Siamo del Centro Tarature AvaTech Lab a Roma — specializzati in taratura strumenti di misura per il settore HVAC, frigorista e termoidraulica.\n\n" +
+    "Offriamo taratura ACCREDIA per:\n" +
+    "• Manometri, anemometri, termoigrometri\n" +
+    "• Analizzatori combustione, pinze amperometriche\n" +
+    "• Multimetri, termometri sonda, fonometri, luxometri\n\n" +
+    "✅ Tempi 24-48h dalla consegna\n" +
+    "✅ Listino tra i più competitivi del Lazio\n" +
+    "✅ Ritiro/consegna su Roma su appuntamento\n\n" +
+    "Se ti interessa un preventivo personalizzato, rispondi a questo messaggio con la lista dei tuoi strumenti.",
+  session_delivered_paper:
+    "Gentile {{1}},\n\n" +
+    "confermiamo la consegna dei Suoi strumenti tarati:\n" +
+    "{{2}}\n\n" +
+    "Le comunichiamo che i certificati di taratura ACCREDIA e i Rapporti di Taratura (RdT) originali firmati sono stati consegnati insieme agli strumenti in formato cartaceo. Questa e l'unica versione con valore legale: non viene rilasciata alcuna copia digitale.\n\n" +
+    "Grazie per averci scelto. Per future tarature o assistenza, non esiti a contattarci.\n\n" +
+    "AvaTech Tarature Certificazioni\n" +
+    "Genius Lab s.r.l.s\n" +
+    "Viale Somalia, 246 - 00199 Roma\n" +
+    "Tel. +39 06 80074880 | Cell. +39 375 7371888\n" +
+    "www.avatechlab.it",
+  gl_outreach_partnership:
+    "Buongiorno {{1}}, sono Christian di Genius Lab Roma. Operiamo da oltre 15 anni come laboratorio specializzato Apple e collaboriamo con centri assistenza in tutta Italia per microsaldatura, schede logiche, recupero dati e riparazioni complesse. Se vi capitano casi che non riuscite a gestire in negozio o avete bisogno di un partner tecnico affidabile, ci occupiamo noi. Diagnosi gratuita, ritiro e riconsegna con corriere espresso. Se vi interessa, vi mando una scheda con dettagli e modalità di collaborazione. Grazie.",
+  gl_review_request:
+    "Ciao {{1}}, grazie per averci scelto per la riparazione del tuo {{2}} (ticket #{{3}}). Siamo felici di averti aiutato e speriamo che tu sia soddisfatto del nostro servizio. Se hai un minuto, ci faresti un grande favore lasciandoci una recensione su Google. Per noi è il modo migliore per crescere e farci conoscere ad altri clienti come te. Grazie di cuore dal Team Genius Lab.",
 };
 
 /**

@@ -31,7 +31,7 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
 
 export type LeadSource = "customer" | "fgas" | "cold" | "staff" | "unknown";
 export type Direction = "inbound" | "outbound";
-export type MessageType = "text" | "image" | "document" | "audio" | "video" | "template" | "system";
+export type MessageType = "text" | "image" | "document" | "audio" | "video" | "template" | "system" | "reaction";
 export type MessageStatus = "sent" | "delivered" | "read" | "failed" | "pending";
 
 export interface Conversation {

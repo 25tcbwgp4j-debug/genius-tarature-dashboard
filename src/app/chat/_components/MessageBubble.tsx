@@ -36,6 +36,29 @@ function humanTemplateName(name: string): string {
   return name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// Il backend salva "[Template: <name>]" quando il template non è (ancora) nel
+// registry: NON è testo utile → trattalo come body assente e renderizza dal
+// registry frontend (vedi template-snapshot.ts).
+function isTemplatePlaceholder(body: string | null | undefined): boolean {
+  return !!body && /^\[Template:\s/.test(body.trim());
+}
+
+// Estrae l'emoji di una reaction: prima da metadata.reaction_emoji, poi dal
+// body "Ha reagito 👍" (fallback per messaggi salvati prima del fix backend).
+function reactionEmoji(msg: ChatMessage): string {
+  const md = msg.metadata as Record<string, unknown> | null | undefined;
+  const fromMeta = md && typeof md.reaction_emoji === "string" ? md.reaction_emoji : "";
+  if (fromMeta) return fromMeta;
+  const raw =
+    md && md.raw && typeof md.raw === "object"
+      ? ((md.raw as Record<string, unknown>).reaction as Record<string, unknown> | undefined)
+      : undefined;
+  if (raw && typeof raw.emoji === "string") return raw.emoji;
+  const b = (msg.body || "").trim();
+  if (b.startsWith("Ha reagito")) return b.replace("Ha reagito", "").trim();
+  return "";
+}
+
 function TemplatePlaceholder({ msg }: { msg: ChatMessage }) {
   const { name, params } = getTemplateMeta(msg);
   const label = name ? humanTemplateName(name) : "Template";
@@ -199,15 +222,26 @@ export function MessageBubble({
           <video controls src={msg.media_url} className="max-w-xs rounded-lg" />
         )}
 
-        {msg.body && (
-          <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-            {msg.body}
+        {msg.message_type === "reaction" && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-2xl leading-none">{reactionEmoji(msg) || "🗑️"}</span>
+            <span className="text-gray-600 italic">
+              {reactionEmoji(msg) ? "ha reagito a un messaggio" : "ha rimosso la reazione"}
+            </span>
           </div>
         )}
 
-        {!msg.body && msg.message_type === "template" && isOut && (
-          <TemplatePlaceholder msg={msg} />
-        )}
+        {msg.message_type !== "reaction" &&
+          msg.body &&
+          !isTemplatePlaceholder(msg.body) && (
+            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+              {msg.body}
+            </div>
+          )}
+
+        {(!msg.body || isTemplatePlaceholder(msg.body)) &&
+          msg.message_type === "template" &&
+          isOut && <TemplatePlaceholder msg={msg} />}
 
         <div
           className={`flex items-center gap-1 justify-end mt-1 text-[10px] ${
