@@ -1,8 +1,8 @@
 "use server";
 
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { AUTH_COOKIE_NAME } from "@/lib/auth";
+import { AUTH_COOKIE_NAME, verifyJwt } from "@/lib/auth";
 
 const BACKEND_URL =
   process.env.BACKEND_URL ||
@@ -18,8 +18,19 @@ async function authedFetch(path: string, init: RequestInit = {}) {
 }
 
 async function ensureAdmin() {
-  const role = (await headers()).get("x-user-role");
-  if (role !== "admin") {
+  // Il ruolo si ricava dal JWT firmato nel cookie, non da un header.
+  // headers() restituisce header della richiesta, che il client controlla: chi
+  // invocava l'action con "x-user-role: admin" passava il controllo. In piu' il
+  // proxy scriveva quell'header sulla RISPOSTA, quindi qui arrivava sempre null
+  // e /utenti era rotto anche per l'admin vero. Audit 16/07.
+  const token = (await cookies()).get(AUTH_COOKIE_NAME)?.value;
+  // Stesso fallback del proxy (src/proxy.ts): in prod puo' essere impostata l'una o l'altra.
+  const secret = process.env.AUTH_JWT_SECRET || process.env.AUTH_SECRET || "";
+  if (!token || !secret) {
+    throw new Error("Sessione non valida: rifai il login");
+  }
+  const payload = await verifyJwt(token, secret);
+  if (!payload || payload.role !== "admin") {
     throw new Error("Solo l'admin puo' gestire gli utenti");
   }
 }

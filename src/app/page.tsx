@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { listSessions, getReconciliationToday } from "@/lib/api";
+import { listSessions, getReconciliationToday, getStatistics } from "@/lib/api";
 import { ClipboardList, Wrench, Package, AlertTriangle, Users } from "lucide-react";
 import Link from "next/link";
 import { STATUS_CONFIG, getStatusConfig } from "@/lib/constants";
@@ -27,17 +27,25 @@ export default function Home() {
     Promise.all([
       listSessions({ limit: 20 }).catch(() => null),
       getReconciliationToday().catch(() => null),
+      getStatistics().catch(() => null),
     ])
-      .then(([data, recon]) => {
+      .then(([data, recon, statistics]) => {
         if (data) {
           const all = data.sessions || [];
           setSessions(all);
-          const today = new Date().toISOString().split("T")[0];
+          // Data di OGGI in ora italiana. toISOString() da' la data UTC: tra
+          // mezzanotte e le 02:00 (ora legale) restituiva IERI e "Sessioni oggi"
+          // contava il giorno sbagliato. Audit 16/07.
+          const today = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Europe/Rome",
+          }).format(new Date());
           setStats({
             oggi: all.filter((s: any) => s.session_date === today).length,
             attive: all.filter((s: any) => s.status !== "completata").length,
             pronti: all.filter((s: any) => s.status === "pronto_ritiro").length,
-            scadenze: 0,
+            // Prima era cablato a 0: la card mostrava "0 Scadenze prossime" anche
+            // con centinaia di tarature in scadenza. Ora dal backend. Audit 16/07.
+            scadenze: statistics?.scadenze_prossime_30gg ?? 0,
           });
         } else {
           setError("Errore di connessione al backend. Potrebbe essere in fase di avvio, riprova tra qualche secondo.");

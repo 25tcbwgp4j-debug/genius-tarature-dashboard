@@ -1,7 +1,7 @@
 "use server";
 
-import { cookies, headers } from "next/headers";
-import { AUTH_COOKIE_NAME } from "@/lib/auth";
+import { cookies } from "next/headers";
+import { AUTH_COOKIE_NAME, verifyJwt } from "@/lib/auth";
 
 const BACKEND_URL =
   process.env.BACKEND_URL ||
@@ -17,8 +17,15 @@ async function authedFetch(path: string, init: RequestInit = {}) {
 }
 
 async function ensureAdmin() {
-  const role = (await headers()).get("x-user-role");
-  if (role !== "admin") throw new Error("Solo l'admin può accedere all'audit log");
+  // Ruolo dal JWT firmato nel cookie, non da un header controllabile dal client
+  // (e che, com'era scritto il proxy, arrivava sempre null). Audit 16/07.
+  const token = (await cookies()).get(AUTH_COOKIE_NAME)?.value;
+  const secret = process.env.AUTH_JWT_SECRET || process.env.AUTH_SECRET || "";
+  if (!token || !secret) throw new Error("Sessione non valida: rifai il login");
+  const payload = await verifyJwt(token, secret);
+  if (!payload || payload.role !== "admin") {
+    throw new Error("Solo l'admin può accedere all'audit log");
+  }
 }
 
 export type AuditEvent = {

@@ -62,11 +62,20 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Espone dati utente alle pagine via header (lette solo lato server, non esposte al browser)
-  const res = NextResponse.next();
-  res.headers.set("x-user-email", payload.email);
-  res.headers.set("x-user-role", payload.role);
-  res.headers.set("x-user-id", payload.sub);
+  // Espone i dati utente alle pagine via header di RICHIESTA.
+  //
+  // Prima si faceva res.headers.set(...) su NextResponse.next(): quelli sono header
+  // di RISPOSTA (verso il browser), mentre headers() nei server component/action
+  // legge quelli della RICHIESTA. I due non comunicavano, quindi ensureAdmin()
+  // vedeva sempre role=null e /utenti e /audit erano rotti anche per l'admin —
+  // e per giunta email/ruolo/id finivano nella risposta HTTP verso il browser.
+  // La forma corretta e' NextResponse.next({ request: { headers } }), vedi
+  // node_modules/next/dist/docs/.../proxy.md "Setting Headers". Audit 16/07.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-user-email", payload.email);
+  requestHeaders.set("x-user-role", payload.role);
+  requestHeaders.set("x-user-id", payload.sub);
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
 
   // Refresh sliding (audit P1.15): se il token scade entro 7gg, chiamiamo
   // backend /api/auth/refresh e settiamo nuovo cookie. Best-effort: se la
