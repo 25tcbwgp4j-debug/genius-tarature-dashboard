@@ -42,7 +42,19 @@ export default function UsersTable({
     });
   };
 
-  const onToggle = (id: string, active: boolean) => {
+  // Disattivare un utente lo estromette subito dalla dashboard: partiva
+  // dall'icona Power da 14px senza alcuna conferma, con l'esito a un click di
+  // distanza da "Reset password". Come le altre azioni gravi del progetto
+  // (elimina cliente, marca rinnovato) ora chiede conferma. Audit 17/07.
+  const onToggle = (id: string, active: boolean, email: string) => {
+    const azione = active ? "Riattivare" : "Disattivare";
+    if (
+      !window.confirm(
+        `${azione} l'utente "${email}"?` +
+          (active ? "" : "\nNon potra' piu' accedere alla dashboard."),
+      )
+    )
+      return;
     setError(null);
     startTransition(async () => {
       try {
@@ -53,12 +65,40 @@ export default function UsersTable({
     });
   };
 
-  const onChangeRole = (id: string, role: "admin" | "operator") => {
+  // Il cambio ruolo parte dall'onChange di una <select>: bastava la rotella del
+  // mouse sopra il controllo, o una freccia da tastiera, per promuovere un
+  // operatore ad admin (quindi abilitato a cancellare clienti/sessioni/
+  // strumenti) senza nessun prompt. Ora si conferma; se l'operatore annulla si
+  // ripristina il valore mostrato dalla select. Audit 17/07.
+  const onChangeRole = (
+    select: HTMLSelectElement,
+    id: string,
+    email: string,
+    currentRole: "admin" | "operator",
+    role: "admin" | "operator",
+  ) => {
+    if (role === currentRole) return;
+    const avviso =
+      role === "admin"
+        ? `\n\nATTENZIONE: come admin potra' CANCELLARE clienti, sessioni, strumenti e rapporti.`
+        : `\n\nCome operatore perdera' il permesso di cancellazione.`;
+    if (
+      !window.confirm(
+        `Cambiare il ruolo di "${email}" da ${currentRole} a ${role}?${avviso}`,
+      )
+    ) {
+      // La select e' controllata da una prop che non cambia: senza questo
+      // ripristino esplicito React puo' non ri-renderizzare e il DOM
+      // resterebbe sul ruolo sbagliato, mai salvato.
+      select.value = currentRole;
+      return;
+    }
     setError(null);
     startTransition(async () => {
       try {
         await changeRoleAction(id, role);
       } catch (e: unknown) {
+        select.value = currentRole; // rollback: il salvataggio non e' avvenuto
         setError(e instanceof Error ? e.message : "Errore");
       }
     });
@@ -189,8 +229,17 @@ export default function UsersTable({
                   </td>
                   <td className="px-4 py-3">
                     <select
-                      value={u.role}
-                      onChange={(e) => onChangeRole(u.id, e.target.value as "admin" | "operator")}
+                      defaultValue={u.role}
+                      key={`${u.id}-${u.role}`}
+                      onChange={(e) =>
+                        onChangeRole(
+                          e.currentTarget,
+                          u.id,
+                          u.email,
+                          u.role,
+                          e.target.value as "admin" | "operator",
+                        )
+                      }
                       disabled={isSelf || isPending}
                       className="border border-gray-300 rounded px-2 py-1 text-xs disabled:opacity-50"
                     >
@@ -223,7 +272,7 @@ export default function UsersTable({
                         <KeyRound size={14} />
                       </button>
                       <button
-                        onClick={() => onToggle(u.id, !u.active)}
+                        onClick={() => onToggle(u.id, !u.active, u.email)}
                         disabled={isSelf || isPending}
                         title={u.active ? "Disattiva" : "Riattiva"}
                         className="p-2 rounded hover:bg-gray-100 text-gray-600 disabled:opacity-50"

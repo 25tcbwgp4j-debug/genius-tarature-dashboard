@@ -7,18 +7,60 @@ import { getAnalytics, formatDuration, type Analytics } from "@/lib/chat-api";
 export function AnalyticsWidget() {
   const [data, setData] = useState<Analytics | null>(null);
   const [days, setDays] = useState(7);
+  // "data === null" copriva sia il caricamento sia l'errore: una fetch fallita
+  // lasciava lo skeleton in animazione per sempre, come se stesse ancora
+  // caricando. I due stati ora sono distinti. Audit 17/07.
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let annullato = false; // scarta la risposta di un `days` ormai superato
+    setLoading(true);
+    setError(null);
     getAnalytics(days)
-      .then(setData)
-      .catch(() => setData(null));
-  }, [days]);
+      .then((d) => {
+        if (annullato) return;
+        setData(d);
+      })
+      .catch((e: unknown) => {
+        if (annullato) return;
+        setData(null);
+        setError(e instanceof Error ? e.message : "Errore caricamento analytics");
+      })
+      .finally(() => {
+        if (!annullato) setLoading(false);
+      });
+    return () => {
+      annullato = true;
+    };
+  }, [days, reloadKey]);
 
-  if (!data) {
+  if (loading) {
     return (
       <div className="p-4 animate-pulse bg-white rounded-xl border">
         <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
         <div className="h-8 bg-gray-200 rounded" />
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="p-4 bg-white rounded-xl border border-red-200">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-1">
+          <BarChart3 className="w-4 h-4 text-red-500" />
+          Analytics chat
+        </div>
+        <p className="text-xs text-red-600">
+          {error || "Dati non disponibili"}
+        </p>
+        <button
+          onClick={() => setReloadKey((k) => k + 1)}
+          className="mt-2 text-xs px-2 py-1 rounded bg-gray-50 hover:bg-gray-100 text-gray-700"
+        >
+          Riprova
+        </button>
       </div>
     );
   }

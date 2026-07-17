@@ -36,6 +36,11 @@ export function SendQuoteModal({
   const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [total, setTotal] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Invio riuscito: la modale resta montata 2500ms prima di chiudersi. Senza
+  // questo flag il pulsante tornava cliccabile in quella finestra e un secondo
+  // click inviava un SECONDO preventivo WhatsApp reale al cliente. Audit 17/07.
+  const [sent, setSent] = useState(false);
 
   function addItem() {
     setItems([...items, { type: "", qty: 1 }]);
@@ -52,7 +57,9 @@ export function SendQuoteModal({
   async function send() {
     const valid = items.filter((it) => it.type.trim() && it.qty > 0);
     if (valid.length === 0) return alert("Aggiungi almeno uno strumento");
+    if (sending || sent) return; // doppio invio: vedi commento su `sent`
     setSending(true);
+    setError(null);
     try {
       const r = await sendQuote({
         phone,
@@ -60,14 +67,26 @@ export function SendQuoteModal({
         discount_percent: discount,
         operator_email: operatorEmail,
       });
-      setPreview(r.body);
-      setTotal(r.total);
+      // preview/total venivano impostati PRIMA di controllare r.ok: con ok:false
+      // (invio WhatsApp fallito lato Meta) la UI mostrava comunque il riquadro
+      // verde "✓ Preventivo inviato" col totale, mentre il cliente non aveva
+      // ricevuto nulla. Il backend calcola il preventivo anche quando l'invio
+      // fallisce, quindi body/total esistono in entrambi i casi: si mostrano
+      // solo quando l'invio e' andato davvero a buon fine. Audit 17/07.
       if (r.ok) {
+        setPreview(r.body);
+        setTotal(r.total);
+        setSent(true);
         setTimeout(onClose, 2500);
+        return; // niente setSending(false): il pulsante resta bloccato
       }
+      setError(
+        "Preventivo NON inviato: WhatsApp ha rifiutato il messaggio. " +
+          "Verifica che il numero sia raggiungibile e riprova.",
+      );
+      setSending(false);
     } catch (e) {
-      alert(`Errore: ${(e as Error).message}`);
-    } finally {
+      setError(`Preventivo NON inviato: ${(e as Error).message}`);
       setSending(false);
     }
   }
@@ -137,6 +156,13 @@ export function SendQuoteModal({
             />
           </div>
 
+          {error && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="text-xs font-semibold text-red-700">Invio fallito</div>
+              <p className="text-xs text-red-700 mt-0.5">{error}</p>
+            </div>
+          )}
+
           {preview && (
             <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
               <div className="text-xs font-semibold text-emerald-700 mb-1">✓ Preventivo inviato</div>
@@ -156,10 +182,10 @@ export function SendQuoteModal({
           </button>
           <button
             onClick={send}
-            disabled={sending}
+            disabled={sending || sent}
             className="px-4 py-2 text-sm bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50"
           >
-            {sending ? "Invio..." : "Calcola e invia"}
+            {sent ? "Inviato" : sending ? "Invio..." : error ? "Riprova invio" : "Calcola e invia"}
           </button>
         </div>
       </div>

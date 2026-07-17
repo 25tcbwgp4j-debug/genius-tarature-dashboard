@@ -90,6 +90,12 @@ export default function SessionsPage() {
   const clearSelection = () => setSelectedIds(new Set());
 
   useEffect(() => {
+    // "Guardia ultima richiesta vince": senza, la risposta lenta di una ricerca
+    // vecchia (es. "ros") poteva arrivare dopo quella nuova ("rossi") e
+    // sovrascrivere la lista con risultati non piu' corrispondenti a cio' che
+    // e' scritto nel campo. listSessions non espone un AbortSignal, quindi si
+    // scartano gli esiti obsoleti con un flag nel cleanup. Audit 17/07.
+    let annullato = false;
     setLoading(true);
     const opts: Record<string, string | number | undefined> = {
       limit: PAGE_SIZE,
@@ -99,6 +105,7 @@ export default function SessionsPage() {
     if (dateFilter) opts.date = dateFilter;
     listSessions(opts as Parameters<typeof listSessions>[0])
       .then((data) => {
+        if (annullato) return;
         let rows = data.sessions || [];
         if (search.trim()) {
           const q = search.trim().toLowerCase();
@@ -111,8 +118,16 @@ export default function SessionsPage() {
         setSessions(rows);
         setTotal(data.total ?? data.count ?? 0);
       })
-      .catch(() => toast.error("Errore caricamento sessioni"))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (annullato) return;
+        toast.error("Errore caricamento sessioni");
+      })
+      .finally(() => {
+        if (!annullato) setLoading(false);
+      });
+    return () => {
+      annullato = true;
+    };
   }, [page, statusFilter, dateFilter, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));

@@ -5,8 +5,11 @@
 
 const BASE = "/api/backend/api/chat";
 
-async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { cache: "no-store" });
+// `signal` opzionale: serve a far arrivare davvero l'AbortController dei
+// chiamanti fino a fetch. Senza, una richiesta "annullata" restava in volo e
+// poteva atterrare dopo una piu' recente. Audit 17/07.
+async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { cache: "no-store", signal });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `API ${res.status}`);
@@ -96,17 +99,21 @@ export interface ConversationContext {
 
 // ===== API =====
 
-export async function listConversations(params: {
-  source?: string;
-  search?: string;
-  unreadOnly?: boolean;
-} = {}) {
+export async function listConversations(
+  params: {
+    source?: string;
+    search?: string;
+    unreadOnly?: boolean;
+  } = {},
+  signal?: AbortSignal,
+) {
   const qs = new URLSearchParams();
   if (params.source) qs.set("source", params.source);
   if (params.search) qs.set("search", params.search);
   if (params.unreadOnly) qs.set("unread_only", "true");
   return apiGet<{ conversations: Conversation[]; count: number }>(
     `/conversations?${qs.toString()}`,
+    signal,
   );
 }
 
@@ -550,13 +557,14 @@ export interface Contact {
   created_at: string;
 }
 
-export async function listContacts(q?: string, limit = 200, offset = 0) {
+export async function listContacts(q?: string, limit = 200, offset = 0, signal?: AbortSignal) {
   const qs = new URLSearchParams();
   if (q) qs.set("q", q);
   qs.set("limit", String(limit));
   qs.set("offset", String(offset));
   return apiGet<{ contacts: Contact[]; total: number; limit: number; offset: number }>(
-    `/contacts?${qs.toString()}`
+    `/contacts?${qs.toString()}`,
+    signal,
   );
 }
 

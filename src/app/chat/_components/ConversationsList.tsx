@@ -34,20 +34,43 @@ export function ConversationsList({
 }) {
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [loading, setLoading] = useState(true);
 
+  // Debounce della sola ricerca: digitando "mario" partivano 5 richieste, una
+  // per lettera. I click sui filtri restano immediati. Audit 17/07.
   useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    // Qui c'era un AbortController con ctrl.abort() nel cleanup, ma il signal
+    // non veniva mai passato a fetch: il codice SEMBRAVA protetto e non lo era.
+    // Se la risposta di "ma" atterrava dopo quella di "mario", la lista
+    // mostrava i risultati della query vecchia e si rischiava di aprire la chat
+    // del cliente SBAGLIATO. Ora il signal arriva davvero fino a fetch. Audit 17/07.
     const ctrl = new AbortController();
     setLoading(true);
     const source = filter === "unread" ? undefined : filter === "all" ? undefined : filter;
     const unreadOnly = filter === "unread";
-    listConversations({ source, search: search || undefined, unreadOnly })
+    listConversations(
+      { source, search: debouncedSearch || undefined, unreadOnly },
+      ctrl.signal,
+    )
       .then((res) => setConvs(res.conversations))
-      .catch(() => setConvs([]))
-      .finally(() => setLoading(false));
+      .catch((e: unknown) => {
+        // Una richiesta abortita non e' un errore: e' gia' partita quella che
+        // la sostituisce, sara' lei a impostare risultati e loading.
+        if (ctrl.signal.aborted || (e as Error)?.name === "AbortError") return;
+        setConvs([]);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
     return () => ctrl.abort();
-  }, [filter, search, refreshKey]);
+  }, [filter, debouncedSearch, refreshKey]);
 
   const totalUnread = useMemo(
     () => convs.reduce((s, c) => s + (c.unread_count || 0), 0),

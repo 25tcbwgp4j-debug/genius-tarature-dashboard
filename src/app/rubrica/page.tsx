@@ -15,27 +15,34 @@ export default function RubricaPage() {
   const [reconciling, setReconciling] = useState(false);
   const [reconcileMsg, setReconcileMsg] = useState<string | null>(null);
 
-  async function load() {
+  // load() usato dalle azioni (salva rinomina, riconcilia): ricarica "ora"
+  // senza debounce e senza abort. La ricerca reattiva usa invece l'effect sotto.
+  async function load(signal?: AbortSignal) {
     setLoading(true);
     try {
-      const r = await listContacts(q || undefined, 200, 0);
+      const r = await listContacts(q || undefined, 200, 0, signal);
       setContacts(r.contacts);
       setTotal(r.total);
     } catch (e: any) {
+      if (signal?.aborted || e?.name === "AbortError") return;
       console.error(e);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }
 
+  // Prima c'erano DUE effect: uno al mount che chiamava load() e uno su [q] con
+  // setTimeout(load, 300). Al mount partivano quindi 2 richieste identiche, e
+  // svuotando la casella si aveva una race tra le due. Unificati in un solo
+  // effect con debounce + abort: la risposta di una query vecchia non puo' piu'
+  // sovrascrivere quella corrente. Audit 17/07.
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const t = setTimeout(load, 300);
-    return () => clearTimeout(t);
+    const ctrl = new AbortController();
+    const t = setTimeout(() => load(ctrl.signal), 300);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 

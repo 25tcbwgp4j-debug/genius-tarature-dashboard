@@ -42,6 +42,7 @@ export default function ClientiPage() {
   const [query, setQuery] = useState("");
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"search" | "list">("list");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
@@ -66,6 +67,7 @@ export default function ClientiPage() {
   // Carica lista paginata
   const loadList = async (p: number, f: string) => {
     setLoading(true);
+    setError(null);
     try {
       const filterParam = f === "all" ? undefined : f;
       const data = await listCustomers(p, 30, filterParam);
@@ -73,7 +75,17 @@ export default function ClientiPage() {
       setTotalPages(data.pages || 0);
       setTotal(data.total || 0);
       setMode("list");
-    } catch {
+    } catch (e) {
+      // Il catch era vuoto. Al primo caricamento fallito la pagina diceva
+      // "Nessun cliente trovato" (indistinguibile da un archivio vuoto); a
+      // filtro cambiato restava in video la lista PRECEDENTE con total/
+      // totalPages del filtro vecchio, spacciata per il risultato corrente.
+      // Si azzera tutto e si dichiara l'errore. Audit 17/07.
+      setCustomers([]);
+      setTotalPages(0);
+      setTotal(0);
+      setMode("list");
+      setError(e instanceof Error ? e.message : "Errore caricamento clienti");
     } finally {
       setLoading(false);
     }
@@ -81,18 +93,25 @@ export default function ClientiPage() {
 
   // Carica stats
   useEffect(() => {
-    getCustomerStats().then(setStats).catch(() => {});
+    // Stats non critiche: se falliscono le card restano nascoste, ma l'errore
+    // della lista sopra e' gia' visibile. Nessun dato falso mostrato.
+    getCustomerStats().then(setStats).catch(() => setStats(null));
     loadList(1, "all");
   }, []);
 
   const handleSearch = async () => {
     if (query.length < 2) return;
     setLoading(true);
+    setError(null);
     setMode("search");
     try {
       const data = await searchCustomers(query, 50);
       setCustomers(data.customers || []);
-    } catch {
+    } catch (e) {
+      // Stessa guardia di loadList: senza svuotare, i risultati della ricerca
+      // precedente restavano a schermo come se fossero quelli nuovi.
+      setCustomers([]);
+      setError(e instanceof Error ? e.message : "Errore ricerca clienti");
     } finally {
       setLoading(false);
     }
@@ -188,6 +207,32 @@ export default function ClientiPage() {
         onSynced={() => loadList(page, filter)}
       />
 
+      {/* Banner errore: senza, una lista vuota per errore era identica a
+          "nessun cliente". Audit 17/07. */}
+      {error && (
+        <Card className="p-4 border-red-300 bg-red-50">
+          <div className="flex items-center gap-3 flex-wrap">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+            <div className="flex-1 min-w-[200px]">
+              <p className="font-semibold text-red-900">Clienti non caricati</p>
+              <p className="text-sm text-red-800">
+                {error} · L&apos;elenco qui sotto e&apos; vuoto per un errore, non perche&apos;
+                non ci siano clienti.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => (mode === "search" ? handleSearch() : loadList(page, filter))}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+              Riprova
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
@@ -265,7 +310,10 @@ export default function ClientiPage() {
       <Card>
         <div className="p-3 border-b flex justify-between items-center">
           <span className="text-sm text-gray-500">
-            {mode === "search"
+            {/* Su errore non si dichiarano conteggi: sarebbero inventati. */}
+            {error
+              ? "Dati non disponibili"
+              : mode === "search"
               ? `${customers.length} risultati per "${query}"`
               : `${total} clienti — Pagina ${page}/${totalPages}`}
           </span>
@@ -294,6 +342,12 @@ export default function ClientiPage() {
           {loading ? (
             <div className="p-8 text-center">
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
+            </div>
+          ) : error ? (
+            <div className="p-8 text-center">
+              <AlertCircle className="w-6 h-6 mx-auto text-red-400 mb-2" />
+              <p className="text-red-600 font-medium">Impossibile caricare i clienti</p>
+              <p className="text-sm text-gray-500 mt-1">Usa &quot;Riprova&quot; qui sopra.</p>
             </div>
           ) : customers.length === 0 ? (
             <p className="p-8 text-center text-gray-500">Nessun cliente trovato</p>

@@ -70,6 +70,8 @@ export default function ScadenzarioPage() {
   const [entries, setEntries] = useState<ScheduleEntry[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [sending, setSending] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -80,6 +82,7 @@ export default function ScadenzarioPage() {
   // Carica dati con range ampio (12 mesi) per avere tutto
   useEffect(() => {
     setLoading(true);
+    setError(null);
     Promise.all([
       getExpiringCalibrations(maxDays),
       getScheduleStats(),
@@ -88,9 +91,18 @@ export default function ScadenzarioPage() {
         setEntries(expData.expiring || []);
         setStats(statsData);
       })
-      .catch(() => {})
+      // Il catch era vuoto: con backend giu' o 401 restavano entries=[] e
+      // stats=null, cioe' esattamente la stessa schermata di "tutto ok, nessuna
+      // taratura in scadenza". L'operatore chiudeva la pagina convinto di non
+      // avere nulla da fare e i clienti non venivano avvisati. L'errore ora e'
+      // esplicito e distinto da "nessun risultato". Audit 17/07.
+      .catch((err) => {
+        setEntries([]);
+        setStats(null);
+        setError(err instanceof Error ? err.message : "Errore sconosciuto");
+      })
       .finally(() => setLoading(false));
-  }, [maxDays]);
+  }, [maxDays, reloadKey]);
 
   const getDaysLeft = (dateStr: string) => {
     const diff = new Date(dateStr).getTime() - Date.now();
@@ -238,6 +250,36 @@ export default function ScadenzarioPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Scadenzario tarature</h2>
+
+      {/* Banner errore: senza questo un caricamento fallito era indistinguibile
+          da uno scadenzario vuoto (nessun cliente da avvisare). Audit 17/07. */}
+      {error && (
+        <Card className="p-4 border-red-300 bg-red-50">
+          <div className="flex items-center gap-3 flex-wrap">
+            <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
+            <div className="flex-1 min-w-[200px]">
+              <p className="font-semibold text-red-900">
+                Scadenzario NON caricato — elenco non attendibile
+              </p>
+              <p className="text-sm text-red-800">
+                {error} · La lista qui sotto e&apos; vuota per un errore, non perche&apos; non
+                ci siano tarature in scadenza. Non chiudere la pagina senza aver riprovato.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setReloadKey((k) => k + 1)}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+              ) : null}
+              Riprova
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Statistiche */}
       {stats && (
@@ -399,14 +441,26 @@ export default function ScadenzarioPage() {
         <div className="p-4 border-b flex justify-between items-center">
           <h3 className="font-semibold flex items-center gap-2">
             <CalendarClock className="w-5 h-5" />
-            {filtered.length} clienti
-            {searchQuery && ` per "${searchQuery}"`}
+            {/* Su errore non si scrive "0 clienti": sarebbe un dato falso. */}
+            {error ? "Dati non disponibili" : `${filtered.length} clienti`}
+            {!error && searchQuery && ` per "${searchQuery}"`}
           </h3>
         </div>
         <div className="divide-y">
           {loading ? (
             <div className="p-8 text-center">
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
+            </div>
+          ) : error ? (
+            <div className="p-8 text-center">
+              <AlertTriangle className="w-6 h-6 mx-auto text-red-400 mb-2" />
+              <p className="text-red-600 font-medium">
+                Impossibile caricare lo scadenzario
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                Usa &quot;Riprova&quot; qui sopra. Finche&apos; l&apos;errore resta, non e&apos;
+                possibile sapere quali clienti vanno avvisati.
+              </p>
             </div>
           ) : filtered.length === 0 ? (
             <p className="p-8 text-center text-gray-500">
