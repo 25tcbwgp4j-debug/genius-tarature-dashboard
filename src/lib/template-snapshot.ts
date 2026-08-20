@@ -6,6 +6,20 @@
  *
  * Se i template vengono modificati in Meta Manager, aggiornare TEMPLATE_BODIES.
  * Allineato a `genius-tarature/whatsapp_template_render.py`.
+ *
+ * ⚠️ DA CORREGGERE SU META (20/08/2026) — i testi qui sotto sono lo SPECCHIO di quello
+ * che sta su Meta, non la sorgente: le stringhe ACCREDIA vanno cambiate in Meta Manager
+ * (edit + nuova review), poi ricopiate qui. Il laboratorio NON e' un centro LAT
+ * accreditato, ha riferibilita' metrologica tramite campioni con certificato LAT:
+ *   - fgas_renewal_offer      "Certificazione ACCREDIA"
+ *                             -> "RdT con riferibilita' ACCREDIA LAT"
+ *   - cold_calibration_intro  "Offriamo taratura ACCREDIA per:"
+ *                             -> "Rapporti di Taratura con riferibilita' ACCREDIA LAT per:"
+ *   - session_delivered_paper "i certificati di taratura ACCREDIA e i Rapporti..."
+ *                             -> "i Rapporti di Taratura (RdT) originali firmati..."
+ * Inoltre gl_device_received / gl_ready_for_pickup hanno il placeholder mai risolto
+ * "Via XXX, Roma": va messo l'indirizzo reale.
+ * Elenco completo e testi corretti in whatsapp_template_render.py.
  */
 
 export const TEMPLATE_BODIES: Record<string, string> = {
