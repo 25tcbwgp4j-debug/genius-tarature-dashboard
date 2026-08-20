@@ -415,6 +415,7 @@ export async function listProspects(params: {
   status?: string;
   provincia?: string;
   search?: string;
+  has_email?: boolean;
 }) {
   const qs = new URLSearchParams();
   if (params.page) qs.set('page', String(params.page));
@@ -422,6 +423,9 @@ export async function listProspects(params: {
   if (params.status) qs.set('status', params.status);
   if (params.provincia) qs.set('provincia', params.provincia);
   if (params.search) qs.set('search', params.search);
+  // il backend accetta has_email da sempre, il client non lo passava mai:
+  // il select "Con/Senza email" in pagina era inerte. (20/08/2026)
+  if (params.has_email !== undefined) qs.set('has_email', String(params.has_email));
   return fetchAPI(`/api/prospects?${qs.toString()}`);
 }
 

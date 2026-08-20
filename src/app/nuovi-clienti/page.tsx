@@ -84,6 +84,8 @@ export default function NuoviClientiPage() {
       };
       if (search) params.search = search;
       if (filterProv) params.provincia = filterProv;
+      if (filterEmail === "yes") params.has_email = true;
+      if (filterEmail === "no") params.has_email = false;
       const data = await listProspects(params);
       setProspects(data.prospects || []);
       setTotalPages(data.pages || 1);
@@ -93,7 +95,7 @@ export default function NuoviClientiPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, filterProv, tab]);
+  }, [page, search, filterProv, filterEmail, tab]);
 
   const fetchStats = async () => {
     try {

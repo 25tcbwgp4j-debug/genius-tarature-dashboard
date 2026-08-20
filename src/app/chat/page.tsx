@@ -18,6 +18,14 @@ export default function ChatPage() {
   const [showBroadcast, setShowBroadcast] = useState(false);
   const bumpRefresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
+  // Deep-link /chat?phone=39... : la Rubrica ci linka da sempre, ma il
+  // parametro non veniva mai letto e la chat si apriva vuota. (20/08/2026)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const phone = new URLSearchParams(window.location.search).get("phone");
+    if (phone) setSelectedPhone(phone);
+  }, []);
+
   useEffect(() => {
     const sb = getSupabaseBrowser();
     if (!sb) return;

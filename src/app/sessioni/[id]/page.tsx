@@ -1344,7 +1344,7 @@ export default function SessionDetail() {
                   setActionLoading("stripe_link");
                   try {
                     const r = await fetch(
-                      `${process.env.NEXT_PUBLIC_API_URL || ""}/api/backend/sessions/${sessionId}/checkout-link`,
+                      `/api/backend/api/sessions/${sessionId}/checkout-link`,
                       { method: "POST" }
                     );
                     if (!r.ok) throw new Error(`Backend ${r.status}`);

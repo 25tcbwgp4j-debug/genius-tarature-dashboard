@@ -382,11 +382,12 @@ export default function SessionsPage() {
                 if (!confirm(`Inviare notifica "Pronti al ritiro" a ${selectedIds.size} sessioni? Verranno inviati Email + WhatsApp con rate-limit 1/sec.`)) return;
                 setBulkRunning("notify-ready");
                 try {
-                  const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/backend/sessions/bulk-action`, {
+                  const r = await fetch("/api/backend/api/sessions/bulk-action", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ action: "notify-ready", session_ids: Array.from(selectedIds) }),
                   });
+                  if (!r.ok) throw new Error(`HTTP ${r.status}`);
                   const data = await r.json();
                   toast.success(`Bulk completato: ${data.success}/${data.total} OK`);
                   clearSelection();
@@ -413,11 +414,12 @@ export default function SessionsPage() {
                 if (!confirm(`Marcare ${selectedIds.size} sessioni come pagate via ${method}?`)) return;
                 setBulkRunning("mark-paid");
                 try {
-                  const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/backend/sessions/bulk-action`, {
+                  const r = await fetch("/api/backend/api/sessions/bulk-action", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ action: "mark-paid", session_ids: Array.from(selectedIds), extra: { payment_method: method } }),
                   });
+                  if (!r.ok) throw new Error(`HTTP ${r.status}`);
                   const data = await r.json();
                   toast.success(`${data.success}/${data.total} marcati come pagati (${method})`);
                   clearSelection();
@@ -440,7 +442,7 @@ export default function SessionsPage() {
                 const params = new URLSearchParams();
                 if (statusFilter) params.set("status", statusFilter);
                 if (dateFilter) params.set("date_from", dateFilter);
-                window.open(`/api/backend/sessions/export.xlsx?${params}`, "_blank");
+                window.open(`/api/backend/api/sessions-export.xlsx?${params}`, "_blank");
               }}
             >
               <FileDown className="w-3 h-3 mr-1" /> Excel

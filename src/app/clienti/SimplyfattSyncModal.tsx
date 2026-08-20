@@ -7,7 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, X, Upload, RefreshCw, UserPlus, Pencil, Download } from "lucide-react";
 import { toast } from "sonner";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+// Va dal proxy Next, non diretto a Railway: il middleware di auth del
+// backend rifiuta ogni chiamata senza X-API-Key/JWT, e la chiave sta
+// solo lato server. (20/08/2026)
+const API_BASE = "/api/backend";
 
 interface SyncNew {
   ragione_sociale: string;
