@@ -186,10 +186,15 @@ export default function RubricaPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-700">{c.email || "—"}</td>
                   <td className="px-4 py-3 text-gray-500 font-mono text-xs">{c.vat_number || "—"}</td>
+                  {/* La colonna diceva «attivo» leggendo `whatsapp_active`, che in
+                      `customers` non esiste: era sempre vuota, e chiederla all'API
+                      faceva rispondere 500 lasciando tutta la Rubrica bianca.
+                      Ora mostra se il contatto ha un numero WhatsApp, che e' il
+                      dato che serve davvero per scrivergli. (24/09/2026) */}
                   <td className="px-4 py-3">
-                    {c.whatsapp_active ? (
+                    {c.whatsapp_phone ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-xs">
-                        ● attivo
+                        ● WhatsApp
                       </span>
                     ) : (
                       <span className="text-gray-400 text-xs">—</span>

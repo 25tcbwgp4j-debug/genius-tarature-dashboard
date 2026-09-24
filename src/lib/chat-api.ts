@@ -553,7 +553,8 @@ export interface Contact {
   phone1: string | null;
   whatsapp_phone: string | null;
   vat_number: string | null;
-  whatsapp_active: boolean | null;
+  // `whatsapp_active` non esiste in `customers`: chiederla faceva rispondere
+  // 500 all'API e lasciava la Rubrica vuota. Tolta anche di qui. (24/09/2026)
   created_at: string;
 }
 
