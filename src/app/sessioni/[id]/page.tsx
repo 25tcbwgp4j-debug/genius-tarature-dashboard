@@ -429,7 +429,9 @@ export default function SessionDetail() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Indietro
           </Button>
-          <h2 className="text-2xl font-bold text-gray-900">Dettaglio sessione</h2>
+          <h2 className="text-2xl font-bold text-gray-900">
+            {session.session_number != null ? `Sessione N. ${session.session_number}` : "Dettaglio sessione"}
+          </h2>
           {(() => {
             const cfg = getStatusConfig(session.status, { shippingIncluded: !!session.shipping_included });
             return (
@@ -1410,8 +1412,9 @@ export default function SessionDetail() {
       <Card className="p-4">
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
           <div>
-            <span className="text-gray-500">ID:</span>
-            <p className="font-mono text-xs">{session.id?.substring(0, 8)}</p>
+            <span className="text-gray-500">N. sessione:</span>
+            <p className="font-mono">{session.session_number ?? "—"}</p>
+            <p className="font-mono text-xs text-gray-400">ID {session.id?.substring(0, 8)}</p>
           </div>
           <div>
             <span className="text-gray-500">Data:</span>

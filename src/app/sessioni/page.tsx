@@ -109,7 +109,10 @@ export default function SessionsPage() {
         let rows = data.sessions || [];
         if (search.trim()) {
           const q = search.trim().toLowerCase();
-          rows = rows.filter((s: { customers?: { company_name?: string; vat_number?: string } | null; operator?: string }) =>
+          // "165", "n. 165", "n165": ricerca per numero di sessione
+          const qNum = q.replace(/^n\.?\s*/, "");
+          rows = rows.filter((s: { customers?: { company_name?: string; vat_number?: string } | null; operator?: string; session_number?: number }) =>
+            (/^\d+$/.test(qNum) && String(s.session_number ?? "") === qNum) ||
             (s.customers?.company_name || "").toLowerCase().includes(q) ||
             (s.customers?.vat_number || "").toLowerCase().includes(q) ||
             (s.operator || "").toLowerCase().includes(q),
@@ -320,7 +323,7 @@ export default function SessionsPage() {
           {/* Search testuale (cliente/operator) */}
           <div className="flex items-center gap-1 flex-1 min-w-[200px]">
             <Input
-              placeholder="Cerca cliente / P.IVA / operatore..."
+              placeholder="Cerca n. sessione / cliente / P.IVA / operatore..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => {
@@ -496,7 +499,12 @@ export default function SessionsPage() {
                 >
                   {/* Riga 1: cliente + importo + badge stato + badge pagamento */}
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium truncate">{s.customers?.company_name || "N/D"}</p>
+                    <p className="font-medium truncate">
+                      {s.session_number != null && (
+                        <span className="mr-2 font-mono text-sm text-gray-500">N. {s.session_number}</span>
+                      )}
+                      {s.customers?.company_name || "N/D"}
+                    </p>
                     <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
                       <span className="text-sm font-semibold text-gray-700">
                         EUR {parseFloat(s.total_amount || 0).toFixed(2)}
