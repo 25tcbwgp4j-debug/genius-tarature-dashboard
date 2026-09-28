@@ -111,6 +111,9 @@ function ActionTimestamp({ ts, prefix }: { ts: string | null | undefined; prefix
 // entrambi. "Lavorazione esterna" = la tara un altro laboratorio (es. Testo)
 // o è una fornitura: resta in sessione e in fattura, ma niente RDT nostro.
 type SondaState = {
+  manufacturer?: string;
+  model?: string;
+  serial_number?: string;
   con_sonda?: boolean;
   probe_model?: string;
   probe_serial_number?: string;
@@ -139,10 +142,51 @@ function SondaFields({ value, onChange }: { value: SondaState; onChange: (patch:
         </button>
       </div>
 
-      {value.con_sonda && (
-        <div className="grid grid-cols-1 gap-2 rounded-md border border-blue-200 bg-blue-50 p-2 sm:grid-cols-2">
+      {/* Riquadro blu dei dati da scrivere: STRUMENTO se pezzo unico,
+          UNITÀ BASE + SONDA (due riquadri, uno sotto l'altro) se combo. */}
+      <div className="rounded-md border border-blue-200 bg-blue-50 p-2">
+        <p className="mb-1 text-xs font-bold uppercase tracking-wide text-blue-900">
+          {value.con_sonda ? "Unità base" : "Strumento"}
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <div>
-            <label className="text-xs font-semibold text-blue-900">SONDA – modello / codice</label>
+            <label className="text-xs font-semibold text-blue-900">Marca</label>
+            <Input
+              value={value.manufacturer || ""}
+              onChange={(e) => onChange({ manufacturer: e.target.value })}
+              className="h-9 bg-white text-sm"
+              placeholder="es. Testo"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-blue-900">Modello / codice</label>
+            <Input
+              value={value.model || ""}
+              onChange={(e) => onChange({ model: e.target.value })}
+              className="h-9 bg-white text-sm"
+              placeholder={value.con_sonda ? "es. testo 400 (0560 0400)" : "es. testo 605i (0560 1605)"}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-blue-900">
+              {value.con_sonda ? "Seriale UNITÀ BASE" : "Seriale / matricola"}
+            </label>
+            <Input
+              value={value.serial_number || ""}
+              onChange={(e) => onChange({ serial_number: e.target.value })}
+              className="h-9 bg-white text-sm"
+              placeholder="es. 62080722"
+            />
+          </div>
+        </div>
+      </div>
+
+      {value.con_sonda && (
+        <div className="rounded-md border border-blue-200 bg-blue-50 p-2">
+        <p className="mb-1 text-xs font-bold uppercase tracking-wide text-blue-900">Sonda</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div>
+            <label className="text-xs font-semibold text-blue-900">Modello / codice</label>
             <Input
               value={value.probe_model || ""}
               onChange={(e) => onChange({ probe_model: e.target.value })}
@@ -151,7 +195,7 @@ function SondaFields({ value, onChange }: { value: SondaState; onChange: (patch:
             />
           </div>
           <div>
-            <label className="text-xs font-semibold text-blue-900">SONDA – seriale</label>
+            <label className="text-xs font-semibold text-blue-900">Seriale SONDA</label>
             <Input
               value={value.probe_serial_number || ""}
               onChange={(e) => onChange({ probe_serial_number: e.target.value })}
@@ -159,6 +203,7 @@ function SondaFields({ value, onChange }: { value: SondaState; onChange: (patch:
               placeholder="es. 62055806"
             />
           </div>
+        </div>
         </div>
       )}
 
@@ -876,35 +921,6 @@ export default function SessionDetail() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
               <div>
-                <label className="text-xs text-gray-600">Marca</label>
-                <Input
-                  value={newInstrument.manufacturer}
-                  onChange={(e) => setNewInstrument({ ...newInstrument, manufacturer: e.target.value })}
-                  className="h-9 text-sm"
-                  placeholder="es. Testo"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-600">Modello</label>
-                <Input
-                  value={newInstrument.model}
-                  onChange={(e) => setNewInstrument({ ...newInstrument, model: e.target.value })}
-                  className="h-9 text-sm"
-                  placeholder="es. 550"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-600">
-                  {newInstrument.con_sonda ? "Seriale UNITÀ BASE" : "Seriale/Matr."}
-                </label>
-                <Input
-                  value={newInstrument.serial_number}
-                  onChange={(e) => setNewInstrument({ ...newInstrument, serial_number: e.target.value })}
-                  className="h-9 text-sm"
-                  placeholder="es. 12345"
-                />
-              </div>
-              <div>
                 <label className="text-xs text-gray-600">Prezzo EUR</label>
                 <Input
                   type="number"
@@ -989,38 +1005,12 @@ export default function SessionDetail() {
                     value={editInstrumentData || {}}
                     onChange={(patch) => setEditInstrumentData({ ...editInstrumentData, ...patch })}
                   />
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                    <div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="sm:col-span-2">
                       <label className="text-xs text-gray-500">Nome (override)</label>
                       <Input
                         value={editInstrumentData?.instrument_name || ""}
                         onChange={(e) => setEditInstrumentData({ ...editInstrumentData, instrument_name: e.target.value })}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500">Marca</label>
-                      <Input
-                        value={editInstrumentData?.manufacturer || ""}
-                        onChange={(e) => setEditInstrumentData({ ...editInstrumentData, manufacturer: e.target.value })}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500">Modello</label>
-                      <Input
-                        value={editInstrumentData?.model || ""}
-                        onChange={(e) => setEditInstrumentData({ ...editInstrumentData, model: e.target.value })}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500">
-                        {editInstrumentData?.con_sonda ? "Seriale UNITÀ BASE" : "Seriale/Matricola"}
-                      </label>
-                      <Input
-                        value={editInstrumentData?.serial_number || ""}
-                        onChange={(e) => setEditInstrumentData({ ...editInstrumentData, serial_number: e.target.value })}
                         className="h-8 text-sm"
                       />
                     </div>
@@ -1070,9 +1060,9 @@ export default function SessionDetail() {
                         </p>
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-500">
-                        {inst.manufacturer} {inst.model}
-                        {inst.serial_number && ` - Matr. ${inst.serial_number}`}
+                      <p className="mt-1 text-sm text-gray-600">
+                        <span className="inline-block w-24 text-xs font-semibold uppercase text-gray-500">Strumento</span>
+                        {inst.manufacturer} {inst.model} — Matr. <span className="font-mono">{inst.serial_number || "n.d."}</span>
                       </p>
                     )}
                   </div>
