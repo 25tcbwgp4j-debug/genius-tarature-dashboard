@@ -117,49 +117,70 @@ type SondaState = {
   external_processing?: boolean;
 };
 
+// Va messo SUBITO sotto il tipo di strumento (richiesta Christian 28/09):
+// la composizione dello strumento si decide prima di scrivere marca e
+// seriale, cosi' non si confonde la matricola della base con quella della sonda.
 function SondaFields({ value, onChange }: { value: SondaState; onChange: (patch: SondaState) => void }) {
+  const scelta = (attiva: boolean) =>
+    `flex-1 rounded-md border-2 px-3 py-2 text-left text-sm transition-colors ${
+      attiva ? "border-blue-600 bg-blue-50 text-blue-900" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+    }`;
   return (
-    <div className="mb-3 space-y-2">
-      <div className="flex flex-wrap gap-4 text-sm">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={!!value.con_sonda}
-            onChange={(e) => onChange({ con_sonda: e.target.checked })}
-          />
-          Strumento con sonda (unità base + sonda = 1 rapporto)
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={!!value.external_processing}
-            onChange={(e) => onChange({ external_processing: e.target.checked })}
-          />
-          Lavorazione esterna / fornitura (nessun rapporto nostro)
-        </label>
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-gray-700">Com&apos;è fatto lo strumento? (1 riga = 1 rapporto di taratura)</p>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button type="button" className={scelta(!value.con_sonda)} onClick={() => onChange({ con_sonda: false })}>
+          <span className="font-semibold">Pezzo unico</span>
+          <span className="block text-xs">un solo seriale (es. cercafughe, testo 605i)</span>
+        </button>
+        <button type="button" className={scelta(!!value.con_sonda)} onClick={() => onChange({ con_sonda: true })}>
+          <span className="font-semibold">Unità base + sonda</span>
+          <span className="block text-xs">un rapporto con il seriale della base E della sonda</span>
+        </button>
       </div>
+
       {value.con_sonda && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <div className="col-span-2">
-            <label className="text-xs text-gray-600">Sonda – modello / codice</label>
+        <div className="grid grid-cols-1 gap-2 rounded-md border border-blue-200 bg-blue-50 p-2 sm:grid-cols-2">
+          <div>
+            <label className="text-xs font-semibold text-blue-900">SONDA – modello / codice</label>
             <Input
               value={value.probe_model || ""}
               onChange={(e) => onChange({ probe_model: e.target.value })}
-              className="h-9 text-sm"
-              placeholder="es. sonda filo caldo 0628 0152"
+              className="h-9 bg-white text-sm"
+              placeholder="es. sonda comfort 0628 0152 «806»"
             />
           </div>
-          <div className="col-span-2">
-            <label className="text-xs text-gray-600">Sonda – seriale</label>
+          <div>
+            <label className="text-xs font-semibold text-blue-900">SONDA – seriale</label>
             <Input
               value={value.probe_serial_number || ""}
               onChange={(e) => onChange({ probe_serial_number: e.target.value })}
-              className="h-9 text-sm"
+              className="h-9 bg-white text-sm"
               placeholder="es. 62055806"
             />
           </div>
         </div>
       )}
+
+      <label
+        className={`flex cursor-pointer items-start gap-2 rounded-md border-2 px-3 py-2 text-sm ${
+          value.external_processing ? "border-orange-500 bg-orange-50 text-orange-900" : "border-gray-200 text-gray-600"
+        }`}
+      >
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={!!value.external_processing}
+          onChange={(e) => onChange({ external_processing: e.target.checked })}
+        />
+        <span>
+          <span className="font-semibold">NON lo tariamo noi</span> — lavorazione presso un altro laboratorio (es. Testo)
+          oppure fornitura/vendita
+          <span className="block text-xs">
+            Resta nella sessione e in fattura, ma non genera un nostro rapporto e non va nello scadenzario.
+          </span>
+        </span>
+      </label>
     </div>
   );
 }
@@ -832,9 +853,9 @@ export default function SessionDetail() {
         {addingInstrument && (
           <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
             <h4 className="font-semibold mb-3 text-green-900">Nuovo strumento</h4>
-            <div className="grid grid-cols-6 gap-2 mb-3">
-              <div className="col-span-2">
-                <label className="text-xs text-gray-600">Tipo strumento *</label>
+            <div className="mb-3 space-y-3">
+              <div>
+                <label className="text-xs text-gray-600">Tipo strumento * (cosa misura: es. base + sonda di temperatura = TERMOMETRO SONDA)</label>
                 <select
                   className="w-full h-9 text-sm border rounded px-2 bg-white"
                   value={newInstrument.instrument_type_id}
@@ -848,6 +869,12 @@ export default function SessionDetail() {
                   ))}
                 </select>
               </div>
+              <SondaFields
+                value={newInstrument}
+                onChange={(patch) => setNewInstrument({ ...newInstrument, ...patch })}
+              />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
               <div>
                 <label className="text-xs text-gray-600">Marca</label>
                 <Input
@@ -868,7 +895,7 @@ export default function SessionDetail() {
               </div>
               <div>
                 <label className="text-xs text-gray-600">
-                  {newInstrument.con_sonda ? "Seriale unità base" : "Seriale/Matr."}
+                  {newInstrument.con_sonda ? "Seriale UNITÀ BASE" : "Seriale/Matr."}
                 </label>
                 <Input
                   value={newInstrument.serial_number}
@@ -888,10 +915,6 @@ export default function SessionDetail() {
                 />
               </div>
             </div>
-            <SondaFields
-              value={newInstrument}
-              onChange={(patch) => setNewInstrument({ ...newInstrument, ...patch })}
-            />
             <div className="flex gap-2 justify-end">
               <Button
                 variant="outline"
@@ -937,8 +960,7 @@ export default function SessionDetail() {
               {editingInstrument === inst.id ? (
                 /* Modifica strumento — 20/05 ora include conversione TIPO */
                 <div className="space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
-                    <div className="sm:col-span-2">
+                  <div>
                       <label className="text-xs text-gray-500">
                         Tipo strumento <span className="text-purple-600 font-semibold">(conversione)</span>
                       </label>
@@ -962,7 +984,12 @@ export default function SessionDetail() {
                           <option key={t.id} value={t.id}>{t.name} (EUR {parseFloat(String(t.price)).toFixed(2)})</option>
                         ))}
                       </select>
-                    </div>
+                  </div>
+                  <SondaFields
+                    value={editInstrumentData || {}}
+                    onChange={(patch) => setEditInstrumentData({ ...editInstrumentData, ...patch })}
+                  />
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     <div>
                       <label className="text-xs text-gray-500">Nome (override)</label>
                       <Input
@@ -989,7 +1016,7 @@ export default function SessionDetail() {
                     </div>
                     <div>
                       <label className="text-xs text-gray-500">
-                        {editInstrumentData?.con_sonda ? "Seriale unità base" : "Seriale/Matricola"}
+                        {editInstrumentData?.con_sonda ? "Seriale UNITÀ BASE" : "Seriale/Matricola"}
                       </label>
                       <Input
                         value={editInstrumentData?.serial_number || ""}
@@ -1008,10 +1035,6 @@ export default function SessionDetail() {
                       />
                     </div>
                   </div>
-                  <SondaFields
-                    value={editInstrumentData || {}}
-                    onChange={(patch) => setEditInstrumentData({ ...editInstrumentData, ...patch })}
-                  />
                   <div className="flex gap-2 justify-end">
                     <Button variant="outline" size="sm" onClick={() => { setEditingInstrument(null); setEditInstrumentData(null); }}>
                       <X className="w-4 h-4 mr-1" /> Annulla
@@ -1034,14 +1057,22 @@ export default function SessionDetail() {
                         </Badge>
                       )}
                     </p>
-                    <p className="text-sm text-gray-500">
-                      {inst.manufacturer} {inst.model}
-                      {inst.serial_number && ` - Matr. ${inst.serial_number}`}
-                    </p>
-                    {(inst.probe_model || inst.probe_serial_number) && (
+                    {inst.probe_model || inst.probe_serial_number ? (
+                      <div className="mt-1 space-y-0.5 text-sm">
+                        <p className="text-gray-600">
+                          <span className="inline-block w-24 text-xs font-semibold uppercase text-gray-500">Unità base</span>
+                          {inst.manufacturer} {inst.model} — Matr. <span className="font-mono">{inst.serial_number || "n.d."}</span>
+                        </p>
+                        <p className="text-blue-800">
+                          <span className="inline-block w-24 text-xs font-semibold uppercase text-blue-600">Sonda</span>
+                          {inst.probe_model || "—"} — Matr.{" "}
+                          <span className="font-mono">{inst.probe_serial_number || "DA INSERIRE"}</span>
+                        </p>
+                      </div>
+                    ) : (
                       <p className="text-sm text-gray-500">
-                        + Sonda {inst.probe_model || ""}
-                        {` - Matr. sonda ${inst.probe_serial_number || "n.d."}`}
+                        {inst.manufacturer} {inst.model}
+                        {inst.serial_number && ` - Matr. ${inst.serial_number}`}
                       </p>
                     )}
                   </div>
