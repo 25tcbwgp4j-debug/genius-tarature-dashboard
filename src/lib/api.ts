@@ -123,6 +123,11 @@ export async function addInstrument(data: {
   model?: string;
   serial_number?: string;
   price?: number;
+  // Unita' base + sonda = un solo rapporto: serial_number e' la base
+  probe_model?: string;
+  probe_serial_number?: string;
+  // Lavorazione esterna (es. laboratorio Testo) o fornitura: niente RDT nostro
+  external_processing?: boolean;
 }) {
   return fetchAPI('/api/instruments', {
     method: 'POST',

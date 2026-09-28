@@ -105,6 +105,65 @@ function ActionTimestamp({ ts, prefix }: { ts: string | null | undefined; prefix
   );
 }
 
+// Regola del laboratorio (28/09/2026): un rapporto = un pezzo unico OPPURE
+// unità base + la sua sonda. Con la spunta il seriale principale è quella
+// della base e la sonda ha modello e matricola propri: sul rapporto escono
+// entrambi. "Lavorazione esterna" = la tara un altro laboratorio (es. Testo)
+// o è una fornitura: resta in sessione e in fattura, ma niente RDT nostro.
+type SondaState = {
+  con_sonda?: boolean;
+  probe_model?: string;
+  probe_serial_number?: string;
+  external_processing?: boolean;
+};
+
+function SondaFields({ value, onChange }: { value: SondaState; onChange: (patch: SondaState) => void }) {
+  return (
+    <div className="mb-3 space-y-2">
+      <div className="flex flex-wrap gap-4 text-sm">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={!!value.con_sonda}
+            onChange={(e) => onChange({ con_sonda: e.target.checked })}
+          />
+          Strumento con sonda (unità base + sonda = 1 rapporto)
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={!!value.external_processing}
+            onChange={(e) => onChange({ external_processing: e.target.checked })}
+          />
+          Lavorazione esterna / fornitura (nessun rapporto nostro)
+        </label>
+      </div>
+      {value.con_sonda && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="col-span-2">
+            <label className="text-xs text-gray-600">Sonda – modello / codice</label>
+            <Input
+              value={value.probe_model || ""}
+              onChange={(e) => onChange({ probe_model: e.target.value })}
+              className="h-9 text-sm"
+              placeholder="es. sonda filo caldo 0628 0152"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="text-xs text-gray-600">Sonda – seriale</label>
+            <Input
+              value={value.probe_serial_number || ""}
+              onChange={(e) => onChange({ probe_serial_number: e.target.value })}
+              className="h-9 text-sm"
+              placeholder="es. 62055806"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SessionDetail() {
   const params = useParams();
   const router = useRouter();
@@ -281,6 +340,9 @@ export default function SessionDetail() {
         model: newInstrument.model || undefined,
         serial_number: newInstrument.serial_number || undefined,
         price: newInstrument.price || undefined,
+        probe_model: newInstrument.con_sonda ? newInstrument.probe_model || undefined : undefined,
+        probe_serial_number: newInstrument.con_sonda ? newInstrument.probe_serial_number || undefined : undefined,
+        external_processing: newInstrument.external_processing || undefined,
       });
       toast.success("Strumento aggiunto");
       setAddingInstrument(false);
@@ -291,6 +353,10 @@ export default function SessionDetail() {
         model: "",
         serial_number: "",
         price: 0,
+        con_sonda: false,
+        probe_model: "",
+        probe_serial_number: "",
+        external_processing: false,
       });
       await loadSession();
     } catch (err: any) {
@@ -379,8 +445,14 @@ export default function SessionDetail() {
     if (!editingInstrument || !editInstrumentData) return;
     setActionLoading("save_inst");
     try {
+      // con_sonda e' solo stato del modulo: non esiste come colonna.
+      // Togliendo la spunta si svuotano i campi sonda.
+      const { con_sonda, ...dati } = editInstrumentData;
       await updateInstrument(editingInstrument, {
-        ...editInstrumentData,
+        ...dati,
+        probe_model: con_sonda ? dati.probe_model || null : null,
+        probe_serial_number: con_sonda ? dati.probe_serial_number || null : null,
+        external_processing: !!dati.external_processing,
         session_id: sessionId,
       });
       toast.success("Strumento aggiornato");
@@ -795,7 +867,9 @@ export default function SessionDetail() {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-600">Seriale/Matr.</label>
+                <label className="text-xs text-gray-600">
+                  {newInstrument.con_sonda ? "Seriale unità base" : "Seriale/Matr."}
+                </label>
                 <Input
                   value={newInstrument.serial_number}
                   onChange={(e) => setNewInstrument({ ...newInstrument, serial_number: e.target.value })}
@@ -814,6 +888,10 @@ export default function SessionDetail() {
                 />
               </div>
             </div>
+            <SondaFields
+              value={newInstrument}
+              onChange={(patch) => setNewInstrument({ ...newInstrument, ...patch })}
+            />
             <div className="flex gap-2 justify-end">
               <Button
                 variant="outline"
@@ -827,6 +905,10 @@ export default function SessionDetail() {
                     model: "",
                     serial_number: "",
                     price: 0,
+                    con_sonda: false,
+                    probe_model: "",
+                    probe_serial_number: "",
+                    external_processing: false,
                   });
                 }}
               >
@@ -906,7 +988,9 @@ export default function SessionDetail() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500">Seriale/Matricola</label>
+                      <label className="text-xs text-gray-500">
+                        {editInstrumentData?.con_sonda ? "Seriale unità base" : "Seriale/Matricola"}
+                      </label>
                       <Input
                         value={editInstrumentData?.serial_number || ""}
                         onChange={(e) => setEditInstrumentData({ ...editInstrumentData, serial_number: e.target.value })}
@@ -924,6 +1008,10 @@ export default function SessionDetail() {
                       />
                     </div>
                   </div>
+                  <SondaFields
+                    value={editInstrumentData || {}}
+                    onChange={(patch) => setEditInstrumentData({ ...editInstrumentData, ...patch })}
+                  />
                   <div className="flex gap-2 justify-end">
                     <Button variant="outline" size="sm" onClick={() => { setEditingInstrument(null); setEditInstrumentData(null); }}>
                       <X className="w-4 h-4 mr-1" /> Annulla
@@ -940,11 +1028,22 @@ export default function SessionDetail() {
                   <div>
                     <p className="font-medium">
                       {i + 1}. {inst.instrument_name}
+                      {inst.external_processing && (
+                        <Badge className="ml-2 bg-orange-100 text-orange-800 text-xs">
+                          Lavorazione esterna — nessun RDT nostro
+                        </Badge>
+                      )}
                     </p>
                     <p className="text-sm text-gray-500">
                       {inst.manufacturer} {inst.model}
                       {inst.serial_number && ` - Matr. ${inst.serial_number}`}
                     </p>
+                    {(inst.probe_model || inst.probe_serial_number) && (
+                      <p className="text-sm text-gray-500">
+                        + Sonda {inst.probe_model || ""}
+                        {` - Matr. sonda ${inst.probe_serial_number || "n.d."}`}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-right mr-2">
@@ -967,6 +1066,10 @@ export default function SessionDetail() {
                           model: inst.model || "",
                           serial_number: inst.serial_number || "",
                           price: inst.price || 0,
+                          con_sonda: !!(inst.probe_model || inst.probe_serial_number),
+                          probe_model: inst.probe_model || "",
+                          probe_serial_number: inst.probe_serial_number || "",
+                          external_processing: !!inst.external_processing,
                         });
                       }}
                     >
