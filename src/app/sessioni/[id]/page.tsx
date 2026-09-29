@@ -62,6 +62,7 @@ import { STATUS_CONFIG, getStatusConfig, getPaymentConfig } from "@/lib/constant
 import { RecipientPanel } from "./RecipientPanel";
 import { ChangeCustomerDialog } from "./ChangeCustomerDialog";
 import { EditCustomerDialog } from "./EditCustomerDialog";
+import { ShipmentsPanel } from "./ShipmentsPanel";
 
 interface InstrumentType {
   id: string;
@@ -1525,6 +1526,9 @@ export default function SessionDetail() {
           </div>
         </div>
       </Card>
+
+      {/* === SPEDIZIONI UPS: ritiro dal cliente e riconsegna === */}
+      <ShipmentsPanel sessionId={sessionId} />
 
       {/* === SEZIONE RICHIESTA RECENSIONE ===
            Visibile per sessioni completate o con review già inviata. */}

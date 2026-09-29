@@ -652,3 +652,46 @@ export async function updatePartner(partnerId: number, data: {
     body: JSON.stringify(data),
   });
 }
+
+// === SPEDIZIONI UPS (ritiro / riconsegna) — 29/09/2026 ===
+export type ShipmentDirection = 'ritiro' | 'riconsegna';
+
+export interface ShipmentAddress {
+  name: string; attention: string; phone: string; street: string;
+  city: string; zip: string; province: string;
+}
+
+export interface ShipmentRequest {
+  direction: ShipmentDirection;
+  pickup_date?: string | null;
+  book_pickup?: boolean;
+  packages?: number;
+  weight_kg?: number;
+  email?: string;
+  whatsapp_phone?: string;
+  address?: Partial<ShipmentAddress>;
+  send_email?: boolean;
+  send_whatsapp?: boolean;
+  test?: boolean;
+  force?: boolean;
+}
+
+export async function previewShipment(sessionId: string, body: ShipmentRequest) {
+  return fetchAPI(`/api/sessions/${sessionId}/shipments/preview`, {
+    method: 'POST', body: JSON.stringify(body),
+  });
+}
+
+export async function createShipment(sessionId: string, body: ShipmentRequest) {
+  return fetchAPI(`/api/sessions/${sessionId}/shipments`, {
+    method: 'POST', body: JSON.stringify(body),
+  });
+}
+
+export async function listShipments(sessionId: string) {
+  return fetchAPI(`/api/sessions/${sessionId}/shipments`);
+}
+
+export function getShipmentLabelUrl(shipmentId: string): string {
+  return `${API_PROXY}/api/shipments/${shipmentId}/label-pdf`;
+}
