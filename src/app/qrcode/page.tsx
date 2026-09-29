@@ -5,9 +5,9 @@ import QRCode from "qrcode";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getWhatsAppQR, getStaffWhatsAppQR } from "@/lib/api";
-import { Loader2, Download, QrCode, Smartphone, Bot } from "lucide-react";
+import { Loader2, Download, QrCode, Smartphone, Bot, UserPlus, Printer } from "lucide-react";
 
-type QRKind = "bot" | "staff";
+type QRKind = "bot" | "staff" | "registrazione";
 
 interface QRData {
   link: string;
@@ -58,9 +58,27 @@ function renderQRToCanvas(canvas: HTMLCanvasElement, data: QRData) {
   });
 }
 
+// Messaggio che il cliente trova gia' scritto: il bot riconosce «REGISTRAZIONE» e crea il cliente
+const TESTO_REGISTRAZIONE =
+  "REGISTRAZIONE NUOVO CLIENTE\nRagione sociale: \nPartita IVA: \nIndirizzo: \nReferente: \nCodice SDI o PEC: ";
+
+// Stampa il QR come adesivo (circa 8 x 10 cm) per il retro del MacBook del banco
+function stampaAdesivo(canvas: HTMLCanvasElement | null) {
+  if (!canvas) return;
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(`<html><head><title>QR registrazione</title><style>
+    @page { size: A4; margin: 15mm; } body { margin: 0; }
+    img { width: 80mm; height: 100mm; object-fit: contain; border: 1px dashed #999; }
+  </style></head><body><img src="${canvas.toDataURL("image/png")}" onload="window.print()"/></body></html>`);
+  w.document.close();
+}
+
 export default function QRCodePage() {
   const [botData, setBotData] = useState<QRData | null>(null);
   const [staffData, setStaffData] = useState<QRData | null>(null);
+  const [regData, setRegData] = useState<QRData | null>(null);
+  const regCanvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
   const botCanvasRef = useRef<HTMLCanvasElement>(null);
   const staffCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -77,6 +95,16 @@ export default function QRCodePage() {
             phone: bot.phone,
             title: "Bot WhatsApp",
             subtitle: "Scansiona per parlare con l'assistente AI",
+          });
+        }
+        if (bot) {
+          // Stesso numero del bot, con il modulo di registrazione gia' compilato
+          const numero = String(bot.wa_link).replace(/^https?:\/\/wa\.me\//, "").split("?")[0];
+          setRegData({
+            link: `https://wa.me/${numero}?text=${encodeURIComponent(TESTO_REGISTRAZIONE)}`,
+            phone: bot.phone,
+            title: "Registrazione nuovo cliente",
+            subtitle: "Nuovo cliente? Inquadra e registra la tua azienda",
           });
         }
         if (staff) {
@@ -103,10 +131,16 @@ export default function QRCodePage() {
     }
   }, [staffData]);
 
+  useEffect(() => {
+    if (regData && regCanvasRef.current) {
+      renderQRToCanvas(regCanvasRef.current, regData).catch(() => {});
+    }
+  }, [regData]);
+
   const downloadQR = (canvasRef: React.RefObject<HTMLCanvasElement | null>, kind: QRKind) => {
     if (!canvasRef.current) return;
     const link = document.createElement("a");
-    link.download = `AvaTech-Tarature-QRCode-${kind === "bot" ? "BotWhatsApp" : "StaffWhatsApp"}.png`;
+    link.download = `AvaTech-Tarature-QRCode-${kind === "bot" ? "BotWhatsApp" : kind === "staff" ? "StaffWhatsApp" : "RegistrazioneCliente"}.png`;
     link.href = canvasRef.current.toDataURL("image/png");
     link.click();
   };
@@ -130,6 +164,35 @@ export default function QRCodePage() {
         Esponi questi QR code in laboratorio. I clienti possono scansionare
         quello che preferiscono per contattarti via WhatsApp o chiamata.
       </p>
+
+      {/* QR registrazione cliente: da stampare e attaccare sul retro del MacBook del banco */}
+      <Card className="p-6 border-2 border-amber-300 bg-amber-50/40">
+        <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 text-amber-800">
+          <UserPlus className="w-5 h-5" />
+          Registrazione nuovo cliente (retro del MacBook Air)
+        </h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Il cliente inquadra, trova il messaggio già pronto e scrive i dati della sua azienda (anche in
+          più messaggi) oppure manda la foto del biglietto da visita: il cliente viene creato da solo e lo
+          trovi quando apri la sessione.
+        </p>
+        <div className="flex flex-col md:flex-row gap-6 items-center">
+          <canvas ref={regCanvasRef} className="border rounded-lg shadow-lg" style={{ maxWidth: "300px" }} />
+          <div className="flex gap-3 flex-wrap">
+            <Button onClick={() => stampaAdesivo(regCanvasRef.current)}>
+              <Printer className="w-4 h-4 mr-2" /> Stampa adesivo
+            </Button>
+            <Button variant="outline" onClick={() => downloadQR(regCanvasRef, "registrazione")}>
+              <Download className="w-4 h-4 mr-2" /> Scarica PNG
+            </Button>
+            {regData && (
+              <Button variant="outline" onClick={() => window.open(regData.link, "_blank")}>
+                Prova il link
+              </Button>
+            )}
+          </div>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* QR Bot WhatsApp */}
