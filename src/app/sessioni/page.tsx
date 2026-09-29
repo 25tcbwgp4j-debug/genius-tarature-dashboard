@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { listSessions, searchLeads, promoteLead, createSession } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Plus, Search, Loader2, ChevronLeft, ChevronRight, FileDown } from "lucide-react";
+import { Plus, Search, Loader2, ChevronLeft, ChevronRight, FileDown, UserPlus } from "lucide-react";
+import { ParseCustomerModal } from "../clienti/ParseCustomerModal";
 import {
   Dialog,
   DialogContent,
@@ -135,6 +136,23 @@ export default function SessionsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  // Cliente nuovo creato dal dialog (incolla dati / foto biglietto): la sessione parte subito
+  const [newCustomerOpen, setNewCustomerOpen] = useState(false);
+  const avviaSessionePer = async (customerId: string) => {
+    if (creatingFor) return;
+    setCreatingFor(customerId);
+    setNewCustomerOpen(false);
+    try {
+      const session = await createSession(customerId);
+      toast.success("Cliente pronto, sessione creata!");
+      setDialogOpen(false);
+      window.location.assign(`/sessioni/${session.id}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Errore creazione sessione");
+      setCreatingFor(null);
+    }
+  };
+
   const handleSearch = async () => {
     if (customerQuery.length < 2) return;
     setSearching(true);
@@ -259,15 +277,30 @@ export default function SessionsPage() {
                         </div>
                       )}
                       {customerResults.length === 0 && customerQuery.length >= 2 && !searching && (
-                        <p className="p-3 text-gray-500 text-center">Nessun risultato</p>
+                        <p className="p-3 text-gray-500 text-center">Nessun risultato: crea il cliente qui sotto.</p>
                       )}
                     </>
                   );
                 })()}
               </div>
+              <Button
+                variant={customerResults.length === 0 && customerQuery.length >= 2 && !searching ? "default" : "outline"}
+                className="w-full"
+                disabled={!!creatingFor}
+                onClick={() => { setDialogOpen(false); setNewCustomerOpen(true); }}
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                Crea nuovo cliente (incolla i dati o la foto del biglietto)
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
+        <ParseCustomerModal
+          open={newCustomerOpen}
+          onClose={() => setNewCustomerOpen(false)}
+          onCreated={avviaSessionePer}
+          onUpdated={avviaSessionePer}
+        />
       </div>
 
       {/* Barra filtri (audit P1.14) */}

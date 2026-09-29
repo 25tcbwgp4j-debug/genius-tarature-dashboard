@@ -26,6 +26,7 @@ import {
   getReceiptPdfUrl,
   getLabelsPdfUrl,
   getFatturaXmlUrl,
+  getSessionReportsZipUrl,
   getReviewStatus,
   sendReviewRequest,
   markReviewReceived,
@@ -645,6 +646,18 @@ export default function SessionDetail() {
           >
             <FileDown className="w-4 h-4 mr-1" />
             Fattura XML
+          </Button>
+          {/* Rapporti generati: si scaricano da qui, senza passare dalla sezione Rapporti */}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!(session.instruments || []).some((i: { rdt_number?: string | null }) => !!i.rdt_number)}
+            onClick={() => { window.location.href = getSessionReportsZipUrl(sessionId); }}
+            className="bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+            title="Scarica in un unico ZIP i rapporti di taratura generati per questa sessione"
+          >
+            <FileDown className="w-4 h-4 mr-1" />
+            Scarica rapporti
           </Button>
           <Button
             variant="outline"
