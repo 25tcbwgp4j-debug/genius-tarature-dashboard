@@ -313,7 +313,7 @@ export default function ScadenzarioPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats.entro_90_giorni}</p>
-                <p className="text-sm text-gray-500">Entro 90gg</p>
+                <p className="text-sm text-gray-500">Tra 31 e 90 gg</p>
               </div>
             </div>
           </Card>
@@ -500,11 +500,23 @@ export default function ScadenzarioPage() {
                         ? `SCADUTA da ${Math.abs(customer.daysLeft)}gg`
                         : `${customer.daysLeft}gg`}
                     </Badge>
-                    {customer.instruments.some(i => i.last_notified_at) && (
-                      <Badge variant="outline" className="text-blue-500 border-blue-300 text-xs">
-                        Notificato
-                      </Badge>
-                    )}
+                    {(() => {
+                      // Ultimo contatto del cliente (mail o WhatsApp), o «Mai contattato» in rosso
+                      const ultimo = customer.instruments
+                        .filter(i => i.last_notified_at)
+                        .sort((a, b) => String(b.last_notified_at).localeCompare(String(a.last_notified_at)))[0];
+                      return ultimo ? (
+                        <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs"
+                          title={`Contattato ${ultimo.notification_count || 1} volte`}>
+                          Ultimo contatto {new Date(ultimo.last_notified_at as string).toLocaleDateString("it-IT")}
+                          {ultimo.last_notified_via ? ` · ${ultimo.last_notified_via}` : ""}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-red-600 border-red-300 bg-red-50 text-xs">
+                          Mai contattato
+                        </Badge>
+                      );
+                    })()}
                     <Button
                       size="sm"
                       onClick={() => handleNotifyCustomer(customer.rawName, customer.id)}
