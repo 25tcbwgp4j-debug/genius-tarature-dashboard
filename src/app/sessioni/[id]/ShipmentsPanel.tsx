@@ -181,7 +181,7 @@ export function ShipmentsPanel({ sessionId }: { sessionId: string }) {
       if (r.pickup_error) toast.error(`Etichetta creata ma ritiro NON prenotato: ${r.pickup_error}`, { duration: 15000 });
       chiudi();
       await load();
-      if (r.id) await stampaEtichetta(r.id);
+      // Niente stampa automatica (dava due fogli bianchi): si usa «Stampa etichetta» o «Apri PDF»
     } catch (e: unknown) {
       toast.error((e as Error).message || "Errore spedizione", { duration: 12000 });
     } finally {
