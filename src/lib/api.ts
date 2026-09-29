@@ -695,3 +695,7 @@ export async function listShipments(sessionId: string) {
 export function getShipmentLabelUrl(shipmentId: string): string {
   return `${API_PROXY}/api/shipments/${shipmentId}/label-pdf`;
 }
+
+export async function cancelShipment(shipmentId: string) {
+  return fetchAPI(`/api/shipments/${shipmentId}/cancel`, { method: 'POST', body: '{}' });
+}

@@ -9,9 +9,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ExternalLink, FileText, Loader2, Package, Truck, X } from "lucide-react";
+import { ExternalLink, FileText, Loader2, Package, Printer, Truck, X } from "lucide-react";
 import { toast } from "sonner";
 import {
+  cancelShipment,
   createShipment,
   getShipmentLabelUrl,
   listShipments,
@@ -38,6 +39,7 @@ interface ShipmentRow {
   email_error: string | null;
   whatsapp: { status: string; sent_at: string | null; error: string | null } | null;
   tracking_url: string | null;
+  status: string;
   created_at: string;
 }
 
@@ -67,6 +69,34 @@ const CAMPI_INDIRIZZO: { key: keyof ShipmentAddress; label: string }[] = [
   { key: "city", label: "Città" },
   { key: "province", label: "Prov." },
 ];
+
+// Stampa l'etichetta dalla dashboard: il PDF si carica in un riquadro nascosto e si apre
+// la finestra di stampa del browser (niente download, niente popup bloccati).
+async function stampaEtichetta(shipmentId: string) {
+  try {
+    const res = await fetch(getShipmentLabelUrl(shipmentId));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const url = URL.createObjectURL(await res.blob());
+    const frame = document.createElement("iframe");
+    frame.style.position = "fixed";
+    frame.style.width = "0";
+    frame.style.height = "0";
+    frame.style.border = "0";
+    frame.src = url;
+    frame.onload = () => {
+      try {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+      } catch {
+        window.open(url, "_blank");
+      }
+      setTimeout(() => { frame.remove(); URL.revokeObjectURL(url); }, 60000);
+    };
+    document.body.appendChild(frame);
+  } catch (e: unknown) {
+    toast.error(`Etichetta non stampabile: ${(e as Error).message}`);
+  }
+}
 
 export function ShipmentsPanel({ sessionId }: { sessionId: string }) {
   const [rows, setRows] = useState<ShipmentRow[]>([]);
@@ -151,9 +181,25 @@ export function ShipmentsPanel({ sessionId }: { sessionId: string }) {
       if (r.pickup_error) toast.error(`Etichetta creata ma ritiro NON prenotato: ${r.pickup_error}`, { duration: 15000 });
       chiudi();
       await load();
-      if (r.id) window.open(getShipmentLabelUrl(r.id), "_blank");
+      if (r.id) await stampaEtichetta(r.id);
     } catch (e: unknown) {
       toast.error((e as Error).message || "Errore spedizione", { duration: 12000 });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const annulla = async (r: ShipmentRow) => {
+    if (!confirm(`Annullare con UPS la spedizione ${r.tracking}?\n\n` +
+      (r.pickup_prn ? "Viene annullato anche il ritiro prenotato: il corriere non passa.\n" : "") +
+      "L'etichetta non sarà addebitata. Mail e WhatsApp già inviati NON si possono ritirare.")) return;
+    setBusy(true);
+    try {
+      await cancelShipment(r.id);
+      toast.success("Spedizione annullata con UPS");
+      await load();
+    } catch (e: unknown) {
+      toast.error((e as Error).message || "Annullamento non riuscito", { duration: 12000 });
     } finally {
       setBusy(false);
     }
@@ -290,6 +336,7 @@ export function ShipmentsPanel({ sessionId }: { sessionId: string }) {
                 {r.direction === "ritiro" ? "Ritiro" : "Riconsegna"}
               </Badge>
               {r.test_mode && <Badge className="bg-gray-200 text-gray-700">PROVA</Badge>}
+              {r.status === "annullata" && <Badge className="bg-red-100 text-red-700">ANNULLATA</Badge>}
               {r.tracking_url ? (
                 <a href={r.tracking_url} target="_blank" rel="noreferrer" className="font-mono text-blue-700 inline-flex items-center gap-1">
                   {r.tracking} <ExternalLink className="w-3 h-3" />
@@ -310,9 +357,17 @@ export function ShipmentsPanel({ sessionId }: { sessionId: string }) {
               <span className={r.whatsapp?.status === "failed" ? "text-red-600" : "text-muted-foreground"}>
                 WhatsApp: {r.whatsapp ? ({ pending: "in coda", sending: "in invio", sent: "inviato", failed: "non inviato" } as Record<string, string>)[r.whatsapp.status] || r.whatsapp.status : "—"}
               </span>
+              <Button size="sm" variant="outline" className="h-7" onClick={() => stampaEtichetta(r.id)}>
+                <Printer className="w-3 h-3 mr-1" /> Stampa etichetta
+              </Button>
               <a href={getShipmentLabelUrl(r.id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700">
-                <FileText className="w-3 h-3" /> Etichetta PDF
+                <FileText className="w-3 h-3" /> Apri PDF
               </a>
+              {r.status !== "annullata" && (
+                <Button size="sm" variant="ghost" className="h-7 text-red-700" disabled={busy} onClick={() => annulla(r)}>
+                  <X className="w-3 h-3 mr-1" /> Annulla
+                </Button>
+              )}
             </div>
           ))}
         </div>
