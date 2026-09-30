@@ -919,7 +919,7 @@ export interface RigaGiornata {
 export interface ControlloCassa { chiave: string; nome: string; atteso: number | null; trovato: number; differenza: number | null; ok: boolean; mancante: boolean; nota: string }
 export interface FoglioCassa {
   giornata: {
-    giorno: string; stato: 'aperta' | 'chiusa'; apertura_tagli: Tagli; chiusura_tagli: Tagli; prelievi: { importo: number; nota: string }[];
+    giorno: string; stato: 'aperta' | 'chiusa'; apertura_tagli: Tagli; chiusura_tagli: Tagli; prelievi: { importo: number; nota: string; tipo?: string }[];
     pos_terminale: number | null; rt_scontrini: number | null; note: string | null; chiusa_il?: string | null; chiusa_da?: string | null;
     file_scaricato_il?: string | null; nuova?: boolean; apertura_da?: string | null;
   };
@@ -927,6 +927,7 @@ export interface FoglioCassa {
   riepilogo: {
     apertura: number; prelievi: number; chiusura_teorica: number; chiusura_contata: number; pos_terminale: number | null; pos_da_sumup: number | null;
     fatture_n: number; fatture_totale: number; fatture_prec_totale: number; scontrini_n: number; scontrini_totale: number; altro_totale: number;
+    acconti_n: number; acconti_totale: number; note_credito_n: number; note_credito_totale: number; rimborsi_contanti: number; storni_totale: number;
   };
   controlli: ControlloCassa[]; conti_tornano: boolean; tagli: string[]; tagli_apertura: string[]; tagli_chiusura: string[];
 }

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Plus, Search, Send, Trash2, Truck, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
+import { CercaArticolo } from "@/components/CercaArticolo";
 import {
   fattCatalogo,
   fattCrea,
@@ -308,6 +309,8 @@ export function Editor({
               </label>
               <Button size="xs" variant="outline" className="ml-auto" onClick={() => setRighe((p) => [...p, rigaVuota(societa === "gingy" ? 10 : 22)])}><Plus /> Riga</Button>
             </div>
+            <CercaArticolo listino={catalogo} className="w-full"
+              onScelto={(a) => aggiungiVoce({ gruppo: "", codice: a.codice || null, descrizione: a.descrizione, prezzo_ivato: a.prezzo_ivato, aliquota: a.aliquota })} />
             {catalogo.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 p-2">
                 <select className={`${campo} sm:w-96`} value="" onChange={(e) => {

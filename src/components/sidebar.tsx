@@ -45,7 +45,7 @@ const navItems = [
   { href: "/partner", label: "Partner B2B", icon: Handshake },
   { href: "/rapporti", label: "Rapporti", icon: FileText },
   { href: "/fatturazione", label: "Fatturazione", icon: Receipt },
-  { href: "/cassa", label: "Cassa", icon: ShoppingCart },
+  { href: "/cassa", label: "Scontrino (registratore)", icon: ShoppingCart },
   { href: "/cassa/giornata", label: "Cassa del giorno", icon: Calculator },
   { href: "/magazzino", label: "Magazzino", icon: Boxes },
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
@@ -138,7 +138,7 @@ export function Sidebar() {
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(item.href));
+              (item.href !== "/" && pathname.startsWith(item.href + "/") && !navItems.some((o) => o.href !== item.href && o.href.startsWith(item.href) && pathname.startsWith(o.href)));
             const Icon = item.icon;
             const showBadge = item.href === "/chat" && unread > 0;
             return (
