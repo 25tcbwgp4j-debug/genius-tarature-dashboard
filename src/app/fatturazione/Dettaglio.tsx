@@ -30,9 +30,11 @@ export function Dettaglio({
   const [invio, setInvio] = useState<"" | "email" | "whatsapp">("");
   const [dest, setDest] = useState("");
   const [msgInvio, setMsgInvio] = useState("");
+  const [errore, setErrore] = useState("");
 
   const carica = useCallback(() => {
-    fattDettaglio(id).then(setF).catch((e) => toast.error((e as Error).message));
+    fattDettaglio(id).then((r) => { setF(r); setErrore(""); })
+      .catch((e) => { const m = (e as Error).message || "Errore"; setErrore(m); toast.error(m); });
   }, [id]);
   useEffect(() => { carica(); }, [carica]);
 
@@ -52,8 +54,17 @@ export function Dettaglio({
 
   if (!f) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <Loader2 className="size-6 animate-spin text-white" />
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+        {errore ? (
+          <div className="max-w-sm space-y-3 rounded-lg bg-background p-4 text-sm shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 font-medium"><AlertTriangle className="size-4 text-red-600" />Non riesco ad aprire la fattura</div>
+            <div className="text-muted-foreground">{errore}</div>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={onClose}>Chiudi</Button>
+              <Button size="sm" onClick={() => { setErrore(""); carica(); }}>Riprova</Button>
+            </div>
+          </div>
+        ) : <Loader2 className="size-6 animate-spin text-white" />}
       </div>
     );
   }
