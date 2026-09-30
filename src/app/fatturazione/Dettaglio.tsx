@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   AlertTriangle, Banknote, Copy, CreditCard, FileCode2, Link2, Loader2, Pencil, Printer,
-  Receipt, RotateCcw, Send, Smartphone, Trash2, Undo2, X,
+  Receipt, RotateCcw, Send, Smartphone, Trash2, Undo2, Wallet, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -64,6 +64,7 @@ export function Dettaglio({
     { k: "contanti", label: "Contanti", icon: Banknote },
     { k: "pos_sumup", label: "POS SumUp", icon: Smartphone },
     { k: "carta_stripe", label: "Carta Stripe", icon: CreditCard },
+    { k: "paypal", label: "PayPal", icon: Wallet },
     { k: "bonifico", label: "Bonifico", icon: Receipt },
   ];
 

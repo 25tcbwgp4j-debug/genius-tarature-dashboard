@@ -21,6 +21,7 @@ export const MODALITA_LABEL: Record<string, string> = {
   contanti: "Contanti",
   pos_sumup: "POS SumUp",
   carta_stripe: "Carta (Stripe)",
+  paypal: "PayPal",
   bonifico: "Bonifico",
   non_pagato: "Da pagare",
 };

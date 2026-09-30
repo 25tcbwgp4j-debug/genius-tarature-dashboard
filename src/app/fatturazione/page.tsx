@@ -234,7 +234,7 @@ function Pagina() {
         <Card className="flex flex-wrap items-center gap-2 p-2 text-sm">
           <span><b>{selIds.length}</b> selezionate · {eur(righe.filter((f) => sel[f.id]).reduce((t, f) => t + Number(f.totale) * (f.tipo_documento === "TD04" ? -1 : 1), 0))}</span>
           <select className={sel_cls} value={modMulti} onChange={(e) => setModMulti(e.target.value as FattModalita)}>
-            {(["bonifico", "pos_sumup", "contanti", "carta_stripe"] as FattModalita[]).map((m) => <option key={m} value={m}>{MODALITA_LABEL[m]}</option>)}
+            {(["bonifico", "pos_sumup", "paypal", "contanti", "carta_stripe"] as FattModalita[]).map((m) => <option key={m} value={m}>{MODALITA_LABEL[m]}</option>)}
           </select>
           <Button size="sm" onClick={incassaSelezionate}><Wallet /> Segna {tab === "emessa" ? "incassate" : "pagate"}</Button>
           <Button size="sm" variant="ghost" onClick={() => setSel({})}>Deseleziona</Button>

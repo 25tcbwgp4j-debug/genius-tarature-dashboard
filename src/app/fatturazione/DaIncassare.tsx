@@ -141,7 +141,7 @@ export function DaIncassare({
                       </>
                     )}
                     <select className="ml-auto h-8 rounded-md border border-input bg-background px-2 text-sm" value={mod} onChange={(e) => setMod(e.target.value as FattModalita)}>
-                      {(["bonifico", "pos_sumup", "contanti", "carta_stripe"] as FattModalita[]).map((m) => <option key={m} value={m}>{MODALITA_LABEL[m]}</option>)}
+                      {(["bonifico", "pos_sumup", "paypal", "contanti", "carta_stripe"] as FattModalita[]).map((m) => <option key={m} value={m}>{MODALITA_LABEL[m]}</option>)}
                     </select>
                     <Button size="sm" disabled={!!busy} onClick={() => incassa(c)}>
                       {busy === "pag" ? <Loader2 className="animate-spin" /> : <Wallet />} Segna {emessa ? "incassate" : "pagate"}

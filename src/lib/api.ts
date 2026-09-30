@@ -702,7 +702,7 @@ export async function cancelShipment(shipmentId: string) {
 
 // === FATTURAZIONE (Openapi SDI) — 30/09/2026 ===
 export type FattSocieta = 'genius' | 'gingy' | 'avantifiori';
-export type FattModalita = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'bonifico' | 'non_pagato';
+export type FattModalita = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'paypal' | 'bonifico' | 'non_pagato';
 export interface FattRiga {
   descrizione: string;
   quantita: number;
