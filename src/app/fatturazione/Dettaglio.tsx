@@ -176,7 +176,8 @@ export function Dettaglio({
               </>
             )}
             <a href={fattUrlXml(f.id)}><Button size="sm" variant="outline"><FileCode2 /> XML</Button></a>
-            {emessa && f.numero && !["bozza", "scartata"].includes(f.stato) && f.tipo_documento !== "TD04" && (
+            {/* nota di credito: solo su fatture trasmesse allo SdI (come il backend); per l'operatore serve l'autorizzazione dell'admin */}
+            {emessa && f.numero && ["inviata", "consegnata", "non_consegnata"].includes(f.stato) && f.tipo_documento !== "TD04" && (
               <Button size="sm" variant="outline" disabled={!!busy}
                 onClick={() => azione("nc", () => fattNotaCredito(f.id), (r) => { toast.success("Nota di credito preparata"); onOpen(r.id); })}>
                 <RotateCcw /> Nota di credito

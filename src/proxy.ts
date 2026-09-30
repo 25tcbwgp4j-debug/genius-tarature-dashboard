@@ -11,7 +11,8 @@ import { verifyJwt, AUTH_COOKIE_NAME } from "@/lib/auth";
 // che operatori trovino logout improvviso al 31° giorno di uso silenzioso.
 
 const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"];
-const ADMIN_ONLY_PATHS = ["/utenti", "/audit"];
+// livelli di accesso 01/10/2026: statistiche e carico/inventario di magazzino solo per l'amministratore
+const ADMIN_ONLY_PATHS = ["/utenti", "/audit", "/statistiche", "/magazzino/carico"];
 // Soglia refresh: rinnova se mancano <7gg alla scadenza
 const REFRESH_THRESHOLD_SEC = 7 * 24 * 60 * 60;
 

@@ -7,6 +7,7 @@ import { listSessions, getReconciliationToday, getStatistics } from "@/lib/api";
 import { ClipboardList, Wrench, Package, AlertTriangle, Users } from "lucide-react";
 import Link from "next/link";
 import { STATUS_CONFIG, getStatusConfig } from "@/lib/constants";
+import { usePermessi } from "@/components/permessi";
 
 interface ReconciliationSnapshot {
   total_groups?: number;
@@ -20,6 +21,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ oggi: 0, attive: 0, pronti: 0, scadenze: 0 });
   const [reconciliation, setReconciliation] = useState<ReconciliationSnapshot | null>(null);
+  // le statistiche sono riservate all'amministratore: l'operatore non le chiede (il backend risponderebbe 403)
+  const { admin, caricato } = usePermessi();
 
   useEffect(() => {
     setLoading(true);
@@ -27,7 +30,7 @@ export default function Home() {
     Promise.all([
       listSessions({ limit: 20 }).catch(() => null),
       getReconciliationToday().catch(() => null),
-      getStatistics().catch(() => null),
+      admin ? getStatistics().catch(() => null) : Promise.resolve(null),
     ])
       .then(([data, recon, statistics]) => {
         if (data) {
@@ -53,7 +56,7 @@ export default function Home() {
         if (recon) setReconciliation(recon);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [admin]);
 
   return (
     <div className="space-y-6">
@@ -99,7 +102,7 @@ export default function Home() {
               <AlertTriangle className="w-5 h-5 text-red-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{stats.scadenze}</p>
+              <p className="text-2xl font-bold">{caricato && !admin ? "—" : stats.scadenze}</p>
               <p className="text-sm text-gray-500">Scadenze prossime</p>
             </div>
           </div>

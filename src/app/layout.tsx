@@ -5,6 +5,8 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { Sidebar } from "@/components/sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
+import { PermessiProvider } from "@/components/permessi";
+import { AutorizzazioneDialog } from "@/components/AutorizzazioneDialog";
 
 const geist = Geist({
   variable: "--font-geist",
@@ -60,10 +62,14 @@ export default function RootLayout({
     <html lang="it" className={`${geist.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full flex bg-gray-50 dark:bg-gray-950">
         <ThemeProvider>
-          <Sidebar />
-          <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 p-3 sm:p-6 pt-14 sm:pt-14 lg:pt-6 print:p-0">
-            {children}
-          </main>
+          <PermessiProvider>
+            <Sidebar />
+            <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 p-3 sm:p-6 pt-14 sm:pt-14 lg:pt-6 print:p-0">
+              {children}
+            </main>
+            {/* operazioni protette dell'operatore: password dell'admin sul posto o richiesta in attesa */}
+            <AutorizzazioneDialog />
+          </PermessiProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>
         <Script id="sw-register" strategy="afterInteractive">

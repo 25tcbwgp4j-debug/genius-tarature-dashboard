@@ -8,9 +8,16 @@ export function eCassaChiusa(e: unknown) {
   return err?.status === 409 && /(cassa|giornata)[^.]*chiusa/i.test(err.message || "");
 }
 
+/** Operazione mandata all'amministratore per l'approvazione (dialog «Invia richiesta e attendi»): non è un errore. */
+export function eInAttesa(e: unknown) {
+  return !!(e as ApiError)?.inAttesa;
+}
+
 export function toastErrore(e: unknown) {
   const m = (e as Error)?.message || "Errore";
-  if (eCassaChiusa(e)) {
+  if (eInAttesa(e)) {
+    toast.info(m, { duration: 8000 });
+  } else if (eCassaChiusa(e)) {
     toast.error(m, { duration: 12000, action: { label: "Apri cassa del giorno", onClick: () => { window.location.href = "/cassa/giornata"; } } });
   } else {
     toast.error(m);

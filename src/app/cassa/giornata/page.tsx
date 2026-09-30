@@ -10,13 +10,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, Lock, Plus, Trash2, Unlock, XCircle } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, Lock, Plus, Trash2, Undo2, Unlock, XCircle } from "lucide-react";
+import { StornoDialog, type OggettoStorno } from "@/components/StornoDialog";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma, spostaGiorno } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 import {
+  cassaAnnulla, cassaScontrini, type RigaGiornata, type Scontrino,
   cassaGiornata, cassaGiornataChiudi, cassaGiornataConfermaApertura, cassaGiornataElimina, cassaGiornataRiapri, cassaGiornataRiga, cassaGiornataSalva, cassaGiornataUrlExcel,
   type FoglioCassa, type Tagli,
 } from "@/lib/api";
@@ -25,7 +27,7 @@ const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { s
 const COL = [["contanti", "Contanti"], ["pos", "POS"], ["stripe", "Stripe"], ["bonifico", "Bonifico"], ["paypal", "PayPal"]] as const;
 const FONTE: Record<string, string> = { fattura: "auto", fattura_prec: "auto", scontrino: "dashboard", manuale: "a mano" };
 const TIPI_RIGA: [string, string][] = [
-  ["scontrino", "Scontrino (battuto in cassa)"], ["storno", "Storno scontrino (reso)"], ["acconto", "Acconto (solo se NON registrato in Ordini)"],
+  ["scontrino", "Scontrino (battuto in cassa)"], ["storno", "Storno scontrino (reso)"], ["annullo", "Annullo scontrino"], ["acconto", "Acconto (solo se NON registrato in Ordini)"],
   ["reso", "Rimborso in contanti"], ["fattura", "Fattura fuori dashboard"], ["altro", "Altro"],
 ];
 const TIPI_PRELIEVO: Record<string, string> = { eccesso: "Troppi contanti in cassa", spesa: "Spesa", altro: "Altro" };
@@ -96,6 +98,7 @@ export default function CassaGiornataPage() {
   const [nuova, setNuova] = useState(RIGA_VUOTA);
   const [prel, setPrel] = useState({ importo: "", tipo: "eccesso", nota: "" });
   const chiusa = f?.giornata.stato === "chiusa";
+  const [storno, setStorno] = useState<OggettoStorno | null>(null);
 
   // Salvataggi con attesa di 700 ms: prima di ogni azione (chiusura, conferma, righe, prelievi, cambio giorno)
   // si «svuotano» con flush(), così il backend lavora sempre sugli ultimi numeri scritti.
@@ -243,6 +246,24 @@ export default function CassaGiornataPage() {
   function eliminaRiga(id: string) {
     if (!confirm("Eliminare questa riga?")) return;
     return azione("elimina", async () => { applica(await cassaGiornataElimina(id)); });
+  }
+
+  /** Storno/reso o annullo di una riga SCONTRINO: a mano → movimenti/{id}/storno; della dashboard → scontrini/{id}/storno. */
+  function apriStorno(r: RigaGiornata) {
+    if (r.fonte === "manuale") { setStorno({ fonte: "manuale", riga: r }); return; }
+    return azione("storno", async () => {
+      const l: { scontrini: Scontrino[] } = await cassaScontrini(giorno);
+      const s = l.scontrini.find((x) => x.id === r.id);
+      if (!s) { toast.error("Scontrino non trovato"); return; }
+      if (["da_stampare", "errore"].includes(s.stato)) {   // mai arrivato al registratore: si toglie dalla coda, niente documento
+        if (!confirm("Lo scontrino non è ancora stato emesso dal registratore: annullarlo e rimettere in giacenza gli articoli?")) return;
+        await cassaAnnulla(s.id);
+        toast.success("Scontrino annullato");
+        await ricarica();
+        return;
+      }
+      setStorno({ fonte: "scontrino", scontrino: s });
+    });
   }
 
   function chiudi() {
@@ -474,17 +495,27 @@ export default function CassaGiornataPage() {
             </thead>
             <tbody>
               <tr className="border-t bg-muted/20"><td className="px-2 py-1 font-medium">APERTURA</td><td>cassa</td><td className="px-2 text-right tabular-nums">{eur(rp.apertura)}</td><td colSpan={7} /></tr>
-              {f.righe.map((r) => (
-                <tr key={`${r.fonte}-${r.id}`} className="border-t">
-                  <td className="px-2 py-1">{r.tipo}<span className="ml-1 text-[10px] text-muted-foreground">{FONTE[r.fonte]}</span></td>
+              {f.righe.map((r) => {
+                const negativo = ["STORNO", "ANNULLO"].includes(r.tipo);
+                const stornabile = r.tipo === "SCONTRINO" && (r.fonte === "manuale" || r.fonte === "scontrino") && r.totale > 0;
+                return (
+                <tr key={`${r.fonte}-${r.id}`} className={`border-t ${negativo ? "bg-red-50/70 dark:bg-red-950/20" : ""}`}>
+                  <td className="px-2 py-1">{negativo
+                    ? <span className="rounded bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">{r.tipo}</span>
+                    : r.tipo}<span className="ml-1 text-[10px] text-muted-foreground">{FONTE[r.fonte]}</span></td>
                   <td className="px-2">{r.numero}</td>
                   {COL.map(([k]) => <td key={k} className={`px-2 text-right tabular-nums ${r[k] ? (r[k] < 0 ? "text-red-600" : "") : "text-muted-foreground/40"}`}>{r[k] ? eur(r[k]) : "0"}</td>)}
                   <td className="max-w-[280px] truncate px-2" title={r.descrizione}>{r.descrizione}</td>
                   <td className="px-2">{r.modello}</td>
-                  <td className="px-2 text-right">{r.fonte === "manuale" && !chiusa && (
-                    <button className="text-muted-foreground hover:text-red-600" title="Elimina riga" disabled={!!busy} onClick={() => eliminaRiga(r.id)}><Trash2 className="size-4" /></button>)}</td>
+                  <td className="whitespace-nowrap px-2 text-right">
+                    {stornabile && (
+                      <button className="mr-2 text-muted-foreground hover:text-red-600" title="Storno / reso o annullo (va nella cassa di oggi)" disabled={!!busy}
+                        onClick={() => apriStorno(r)}>{busy === "storno" ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}</button>)}
+                    {r.fonte === "manuale" && !chiusa && (
+                      <button className="text-muted-foreground hover:text-red-600" title="Elimina riga" disabled={!!busy} onClick={() => eliminaRiga(r.id)}><Trash2 className="size-4" /></button>)}</td>
                 </tr>
-              ))}
+                );
+              })}
               {!f.righe.length && <tr><td colSpan={10} className="px-2 py-4 text-center text-muted-foreground">Nessun movimento</td></tr>}
               <tr className="border-t-2 font-semibold"><td className="px-2 py-1" colSpan={2}>TOTALI</td>
                 {COL.map(([k]) => <td key={k} className="px-2 text-right tabular-nums">{eur(f.totali[k] + (k === "contanti" ? rp.apertura : 0))}</td>)}<td colSpan={3} /></tr>
@@ -500,6 +531,10 @@ export default function CassaGiornataPage() {
           </label>
         </Card>
       </>)}
+      <StornoDialog oggetto={storno} onClose={() => setStorno(null)} onFatto={() => {
+        ricarica();
+        if (giorno !== oggiRoma()) toast.info("Lo storno è nella cassa di oggi", { action: { label: "Vai a oggi", onClick: () => vaiA(oggiRoma()) } });
+      }} />
     </div>
   );
 }

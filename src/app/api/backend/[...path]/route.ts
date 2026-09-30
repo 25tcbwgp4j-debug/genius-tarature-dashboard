@@ -28,6 +28,10 @@ const FORWARDED_REQ_HEADERS = new Set([
   "accept",
   "accept-language",
   "cache-control",
+  // autorizzazione sul posto: l'amministratore digita la sua password sul dispositivo dell'operatore
+  "x-admin-email",
+  "x-admin-password",
+  "x-motivo",
 ]);
 
 // Headers della risposta backend che restituiamo al client

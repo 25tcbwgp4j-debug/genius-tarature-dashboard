@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
 import { dec0 } from "@/components/DecInput";
 import { toastErrore } from "@/lib/errori";
+import { usePermessi } from "@/components/permessi";
 import { type ApiError, magCrea, magModifica, magMovimento, magPerCodice, magProdotti, magProdotto, type Prodotto } from "@/lib/api";
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
@@ -34,6 +35,8 @@ export default function MagazzinoPage() {
   const [nuovo, setNuovo] = useState<Partial<Prodotto> & { giacenza_iniziale?: number } | null>(null);
   const [etichette, setEtichette] = useState<Prodotto[]>([]);
   const [caricoQta, setCaricoQta] = useState(1);
+  // l'operatore vede il magazzino ma non lo modifica (carico, scarico, inventario, articoli: solo amministratore)
+  const { admin: puoModificare, caricato } = usePermessi();
 
   const carica = useCallback(async () => {
     setLoading(true);
@@ -78,19 +81,24 @@ export default function MagazzinoPage() {
         <Boxes className="size-6" /><h1 className="text-2xl font-semibold">Magazzino</h1>
         <span className="text-sm text-muted-foreground">{righe.length} articoli · valore (a costo) {eur(valore)}</span>
         <div className="ml-auto flex gap-2 print:hidden">
-          <Link href="/magazzino/carico"><Button variant="outline"><PackagePlus /> Carico e inventario</Button></Link>
+          {puoModificare && <Link href="/magazzino/carico"><Button variant="outline"><PackagePlus /> Carico e inventario</Button></Link>}
           {etichette.length > 0 && <Button variant="outline" onClick={() => window.print()}><Printer /> Stampa {etichette.length} etichette</Button>}
-          <Button onClick={() => setNuovo({ descrizione: "", prezzo: 0, aliquota: 22, giacenza_iniziale: 0 })}><Plus /> Nuovo articolo</Button>
+          {puoModificare && <Button onClick={() => setNuovo({ descrizione: "", prezzo: 0, aliquota: 22, giacenza_iniziale: 0 })}><Plus /> Nuovo articolo</Button>}
         </div>
       </div>
 
-      <Card className="space-y-2 p-3 print:hidden">
+      {caricato && !puoModificare && (
+        <div className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900 print:hidden dark:bg-sky-950/30 dark:text-sky-200">
+          Consultazione: carico, scarico, inventario e modifica degli articoli sono riservati all&apos;amministratore.
+        </div>
+      )}
+      {puoModificare && <Card className="space-y-2 p-3 print:hidden">
         <div className="flex items-center gap-2 text-sm font-medium"><PackagePlus className="size-4" /> Carico con lo scanner
           <span className="ml-2 text-xs font-normal text-muted-foreground">quantità per ogni lettura</span>
           <input type="number" min={1} className="h-7 w-16 rounded border border-input bg-background px-1" value={caricoQta} onChange={(e) => setCaricoQta(Math.max(1, Number(e.target.value)))} />
         </div>
         <ScannerInput onCodice={caricoScanner} placeholder="Spara il codice dell'articolo che entra in magazzino" />
-      </Card>
+      </Card>}
 
       <div className="flex flex-wrap items-center gap-2 print:hidden">
         <div className="relative"><Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
@@ -136,14 +144,14 @@ export default function MagazzinoPage() {
 
       {(nuovo || aperto) && (
         <Scheda p={aperto} nuovo={nuovo} setNuovo={setNuovo} onClose={() => { setAperto(null); setNuovo(null); }} onSalvaNuovo={salvaNuovo} creando={creando}
-          onCambiato={(p) => { carica(); if (p) apri(p.id); }} campo={campo} />
+          onCambiato={(p) => { carica(); if (p) apri(p.id); }} campo={campo} solaLettura={!puoModificare} />
       )}
     </div>
   );
 }
 
-function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, creando }: {
-  p: Prodotto | null; nuovo: (Partial<Prodotto> & { giacenza_iniziale?: number }) | null; creando: boolean;
+function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, creando, solaLettura }: {
+  p: Prodotto | null; nuovo: (Partial<Prodotto> & { giacenza_iniziale?: number }) | null; creando: boolean; solaLettura: boolean;
   setNuovo: (n: Partial<Prodotto> & { giacenza_iniziale?: number }) => void; onClose: () => void; onSalvaNuovo: () => void;
   onCambiato: (p: Prodotto | null) => void; campo: string;
 }) {
@@ -180,18 +188,18 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, 
           {CAMPI.map(([k, l, t]) => (
             <label key={k} className={`space-y-1 ${k === "descrizione" ? "col-span-2" : ""}`}><div className="text-xs text-muted-foreground">{l}</div>
               {NUMERICI.has(k)
-                ? <input type="text" inputMode="decimal" className={campo} value={testi[k] ?? String((dati[k] as number | undefined) ?? "").replace(".", ",")}
+                ? <input type="text" inputMode="decimal" className={campo} disabled={solaLettura} value={testi[k] ?? String((dati[k] as number | undefined) ?? "").replace(".", ",")}
                     onChange={(e) => { setTesti((x) => ({ ...x, [k]: e.target.value })); set(k, dec0(e.target.value)); }} />
-                : <input type={t} className={campo} value={(dati[k] as string | undefined) ?? ""} onChange={(e) => set(k, e.target.value)} />}</label>
+                : <input type={t} className={campo} disabled={solaLettura} value={(dati[k] as string | undefined) ?? ""} onChange={(e) => set(k, e.target.value)} />}</label>
           ))}
           {nuovo && <label className="space-y-1"><div className="text-xs text-muted-foreground">Giacenza iniziale</div>
             <input type="number" className={campo} value={nuovo.giacenza_iniziale ?? 0} onChange={(e) => set("giacenza_iniziale", Number(e.target.value))} /></label>}
         </div>
         {nuovo ? <Button onClick={onSalvaNuovo} disabled={creando}>{creando ? <Loader2 className="animate-spin" /> : <Save />} Crea articolo</Button> : (
           <>
-            <div className="flex gap-2"><Button onClick={salva} disabled={!!busy}>{busy === "salva" ? <Loader2 className="animate-spin" /> : <Save />} Salva</Button>
+            <div className="flex gap-2">{!solaLettura && <Button onClick={salva} disabled={!!busy}>{busy === "salva" ? <Loader2 className="animate-spin" /> : <Save />} Salva</Button>}
               {p?.barcode && <div className="rounded border p-2"><Barcode value={p.barcode} /></div>}</div>
-            <Card className="space-y-2 p-3">
+            {solaLettura ? <div className="text-sm">Giacenza attuale <b>{Number(p?.giacenza)}</b></div> : <Card className="space-y-2 p-3">
               <div className="flex items-center gap-2 text-sm font-medium"><Tag className="size-4" /> Movimento · giacenza attuale <b>{Number(p?.giacenza)}</b></div>
               <div className="flex flex-wrap gap-2">
                 <select className="h-8 rounded-md border border-input bg-background px-2 text-sm" value={mov.tipo} onChange={(e) => setMov({ ...mov, tipo: e.target.value })}>
@@ -200,7 +208,7 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, 
                 <input className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-sm" placeholder="Causale (fornitore, fattura…)" value={mov.causale} onChange={(e) => setMov({ ...mov, causale: e.target.value })} />
                 <Button size="sm" onClick={movimento} disabled={!!busy}>{busy === "mov" ? <Loader2 className="animate-spin" /> : null}Registra</Button>
               </div>
-            </Card>
+            </Card>}
             <div className="text-sm font-medium">Movimenti</div>
             <div className="divide-y rounded border text-sm">
               {(p?.movimenti || []).map((m) => (

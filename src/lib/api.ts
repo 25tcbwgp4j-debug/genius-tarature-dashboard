@@ -8,10 +8,35 @@
 const API_PROXY = '/api/backend';
 
 
-/** Errore del backend con codice HTTP e dettaglio (es. 409 «fattura già esistente» con la fattura trovata). */
-export type ApiError = Error & { status?: number; detail?: any };  // eslint-disable-line @typescript-eslint/no-explicit-any
+/** Errore del backend con codice HTTP e dettaglio (es. 409 «fattura già esistente» con la fattura trovata).
+ *  `inAttesa` = operazione protetta mandata all'amministratore per l'approvazione (non è un vero errore). */
+export type ApiError = Error & { status?: number; detail?: any; inAttesa?: boolean; autorizzazioneId?: string };  // eslint-disable-line @typescript-eslint/no-explicit-any
 
-async function fetchAPI(path: string, options: RequestInit = {}) {
+// === AUTORIZZAZIONE DELL'AMMINISTRATORE (livelli di accesso, 01/10/2026) ===
+// Un'operazione protetta (cancellazione, storno, riapertura cassa…) chiamata da un operatore risponde
+// 403 {codice:"autorizzazione_richiesta", id, messaggio}. Qui la intercettiamo UNA volta per tutte le chiamate:
+// il dialog globale (montato nel layout) chiede la password dell'admin e ripete la STESSA chiamata con gli header
+// X-Admin-Email / X-Admin-Password / X-Motivo, oppure lascia la richiesta in attesa dell'approvazione.
+export type HeaderAutorizzazione = { 'X-Admin-Email': string; 'X-Admin-Password': string; 'X-Motivo'?: string };
+export interface RichiestaAutorizzazione {
+  id: string;
+  messaggio: string;
+  metodo: string;
+  percorso: string;
+  /** Ripete la chiamata originale con le credenziali dell'amministratore. */
+  esegui: (h: HeaderAutorizzazione) => Promise<any>;  // eslint-disable-line @typescript-eslint/no-explicit-any
+}
+type GestoreAutorizzazione = (r: RichiestaAutorizzazione) => Promise<any>;  // eslint-disable-line @typescript-eslint/no-explicit-any
+let gestoreAutorizzazione: GestoreAutorizzazione | null = null;
+/** Il dialog globale si registra qui (e si toglie allo smontaggio). */
+export function registraGestoreAutorizzazione(g: GestoreAutorizzazione | null) { gestoreAutorizzazione = g; }
+
+/** Gli header HTTP accettano solo caratteri Latin-1: il resto (emoji, €…) si sostituisce. */
+function latin1(v: string) { return v.replace(/[^\x20-\x7E\xA0-\xFF]/g, '?'); }
+/** Testo libero negli header (motivo, email): accenti tolti (così → cosi), resto in ASCII. */
+function ascii(v: string) { return v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '?'); }
+
+async function fetchAPI(path: string, options: RequestInit = {}, conDialog = true): Promise<any> {  // eslint-disable-line @typescript-eslint/no-explicit-any
   const url = `${API_PROXY}${path}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -31,6 +56,18 @@ async function fetchAPI(path: string, options: RequestInit = {}) {
     }
     const error = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = error.detail;
+    // operazione protetta: serve l'amministratore → dialog globale (una sola volta: la ripetizione non lo riapre)
+    if (res.status === 403 && conDialog && detail && typeof detail === 'object' && detail.codice === 'autorizzazione_richiesta'
+        && typeof window !== 'undefined' && gestoreAutorizzazione) {
+      return gestoreAutorizzazione({
+        id: String(detail.id || ''), messaggio: String(detail.messaggio || ''), metodo: (options.method || 'GET').toUpperCase(), percorso: path,
+        esegui: (h) => {
+          const extra: Record<string, string> = { 'X-Admin-Email': ascii(h['X-Admin-Email'].trim()), 'X-Admin-Password': latin1(h['X-Admin-Password']) };
+          if (h['X-Motivo']?.trim()) extra['X-Motivo'] = ascii(h['X-Motivo'].trim()).slice(0, 300);
+          return fetchAPI(path, { ...options, headers: { ...(options.headers as Record<string, string> | undefined), ...extra } }, false);
+        },
+      });
+    }
     const err = new Error(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map((e: { msg?: string }) => e.msg || JSON.stringify(e)).join('; ')
       : (detail && typeof detail === 'object' && 'messaggio' in detail ? String(detail.messaggio) : `API Error: ${res.status}`))) as ApiError;
     err.status = res.status;
@@ -39,6 +76,29 @@ async function fetchAPI(path: string, options: RequestInit = {}) {
   }
   return res.json();
 }
+
+export interface Permessi {
+  ruolo: string; admin: boolean;
+  puo: { statistiche: boolean; fatturato: boolean; magazzino_modifica: boolean; utenti: boolean; senza_autorizzazione: boolean };
+  richiedono_autorizzazione?: string[];
+}
+export interface Autorizzazione {
+  id: string; tipo: string; descrizione: string | null; metodo: string; percorso: string; corpo?: unknown;
+  richiesta_da: string | null; stato: 'in_attesa' | 'approvata' | 'eseguita' | 'rifiutata' | 'errore' | string;
+  decisa_da: string | null; decisa_il: string | null; motivo: string | null; esito?: unknown; created_at: string;
+}
+export const TIPI_AUTORIZZAZIONE: Record<string, string> = {
+  elimina_fattura: "Eliminare una fattura", nota_credito: "Fare una nota di credito", annulla_incasso: "Annullare l'incasso di una fattura",
+  annulla_scontrino: "Annullare uno scontrino", storno_scontrino: "Stornare (reso) uno scontrino", elimina_riga_cassa: "Cancellare una riga della cassa del giorno",
+  riapri_cassa: "Riaprire una cassa già chiusa", annulla_documento: "Annullare un ordine/preventivo",
+};
+export async function autIo(): Promise<Permessi> { return fetchAPI('/api/autorizzazioni/io'); }
+/** stato: 'in_attesa' oppure '' per tutte (storico). L'operatore vede solo le sue. */
+export async function autElenco(stato = 'in_attesa'): Promise<Autorizzazione[]> {
+  return fetchAPI(`/api/autorizzazioni?stato=${encodeURIComponent(stato)}`);
+}
+export async function autApprova(id: string): Promise<{ ok: boolean; stato: string }> { return fetchAPI(`/api/autorizzazioni/${id}/approva`, { method: 'POST' }); }
+export async function autRifiuta(id: string): Promise<{ ok: boolean }> { return fetchAPI(`/api/autorizzazioni/${id}/rifiuta`, { method: 'POST' }); }
 
 // === CLIENTI ===
 export async function searchCustomers(query: string, limit = 10) {
@@ -888,6 +948,8 @@ export interface RigaCassa { prodotto_id?: string | null; descrizione: string; q
 export interface Scontrino {
   id: string; stato: string; righe: RigaCassa[]; totale: number; pagamenti: { modalita: string; importo: number }[];
   codice_lotteria: string | null; numero_rt: string | null; errore: string | null; risposta_rt: string | null; created_at: string;
+  /** vendita (default) · reso · annullo: i documenti di reso/annullo hanno importi da leggere in NEGATIVO */
+  tipo_documento?: 'vendita' | 'reso' | 'annullo' | null; rif_scontrino_id?: string | null; motivo?: string | null; creato_da?: string | null;
 }
 export async function magProdotti(q = '', sottoScorta = false, limit = 300): Promise<{ prodotti: Prodotto[]; totale_righe: number | null; valore_magazzino: number }> {
   return fetchAPI(`/api/magazzino/prodotti?q=${encodeURIComponent(q)}&sotto_scorta=${sottoScorta}&limit=${limit}`);
@@ -908,6 +970,10 @@ export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { mo
 }
 export async function cassaScontrini(giorno = '') { return fetchAPI(`/api/cassa/scontrini?giorno=${giorno}`); }
 export async function cassaAnnulla(id: string) { return fetchAPI(`/api/cassa/scontrini/${id}/annulla`, { method: 'POST' }); }
+/** Reso (anche parziale) o annullo di uno scontrino GIÀ EMESSO: nasce un documento negativo nella cassa di oggi. */
+export async function cassaStornoScontrino(id: string, body: { tipo: 'reso' | 'annullo'; righe?: { indice: number; quantita: number }[]; modalita?: string; motivo: string; numero_rt?: string }): Promise<Scontrino> {
+  return fetchAPI(`/api/cassa/scontrini/${id}/storno`, { method: 'POST', body: JSON.stringify(body) });
+}
 export async function cassaRiprova(id: string) { return fetchAPI(`/api/cassa/scontrini/${id}/riprova`, { method: 'POST' }); }
 export async function cassaFattura(body: { righe: RigaCassa[]; pagamenti?: { modalita: string }[]; pagata?: boolean }): Promise<Fattura> {
   return fetchAPI('/api/cassa/fattura', { method: 'POST', body: JSON.stringify(body) });
@@ -944,6 +1010,10 @@ export async function cassaGiornataRiga(body: Record<string, string | number>): 
   return fetchAPI('/api/cassa/giornata/movimenti', { method: 'POST', body: JSON.stringify(body) });
 }
 export async function cassaGiornataElimina(id: string): Promise<FoglioCassa> { return fetchAPI(`/api/cassa/giornata/movimenti/${id}`, { method: 'DELETE' }); }
+/** Storno (anche parziale) o annullo di una riga «scontrino» battuta a mano: riga negativa nella cassa di OGGI. */
+export async function cassaGiornataStorno(id: string, body: { tipo: 'storno' | 'annullo'; numero: string; importo?: number; modalita?: string; motivo: string }): Promise<FoglioCassa & { ok: boolean }> {
+  return fetchAPI(`/api/cassa/giornata/movimenti/${id}/storno`, { method: 'POST', body: JSON.stringify(body) });
+}
 export async function cassaGiornataChiudi(giorno: string, forza = false, nota = ''): Promise<FoglioCassa> {
   return fetchAPI('/api/cassa/giornata/chiudi', { method: 'POST', body: JSON.stringify({ giorno, forza, nota }) });
 }

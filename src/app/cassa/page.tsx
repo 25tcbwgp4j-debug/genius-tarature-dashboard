@@ -8,7 +8,8 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Banknote, CreditCard, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Wallet, X } from "lucide-react";
+import { Banknote, CreditCard, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, Wallet, X } from "lucide-react";
+import { StornoDialog } from "@/components/StornoDialog";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
 import { DecInput, parseDec } from "@/components/DecInput";
@@ -36,12 +37,15 @@ export default function CassaPage() {
   const [oggi, setOggi] = useState<{ scontrini: Scontrino[]; totale: number; per_modalita: Record<string, number> } | null>(null);
   const [libera, setLibera] = useState({ descrizione: "", prezzo: "" });
   const [cassaChiusa, setCassaChiusa] = useState(false);
+  // elenco scontrini: di oggi (default) o di un giorno passato, per fare reso/annullo di quelli già emessi
+  const [giornoLista, setGiornoLista] = useState(oggiRoma);
+  const [storno, setStorno] = useState<Scontrino | null>(null);
 
   const ricarica = useCallback(() => {
-    cassaScontrini(oggiRoma()).then(setOggi).catch(() => undefined);
+    cassaScontrini(giornoLista).then(setOggi).catch(() => undefined);
     // gli scontrini finiscono nella cassa del giorno: se è già chiusa lo dico subito
     cassaGiornata(oggiRoma()).then((r) => setCassaChiusa(r.giornata.stato === "chiusa")).catch(() => undefined);
-  }, []);
+  }, [giornoLista]);
   useEffect(() => { ricarica(); const t = setInterval(ricarica, 10000); return () => clearInterval(t); }, [ricarica]);
   useEffect(() => {
     if (q.trim().length < 2) { setTrovati([]); return; }
@@ -165,31 +169,46 @@ export default function CassaPage() {
         </Card>
 
         <Card className="p-3">
-          <div className="mb-2 flex items-baseline justify-between"><span className="text-sm font-medium">Scontrini di oggi</span><span className="font-semibold tabular-nums">{eur(oggi?.totale || 0)}</span></div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1 text-sm font-medium">Scontrini {giornoLista === oggiRoma() ? "di oggi" : "del"}
+              <input type="date" className="h-7 rounded-md border border-input bg-background px-1 text-xs" value={giornoLista} max={oggiRoma()}
+                onChange={(e) => { if (e.target.value) { setOggi(null); setGiornoLista(e.target.value); } }} /></span>
+            <span className="font-semibold tabular-nums">{eur(oggi?.totale || 0)}</span></div>
           <div className="mb-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
             {Object.entries(oggi?.per_modalita || {}).map(([k, v]) => <span key={k}>{MOD[k] || k}: {eur(v)}</span>)}
           </div>
           <div className="max-h-96 divide-y overflow-y-auto">
-            {(oggi?.scontrini || []).map((s) => (
-              <div key={s.id} className="py-2 text-sm">
+            {(oggi?.scontrini || []).map((s) => {
+              const doc = s.tipo_documento || "vendita";
+              const negativo = doc !== "vendita";   // reso / annullo: i soldi escono
+              const stornabile = !negativo && ["emesso", "in_stampa"].includes(s.stato);
+              return (
+              <div key={s.id} className={`py-2 text-sm ${negativo ? "-mx-1 rounded bg-red-50/80 px-1 dark:bg-red-950/20" : ""}`}>
                 <div className="flex justify-between">
-                  <span>{new Date(s.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · {s.numero_rt ? `n. ${s.numero_rt}` : ""}</span>
-                  <span className="tabular-nums">{eur(Number(s.totale))}</span>
+                  <span className={s.stato === "annullato" ? "line-through opacity-60" : ""}>
+                    {negativo && <span className="mr-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{doc === "annullo" ? "ANNULLO" : "RESO"}</span>}
+                    {new Date(s.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · {s.numero_rt ? `n. ${s.numero_rt}` : ""}</span>
+                  <span className={`tabular-nums ${negativo ? "font-semibold text-red-700 dark:text-red-300" : s.stato === "annullato" ? "line-through opacity-60" : ""}`}>{negativo ? "− " : ""}{eur(Number(s.totale))}</span>
                 </div>
+                {negativo && s.motivo && <div className="text-xs text-muted-foreground">Motivo: {s.motivo}</div>}
                 <div className="flex items-center justify-between text-xs">
                   <span className={s.stato === "errore" ? "text-red-600" : s.stato === "simulato" ? "text-amber-600" : "text-muted-foreground"}>
                     {STATO[s.stato] || s.stato} · {s.pagamenti.map((p) => MOD[p.modalita] || p.modalita).join(", ")}{s.errore ? ` · ${s.errore}` : ""}</span>
                   <span className="flex gap-1">
                     {(s.stato === "errore" || s.stato === "simulato") && <Button size="xs" variant="ghost" onClick={() => cassaRiprova(s.id).then(ricarica).catch(toastErrore)}><RotateCcw /> Riprova</Button>}
                     {["da_stampare", "errore", "simulato"].includes(s.stato) && <Button size="xs" variant="ghost" onClick={() => { if (confirm("Annullare lo scontrino e rimettere in giacenza gli articoli?")) cassaAnnulla(s.id).then(ricarica).catch(toastErrore); }}>Annulla</Button>}
+                    {stornabile && <Button size="xs" variant="ghost" className="text-red-600" title="Reso (anche parziale) o annullo di uno scontrino già emesso"
+                      onClick={() => setStorno(s)}><Undo2 /> Storno</Button>}
                   </span>
                 </div>
               </div>
-            ))}
-            {!oggi?.scontrini.length && <div className="py-4 text-center text-sm text-muted-foreground">Nessuno scontrino oggi</div>}
+              );
+            })}
+            {!oggi?.scontrini.length && <div className="py-4 text-center text-sm text-muted-foreground">Nessuno scontrino {giornoLista === oggiRoma() ? "oggi" : "in questo giorno"}</div>}
           </div>
         </Card>
       </div>
+      <StornoDialog oggetto={storno ? { fonte: "scontrino", scontrino: storno } : null} onClose={() => setStorno(null)} onFatto={ricarica} />
     </div>
   );
 }

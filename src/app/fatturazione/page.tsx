@@ -29,9 +29,12 @@ import { toastErrore } from "@/lib/errori";
 type Tab = "emessa" | "ricevuta" | "incassare" | "pagare" | "clienti" | "fornitori" | "chiusure" | "esiti";
 interface Esito { id: string; tipo: string; descrizione: string; data: string;
   fatture?: { id: string; numero: string | null; societa: string; controparte_nome: string | null } | null }
-interface Riepilogo { emesse: number; ricevute: number; fatturato: number; iva_vendite: number; acquisti: number;
-  iva_acquisti: number; da_incassare: number; da_pagare: number; scartate: number; bozze: number; non_consegnate: number;
-  mesi?: { mese: number; fatturato: number; acquisti: number }[] }
+// per l'operatore (livelli di accesso 01/10/2026) i totali riservati arrivano null e riservato=true
+interface Riepilogo { emesse: number; ricevute: number; fatturato: number | null; iva_vendite: number | null; acquisti: number | null;
+  iva_acquisti: number | null; da_incassare: number | null; da_pagare: number | null; scartate: number; bozze: number; non_consegnate: number;
+  mesi?: { mese: number; fatturato: number; acquisti: number }[]; riservato?: boolean }
+/** Importo o «riservato» quando il backend non lo manda all'operatore. */
+const eurR = (v: number | null | undefined) => (v === null || v === undefined ? "riservato" : eur(v));
 interface Config { ambiente: string; configurato: boolean }
 
 function Pagina() {
@@ -95,7 +98,8 @@ function Pagina() {
         setRighe((r.fatture || []).filter((f: Fattura) => !soloScadute || (f.pagamento_stato !== "pagata" && f.tipo_documento !== "TD04" && (f.scadenza || f.data || "") < oggiIso)));
         setSel({});
       }
-      setRie(await fattRiepilogo(societa, anno));
+      // il riepilogo non deve bloccare l'elenco (es. operatore: totali riservati)
+      setRie(await fattRiepilogo(societa, anno).catch(() => null));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -140,11 +144,11 @@ function Pagina() {
     setTab(t); setStato(extra?.stato || ""); setPagamento(extra?.pagamento || ""); setMese(0);
   };
   const kpi = rie ? [
-    { l: `Fatturato ${anno || ""} (imponibile)`, v: eur(rie.fatturato), s: `${rie.emesse} fatture emesse`, go: () => vai("emessa") },
-    { l: "Da incassare", v: eur(rie.da_incassare), s: rie.bozze ? `${rie.bozze} bozze` : "per cliente →", go: () => vai("incassare") },
-    { l: `Acquisti ${anno || ""} (imponibile)`, v: eur(rie.acquisti), s: `${rie.ricevute} fatture ricevute`, go: () => vai("ricevuta") },
-    { l: "Da pagare ai fornitori", v: eur(rie.da_pagare), s: "per fornitore →", go: () => vai("pagare") },
-    { l: "IVA vendite − acquisti", v: eur((rie.iva_vendite || 0) - (rie.iva_acquisti || 0)), s: "stima, non liquidazione", go: () => vai("emessa") },
+    { l: `Fatturato ${anno || ""} (imponibile)`, v: eurR(rie.fatturato), s: `${rie.emesse} fatture emesse`, go: () => vai("emessa") },
+    { l: "Da incassare", v: eurR(rie.da_incassare), s: rie.bozze ? `${rie.bozze} bozze` : "per cliente →", go: () => vai("incassare") },
+    { l: `Acquisti ${anno || ""} (imponibile)`, v: eurR(rie.acquisti), s: `${rie.ricevute} fatture ricevute`, go: () => vai("ricevuta") },
+    { l: "Da pagare ai fornitori", v: eurR(rie.da_pagare), s: "per fornitore →", go: () => vai("pagare") },
+    { l: "IVA vendite − acquisti", v: rie.iva_vendite === null || rie.iva_acquisti === null ? "riservato" : eur((rie.iva_vendite || 0) - (rie.iva_acquisti || 0)), s: "stima, non liquidazione", go: () => vai("emessa") },
     { l: "Da sistemare", v: String((rie.scartate || 0) + (rie.non_consegnate || 0)), s: `${rie.scartate} scartate · ${rie.non_consegnate} nel cassetto`, go: () => vai("emessa", { stato: "scartata" }) },
   ] : [];
   const maxMese = Math.max(1, ...(rie?.mesi || []).map((m) => Math.max(m.fatturato, m.acquisti)));
@@ -210,21 +214,21 @@ function Pagina() {
           {kpi.map((k) => (
             <Card key={k.l} className="cursor-pointer p-3 transition hover:border-primary" onClick={k.go}>
               <div className="text-xs text-muted-foreground">{k.l}</div>
-              <div className="text-lg font-semibold tabular-nums">{k.v}</div>
+              <div className={`text-lg font-semibold tabular-nums ${k.v === "riservato" ? "italic text-muted-foreground" : ""}`} title={k.v === "riservato" ? "Visibile solo all'amministratore" : undefined}>{k.v}</div>
               {k.s && <div className="text-xs text-muted-foreground">{k.s}</div>}
             </Card>
           ))}
         </div>
       )}
 
-      {rie?.mesi && anno > 0 && (
+      {!!rie?.mesi?.length && anno > 0 && (
         <Card className="p-3">
           <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
             <span>Imponibile per mese {anno} — clicca un mese per filtrare</span>
             <span><span className="mr-1 inline-block size-2 rounded-sm bg-primary" />fatturato <span className="ml-2 mr-1 inline-block size-2 rounded-sm bg-muted-foreground/40" />acquisti</span>
           </div>
           <div className="flex h-28 items-end gap-1">
-            {rie.mesi.map((m) => (
+            {(rie.mesi || []).map((m) => (
               <button key={m.mese} title={`${m.mese}/${anno}: fatturato ${eur(m.fatturato)} · acquisti ${eur(m.acquisti)}`}
                 onClick={() => { setMese(mese === m.mese ? 0 : m.mese); if (tab !== "emessa" && tab !== "ricevuta") setTab("emessa"); }}
                 className={`flex h-full flex-1 flex-col items-center justify-end gap-0.5 rounded ${mese === m.mese ? "bg-muted" : ""}`}>
@@ -244,8 +248,8 @@ function Pagina() {
           <button key={k} onClick={() => { if (k === "incassare" || k === "pagare") setCercaCrediti(q); setTab(k); setStato(""); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === k ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}>
             {l}
-            {k === "incassare" && rie && rie.da_incassare > 0 && <span className="ml-1 rounded bg-amber-500/15 px-1 text-[10px] text-amber-700 dark:text-amber-300">{eur(rie.da_incassare)}</span>}
-            {k === "pagare" && rie && rie.da_pagare > 0 && <span className="ml-1 rounded bg-muted px-1 text-[10px]">{eur(rie.da_pagare)}</span>}
+            {k === "incassare" && rie && (rie.da_incassare ?? 0) > 0 && <span className="ml-1 rounded bg-amber-500/15 px-1 text-[10px] text-amber-700 dark:text-amber-300">{eur(rie.da_incassare ?? 0)}</span>}
+            {k === "pagare" && rie && (rie.da_pagare ?? 0) > 0 && <span className="ml-1 rounded bg-muted px-1 text-[10px]">{eur(rie.da_pagare ?? 0)}</span>}
           </button>
         ))}
         {(tab === "emessa" || tab === "ricevuta") && (

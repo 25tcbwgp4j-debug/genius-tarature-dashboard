@@ -30,13 +30,19 @@ import {
   ShoppingCart,
   Boxes,
   NotebookPen,
+  ShieldCheck,
+  UserCog,
+  History,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
 import { useTheme } from "@/components/theme-provider";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { usePermessi } from "@/components/permessi";
 
-const navItems = [
+// soloAdmin: voci nascoste all'operatore ordinario (livelli di accesso 01/10/2026)
+type Voce = { href: string; label: string; icon: typeof ClipboardList; soloAdmin?: boolean };
+const navItems: Voce[] = [
   { href: "/", label: "Registro", icon: ClipboardList },
   { href: "/chat", label: "Chat WhatsApp", icon: MessageSquare },
   { href: "/rubrica", label: "Rubrica", icon: BookUser },
@@ -53,7 +59,10 @@ const navItems = [
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/automazioni", label: "Automazioni", icon: Activity },
   { href: "/enrichment", label: "Arricchimento", icon: Zap },
-  { href: "/statistiche", label: "Statistiche", icon: BarChart3 },
+  { href: "/statistiche", label: "Statistiche", icon: BarChart3, soloAdmin: true },
+  { href: "/autorizzazioni", label: "Autorizzazioni", icon: ShieldCheck },
+  { href: "/utenti", label: "Utenti", icon: UserCog, soloAdmin: true },
+  { href: "/audit", label: "Registro modifiche", icon: History, soloAdmin: true },
   { href: "/qrcode", label: "QR Code", icon: QrCode },
   { href: "/impostazioni", label: "Impostazioni", icon: Settings },
 ];
@@ -67,6 +76,8 @@ export function Sidebar() {
   const setMobileOpen = (v: boolean) => setApertoSu(v ? pathname : null);
   const { theme, toggleTheme } = useTheme();
   const push = usePushNotifications();
+  const { admin, nInAttesa } = usePermessi();
+  const voci = navItems.filter((v) => !v.soloAdmin || admin);
 
   useEffect(() => {
     if (pathname === "/login" || pathname.startsWith("/login/")) return;
@@ -135,12 +146,13 @@ export function Sidebar() {
           </button>
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {voci.map((item) => {
             const isActive =
               pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(item.href + "/") && !navItems.some((o) => o.href !== item.href && o.href.startsWith(item.href) && pathname.startsWith(o.href)));
+              (item.href !== "/" && pathname.startsWith(item.href + "/") && !voci.some((o) => o.href !== item.href && o.href.startsWith(item.href) && pathname.startsWith(o.href)));
             const Icon = item.icon;
             const showBadge = item.href === "/chat" && unread > 0;
+            const badgeAut = item.href === "/autorizzazioni" && nInAttesa > 0;
             return (
               <Link
                 key={item.href}
@@ -156,6 +168,11 @@ export function Sidebar() {
                 {showBadge && (
                   <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[10px] font-semibold">
                     {unread > 99 ? "99+" : unread}
+                  </span>
+                )}
+                {badgeAut && (
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-semibold" title="Richieste in attesa">
+                    {nInAttesa}
                   </span>
                 )}
               </Link>
