@@ -988,3 +988,17 @@ export async function docDaFattura(fid: string, body: { a: 'ordine' | 'preventiv
   Promise<{ ok: boolean; documento?: { id: string; sigla: string; tipo: string } }> {
   return fetchAPI(`/api/documenti/da-fattura/${fid}`, { method: 'POST', body: JSON.stringify(body) });
 }
+
+// === MAGAZZINO: carico con scanner, riconoscimento barcode, inventario — 30/09/2026 ===
+export interface InfoBarcode { descrizione: string | null; marca?: string | null; categoria?: string | null; fonte?: string | null; certezza?: string | null }
+export interface Riconoscimento { barcode: string; trovato: 'magazzino' | 'online' | null; prodotto?: Prodotto; info?: InfoBarcode; quantita?: number }
+export async function magRiconosci(codice: string): Promise<Riconoscimento> {
+  return fetchAPI(`/api/magazzino/riconosci/${encodeURIComponent(codice)}`);
+}
+export async function magImportTesto(testo: string): Promise<{ righe: Riconoscimento[]; codici: number; pezzi: number }> {
+  return fetchAPI('/api/magazzino/import-testo', { method: 'POST', body: JSON.stringify({ testo }) });
+}
+export async function magCaricoLotto(body: { modo: 'carico' | 'inventario'; causale?: string; righe: { barcode: string; quantita: number; descrizione?: string; marca?: string | null; prezzo?: number; costo?: number; aliquota?: number }[] }):
+  Promise<{ esiti: { barcode: string; ok: boolean; errore?: string; creato?: boolean; descrizione?: string; giacenza?: number }[]; ok: number; errori: number }> {
+  return fetchAPI('/api/magazzino/carico-lotto', { method: 'POST', body: JSON.stringify(body) });
+}

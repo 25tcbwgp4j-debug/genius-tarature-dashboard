@@ -3,6 +3,7 @@
 // MAGAZZINO (GENIUS LAB): articoli con codice a barre, carico con lo scanner, giacenze, movimenti,
 // etichette stampabili con il codice a barre per gli articoli che non l'hanno.
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import JsBarcode from "jsbarcode";
 import { Card } from "@/components/ui/card";
@@ -66,6 +67,7 @@ export default function MagazzinoPage() {
         <span className="text-sm text-muted-foreground">{righe.length} articoli · valore (a costo) {eur(valore)}</span>
         <div className="ml-auto flex gap-2">
           {etichette.length > 0 && <Button variant="outline" onClick={() => window.print()}><Printer /> Stampa {etichette.length} etichette</Button>}
+          <Link href="/magazzino/carico"><Button variant="outline"><PackagePlus /> Carico e inventario</Button></Link>
           <Button onClick={() => setNuovo({ descrizione: "", prezzo: 0, aliquota: 22, giacenza_iniziale: 0 })}><Plus /> Nuovo articolo</Button>
         </div>
       </div>
