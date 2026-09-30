@@ -817,3 +817,40 @@ export function fattUrlPacchetto(societa: string, giorno: string) {
 export async function fattChiusura(societa: string, periodo: 'giorno' | 'mese', giorno: string) {
   return fetchAPI(`/api/fatturazione/chiusura?societa=${societa}&periodo=${periodo}&giorno=${giorno}`);
 }
+
+// === MAGAZZINO E CASSA — 30/09/2026 ===
+export interface Prodotto {
+  id: string; societa: string; codice: string | null; barcode: string | null; descrizione: string;
+  categoria: string | null; marca: string | null; ubicazione: string | null; unita: string | null;
+  prezzo: number; aliquota: number; costo: number; giacenza: number; scorta_minima: number;
+  gestisce_giacenza: boolean; attivo: boolean; origine: string;
+  movimenti?: { id: string; tipo: string; quantita: number; causale: string | null; created_at: string; creato_da: string | null }[];
+}
+export interface RigaCassa { prodotto_id?: string | null; descrizione: string; quantita: number; prezzo: number; aliquota: number; sconto?: number }
+export interface Scontrino {
+  id: string; stato: string; righe: RigaCassa[]; totale: number; pagamenti: { modalita: string; importo: number }[];
+  codice_lotteria: string | null; numero_rt: string | null; errore: string | null; risposta_rt: string | null; created_at: string;
+}
+export async function magProdotti(q = '', sottoScorta = false, limit = 300) {
+  return fetchAPI(`/api/magazzino/prodotti?q=${encodeURIComponent(q)}&sotto_scorta=${sottoScorta}&limit=${limit}`);
+}
+export async function magPerCodice(codice: string): Promise<Prodotto> { return fetchAPI(`/api/magazzino/codice/${encodeURIComponent(codice)}`); }
+export async function magProdotto(id: string): Promise<Prodotto> { return fetchAPI(`/api/magazzino/prodotti/${id}`); }
+export async function magCrea(body: Partial<Prodotto> & { giacenza_iniziale?: number }): Promise<Prodotto> {
+  return fetchAPI('/api/magazzino/prodotti', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function magModifica(id: string, body: Partial<Prodotto>): Promise<Prodotto> {
+  return fetchAPI(`/api/magazzino/prodotti/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+export async function magMovimento(id: string, body: { tipo: string; quantita: number; causale?: string; costo?: number }) {
+  return fetchAPI(`/api/magazzino/prodotti/${id}/movimento`, { method: 'POST', body: JSON.stringify(body) });
+}
+export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string }): Promise<Scontrino> {
+  return fetchAPI('/api/cassa/scontrini', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function cassaScontrini(giorno = '') { return fetchAPI(`/api/cassa/scontrini?giorno=${giorno}`); }
+export async function cassaAnnulla(id: string) { return fetchAPI(`/api/cassa/scontrini/${id}/annulla`, { method: 'POST' }); }
+export async function cassaRiprova(id: string) { return fetchAPI(`/api/cassa/scontrini/${id}/riprova`, { method: 'POST' }); }
+export async function cassaFattura(body: { righe: RigaCassa[]; pagamenti?: { modalita: string }[]; pagata?: boolean }): Promise<Fattura> {
+  return fetchAPI('/api/cassa/fattura', { method: 'POST', body: JSON.stringify(body) });
+}

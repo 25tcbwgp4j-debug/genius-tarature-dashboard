@@ -26,6 +26,8 @@ import {
   BellOff,
   Handshake,
   Receipt,
+  ShoppingCart,
+  Boxes,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -42,6 +44,8 @@ const navItems = [
   { href: "/partner", label: "Partner B2B", icon: Handshake },
   { href: "/rapporti", label: "Rapporti", icon: FileText },
   { href: "/fatturazione", label: "Fatturazione", icon: Receipt },
+  { href: "/cassa", label: "Cassa", icon: ShoppingCart },
+  { href: "/magazzino", label: "Magazzino", icon: Boxes },
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/automazioni", label: "Automazioni", icon: Activity },
   { href: "/enrichment", label: "Arricchimento", icon: Zap },
