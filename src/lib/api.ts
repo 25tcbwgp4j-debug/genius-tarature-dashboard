@@ -808,3 +808,12 @@ export function fattUrlExport(params: Record<string, string>) {
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
   return `${API_PROXY}/api/fatturazione/export.csv?${q}`;
 }
+export function fattUrlChiusura(societa: string, periodo: 'giorno' | 'mese', giorno: string) {
+  return `${API_PROXY}/api/fatturazione/chiusura/stampa?societa=${societa}&periodo=${periodo}&giorno=${giorno}`;
+}
+export function fattUrlPacchetto(societa: string, giorno: string) {
+  return `${API_PROXY}/api/fatturazione/pacchetto-commercialista.zip?societa=${societa}&giorno=${giorno}`;
+}
+export async function fattChiusura(societa: string, periodo: 'giorno' | 'mese', giorno: string) {
+  return fetchAPI(`/api/fatturazione/chiusura?societa=${societa}&periodo=${periodo}&giorno=${giorno}`);
+}

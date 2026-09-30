@@ -17,11 +17,12 @@ import {
 import { Editor } from "./Editor";
 import { Anagrafiche } from "./Anagrafiche";
 import { DaIncassare } from "./DaIncassare";
+import { Chiusure } from "./Chiusure";
 import type { FattAnagrafica } from "@/lib/api";
 import { Dettaglio } from "./Dettaglio";
 import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
 
-type Tab = "emessa" | "ricevuta" | "incassare" | "pagare" | "clienti" | "fornitori" | "esiti";
+type Tab = "emessa" | "ricevuta" | "incassare" | "pagare" | "clienti" | "fornitori" | "chiusure" | "esiti";
 interface Esito { id: string; tipo: string; descrizione: string; data: string;
   fatture?: { id: string; numero: string | null; societa: string; controparte_nome: string | null } | null }
 interface Riepilogo { emesse: number; ricevute: number; fatturato: number; iva_vendite: number; acquisti: number;
@@ -186,7 +187,7 @@ function Pagina() {
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-b">
-        {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["incassare", "Da incassare"], ["pagare", "Da pagare"], ["clienti", "Clienti"], ["fornitori", "Fornitori"], ["esiti", "Esiti SdI"]] as [Tab, string][]).map(([k, l]) => (
+        {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["incassare", "Da incassare"], ["pagare", "Da pagare"], ["clienti", "Clienti"], ["fornitori", "Fornitori"], ["chiusure", "Chiusure"], ["esiti", "Esiti SdI"]] as [Tab, string][]).map(([k, l]) => (
           <button key={k} onClick={() => { setTab(k); setStato(""); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === k ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}>
             {l}
@@ -223,6 +224,8 @@ function Pagina() {
         <DaIncassare societa={societa || "genius"} anno={0} direzione={tab === "incassare" ? "emessa" : "ricevuta"}
           onApriFattura={(id) => setAperta(id)} onCambiato={carica} />
       )}
+
+      {tab === "chiusure" && <Chiusure societa={societa} />}
 
       {(tab === "clienti" || tab === "fornitori") && (
         <Anagrafiche societa={societa || "genius"} tipo={tab === "clienti" ? "cliente" : "fornitore"}
