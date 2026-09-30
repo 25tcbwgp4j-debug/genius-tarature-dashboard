@@ -20,13 +20,17 @@ interface Dati {
 export function Chiusure({ societa }: { societa: string }) {
   const [giorno, setGiorno] = useState(new Date().toISOString().slice(0, 10));
   const [periodo, setPeriodo] = useState<"giorno" | "mese">("giorno");
-  const [d, setD] = useState<Dati | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [d, setD] = useState<(Dati & { _k: string }) | null>(null);
   const soc = societa || "genius";
+  const chiave = `${soc}|${periodo}|${giorno}`;
+  const loading = d?._k !== chiave;
 
   useEffect(() => {
-    setLoading(true);
-    fattChiusura(soc, periodo, giorno).then(setD).catch((e: Error) => toast.error(e.message)).finally(() => setLoading(false));
+    let vivo = true;
+    fattChiusura(soc, periodo, giorno)
+      .then((r: Dati) => { if (vivo) setD({ ...r, _k: `${soc}|${periodo}|${giorno}` }); })
+      .catch((e: Error) => toast.error(e.message));
+    return () => { vivo = false; };
   }, [soc, periodo, giorno]);
 
   return (
