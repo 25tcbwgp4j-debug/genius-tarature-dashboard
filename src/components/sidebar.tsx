@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Calculator,
   ClipboardList,
   Users,
   UserPlus,
@@ -45,6 +46,7 @@ const navItems = [
   { href: "/rapporti", label: "Rapporti", icon: FileText },
   { href: "/fatturazione", label: "Fatturazione", icon: Receipt },
   { href: "/cassa", label: "Cassa", icon: ShoppingCart },
+  { href: "/cassa/giornata", label: "Cassa del giorno", icon: Calculator },
   { href: "/magazzino", label: "Magazzino", icon: Boxes },
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/automazioni", label: "Automazioni", icon: Activity },

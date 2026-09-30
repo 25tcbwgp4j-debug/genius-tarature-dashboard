@@ -909,3 +909,39 @@ export async function cassaRiprova(id: string) { return fetchAPI(`/api/cassa/sco
 export async function cassaFattura(body: { righe: RigaCassa[]; pagamenti?: { modalita: string }[]; pagata?: boolean }): Promise<Fattura> {
   return fetchAPI('/api/cassa/fattura', { method: 'POST', body: JSON.stringify(body) });
 }
+
+// === CASSA DEL GIORNO (ex Excel BASE CASSA) — 30/09/2026 ===
+export type Tagli = Record<string, number>;
+export interface RigaGiornata {
+  id: string; tipo: string; numero: string; descrizione: string; modello: string; fonte: 'fattura' | 'fattura_prec' | 'scontrino' | 'manuale';
+  contanti: number; pos: number; stripe: number; bonifico: number; paypal: number; totale: number;
+}
+export interface ControlloCassa { chiave: string; nome: string; atteso: number | null; trovato: number; differenza: number | null; ok: boolean; mancante: boolean; nota: string }
+export interface FoglioCassa {
+  giornata: {
+    giorno: string; stato: 'aperta' | 'chiusa'; apertura_tagli: Tagli; chiusura_tagli: Tagli; prelievi: { importo: number; nota: string }[];
+    pos_terminale: number | null; rt_scontrini: number | null; note: string | null; chiusa_il?: string | null; chiusa_da?: string | null;
+    file_scaricato_il?: string | null; nuova?: boolean; apertura_da?: string | null;
+  };
+  righe: RigaGiornata[]; totali: Record<'contanti' | 'pos' | 'stripe' | 'bonifico' | 'paypal', number>; totale_giorno: number;
+  riepilogo: {
+    apertura: number; prelievi: number; chiusura_teorica: number; chiusura_contata: number; pos_terminale: number | null; pos_da_sumup: number | null;
+    fatture_n: number; fatture_totale: number; fatture_prec_totale: number; scontrini_n: number; scontrini_totale: number; altro_totale: number;
+  };
+  controlli: ControlloCassa[]; conti_tornano: boolean; tagli: string[];
+}
+export async function cassaGiornata(giorno: string): Promise<FoglioCassa> { return fetchAPI(`/api/cassa/giornata?giorno=${giorno}`); }
+export async function cassaGiornataSalva(giorno: string, body: Partial<FoglioCassa['giornata']>): Promise<FoglioCassa> {
+  return fetchAPI(`/api/cassa/giornata?giorno=${giorno}`, { method: 'PUT', body: JSON.stringify(body) });
+}
+export async function cassaGiornataRiga(body: Record<string, string | number>): Promise<FoglioCassa> {
+  return fetchAPI('/api/cassa/giornata/movimenti', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function cassaGiornataElimina(id: string): Promise<FoglioCassa> { return fetchAPI(`/api/cassa/giornata/movimenti/${id}`, { method: 'DELETE' }); }
+export async function cassaGiornataChiudi(giorno: string, forza = false, nota = ''): Promise<FoglioCassa> {
+  return fetchAPI('/api/cassa/giornata/chiudi', { method: 'POST', body: JSON.stringify({ giorno, forza, nota }) });
+}
+export async function cassaGiornataRiapri(giorno: string): Promise<FoglioCassa> {
+  return fetchAPI('/api/cassa/giornata/riapri', { method: 'POST', body: JSON.stringify({ giorno }) });
+}
+export function cassaGiornataUrlExcel(giorno: string) { return `${API_PROXY}/api/cassa/giornata/excel?giorno=${giorno}`; }
