@@ -25,7 +25,7 @@ const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { s
 const MOD: [string, string][] = [["contanti", "Contanti"], ["pos_sumup", "POS SumUp"], ["bonifico", "Bonifico"], ["paypal", "PayPal"], ["carta_stripe", "Carta online (Stripe)"]];
 const MOD_L = Object.fromEntries(MOD);
 const STATO: Record<string, string> = {
-  aperto: "bg-amber-100 text-amber-800", saldato: "bg-emerald-100 text-emerald-800", convertito: "bg-sky-100 text-sky-800", annullato: "bg-muted text-muted-foreground",
+  aperto: "bg-amber-100 text-amber-800", in_lavorazione: "bg-sky-100 text-sky-800", saldato: "bg-emerald-100 text-emerald-800", convertito: "bg-sky-100 text-sky-800", annullato: "bg-muted text-muted-foreground",
 };
 const dataIt = (d: string) => new Date(`${d.slice(0, 10)}T12:00:00Z`).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" });
 // chiave stabile per ogni riga dell'editor (con l'indice, togliendo una riga i campi «slittavano»)

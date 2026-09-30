@@ -9,6 +9,7 @@ export const SOCIETA_LABEL: Record<string, string> = {
 
 export const STATI: Record<string, { label: string; cls: string }> = {
   bozza: { label: "Bozza", cls: "bg-muted text-muted-foreground" },
+  in_invio: { label: "In invio allo SdI…", cls: "bg-sky-100 text-sky-800" },
   inviata: { label: "Inviata allo SdI", cls: "bg-blue-500/15 text-blue-700 dark:text-blue-300" },
   consegnata: { label: "Consegnata", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" },
   non_consegnata: { label: "Nel cassetto fiscale", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-300" },
