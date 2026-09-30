@@ -760,7 +760,8 @@ export async function fattPagamento(id: string, body: { modalita?: FattModalita;
 export async function fattLinkStripe(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}/link-stripe`, { method: 'POST' }); }
 export async function fattNotaCredito(id: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/nota-credito`, { method: 'POST' }); }
 export async function fattDuplica(id: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/duplica`, { method: 'POST' }); }
-export async function fattDaSessione(sessionId: string) { return fetchAPI(`/api/fatturazione/fatture/da-sessione/${sessionId}`, { method: 'POST' }); }
+export async function fattDaSessione(sessionId: string, emetti = false) { return fetchAPI(`/api/fatturazione/fatture/da-sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ emetti }) }); }
+export async function fattStatoSessione(sessionId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}`); }
 export async function fattSincronizza() { return fetchAPI('/api/fatturazione/sincronizza', { method: 'POST' }); }
 export function fattUrlXml(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/xml`; }
 export function fattUrlStampa(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/stampa`; }
