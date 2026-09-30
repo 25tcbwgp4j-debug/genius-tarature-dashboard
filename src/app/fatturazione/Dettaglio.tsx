@@ -9,6 +9,7 @@ import {
   Receipt, RotateCcw, Send, Smartphone, Trash2, Undo2, Wallet, X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { docDaFattura } from "@/lib/api";
 import {
   fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattInvia, fattLinkStripe, fattNotaCredito,
   fattPagamento, fattUrlPdf, fattUrlStampa, fattUrlXml, type FattModalita, type Fattura,
@@ -125,6 +126,31 @@ export function Dettaglio({
               </Button>
             )}
             {inviabile && <Button size="sm" variant="outline" onClick={() => onEdit(f)}><Pencil /> Modifica</Button>}
+            {emessa && ["bozza", "errore", "scartata"].includes(f.stato) && (
+              <select className="h-8 rounded-md border border-input bg-background px-2 text-sm" value="" disabled={!!busy}
+                onChange={async (e) => {
+                  const a = e.target.value as "ordine" | "preventivo" | "scontrino";
+                  if (!a) return;
+                  let body: { a: typeof a; scontrino_numero?: string; modalita?: string } = { a };
+                  if (a === "scontrino") {
+                    const n = prompt("Numero dello scontrino battuto in cassa:");
+                    if (!n) return;
+                    const m = prompt("Pagato con: contanti, pos_sumup, bonifico, paypal", f.pagamento_modalita || "contanti");
+                    body = { a, scontrino_numero: n.trim(), modalita: (m || "contanti").trim() };
+                  } else if (!confirm(`Trasformare questa bozza in ${a === "ordine" ? "ordine cliente" : "preventivo"}? La bozza di fattura verrà eliminata.`)) return;
+                  try {
+                    const r = await docDaFattura(f.id, body);
+                    toast.success(r.documento ? `Creato ${r.documento.sigla}` : "Scontrino registrato nella cassa di oggi");
+                    onChanged(); onClose();
+                    if (r.documento) window.location.href = `/ordini?id=${r.documento.id}`;
+                  } catch (err) { toast.error((err as Error).message); }
+                }}>
+                <option value="">⇄ Converti in…</option>
+                <option value="ordine">Ordine cliente</option>
+                <option value="preventivo">Preventivo</option>
+                <option value="scontrino">Scontrino</option>
+              </select>
+            )}
             <a href={fattUrlPdf(f.id)} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><FileDown /> PDF di cortesia</Button></a>
             <a href={fattUrlStampa(f.id)} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><Printer /> Stampa</Button></a>
             {emessa && f.stato !== "bozza" && (

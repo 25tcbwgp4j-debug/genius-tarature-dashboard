@@ -946,3 +946,40 @@ export async function cassaGiornataRiapri(giorno: string): Promise<FoglioCassa> 
   return fetchAPI('/api/cassa/giornata/riapri', { method: 'POST', body: JSON.stringify({ giorno }) });
 }
 export function cassaGiornataUrlExcel(giorno: string) { return `${API_PROXY}/api/cassa/giornata/excel?giorno=${giorno}`; }
+
+// === PREVENTIVI E ORDINI CLIENTE — 30/09/2026 ===
+export interface RigaDoc { descrizione: string; quantita: number; prezzo_ivato: number; aliquota: number; sconto?: number; prodotto_id?: string | null }
+export interface PagamentoDoc {
+  id: string; data: string; tipo: 'acconto' | 'saldo'; importo: number; modalita: string; certificato: 'scontrino' | 'fattura';
+  scontrino_numero: string | null; fattura_id: string | null;
+}
+export interface DocumentoCliente {
+  id: string; tipo: 'preventivo' | 'ordine'; anno: number; numero: number; sigla: string; data: string;
+  stato: 'aperto' | 'convertito' | 'saldato' | 'annullato'; anagrafica_id: string | null; controparte: FattControparte;
+  cliente_nome: string | null; cliente?: string; telefono: string | null; email: string | null; righe: RigaDoc[]; totale: number;
+  rif: string | null; note: string | null; convertito_in: { tipo: string; id?: string; sigla?: string; numero?: string } | null;
+  pagamenti?: PagamentoDoc[]; pagato: number; residuo: number; created_at: string;
+}
+export async function docElenco(tipo: 'preventivo' | 'ordine', stato = '', q = ''): Promise<DocumentoCliente[]> {
+  return fetchAPI(`/api/documenti?tipo=${tipo}&stato=${stato}&q=${encodeURIComponent(q)}`);
+}
+export async function docDettaglio(id: string): Promise<DocumentoCliente> { return fetchAPI(`/api/documenti/${id}`); }
+export async function docCrea(body: Partial<DocumentoCliente>): Promise<DocumentoCliente> {
+  return fetchAPI('/api/documenti', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function docModifica(id: string, body: Partial<DocumentoCliente>): Promise<DocumentoCliente> {
+  return fetchAPI(`/api/documenti/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+export async function docAnnulla(id: string): Promise<DocumentoCliente> { return fetchAPI(`/api/documenti/${id}/annulla`, { method: 'POST' }); }
+export async function docAcconto(id: string, body: { importo: number; modalita: string; certificato: 'scontrino' | 'fattura'; scontrino_numero?: string }):
+  Promise<DocumentoCliente & { fattura?: { id: string } }> {
+  return fetchAPI(`/api/documenti/${id}/acconto`, { method: 'POST', body: JSON.stringify(body) });
+}
+export async function docConverti(id: string, body: { a: 'ordine' | 'fattura' | 'scontrino'; modalita?: string; scontrino_numero?: string; pagata?: boolean }):
+  Promise<DocumentoCliente & { fattura?: { id: string }; ordine?: { id: string; sigla: string } }> {
+  return fetchAPI(`/api/documenti/${id}/converti`, { method: 'POST', body: JSON.stringify(body) });
+}
+export async function docDaFattura(fid: string, body: { a: 'ordine' | 'preventivo' | 'scontrino'; modalita?: string; scontrino_numero?: string }):
+  Promise<{ ok: boolean; documento?: { id: string; sigla: string; tipo: string } }> {
+  return fetchAPI(`/api/documenti/da-fattura/${fid}`, { method: 'POST', body: JSON.stringify(body) });
+}

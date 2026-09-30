@@ -47,6 +47,7 @@ const navItems = [
   { href: "/fatturazione", label: "Fatturazione", icon: Receipt },
   { href: "/cassa", label: "Scontrino (registratore)", icon: ShoppingCart },
   { href: "/cassa/giornata", label: "Cassa del giorno", icon: Calculator },
+  { href: "/ordini", label: "Ordini e preventivi", icon: ClipboardList },
   { href: "/magazzino", label: "Magazzino", icon: Boxes },
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/automazioni", label: "Automazioni", icon: Activity },
