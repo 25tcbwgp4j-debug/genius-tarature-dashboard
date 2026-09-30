@@ -14,7 +14,7 @@ import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet,
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import {
-  cassaGiornata, cassaGiornataChiudi, cassaGiornataElimina, cassaGiornataRiapri, cassaGiornataRiga, cassaGiornataSalva, cassaGiornataUrlExcel,
+  cassaGiornata, cassaGiornataChiudi, cassaGiornataConfermaApertura, cassaGiornataElimina, cassaGiornataRiapri, cassaGiornataRiga, cassaGiornataSalva, cassaGiornataUrlExcel,
   type FoglioCassa, type Tagli,
 } from "@/lib/api";
 
@@ -135,6 +135,25 @@ export default function CassaGiornataPage() {
     }, 700);
   }
 
+  const reintT = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function modificaReintegro(p: { reintegro_tagli?: Tagli; reintegro_nota?: string }) {
+    if (!bozza) return;
+    const b = { ...bozza, ...p };
+    setBozza(b);
+    if (reintT.current) clearTimeout(reintT.current);
+    reintT.current = setTimeout(async () => {
+      reintT.current = null;
+      try { setF(await cassaGiornataSalva(giorno, { reintegro_tagli: b.reintegro_tagli || {}, reintegro_nota: b.reintegro_nota || "" })); }
+      catch (e) { toast.error((e as Error).message); }
+    }, 700);
+  }
+
+  async function confermaApertura() {
+    setBusy("apertura");
+    try { applica(await cassaGiornataConfermaApertura(giorno)); toast.success("Apertura confermata"); }
+    catch (e) { toast.error((e as Error).message); } finally { setBusy(""); }
+  }
+
   async function salvaPrelievi(lista: FoglioCassa["giornata"]["prelievi"]) {
     setBusy("prelievo");
     try { applica(await cassaGiornataSalva(giorno, { prelievi: lista })); } catch (e) { toast.error((e as Error).message); } finally { setBusy(""); }
@@ -253,6 +272,45 @@ export default function CassaGiornataPage() {
               </div>
             </div>
           </Riquadro>
+        </div>
+
+        {/* CONFERMA APERTURA (mattino) · REINTEGRO (sera) */}
+        <div className="grid gap-3 lg:grid-cols-2">
+            {g.origine === "excel" ? <div /> : (() => {
+              const attesa = rp.apertura_attesa;
+              const diff = attesa === null ? 0 : tondo(rp.apertura - attesa);
+              const ok = Math.abs(diff) < 0.05;
+              return (
+                <Riquadro titolo="☀️ Apertura del mattino" stato={g.apertura_confermata_il ? "ok" : "manca"}
+                  valore={eur(rp.apertura)}
+                  sotto={attesa === null ? "Nessuna chiusura precedente registrata" :
+                    <>la sera del {rp.apertura_attesa_da ? new Date(`${rp.apertura_attesa_da}T12:00:00`).toLocaleDateString("it-IT") : "giorno prima"} (chiusura + reintegro) doveva lasciare <b>{eur(attesa)}</b>{!ok && <> · <b className="text-red-700">differenza {eur(diff)}</b></>}</>}>
+                  {g.apertura_confermata_il ? (
+                    <div className="text-sm font-medium text-emerald-700">
+                      ✓ Confermata da {g.apertura_confermata_da} alle {new Date(g.apertura_confermata_il).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                      {g.apertura_differenza ? ` · differenza ${eur(g.apertura_differenza)}` : " · corrisponde"}
+                    </div>
+                  ) : !chiusa && (
+                    <Button className={`mt-1 w-full ${ok ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"}`} disabled={busy === "apertura"}
+                      onClick={() => { if (ok || confirm(`I soldi contati (${eur(rp.apertura)}) non corrispondono a quelli attesi (${eur(attesa)}). Confermare con differenza ${eur(diff)}?`)) confermaApertura(); }}>
+                      {busy === "apertura" ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
+                      {ok ? "✓ La cassa corrisponde" : "Conferma apertura con differenza"}
+                    </Button>
+                  )}
+                  {!g.apertura_confermata_il && !chiusa && <div className="text-xs text-muted-foreground">L&apos;addetto alla cassa conta i soldi: se tornano preme il tasto, se no corregge i tagli qui sopra e conferma.</div>}
+                </Riquadro>
+              );
+            })()}
+            <div className="space-y-2">
+              <Contanti titolo="➕ Reintegro serale (per domani)" colore="border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/20"
+                sotto="Banconote e monete aggiunte la sera dopo la chiusura (es. da 6 a 10 banconote da 20): si segna anche a cassa chiusa"
+                tagli={f.tagli_apertura} valori={g.reintegro_tagli || {}} disabled={false} onChange={(t) => modificaReintegro({ reintegro_tagli: t })} />
+              <div className="flex flex-wrap items-center gap-2">
+                <Input className="h-8 flex-1" placeholder="da dove arrivano (es. cassaforte, cambio in banca…)" value={g.reintegro_nota ?? ""}
+                  onChange={(e) => modificaReintegro({ reintegro_nota: e.target.value })} />
+                <span className="rounded-md border-2 border-emerald-400 bg-background px-3 py-1 text-sm font-semibold">Cassa per domani: {eur(rp.cassa_per_domani)}</span>
+              </div>
+            </div>
         </div>
 
         {/* CHIUSURE DEL GIORNO */}
