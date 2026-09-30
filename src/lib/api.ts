@@ -730,6 +730,7 @@ export interface Fattura {
   pagamento_rif?: string | null; scadenza: string | null; causale?: string | null; note?: string | null;
   session_id: string | null; errore: string | null; inviata_il: string | null; created_at: string;
   fattura_collegata_id?: string | null;
+  origine?: string; anagrafica_id?: string | null;
   esiti?: { id: string; tipo: string; descrizione: string; data: string }[];
   controlli?: string[];
   collegata?: { id: string; numero: string; data: string; totale: number } | null;
@@ -763,3 +764,24 @@ export async function fattDaSessione(sessionId: string) { return fetchAPI(`/api/
 export async function fattSincronizza() { return fetchAPI('/api/fatturazione/sincronizza', { method: 'POST' }); }
 export function fattUrlXml(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/xml`; }
 export function fattUrlStampa(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/stampa`; }
+
+// Anagrafiche di fatturazione (clienti/fornitori per società; Genius importata da SimplyFatt) — 30/09/2026
+export interface FattAnagrafica {
+  id: string; societa: FattSocieta; tipo: 'cliente' | 'fornitore'; origine: string; codice?: string | null;
+  denominazione: string | null; piva: string | null; cf: string | null; sdi: string | null; pec: string | null;
+  indirizzo: string | null; cap: string | null; comune: string | null; provincia: string | null; paese: string | null;
+  email: string | null; telefono: string | null; referente?: string | null; attivo?: boolean;
+  fatture?: { id: string; direzione: string; tipo_documento: string; numero: string | null; data: string | null;
+    totale: number; stato: string; pagamento_stato: string; origine: string }[];
+  totale_fatturato?: number;
+}
+export async function fattAnagrafiche(societa: string, tipo: string, q = '', limit = 100, offset = 0) {
+  return fetchAPI(`/api/fatturazione/anagrafiche?societa=${societa}&tipo=${tipo}&q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`);
+}
+export async function fattAnagrafica(id: string): Promise<FattAnagrafica> { return fetchAPI(`/api/fatturazione/anagrafiche/${id}`); }
+export async function fattAnagraficaCrea(body: Partial<FattAnagrafica>): Promise<FattAnagrafica> {
+  return fetchAPI('/api/fatturazione/anagrafiche', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function fattAnagraficaModifica(id: string, body: Partial<FattAnagrafica>): Promise<FattAnagrafica> {
+  return fetchAPI(`/api/fatturazione/anagrafiche/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}

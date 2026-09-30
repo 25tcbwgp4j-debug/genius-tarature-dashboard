@@ -11,8 +11,10 @@ import { toast } from "sonner";
 import {
   fattCrea,
   fattEmetti,
+  fattAnagrafiche,
   fattModifica,
   searchCustomers,
+  type FattAnagrafica,
   type FattControparte,
   type FattModalita,
   type FattRiga,
@@ -23,7 +25,8 @@ import { MODALITA_LABEL, SOCIETA_LABEL, TIPI_LABEL, eur, stimaTotali } from "./u
 
 type TipoCliente = "azienda" | "privato" | "estero";
 interface ClienteAnagrafica { id: string; company_name?: string; vat_number?: string; tax_id?: string; sdi_code?: string;
-  pec?: string; address?: string; zip_code?: string; city?: string; province?: string; email?: string }
+  pec?: string; address?: string; zip_code?: string; city?: string; province?: string; email?: string;
+  _fonte?: "fatturazione" | "tarature"; _anag?: FattAnagrafica }
 const ALIQUOTE = [22, 10, 5, 4, 0];
 const NATURE: Record<string, string> = {
   "N1": "N1 escluse art. 15",
@@ -41,24 +44,32 @@ const rigaVuota = (aliquota = 22): FattRiga => ({ descrizione: "", quantita: 1, 
 
 export function Editor({
   iniziale,
+  anagrafica,
   societaDefault,
   onClose,
   onSaved,
 }: {
   iniziale?: Fattura | null;
+  anagrafica?: FattAnagrafica;
   societaDefault: FattSocieta;
   onClose: () => void;
   onSaved: (id: string) => void;
 }) {
-  const [societa, setSocieta] = useState<FattSocieta>(iniziale?.societa || societaDefault);
+  const [societa, setSocieta] = useState<FattSocieta>(iniziale?.societa || anagrafica?.societa || societaDefault);
   const [tipoDoc, setTipoDoc] = useState(iniziale?.tipo_documento || "TD01");
   const [data, setData] = useState(iniziale?.data || new Date().toISOString().slice(0, 10));
-  const c0 = iniziale?.controparte || {};
+  const c0: FattControparte = iniziale?.controparte || (anagrafica ? {
+    denominazione: anagrafica.denominazione || "", piva: anagrafica.piva || "", cf: anagrafica.cf || "",
+    sdi: anagrafica.sdi || "", pec: anagrafica.pec || "", indirizzo: anagrafica.indirizzo || "", cap: anagrafica.cap || "",
+    comune: anagrafica.comune || "", provincia: anagrafica.provincia || "",
+    paese: (anagrafica.paese || "IT").toUpperCase().slice(0, 2), email: anagrafica.email || "" } : {});
   const [tipoCliente, setTipoCliente] = useState<TipoCliente>(
     (c0.paese && c0.paese !== "IT") ? "estero" : (c0.piva ? "azienda" : (c0.cf || c0.nome ? "privato" : "azienda")),
   );
   const [cliente, setCliente] = useState<FattControparte>({ paese: "IT", ...c0 });
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [anagraficaId, setAnagraficaId] = useState<string | null>(iniziale?.anagrafica_id || anagrafica?.id || null);
+  const [salvaAnag, setSalvaAnag] = useState(true);
   const [righe, setRighe] = useState<FattRiga[]>(
     iniziale?.righe?.length
       ? iniziale.righe.map((r) => ({ ...r, prezzo_ivato: null }))
@@ -76,11 +87,20 @@ export function Editor({
 
   useEffect(() => {
     if (q.trim().length < 2) { setTrovati([]); return; }
-    const t = setTimeout(() => {
-      searchCustomers(q.trim(), 8).then((r) => setTrovati(r.customers || [])).catch(() => setTrovati([]));
+    const t = setTimeout(async () => {
+      const [fa, ta] = await Promise.all([
+        fattAnagrafiche(societa, "cliente", q.trim(), 8).catch(() => ({ anagrafiche: [] })),
+        societa === "genius" ? searchCustomers(q.trim(), 6).catch(() => ({ customers: [] })) : Promise.resolve({ customers: [] }),
+      ]);
+      const daFatt: ClienteAnagrafica[] = (fa.anagrafiche || []).map((a: FattAnagrafica) => ({
+        id: a.id, company_name: a.denominazione || "", vat_number: a.piva || "", tax_id: a.cf || "", sdi_code: a.sdi || "",
+        pec: a.pec || "", address: a.indirizzo || "", zip_code: a.cap || "", city: a.comune || "", province: a.provincia || "",
+        email: a.email || "", _fonte: "fatturazione", _anag: a }));
+      const daTar: ClienteAnagrafica[] = (ta.customers || []).map((c: ClienteAnagrafica) => ({ ...c, _fonte: "tarature" }));
+      setTrovati([...daFatt, ...daTar]);
     }, 300);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, societa]);
 
   const righePerCalcolo = useMemo(
     () => righe.map((r) => prezziIvati
@@ -91,7 +111,8 @@ export function Editor({
   const tot = stimaTotali(righePerCalcolo);
 
   function scegliCliente(x: ClienteAnagrafica) {
-    setCustomerId(x.id);
+    if (x._fonte === "fatturazione") { setAnagraficaId(x.id); setCustomerId(null); }
+    else { setCustomerId(x.id); setAnagraficaId(null); }
     const piva = (x.vat_number || "").replace(/\D/g, "");
     setTipoCliente(piva ? "azienda" : "privato");
     setCliente({
@@ -134,6 +155,8 @@ export function Editor({
       })),
       pagamento_modalita: modalita, scadenza: scadenza || null, causale, note,
       customer_id: customerId || undefined,
+      anagrafica_id: anagraficaId || undefined,
+      salva_anagrafica: !anagraficaId && salvaAnag,
       pagata,
     };
   }
@@ -204,7 +227,7 @@ export function Editor({
                   <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-md border bg-background shadow-lg">
                     {trovati.map((x) => (
                       <button key={x.id} className="block w-full px-3 py-2 text-left text-sm hover:bg-muted" onClick={() => scegliCliente(x)}>
-                        <div className="font-medium">{x.company_name}</div>
+                        <div className="font-medium">{x.company_name} <span className="text-[10px] font-normal text-muted-foreground">{x._fonte === "tarature" ? "Tarature" : "anagrafica"}</span></div>
                         <div className="text-xs text-muted-foreground">{x.vat_number || x.tax_id || "senza P.IVA"} · {x.city || ""}</div>
                       </button>
                     ))}
@@ -240,6 +263,11 @@ export function Editor({
               )}
               <label className="col-span-2 space-y-1"><div className={lab}>Email per la copia di cortesia</div><input className={campo} value={cliente.email || ""} onChange={(e) => setC("email", e.target.value)} /></label>
             </div>
+            {!anagraficaId && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <input type="checkbox" checked={salvaAnag} onChange={(e) => setSalvaAnag(e.target.checked)} /> salva questo cliente in anagrafica
+              </label>
+            )}
             {tipoCliente === "privato" && <p className="text-xs text-muted-foreground">Ai privati la fattura arriva nel loro cassetto fiscale (codice 0000000): consegna loro anche la copia di cortesia.</p>}
             {tipoCliente === "estero" && <p className="text-xs text-muted-foreground">Clienti esteri: codice destinatario XXXXXXX, lo SdI la accetta e la copia va mandata al cliente.</p>}
           </div>

@@ -15,10 +15,12 @@ import {
   type FattSocieta, type Fattura,
 } from "@/lib/api";
 import { Editor } from "./Editor";
+import { Anagrafiche } from "./Anagrafiche";
+import type { FattAnagrafica } from "@/lib/api";
 import { Dettaglio } from "./Dettaglio";
 import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
 
-type Tab = "emessa" | "ricevuta" | "esiti";
+type Tab = "emessa" | "ricevuta" | "clienti" | "fornitori" | "esiti";
 interface Esito { id: string; tipo: string; descrizione: string; data: string;
   fatture?: { id: string; numero: string | null; societa: string; controparte_nome: string | null } | null }
 interface Riepilogo { emesse: number; ricevute: number; fatturato: number; iva_vendite: number; acquisti: number;
@@ -39,7 +41,9 @@ function Pagina() {
   const [cfg, setCfg] = useState<Config | null>(null);
   const [loading, setLoading] = useState(false);
   const [aperta, setAperta] = useState<string | null>(null);
-  const [editor, setEditor] = useState<{ f: Fattura | null } | null>(null);
+  const [editor, setEditor] = useState<{ f: Fattura | null; anag?: FattAnagrafica } | null>(null);
+  const [anno, setAnno] = useState<number>(new Date().getFullYear());
+  const [prove, setProve] = useState(false);
   const [sync, setSync] = useState(false);
 
   useEffect(() => { fattConfig().then(setCfg).catch(() => undefined); }, []);
@@ -55,17 +59,17 @@ function Pagina() {
       if (tab === "esiti") {
         const r = await fattEsiti(150);
         setEsiti(r.esiti || []);
-      } else {
-        const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q });
+      } else if (tab === "emessa" || tab === "ricevuta") {
+        const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q, anno: anno ? String(anno) : "", prove: prove ? "true" : "", limit: "500" });
         setRighe(r.fatture || []);
       }
-      setRie(await fattRiepilogo(societa));
+      setRie(await fattRiepilogo(societa, anno));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [tab, societa, stato, pagamento, q]);
+  }, [tab, societa, stato, pagamento, q, anno, prove]);
 
   useEffect(() => {
     const t = setTimeout(carica, q ? 300 : 0);
@@ -112,6 +116,10 @@ function Pagina() {
           </span>
         )}
         <div className="ml-auto flex flex-wrap gap-2">
+          <select className={sel} value={anno} onChange={(e) => setAnno(Number(e.target.value))}>
+            {[2026, 2025, 2024].map((a) => <option key={a} value={a}>{a}</option>)}
+            <option value={0}>Tutti gli anni</option>
+          </select>
           <select className={sel} value={societa} onChange={(e) => setSocieta(e.target.value)}>
             <option value="">Tutte le società</option>
             {Object.entries(SOCIETA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -136,14 +144,17 @@ function Pagina() {
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-b">
-        {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["esiti", "Esiti SdI"]] as [Tab, string][]).map(([k, l]) => (
+        {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["clienti", "Clienti"], ["fornitori", "Fornitori"], ["esiti", "Esiti SdI"]] as [Tab, string][]).map(([k, l]) => (
           <button key={k} onClick={() => { setTab(k); setStato(""); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === k ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}>
             {l}
           </button>
         ))}
-        {tab !== "esiti" && (
-          <div className="ml-auto flex flex-wrap gap-2 pb-2">
+        {(tab === "emessa" || tab === "ricevuta") && (
+          <div className="ml-auto flex flex-wrap items-center gap-2 pb-2">
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              <input type="checkbox" checked={prove} onChange={(e) => setProve(e.target.checked)} /> mostra prove
+            </label>
             <div className="relative">
               <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
               <Input className="h-8 w-56 pl-8" placeholder="Cliente, numero, P.IVA…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -164,7 +175,13 @@ function Pagina() {
 
       {loading && <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>}
 
-      {!loading && tab !== "esiti" && (
+      {(tab === "clienti" || tab === "fornitori") && (
+        <Anagrafiche societa={societa || "genius"} tipo={tab === "clienti" ? "cliente" : "fornitore"}
+          onNuovaFattura={(a) => setEditor({ f: null, anag: a })}
+          onApriFattura={(id) => setAperta(id)} />
+      )}
+
+      {!loading && (tab === "emessa" || tab === "ricevuta") && (
         <Card className="overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead>
@@ -186,6 +203,7 @@ function Pagina() {
                       {f.numero || <span className="text-muted-foreground">bozza</span>}
                       {f.tipo_documento !== "TD01" && <div className="text-xs text-muted-foreground">{TIPI_LABEL[f.tipo_documento] || f.tipo_documento}</div>}
                       {f.ambiente === "sandbox" && <span className="ml-1 rounded bg-orange-500/15 px-1 text-[10px] text-orange-700 dark:text-orange-300">PROVA</span>}
+                      {f.origine === "simplyfatt" && <span className="ml-1 rounded bg-muted px-1 text-[10px] text-muted-foreground" title="Importata dallo storico SimplyFatt">SF</span>}
                     </td>
                     <td className="p-2 whitespace-nowrap">{dataIt(f.data)}</td>
                     <td className="p-2">
@@ -238,7 +256,7 @@ function Pagina() {
           onOpen={(id) => setAperta(id)} />
       )}
       {editor && (
-        <Editor iniziale={editor.f} societaDefault={(societa as FattSocieta) || "genius"}
+        <Editor iniziale={editor.f} anagrafica={editor.anag} societaDefault={(societa as FattSocieta) || "genius"}
           onClose={() => setEditor(null)}
           onSaved={(id) => { setEditor(null); carica(); setAperta(id); }} />
       )}
