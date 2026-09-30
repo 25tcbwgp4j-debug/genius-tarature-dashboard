@@ -8,23 +8,25 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileText, Loader2, Plus, RefreshCw, Search } from "lucide-react";
+import { Download, FileText, Loader2, Plus, RefreshCw, Search, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
-  fattConfig, fattElenco, fattEsiti, fattRiepilogo, fattSincronizza,
+  fattConfig, fattElenco, fattPagamentoMultiplo, fattUrlExport, type FattModalita, fattEsiti, fattRiepilogo, fattSincronizza,
   type FattSocieta, type Fattura,
 } from "@/lib/api";
 import { Editor } from "./Editor";
 import { Anagrafiche } from "./Anagrafiche";
+import { DaIncassare } from "./DaIncassare";
 import type { FattAnagrafica } from "@/lib/api";
 import { Dettaglio } from "./Dettaglio";
 import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
 
-type Tab = "emessa" | "ricevuta" | "clienti" | "fornitori" | "esiti";
+type Tab = "emessa" | "ricevuta" | "incassare" | "pagare" | "clienti" | "fornitori" | "esiti";
 interface Esito { id: string; tipo: string; descrizione: string; data: string;
   fatture?: { id: string; numero: string | null; societa: string; controparte_nome: string | null } | null }
 interface Riepilogo { emesse: number; ricevute: number; fatturato: number; iva_vendite: number; acquisti: number;
-  iva_acquisti: number; da_incassare: number; da_pagare: number; scartate: number; bozze: number; non_consegnate: number }
+  iva_acquisti: number; da_incassare: number; da_pagare: number; scartate: number; bozze: number; non_consegnate: number;
+  mesi?: { mese: number; fatturato: number; acquisti: number }[] }
 interface Config { ambiente: string; configurato: boolean }
 
 function Pagina() {
@@ -44,6 +46,9 @@ function Pagina() {
   const [editor, setEditor] = useState<{ f: Fattura | null; anag?: FattAnagrafica } | null>(null);
   const [anno, setAnno] = useState<number>(new Date().getFullYear());
   const [prove, setProve] = useState(false);
+  const [mese, setMese] = useState(0);
+  const [sel, setSel] = useState<Record<string, boolean>>({});
+  const [modMulti, setModMulti] = useState<FattModalita>("bonifico");
   const [sync, setSync] = useState(false);
 
   useEffect(() => { fattConfig().then(setCfg).catch(() => undefined); }, []);
@@ -60,8 +65,11 @@ function Pagina() {
         const r = await fattEsiti(150);
         setEsiti(r.esiti || []);
       } else if (tab === "emessa" || tab === "ricevuta") {
-        const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q, anno: anno ? String(anno) : "", prove: prove ? "true" : "", limit: "500" });
+        const ultimo = mese ? new Date(anno || 2026, mese, 0).getDate() : 0;
+        const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q, anno: anno ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
+          da: mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-01` : "", a: mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimo}` : "" });
         setRighe(r.fatture || []);
+        setSel({});
       }
       setRie(await fattRiepilogo(societa, anno));
     } catch (e) {
@@ -69,7 +77,7 @@ function Pagina() {
     } finally {
       setLoading(false);
     }
-  }, [tab, societa, stato, pagamento, q, anno, prove]);
+  }, [tab, societa, stato, pagamento, q, anno, prove, mese]);
 
   useEffect(() => {
     const t = setTimeout(carica, q ? 300 : 0);
@@ -94,15 +102,27 @@ function Pagina() {
     if (sp.get("id")) router.replace("/fatturazione");
   }
 
-  const sel = "h-8 rounded-md border border-input bg-background px-2 text-sm";
+  const sel_cls = "h-8 rounded-md border border-input bg-background px-2 text-sm";
+  const vai = (t: Tab, extra?: { stato?: string; pagamento?: string }) => {
+    setTab(t); setStato(extra?.stato || ""); setPagamento(extra?.pagamento || ""); setMese(0);
+  };
   const kpi = rie ? [
-    { l: "Fatturato (imponibile)", v: eur(rie.fatturato), s: `${rie.emesse} fatture emesse` },
-    { l: "Da incassare", v: eur(rie.da_incassare), s: rie.bozze ? `${rie.bozze} bozze` : "" },
-    { l: "Acquisti (imponibile)", v: eur(rie.acquisti), s: `${rie.ricevute} fatture ricevute` },
-    { l: "Da pagare ai fornitori", v: eur(rie.da_pagare), s: "" },
-    { l: "IVA vendite − acquisti", v: eur((rie.iva_vendite || 0) - (rie.iva_acquisti || 0)), s: "stima, non liquidazione" },
-    { l: "Da sistemare", v: String((rie.scartate || 0) + (rie.non_consegnate || 0)), s: `${rie.scartate} scartate · ${rie.non_consegnate} nel cassetto` },
+    { l: `Fatturato ${anno || ""} (imponibile)`, v: eur(rie.fatturato), s: `${rie.emesse} fatture emesse`, go: () => vai("emessa") },
+    { l: "Da incassare", v: eur(rie.da_incassare), s: rie.bozze ? `${rie.bozze} bozze` : "per cliente →", go: () => vai("incassare") },
+    { l: `Acquisti ${anno || ""} (imponibile)`, v: eur(rie.acquisti), s: `${rie.ricevute} fatture ricevute`, go: () => vai("ricevuta") },
+    { l: "Da pagare ai fornitori", v: eur(rie.da_pagare), s: "per fornitore →", go: () => vai("pagare") },
+    { l: "IVA vendite − acquisti", v: eur((rie.iva_vendite || 0) - (rie.iva_acquisti || 0)), s: "stima, non liquidazione", go: () => vai("emessa") },
+    { l: "Da sistemare", v: String((rie.scartate || 0) + (rie.non_consegnate || 0)), s: `${rie.scartate} scartate · ${rie.non_consegnate} nel cassetto`, go: () => vai("emessa", { stato: "scartata" }) },
   ] : [];
+  const maxMese = Math.max(1, ...(rie?.mesi || []).map((m) => Math.max(m.fatturato, m.acquisti)));
+  const selIds = Object.keys(sel).filter((k) => sel[k]);
+  async function incassaSelezionate() {
+    if (!selIds.length) return;
+    if (!confirm(`Segnare ${selIds.length} fatture come ${tab === "emessa" ? "incassate" : "pagate"} (${modMulti}, oggi)?`)) return;
+    try { await fattPagamentoMultiplo({ ids: selIds, modalita: modMulti }); toast.success(`${selIds.length} fatture aggiornate`); carica(); }
+    catch (e) { toast.error((e as Error).message); }
+  }
+  const exportUrl = fattUrlExport({ direzione: tab === "ricevuta" ? "ricevuta" : "emessa", societa, anno: anno ? String(anno) : "", stato, pagamento, q, prove: prove ? "true" : "" });
 
   return (
     <div className="space-y-4 p-4 md:p-6">
@@ -116,11 +136,11 @@ function Pagina() {
           </span>
         )}
         <div className="ml-auto flex flex-wrap gap-2">
-          <select className={sel} value={anno} onChange={(e) => setAnno(Number(e.target.value))}>
+          <select className={sel_cls} value={anno} onChange={(e) => setAnno(Number(e.target.value))}>
             {[2026, 2025, 2024].map((a) => <option key={a} value={a}>{a}</option>)}
             <option value={0}>Tutti gli anni</option>
           </select>
-          <select className={sel} value={societa} onChange={(e) => setSocieta(e.target.value)}>
+          <select className={sel_cls} value={societa} onChange={(e) => setSocieta(e.target.value)}>
             <option value="">Tutte le società</option>
             {Object.entries(SOCIETA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
@@ -134,7 +154,7 @@ function Pagina() {
       {rie && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           {kpi.map((k) => (
-            <Card key={k.l} className="p-3">
+            <Card key={k.l} className="cursor-pointer p-3 transition hover:border-primary" onClick={k.go}>
               <div className="text-xs text-muted-foreground">{k.l}</div>
               <div className="text-lg font-semibold tabular-nums">{k.v}</div>
               {k.s && <div className="text-xs text-muted-foreground">{k.s}</div>}
@@ -143,8 +163,30 @@ function Pagina() {
         </div>
       )}
 
+      {rie?.mesi && anno > 0 && (
+        <Card className="p-3">
+          <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+            <span>Imponibile per mese {anno} — clicca un mese per filtrare</span>
+            <span><span className="mr-1 inline-block size-2 rounded-sm bg-primary" />fatturato <span className="ml-2 mr-1 inline-block size-2 rounded-sm bg-muted-foreground/40" />acquisti</span>
+          </div>
+          <div className="flex h-28 items-end gap-1">
+            {rie.mesi.map((m) => (
+              <button key={m.mese} title={`${m.mese}/${anno}: fatturato ${eur(m.fatturato)} · acquisti ${eur(m.acquisti)}`}
+                onClick={() => { setMese(mese === m.mese ? 0 : m.mese); if (tab !== "emessa" && tab !== "ricevuta") setTab("emessa"); }}
+                className={`flex h-full flex-1 flex-col items-center justify-end gap-0.5 rounded ${mese === m.mese ? "bg-muted" : ""}`}>
+                <div className="flex w-full flex-1 items-end justify-center gap-0.5">
+                  <div className="w-2/5 rounded-t bg-primary" style={{ height: `${(m.fatturato / maxMese) * 100}%` }} />
+                  <div className="w-2/5 rounded-t bg-muted-foreground/40" style={{ height: `${(m.acquisti / maxMese) * 100}%` }} />
+                </div>
+                <span className="text-[10px] text-muted-foreground">{["G","F","M","A","M","G","L","A","S","O","N","D"][m.mese - 1]}</span>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 border-b">
-        {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["clienti", "Clienti"], ["fornitori", "Fornitori"], ["esiti", "Esiti SdI"]] as [Tab, string][]).map(([k, l]) => (
+        {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["incassare", "Da incassare"], ["pagare", "Da pagare"], ["clienti", "Clienti"], ["fornitori", "Fornitori"], ["esiti", "Esiti SdI"]] as [Tab, string][]).map(([k, l]) => (
           <button key={k} onClick={() => { setTab(k); setStato(""); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === k ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}>
             {l}
@@ -152,19 +194,21 @@ function Pagina() {
         ))}
         {(tab === "emessa" || tab === "ricevuta") && (
           <div className="ml-auto flex flex-wrap items-center gap-2 pb-2">
+            {mese > 0 && <Button size="xs" variant="secondary" onClick={() => setMese(0)}>mese {mese}/{anno} ✕</Button>}
             <label className="flex items-center gap-1 text-xs text-muted-foreground">
               <input type="checkbox" checked={prove} onChange={(e) => setProve(e.target.checked)} /> mostra prove
             </label>
+            <a href={exportUrl}><Button size="sm" variant="outline"><Download /> CSV</Button></a>
             <div className="relative">
               <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
               <Input className="h-8 w-56 pl-8" placeholder="Cliente, numero, P.IVA…" value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
-            <select className={sel} value={stato} onChange={(e) => setStato(e.target.value)}>
+            <select className={sel_cls} value={stato} onChange={(e) => setStato(e.target.value)}>
               <option value="">Tutti gli stati</option>
               {Object.entries(STATI).filter(([k]) => tab === "ricevuta" ? k === "ricevuta" : k !== "ricevuta")
                 .map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
-            <select className={sel} value={pagamento} onChange={(e) => setPagamento(e.target.value)}>
+            <select className={sel_cls} value={pagamento} onChange={(e) => setPagamento(e.target.value)}>
               <option value="">Pagate e non</option>
               <option value="da_pagare">{tab === "emessa" ? "Da incassare" : "Da pagare"}</option>
               <option value="pagata">{tab === "emessa" ? "Incassate" : "Pagate"}</option>
@@ -175,10 +219,26 @@ function Pagina() {
 
       {loading && <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>}
 
+      {(tab === "incassare" || tab === "pagare") && (
+        <DaIncassare societa={societa || "genius"} anno={0} direzione={tab === "incassare" ? "emessa" : "ricevuta"}
+          onApriFattura={(id) => setAperta(id)} onCambiato={carica} />
+      )}
+
       {(tab === "clienti" || tab === "fornitori") && (
         <Anagrafiche societa={societa || "genius"} tipo={tab === "clienti" ? "cliente" : "fornitore"}
           onNuovaFattura={(a) => setEditor({ f: null, anag: a })}
           onApriFattura={(id) => setAperta(id)} />
+      )}
+
+      {!loading && (tab === "emessa" || tab === "ricevuta") && selIds.length > 0 && (
+        <Card className="flex flex-wrap items-center gap-2 p-2 text-sm">
+          <span><b>{selIds.length}</b> selezionate · {eur(righe.filter((f) => sel[f.id]).reduce((t, f) => t + Number(f.totale) * (f.tipo_documento === "TD04" ? -1 : 1), 0))}</span>
+          <select className={sel_cls} value={modMulti} onChange={(e) => setModMulti(e.target.value as FattModalita)}>
+            {(["bonifico", "pos_sumup", "contanti", "carta_stripe"] as FattModalita[]).map((m) => <option key={m} value={m}>{MODALITA_LABEL[m]}</option>)}
+          </select>
+          <Button size="sm" onClick={incassaSelezionate}><Wallet /> Segna {tab === "emessa" ? "incassate" : "pagate"}</Button>
+          <Button size="sm" variant="ghost" onClick={() => setSel({})}>Deseleziona</Button>
+        </Card>
       )}
 
       {!loading && (tab === "emessa" || tab === "ricevuta") && (
@@ -186,6 +246,9 @@ function Pagina() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-xs text-muted-foreground">
+                <th className="w-8 p-2" onClick={(e) => e.stopPropagation()}><input type="checkbox"
+                  checked={!!righe.length && righe.every((f) => sel[f.id])}
+                  onChange={(e) => setSel(Object.fromEntries(righe.map((f) => [f.id, e.target.checked])))} /></th>
                 <th className="p-2">Numero</th><th className="p-2">Data</th><th className="p-2">{tab === "emessa" ? "Cliente" : "Fornitore"}</th>
                 {!societa && <th className="p-2">Società</th>}
                 <th className="p-2 text-right">Imponibile</th><th className="p-2 text-right">Totale</th>
@@ -199,6 +262,9 @@ function Pagina() {
                 const scaduta = f.pagamento_stato !== "pagata" && f.scadenza && f.scadenza < new Date().toISOString().slice(0, 10);
                 return (
                   <tr key={f.id} className="cursor-pointer border-b last:border-0 hover:bg-muted/50" onClick={() => setAperta(f.id)}>
+                    <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={!!sel[f.id]} onChange={(e) => setSel((p) => ({ ...p, [f.id]: e.target.checked }))} />
+                    </td>
                     <td className="p-2 font-medium">
                       {f.numero || <span className="text-muted-foreground">bozza</span>}
                       {f.tipo_documento !== "TD01" && <div className="text-xs text-muted-foreground">{TIPI_LABEL[f.tipo_documento] || f.tipo_documento}</div>}
@@ -225,7 +291,7 @@ function Pagina() {
                 );
               })}
               {!righe.length && (
-                <tr><td colSpan={8} className="p-8 text-center text-muted-foreground">
+                <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">
                   {tab === "emessa" ? "Nessuna fattura emessa con questi filtri" : "Nessuna fattura ricevuta: arrivano da sole dallo SdI quando i fornitori usano il nostro codice destinatario"}
                 </td></tr>
               )}

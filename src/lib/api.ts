@@ -785,3 +785,26 @@ export async function fattAnagraficaCrea(body: Partial<FattAnagrafica>): Promise
 export async function fattAnagraficaModifica(id: string, body: Partial<FattAnagrafica>): Promise<FattAnagrafica> {
   return fetchAPI(`/api/fatturazione/anagrafiche/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
+
+// Crediti per cliente, estratto conto, incassi multipli, export CSV — 30/09/2026
+export interface FattCredito {
+  chiave: string; nome: string | null; piva: string | null; cf: string | null; email: string | null;
+  anagrafica_id: string | null; n: number; totale: number; scaduto: number; piu_vecchia: string | null;
+  fatture: { id: string; numero: string | null; data: string | null; scadenza: string | null; totale: number; stato: string; pagamento_modalita: string | null }[];
+}
+export async function fattCrediti(societa: string, direzione = 'emessa', anno = 0): Promise<{ clienti: FattCredito[]; totale: number; scaduto: number }> {
+  return fetchAPI(`/api/fatturazione/crediti?societa=${societa}&direzione=${direzione}&anno=${anno || ''}`);
+}
+export function fattUrlEstratto(societa: string, chiave: string, ids: string[] = [], messaggio = '') {
+  return `${API_PROXY}/api/fatturazione/estratto?societa=${societa}&chiave=${encodeURIComponent(chiave)}&ids=${ids.join(',')}&messaggio=${encodeURIComponent(messaggio)}`;
+}
+export async function fattEstrattoInvia(body: { societa: string; chiave: string; email: string; ids?: string[]; messaggio?: string; mittente?: string }) {
+  return fetchAPI('/api/fatturazione/estratto/invia', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function fattPagamentoMultiplo(body: { ids: string[]; modalita: FattModalita; data?: string; riferimento?: string }) {
+  return fetchAPI('/api/fatturazione/pagamento-multiplo', { method: 'POST', body: JSON.stringify(body) });
+}
+export function fattUrlExport(params: Record<string, string>) {
+  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
+  return `${API_PROXY}/api/fatturazione/export.csv?${q}`;
+}
