@@ -10,8 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Plus, Receipt, Save, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import {
-  fattAnagrafica, fattAnagraficaCrea, fattAnagraficaModifica, fattAnagrafiche,
-  type FattAnagrafica, type FattControparte,
+  fattAnagrafica, fattAnagraficaCrea, fattAnagraficaModifica, fattAnagrafiche, fattCrediti,
+  type FattAnagrafica, type FattControparte, type FattCredito,
 } from "@/lib/api";
 import { STATI, TIPI_LABEL, dataIt, eur } from "./util";
 
@@ -46,6 +46,15 @@ export function Anagrafiche({
   const [loading, setLoading] = useState(false);
   const [aperta, setAperta] = useState<FattAnagrafica | null>(null);
   const [nuova, setNuova] = useState(false);
+  const [crediti, setCrediti] = useState<FattCredito[]>([]);
+  const [soloAperti, setSoloAperti] = useState(false);
+
+  // Chi ha fatture ancora da incassare (clienti) o da pagare (fornitori): pallino accanto al nome
+  useEffect(() => {
+    fattCrediti(societa, tipo === "cliente" ? "emessa" : "ricevuta").then((r) => setCrediti(r.clienti || [])).catch(() => setCrediti([]));
+  }, [societa, tipo]);
+  const aperto = (a: FattAnagrafica) => crediti.find((c) =>
+    (c.anagrafica_id && c.anagrafica_id === a.id) || (a.piva && c.piva === a.piva) || (!a.piva && a.cf && c.cf === a.cf));
 
   const carica = useCallback(async () => {
     setLoading(true);
@@ -77,6 +86,11 @@ export function Anagrafiche({
           <Input className="h-8 w-72 pl-8" placeholder="Nome, P.IVA, C.F., comune, email…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <span className="text-sm text-muted-foreground">{tot} {tipo === "cliente" ? "clienti" : "fornitori"}</span>
+        {crediti.length > 0 && (
+          <Button size="xs" variant={soloAperti ? "default" : "outline"} onClick={() => setSoloAperti(!soloAperti)}>
+            {crediti.length} {tipo === "cliente" ? "con fatture da incassare" : "con fatture da pagare"}
+          </Button>
+        )}
         <Button size="sm" variant="outline" className="ml-auto" onClick={() => setNuova(true)}><Plus /> Nuovo {tipo}</Button>
       </div>
 
@@ -87,9 +101,23 @@ export function Anagrafiche({
               <th className="p-2">Nome</th><th className="p-2">P.IVA / C.F.</th><th className="p-2">Comune</th>
               <th className="p-2">SDI / PEC</th><th className="p-2">Contatti</th></tr></thead>
             <tbody>
-              {righe.map((a) => (
+              {soloAperti && crediti.filter((c) => !q || `${c.nome} ${c.piva} ${c.cf}`.toLowerCase().includes(q.toLowerCase())).map((c) => (
+                <tr key={c.chiave} className="cursor-pointer border-b last:border-0 hover:bg-muted/50"
+                  onClick={() => c.anagrafica_id ? apri(c.anagrafica_id) : c.fatture[0] && onApriFattura(c.fatture[0].id)}>
+                  <td className="p-2 font-medium">{c.nome}
+                    <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${c.scaduto > 0 ? "bg-red-500/15 text-red-700 dark:text-red-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
+                      {c.n} da {tipo === "cliente" ? "incassare" : "pagare"} · {eur(c.totale)}{c.scaduto > 0 ? ` · scaduto ${eur(c.scaduto)}` : ""}</span></td>
+                  <td className="p-2 text-xs">{c.piva || c.cf || "—"}</td>
+                  <td className="p-2 text-xs" colSpan={2}>dalla fattura del {dataIt(c.piu_vecchia)}</td>
+                  <td className="p-2 text-xs">{c.email || ""}</td>
+                </tr>
+              ))}
+              {!soloAperti && righe.map((a) => (
                 <tr key={a.id} className="cursor-pointer border-b last:border-0 hover:bg-muted/50" onClick={() => apri(a.id)}>
-                  <td className="p-2 font-medium">{a.denominazione}{a.origine === "simplyfatt" && <span className="ml-1 text-[10px] text-muted-foreground">SF</span>}</td>
+                  <td className="p-2 font-medium">{a.denominazione}{a.origine === "simplyfatt" && <span className="ml-1 text-[10px] text-muted-foreground">SF</span>}
+                    {(() => { const c = aperto(a); return c ? (
+                      <span title={`${c.n} fatture aperte`} className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${c.scaduto > 0 ? "bg-red-500/15 text-red-700 dark:text-red-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
+                        da {tipo === "cliente" ? "incassare" : "pagare"} {eur(c.totale)}</span>) : null; })()}</td>
                   <td className="p-2 text-xs">{a.piva || a.cf || "—"}</td>
                   <td className="p-2 text-xs">{[a.comune, a.provincia && `(${a.provincia})`].filter(Boolean).join(" ")}</td>
                   <td className="p-2 text-xs">{a.sdi || a.pec || "—"}</td>

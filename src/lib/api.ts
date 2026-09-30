@@ -8,6 +8,9 @@
 const API_PROXY = '/api/backend';
 
 
+/** Errore del backend con codice HTTP e dettaglio (es. 409 «fattura già esistente» con la fattura trovata). */
+export type ApiError = Error & { status?: number; detail?: any };  // eslint-disable-line @typescript-eslint/no-explicit-any
+
 async function fetchAPI(path: string, options: RequestInit = {}) {
   const url = `${API_PROXY}${path}`;
   const headers: Record<string, string> = {
@@ -28,7 +31,11 @@ async function fetchAPI(path: string, options: RequestInit = {}) {
     }
     const error = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = error.detail;
-    throw new Error(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map((e: any) => e.msg || JSON.stringify(e)).join('; ') : `API Error: ${res.status}`));
+    const err = new Error(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map((e: any) => e.msg || JSON.stringify(e)).join('; ')
+      : (detail && typeof detail === 'object' && 'messaggio' in detail ? String(detail.messaggio) : `API Error: ${res.status}`))) as ApiError;
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
   }
   return res.json();
 }
@@ -718,9 +725,10 @@ export interface FattControparte {
   denominazione?: string; nome?: string; cognome?: string;
   piva?: string; cf?: string; sdi?: string; pec?: string;
   indirizzo?: string; civico?: string; cap?: string; comune?: string; provincia?: string;
-  paese?: string; email?: string;
+  paese?: string; email?: string; telefono?: string;
 }
 export interface Fattura {
+  recapiti?: { email: string; telefono: string };
   id: string; societa: FattSocieta; direzione: 'emessa' | 'ricevuta'; tipo_documento: string;
   numero: string | null; data: string | null; controparte_nome: string | null;
   controparte_piva: string | null; controparte_cf: string | null; controparte?: FattControparte;
@@ -760,7 +768,8 @@ export async function fattPagamento(id: string, body: { modalita?: FattModalita;
 export async function fattLinkStripe(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}/link-stripe`, { method: 'POST' }); }
 export async function fattNotaCredito(id: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/nota-credito`, { method: 'POST' }); }
 export async function fattDuplica(id: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/duplica`, { method: 'POST' }); }
-export async function fattDaSessione(sessionId: string, emetti = false) { return fetchAPI(`/api/fatturazione/fatture/da-sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ emetti }) }); }
+export async function fattDaSessione(sessionId: string, emetti = false, forza = false) { return fetchAPI(`/api/fatturazione/fatture/da-sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ emetti, forza }) }); }
+export async function fattCollegaSessione(sessionId: string, fatturaId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}/collega`, { method: 'POST', body: JSON.stringify({ fattura_id: fatturaId }) }); }
 export async function fattStatoSessione(sessionId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}`); }
 export async function fattSincronizza() { return fetchAPI('/api/fatturazione/sincronizza', { method: 'POST' }); }
 export function fattUrlXml(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/xml`; }
@@ -793,14 +802,59 @@ export interface FattCredito {
   anagrafica_id: string | null; n: number; totale: number; scaduto: number; piu_vecchia: string | null;
   fatture: { id: string; numero: string | null; data: string | null; scadenza: string | null; totale: number; stato: string; pagamento_modalita: string | null }[];
 }
-export async function fattCrediti(societa: string, direzione = 'emessa', anno = 0): Promise<{ clienti: FattCredito[]; totale: number; scaduto: number }> {
-  return fetchAPI(`/api/fatturazione/crediti?societa=${societa}&direzione=${direzione}&anno=${anno || ''}`);
+export async function fattCrediti(societa: string, direzione = 'emessa', anno = 0, dal = '', al = ''): Promise<{ clienti: FattCredito[]; totale: number; scaduto: number }> {
+  return fetchAPI(`/api/fatturazione/crediti?societa=${societa}&direzione=${direzione}&anno=${anno || ''}&dal=${dal}&al=${al}`);
 }
-export function fattUrlEstratto(societa: string, chiave: string, ids: string[] = [], messaggio = '') {
-  return `${API_PROXY}/api/fatturazione/estratto?societa=${societa}&chiave=${encodeURIComponent(chiave)}&ids=${ids.join(',')}&messaggio=${encodeURIComponent(messaggio)}`;
+export function fattUrlEstratto(societa: string, chiave: string, ids: string[] = [], messaggio = '', dal = '', al = '') {
+  return `${API_PROXY}/api/fatturazione/estratto?societa=${societa}&chiave=${encodeURIComponent(chiave)}&ids=${ids.join(',')}&messaggio=${encodeURIComponent(messaggio)}&dal=${dal}&al=${al}`;
 }
-export async function fattEstrattoInvia(body: { societa: string; chiave: string; email: string; ids?: string[]; messaggio?: string; mittente?: string }) {
+export function fattUrlEstrattoPdf(societa: string, chiave: string, ids: string[] = [], messaggio = '', dal = '', al = '') {
+  return `${API_PROXY}/api/fatturazione/estratto.pdf?societa=${societa}&chiave=${encodeURIComponent(chiave)}&ids=${ids.join(',')}&messaggio=${encodeURIComponent(messaggio)}&dal=${dal}&al=${al}`;
+}
+export async function fattEstrattoInvia(body: { societa: string; chiave: string; email: string; ids?: string[]; messaggio?: string; mittente?: string; dal?: string; al?: string; allega_fatture?: boolean }) {
   return fetchAPI('/api/fatturazione/estratto/invia', { method: 'POST', body: JSON.stringify(body) });
+}
+export function fattUrlPdf(id: string, download = false) { return `${API_PROXY}/api/fatturazione/fatture/${id}/pdf${download ? '?download=true' : ''}`; }
+export async function fattInvia(id: string, body: { canale: 'email' | 'whatsapp'; email?: string; telefono?: string; messaggio?: string }) {
+  return fetchAPI(`/api/fatturazione/fatture/${id}/invia`, { method: 'POST', body: JSON.stringify(body) });
+}
+export interface FattVoceCatalogo { gruppo: string; codice: string | null; descrizione: string; prezzo_ivato: number | null; aliquota: number }
+export async function fattCatalogo(societa: string): Promise<{ voci: FattVoceCatalogo[] }> {
+  return fetchAPI(`/api/fatturazione/catalogo?societa=${societa}`);
+}
+
+// === INCASSI: verifica pagamenti arrivati (banca SumUp, POS, PayPal, Stripe) — 30/09/2026 ===
+export type IncFonte = 'banca' | 'pos' | 'paypal' | 'stripe' | 'manuale';
+export interface IncProposta { tipo: 'fattura' | 'fatture' | 'proforma' | 'sessione'; id?: string; ids?: string[]; numero: string | null;
+  nome: string | null; importo: number; data?: string | null; session_id: string | null; punti: number; perche: string }
+export interface Incasso { id: string; fonte: IncFonte; codice: string; data: string; importo: number; ordinante: string | null;
+  causale: string | null; stato: string; proposte: IncProposta[] }
+export interface DaSpedire { session_id: string; numero: number | null; stato: string; pagata_il: string | null; cliente: string | null;
+  citta: string | null; motivo: string }
+export interface IncFontiStato { [k: string]: { api: boolean; nota: string } }
+export async function incElenco(): Promise<{ incassi: Incasso[]; da_spedire: DaSpedire[]; fonti: IncFontiStato }> {
+  return fetchAPI('/api/incassi');
+}
+export async function incVerifica(fonti: IncFonte[]): Promise<{ fonti: Record<string, { ok: boolean; nuovi?: number; nota?: string }>; incassi: Incasso[]; da_spedire: DaSpedire[]; stato_fonti: IncFontiStato }> {
+  return fetchAPI('/api/incassi/verifica', { method: 'POST', body: JSON.stringify({ fonti }) });
+}
+export async function incImportaCsv(file: File): Promise<{ nuovi: number; gia_presenti: number; letti: number; incassi: Incasso[] }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`${API_PROXY}/api/incassi/importa-csv`, { method: 'POST', body: fd });
+  if (!res.ok) {
+    const t = await res.text();
+    let m = t;
+    try { m = JSON.parse(t).detail || t; } catch { /* testo semplice */ }
+    throw new Error(m || `Errore ${res.status}`);
+  }
+  return res.json();
+}
+export async function incAzione(id: string, body: { azione: string; fattura_ids?: string[]; session_id?: string | null; proforma_id?: string; modalita?: string; emetti?: boolean; nota?: string; forza?: boolean }) {
+  return fetchAPI(`/api/incassi/${id}/azione`, { method: 'POST', body: JSON.stringify(body) });
+}
+export async function incSessione(sessionId: string): Promise<{ incassi: { id: string; fonte: IncFonte; data: string; importo: number; ordinante: string | null; stato: string; esito: string | null }[]; da_spedire: DaSpedire | null }> {
+  return fetchAPI(`/api/incassi/sessione/${sessionId}`);
 }
 export async function fattPagamentoMultiplo(body: { ids: string[]; modalita: FattModalita; data?: string; riferimento?: string }) {
   return fetchAPI('/api/fatturazione/pagamento-multiplo', { method: 'POST', body: JSON.stringify(body) });

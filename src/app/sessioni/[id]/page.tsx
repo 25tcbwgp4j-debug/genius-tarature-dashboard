@@ -1542,7 +1542,7 @@ export default function SessionDetail() {
       </Card>
 
       {/* === SPEDIZIONI UPS: ritiro dal cliente e riconsegna === */}
-      <ShipmentsPanel sessionId={sessionId} />
+      <div id="spedizioni" className="scroll-mt-4"><ShipmentsPanel sessionId={sessionId} /></div>
 
       {/* === FATTURA ELETTRONICA (Openapi SDI) === */}
       <FatturaPanel sessionId={sessionId} />

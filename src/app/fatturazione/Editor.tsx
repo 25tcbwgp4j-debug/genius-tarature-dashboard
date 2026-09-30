@@ -6,9 +6,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Plus, Search, Send, Trash2, X } from "lucide-react";
+import { Loader2, Plus, Search, Send, Trash2, Truck, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import {
+  fattCatalogo,
   fattCrea,
   fattEmetti,
   fattAnagrafiche,
@@ -16,6 +17,7 @@ import {
   searchCustomers,
   type FattAnagrafica,
   type FattControparte,
+  type FattVoceCatalogo,
   type FattModalita,
   type FattRiga,
   type FattSocieta,
@@ -84,6 +86,30 @@ export function Editor({
   const [salvando, setSalvando] = useState<"" | "bozza" | "invio">("");
   const [q, setQ] = useState("");
   const [trovati, setTrovati] = useState<ClienteAnagrafica[]>([]);
+  const [catalogo, setCatalogo] = useState<FattVoceCatalogo[]>([]);
+
+  useEffect(() => {
+    fattCatalogo(societa).then((r) => setCatalogo(r.voci || [])).catch(() => setCatalogo([]));
+  }, [societa]);
+
+  /** Aggiunge una voce del listino (come i prodotti di SimplyFatt): riempie la prima riga vuota o ne crea una. */
+  function aggiungiVoce(v: FattVoceCatalogo, quantita = 1) {
+    const ivato = v.prezzo_ivato;
+    const netto = ivato === null ? null : Math.round((ivato / (1 + v.aliquota / 100)) * 100) / 100;
+    const riga: FattRiga = { descrizione: v.descrizione, quantita, aliquota: v.aliquota, sconto: 0,
+      prezzo_ivato: prezziIvati ? ivato : null, prezzo_unitario: prezziIvati ? null : netto };
+    setRighe((p) => {
+      const vuota = p.findIndex((r) => !r.descrizione.trim() && !r.prezzo_ivato && !r.prezzo_unitario);
+      return vuota >= 0 ? p.map((r, j) => (j === vuota ? riga : r)) : [...p, riga];
+    });
+    if (ivato === null) toast.info("Voce aggiunta: scrivi il prezzo");
+  }
+  const voce = (codice: string) => catalogo.find((v) => v.codice === codice);
+  const gruppi = useMemo(() => {
+    const g: Record<string, FattVoceCatalogo[]> = {};
+    for (const v of catalogo) (g[v.gruppo] ||= []).push(v);
+    return g;
+  }, [catalogo]);
 
   useEffect(() => {
     if (q.trim().length < 2) { setTrovati([]); return; }
@@ -282,6 +308,30 @@ export function Editor({
               </label>
               <Button size="xs" variant="outline" className="ml-auto" onClick={() => setRighe((p) => [...p, rigaVuota(societa === "gingy" ? 10 : 22)])}><Plus /> Riga</Button>
             </div>
+            {catalogo.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 p-2">
+                <select className={`${campo} sm:w-96`} value="" onChange={(e) => {
+                  const v = catalogo[Number(e.target.value)];
+                  if (v) aggiungiVoce(v);
+                }}>
+                  <option value="">+ Aggiungi dal listino ({catalogo.length} voci)…</option>
+                  {Object.entries(gruppi).map(([g, voci]) => (
+                    <optgroup key={g} label={g}>
+                      {voci.map((v) => (
+                        <option key={`${g}-${v.codice}-${v.descrizione}`} value={catalogo.indexOf(v)}>
+                          {v.descrizione.replace(/^Rapporto di Taratura per /, "").replace(/ n\. RDT \d+-$/, "")}
+                          {v.prezzo_ivato !== null ? ` — ${eur(v.prezzo_ivato)}` : " — prezzo libero"}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                {voce("0020") && <Button size="xs" variant="outline" onClick={() => aggiungiVoce(voce("0020")!)}><Truck /> Spedizione A/R {eur(voce("0020")!.prezzo_ivato)}</Button>}
+                {voce("0029") && <Button size="xs" variant="outline" onClick={() => aggiungiVoce(voce("0029")!)}><Wrench /> Manutenzione ordinaria</Button>}
+                {voce("0028") && <Button size="xs" variant="outline" onClick={() => aggiungiVoce(voce("0028")!)}><Wrench /> Manutenzione straordinaria</Button>}
+                <span className="text-xs text-muted-foreground">Dopo «RDT {String(new Date().getFullYear()).slice(2)}-» scrivi il numero del rapporto.</span>
+              </div>
+            )}
             <div className="space-y-2">
               {righe.map((r, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 rounded-md border p-2">

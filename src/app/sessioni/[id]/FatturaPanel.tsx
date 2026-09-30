@@ -4,14 +4,15 @@
 // - EMETTI FATTURA SUBITO (cliente al banco): crea e invia allo SdI in un colpo solo
 // - PRO FORMA → pagamento (pulsanti PROFORMA qui sopra) → TRASFORMA IN FATTURA (riprende pro forma e pagamento)
 // - oppure bozza da controllare prima dell'invio.
+// - pagamento arrivato (verifica pagamenti) e avviso «DA SPEDIRE» se la riconsegna va fatta col corriere.
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, FileEdit, Loader2, Receipt, Send } from "lucide-react";
+import { Banknote, ExternalLink, FileEdit, Loader2, Receipt, Send, Truck } from "lucide-react";
 import { toast } from "sonner";
-import { fattDaSessione, fattStatoSessione } from "@/lib/api";
+import { fattCollegaSessione, fattDaSessione, fattStatoSessione, incSessione, type ApiError, type DaSpedire } from "@/lib/api";
 
 const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(v || 0));
 
@@ -25,15 +26,19 @@ export function FatturaPanel({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const [st, setSt] = useState<Stato | null>(null);
   const [busy, setBusy] = useState("");
+  const [inc, setInc] = useState<{ incassi: { id: string; fonte: string; data: string; importo: number; ordinante: string | null; esito: string | null }[]; da_spedire: DaSpedire | null } | null>(null);
 
-  const carica = useCallback(() => { fattStatoSessione(sessionId).then(setSt).catch(() => undefined); }, [sessionId]);
+  const carica = useCallback(() => {
+    fattStatoSessione(sessionId).then(setSt).catch(() => undefined);
+    incSessione(sessionId).then(setInc).catch(() => undefined);
+  }, [sessionId]);
   useEffect(() => { carica(); }, [carica]);
 
-  async function crea(emetti: boolean) {
-    if (emetti && !confirm("Emettere subito la fattura e inviarla allo SdI?")) return;
+  async function crea(emetti: boolean, forza = false) {
+    if (emetti && !forza && !confirm("Emettere subito la fattura e inviarla allo SdI?")) return;
     setBusy(emetti ? "emetti" : "bozza");
     try {
-      const r = await fattDaSessione(sessionId, emetti);
+      const r = await fattDaSessione(sessionId, emetti, forza);
       if (r.gia_presente) { toast.info(`Questa sessione ha già la fattura ${r.numero || "(bozza)"}`); router.push(`/fatturazione?id=${r.id}`); return; }
       if (emetti) {
         if (r.invio?.ok) toast.success(`Fattura ${r.invio.numero} emessa e inviata allo SdI`);
@@ -41,7 +46,21 @@ export function FatturaPanel({ sessionId }: { sessionId: string }) {
       } else toast.success("Bozza di fattura preparata: controllala e inviala allo SdI");
       router.push(`/fatturazione?id=${r.id}`);
     } catch (e) {
-      toast.error((e as Error).message);
+      const err = e as ApiError;
+      if (err.status === 409 && err.detail?.fattura) {
+        // fattura già fatta fuori dalla dashboard (SimplyFatt): la si collega invece di rifarla
+        const dop = err.detail.fattura as { id: string; numero: string };
+        if (confirm(`${err.message}.\n\nOK = collega la fattura ${dop.numero} a questa sessione (niente doppione)\nAnnulla = scegli se crearne comunque una nuova`)) {
+          try {
+            await fattCollegaSessione(sessionId, dop.id);
+            toast.success(`Fattura ${dop.numero} collegata alla sessione`);
+            carica();
+          } catch (e2) { toast.error((e2 as Error).message); }
+        } else if (confirm("Creare comunque una NUOVA fattura per questa sessione?")) {
+          setBusy("");
+          return crea(emetti, true);
+        }
+      } else toast.error(err.message);
     } finally { setBusy(""); }
   }
 
@@ -59,6 +78,23 @@ export function FatturaPanel({ sessionId }: { sessionId: string }) {
             {pagata ? `Pagata (${st?.sessione?.payment_method || "—"})` : "Da pagare"}</span>
         </div>
       </div>
+
+      {inc?.da_spedire && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-sm">
+          <Truck className="size-4" /> <b>Pagata: DA SPEDIRE</b> <span className="text-muted-foreground">({inc.da_spedire.motivo})</span>
+          <Button size="sm" variant="outline" className="ml-auto"
+            onClick={() => document.getElementById("spedizioni")?.scrollIntoView({ behavior: "smooth" })}><Truck /> Vai alla spedizione</Button>
+        </div>
+      )}
+      {!!inc?.incassi.length && (
+        <div className="space-y-0.5 text-xs text-muted-foreground">
+          {inc.incassi.map((x) => (
+            <div key={x.id} className="flex items-center gap-1"><Banknote className="size-3.5" />
+              Pagamento arrivato: {x.fonte === "banca" ? "bonifico" : x.fonte} {eur(x.importo)} del {new Date(x.data).toLocaleDateString("it-IT")}
+              {x.ordinante ? ` da ${x.ordinante}` : ""}{x.esito ? ` — ${x.esito}` : ""}</div>
+          ))}
+        </div>
+      )}
 
       {f ? (
         <div className="flex flex-wrap items-center gap-2 text-sm">

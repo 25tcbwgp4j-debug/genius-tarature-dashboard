@@ -8,15 +8,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Download, FileText, Loader2, Plus, RefreshCw, Search, Wallet } from "lucide-react";
+import { Banknote, Download, FileText, Loader2, Plus, RefreshCw, RotateCcw, Search, Send, Truck, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
   fattConfig, fattElenco, fattPagamentoMultiplo, fattUrlExport, type FattModalita, fattEsiti, fattRiepilogo, fattSincronizza,
-  type FattSocieta, type Fattura,
+  incElenco, type DaSpedire, type FattSocieta, type Fattura,
 } from "@/lib/api";
+import Link from "next/link";
+import { Incassi } from "./Incassi";
 import { Editor } from "./Editor";
 import { Anagrafiche } from "./Anagrafiche";
-import { DaIncassare } from "./DaIncassare";
+import { DaIncassare, calcolaPeriodo } from "./DaIncassare";
 import { Chiusure } from "./Chiusure";
 import type { FattAnagrafica } from "@/lib/api";
 import { Dettaglio } from "./Dettaglio";
@@ -51,12 +53,28 @@ function Pagina() {
   const [sel, setSel] = useState<Record<string, boolean>>({});
   const [modMulti, setModMulti] = useState<FattModalita>("bonifico");
   const [sync, setSync] = useState(false);
+  const [periodo, setPeriodo] = useState<Parameters<typeof calcolaPeriodo>[0]>("tutto");
+  const [pGiorno, setPGiorno] = useState("");
+  const [pDal, setPDal] = useState("");
+  const [pAl, setPAl] = useState("");
+  const [soloScadute, setSoloScadute] = useState(false);
+  const [incassiAperti, setIncassiAperti] = useState(false);
+  const [nIncassi, setNIncassi] = useState(0);
+  const [daSpedire, setDaSpedire] = useState<DaSpedire[]>([]);
+  const [cercaCrediti, setCercaCrediti] = useState("");
+  const per = calcolaPeriodo(periodo, pGiorno, pDal, pAl);
+
+  const caricaIncassi = useCallback(() => {
+    incElenco().then((r) => { setNIncassi(r.incassi.length); setDaSpedire(r.da_spedire); }).catch(() => undefined);
+  }, []);
+  useEffect(() => { caricaIncassi(); }, [caricaIncassi]);
 
   useEffect(() => { fattConfig().then(setCfg).catch(() => undefined); }, []);
   useEffect(() => {
     const id = sp.get("id");
     if (id) setAperta(id);
     if (sp.get("nuova")) setEditor({ f: null });
+    if (sp.get("incassi")) setIncassiAperti(true);
   }, [sp]);
 
   const carica = useCallback(async () => {
@@ -67,9 +85,12 @@ function Pagina() {
         setEsiti(r.esiti || []);
       } else if (tab === "emessa" || tab === "ricevuta") {
         const ultimo = mese ? new Date(anno || 2026, mese, 0).getDate() : 0;
-        const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q, anno: anno ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
-          da: mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-01` : "", a: mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimo}` : "" });
-        setRighe(r.fatture || []);
+        const conPeriodo = periodo !== "tutto";
+        const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q, anno: anno && !conPeriodo ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
+          da: conPeriodo ? per.dal : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-01` : "",
+          a: conPeriodo ? per.al : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimo}` : "" });
+        const oggiIso = new Date().toISOString().slice(0, 10);
+        setRighe((r.fatture || []).filter((f: Fattura) => !soloScadute || (f.pagamento_stato !== "pagata" && f.tipo_documento !== "TD04" && (f.scadenza || f.data || "") < oggiIso)));
         setSel({});
       }
       setRie(await fattRiepilogo(societa, anno));
@@ -78,7 +99,7 @@ function Pagina() {
     } finally {
       setLoading(false);
     }
-  }, [tab, societa, stato, pagamento, q, anno, prove, mese]);
+  }, [tab, societa, stato, pagamento, q, anno, prove, mese, periodo, per.dal, per.al, soloScadute]);
 
   useEffect(() => {
     const t = setTimeout(carica, q ? 300 : 0);
@@ -97,6 +118,15 @@ function Pagina() {
       setSync(false);
     }
   }
+
+  /** Azzera: torna alla pagina base della fatturazione (nessun filtro, anno in corso, fatture emesse). */
+  function azzera() {
+    setTab("emessa"); setStato(""); setPagamento(""); setQ(""); setMese(0); setProve(false); setSel({});
+    setPeriodo("tutto"); setPGiorno(""); setPDal(""); setPAl(""); setSoloScadute(false); setCercaCrediti("");
+    setAnno(new Date().getFullYear()); setSocieta("");
+    if (sp.toString()) router.replace("/fatturazione");
+  }
+  const filtriAttivi = !!(stato || pagamento || q || mese || prove || periodo !== "tutto" || soloScadute || societa || anno !== new Date().getFullYear() || tab !== "emessa");
 
   function chiudiDettaglio() {
     setAperta(null);
@@ -145,12 +175,28 @@ function Pagina() {
             <option value="">Tutte le società</option>
             {Object.entries(SOCIETA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+          {filtriAttivi && <Button variant="ghost" onClick={azzera} title="Torna alla pagina base della fatturazione"><RotateCcw /> Azzera</Button>}
+          <Button variant="outline" onClick={() => setIncassiAperti(true)} title="Bonifici, POS, PayPal, Stripe arrivati">
+            <Banknote /> Verifica pagamenti
+            {nIncassi > 0 && <span className="rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white">{nIncassi}</span>}
+          </Button>
           <Button variant="outline" onClick={sincronizza} disabled={sync}>
             {sync ? <Loader2 className="animate-spin" /> : <RefreshCw />} Aggiorna da SdI
           </Button>
           <Button onClick={() => setEditor({ f: null })}><Plus /> Nuova fattura</Button>
         </div>
       </div>
+
+      {daSpedire.length > 0 && (
+        <Card className="flex flex-wrap items-center gap-2 border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          <Truck className="size-4" /> <b>{daSpedire.length} {daSpedire.length === 1 ? "sessione pagata da spedire" : "sessioni pagate da spedire"}:</b>
+          {daSpedire.slice(0, 6).map((d) => (
+            <Link key={d.session_id} href={`/sessioni/${d.session_id}`} className="rounded bg-background px-1.5 py-0.5 underline">
+              n. {d.numero} {d.cliente}
+            </Link>
+          ))}
+        </Card>
+      )}
 
       {rie && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -188,14 +234,35 @@ function Pagina() {
 
       <div className="flex flex-wrap items-center gap-2 border-b">
         {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["incassare", "Da incassare"], ["pagare", "Da pagare"], ["clienti", "Clienti"], ["fornitori", "Fornitori"], ["chiusure", "Chiusure"], ["esiti", "Esiti SdI"]] as [Tab, string][]).map(([k, l]) => (
-          <button key={k} onClick={() => { setTab(k); setStato(""); }}
+          <button key={k} onClick={() => { if (k === "incassare" || k === "pagare") setCercaCrediti(q); setTab(k); setStato(""); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === k ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}>
             {l}
+            {k === "incassare" && rie && rie.da_incassare > 0 && <span className="ml-1 rounded bg-amber-500/15 px-1 text-[10px] text-amber-700 dark:text-amber-300">{eur(rie.da_incassare)}</span>}
+            {k === "pagare" && rie && rie.da_pagare > 0 && <span className="ml-1 rounded bg-muted px-1 text-[10px]">{eur(rie.da_pagare)}</span>}
           </button>
         ))}
         {(tab === "emessa" || tab === "ricevuta") && (
           <div className="ml-auto flex flex-wrap items-center gap-2 pb-2">
             {mese > 0 && <Button size="xs" variant="secondary" onClick={() => setMese(0)}>mese {mese}/{anno} ✕</Button>}
+            <select className={sel_cls} value={periodo} onChange={(e) => { setPeriodo(e.target.value as typeof periodo); setMese(0); }} title="Periodo (data fattura)">
+              <option value="tutto">Tutto l&apos;anno scelto</option>
+              <option value="mese">Mese in corso</option>
+              <option value="mese_prec">Mese precedente</option>
+              <option value="anno">Anno in corso</option>
+              <option value="anno_prec">Anno precedente</option>
+              <option value="giorno">Una data…</option>
+              <option value="intervallo">Dal… al…</option>
+            </select>
+            {periodo === "giorno" && <input type="date" className={sel_cls} value={pGiorno} onChange={(e) => setPGiorno(e.target.value)} />}
+            {periodo === "intervallo" && <>
+              <input type="date" className={sel_cls} value={pDal} onChange={(e) => setPDal(e.target.value)} title="dal" />
+              <input type="date" className={sel_cls} value={pAl} onChange={(e) => setPAl(e.target.value)} title="al" />
+            </>}
+            <Button size="xs" variant={pagamento === "da_pagare" ? "default" : "outline"}
+              onClick={() => setPagamento(pagamento === "da_pagare" ? "" : "da_pagare")}>
+              {tab === "emessa" ? "da incassare" : "da pagare"}
+            </Button>
+            <Button size="xs" variant={soloScadute ? "destructive" : "outline"} onClick={() => setSoloScadute(!soloScadute)}>scadute</Button>
             <label className="flex items-center gap-1 text-xs text-muted-foreground">
               <input type="checkbox" checked={prove} onChange={(e) => setProve(e.target.checked)} /> mostra prove
             </label>
@@ -221,8 +288,8 @@ function Pagina() {
       {loading && <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>}
 
       {(tab === "incassare" || tab === "pagare") && (
-        <DaIncassare societa={societa || "genius"} anno={0} direzione={tab === "incassare" ? "emessa" : "ricevuta"}
-          onApriFattura={(id) => setAperta(id)} onCambiato={carica} />
+        <DaIncassare key={`${tab}-${cercaCrediti}`} societa={societa || "genius"} anno={0} direzione={tab === "incassare" ? "emessa" : "ricevuta"}
+          cercaIniziale={cercaCrediti} onApriFattura={(id) => setAperta(id)} onCambiato={() => { carica(); caricaIncassi(); }} />
       )}
 
       {tab === "chiusure" && <Chiusure societa={societa} />}
@@ -241,6 +308,15 @@ function Pagina() {
           </select>
           <Button size="sm" onClick={incassaSelezionate}><Wallet /> Segna {tab === "emessa" ? "incassate" : "pagate"}</Button>
           <Button size="sm" variant="ghost" onClick={() => setSel({})}>Deseleziona</Button>
+        </Card>
+      )}
+
+      {!loading && tab === "emessa" && pagamento === "da_pagare" && righe.length > 0 && (
+        <Card className="flex flex-wrap items-center gap-2 p-2 text-sm">
+          <span>{righe.length} fatture da incassare · <b>{eur(righe.reduce((t, f) => t + Number(f.totale) * (f.tipo_documento === "TD04" ? -1 : 1), 0))}</b></span>
+          <Button size="sm" className="ml-auto" onClick={() => { setCercaCrediti(q); setTab("incassare"); }}>
+            <Send /> Estratto PDF e richiesta di pagamento{q ? ` a «${q}»` : ""}
+          </Button>
         </Card>
       )}
 
@@ -323,6 +399,10 @@ function Pagina() {
         <Dettaglio id={aperta} onClose={chiudiDettaglio} onChanged={carica}
           onEdit={(f) => { setAperta(null); setEditor({ f }); }}
           onOpen={(id) => setAperta(id)} />
+      )}
+      {incassiAperti && (
+        <Incassi onClose={() => { setIncassiAperti(false); caricaIncassi(); if (sp.get("incassi")) router.replace("/fatturazione"); }}
+          onApriFattura={(id) => setAperta(id)} onCambiato={() => { carica(); caricaIncassi(); }} />
       )}
       {editor && (
         <Editor iniziale={editor.f} anagrafica={editor.anag} societaDefault={(societa as FattSocieta) || "genius"}

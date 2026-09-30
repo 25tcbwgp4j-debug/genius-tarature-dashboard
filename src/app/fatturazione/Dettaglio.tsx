@@ -5,13 +5,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  AlertTriangle, Banknote, Copy, CreditCard, FileCode2, Link2, Loader2, Pencil, Printer,
+  AlertTriangle, Banknote, Copy, CreditCard, FileCode2, FileDown, Link2, Loader2, Mail, MessageCircle, Pencil, Printer,
   Receipt, RotateCcw, Send, Smartphone, Trash2, Undo2, Wallet, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattLinkStripe, fattNotaCredito,
-  fattPagamento, fattUrlStampa, fattUrlXml, type FattModalita, type Fattura,
+  fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattInvia, fattLinkStripe, fattNotaCredito,
+  fattPagamento, fattUrlPdf, fattUrlStampa, fattUrlXml, type FattModalita, type Fattura,
 } from "@/lib/api";
 import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
 
@@ -27,6 +27,9 @@ export function Dettaglio({
   const [f, setF] = useState<Fattura | null>(null);
   const [busy, setBusy] = useState("");
   const [rif, setRif] = useState("");
+  const [invio, setInvio] = useState<"" | "email" | "whatsapp">("");
+  const [dest, setDest] = useState("");
+  const [msgInvio, setMsgInvio] = useState("");
 
   const carica = useCallback(() => {
     fattDettaglio(id).then(setF).catch((e) => toast.error((e as Error).message));
@@ -111,7 +114,20 @@ export function Dettaglio({
               </Button>
             )}
             {inviabile && <Button size="sm" variant="outline" onClick={() => onEdit(f)}><Pencil /> Modifica</Button>}
-            <a href={fattUrlStampa(f.id)} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><Printer /> Copia di cortesia</Button></a>
+            <a href={fattUrlPdf(f.id)} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><FileDown /> PDF di cortesia</Button></a>
+            <a href={fattUrlStampa(f.id)} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><Printer /> Stampa</Button></a>
+            {emessa && f.stato !== "bozza" && (
+              <>
+                <Button size="sm" variant={invio === "email" ? "default" : "outline"}
+                  onClick={() => { setInvio(invio === "email" ? "" : "email"); setDest(f.recapiti?.email || ""); }}>
+                  <Mail /> Invia per email
+                </Button>
+                <Button size="sm" variant={invio === "whatsapp" ? "default" : "outline"}
+                  onClick={() => { setInvio(invio === "whatsapp" ? "" : "whatsapp"); setDest(f.recapiti?.telefono || ""); }}>
+                  <MessageCircle /> WhatsApp staff
+                </Button>
+              </>
+            )}
             <a href={fattUrlXml(f.id)}><Button size="sm" variant="outline"><FileCode2 /> XML</Button></a>
             {emessa && f.numero && !["bozza", "scartata"].includes(f.stato) && f.tipo_documento !== "TD04" && (
               <Button size="sm" variant="outline" disabled={!!busy}
@@ -121,8 +137,8 @@ export function Dettaglio({
             )}
             {emessa && (
               <Button size="sm" variant="outline" disabled={!!busy}
-                onClick={() => azione("dup", () => fattDuplica(f.id), (r) => { toast.success("Copia creata come bozza"); onOpen(r.id); })}>
-                <Copy /> Duplica
+                onClick={() => azione("dup", () => fattDuplica(f.id), (r) => { toast.success("Copia pronta: modificala e inviala"); onEdit(r); })}>
+                <Copy /> Copia in nuova fattura
               </Button>
             )}
             {f.stato === "bozza" && !f.numero && (
@@ -132,6 +148,29 @@ export function Dettaglio({
               </Button>
             )}
           </div>
+
+          {invio && (
+            <div className="space-y-2 rounded-lg border border-primary/40 p-3">
+              <div className="text-sm font-medium">
+                {invio === "email" ? "Invia la copia di cortesia per email (PDF allegato)" : "Invia sul WhatsApp dello staff (link al PDF)"}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                  placeholder={invio === "email" ? "Email del cliente" : "Cellulare del cliente (es. 347…)"} value={dest} onChange={(e) => setDest(e.target.value)} />
+                <input className="h-8 rounded-md border border-input bg-background px-2 text-sm" placeholder="Messaggio aggiuntivo (facoltativo)"
+                  value={msgInvio} onChange={(e) => setMsgInvio(e.target.value)} />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" disabled={!!busy || !dest}
+                  onClick={() => azione("invio", () => fattInvia(f.id, invio === "email"
+                    ? { canale: "email", email: dest, messaggio: msgInvio } : { canale: "whatsapp", telefono: dest, messaggio: msgInvio }),
+                  (r: { a: string; canale: string }) => { toast.success(r.canale === "email" ? `Fattura inviata a ${r.a}` : `Messaggio in coda sul WhatsApp dello staff per ${r.a}`); setInvio(""); })}>
+                  {busy === "invio" ? <Loader2 className="animate-spin" /> : <Send />} Invia
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setInvio("")}>Annulla</Button>
+              </div>
+            </div>
+          )}
 
           {/* Controparte */}
           <div className="rounded-lg border p-3 text-sm">
