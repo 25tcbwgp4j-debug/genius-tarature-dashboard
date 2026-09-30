@@ -699,3 +699,67 @@ export function getShipmentLabelUrl(shipmentId: string): string {
 export async function cancelShipment(shipmentId: string) {
   return fetchAPI(`/api/shipments/${shipmentId}/cancel`, { method: 'POST', body: '{}' });
 }
+
+// === FATTURAZIONE (Openapi SDI) — 30/09/2026 ===
+export type FattSocieta = 'genius' | 'gingy' | 'avantifiori';
+export type FattModalita = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'bonifico' | 'non_pagato';
+export interface FattRiga {
+  descrizione: string;
+  quantita: number;
+  prezzo_unitario?: number | null;
+  prezzo_ivato?: number | null;
+  aliquota: number;
+  natura?: string | null;
+  sconto?: number | null;
+  riferimento_normativo?: string | null;
+  prezzo_totale?: number;
+}
+export interface FattControparte {
+  denominazione?: string; nome?: string; cognome?: string;
+  piva?: string; cf?: string; sdi?: string; pec?: string;
+  indirizzo?: string; civico?: string; cap?: string; comune?: string; provincia?: string;
+  paese?: string; email?: string;
+}
+export interface Fattura {
+  id: string; societa: FattSocieta; direzione: 'emessa' | 'ricevuta'; tipo_documento: string;
+  numero: string | null; data: string | null; controparte_nome: string | null;
+  controparte_piva: string | null; controparte_cf: string | null; controparte?: FattControparte;
+  righe?: FattRiga[]; imponibile: number; iva: number; totale: number;
+  stato: string; ambiente: string | null; sdi_uuid: string | null; sdi_file_name?: string | null;
+  pagamento_modalita: FattModalita | null; pagamento_stato: string; pagato_il: string | null;
+  pagamento_rif?: string | null; scadenza: string | null; causale?: string | null; note?: string | null;
+  session_id: string | null; errore: string | null; inviata_il: string | null; created_at: string;
+  fattura_collegata_id?: string | null;
+  esiti?: { id: string; tipo: string; descrizione: string; data: string }[];
+  controlli?: string[];
+  collegata?: { id: string; numero: string; data: string; totale: number } | null;
+  note_credito?: { id: string; numero: string; data: string; totale: number; stato: string }[];
+}
+export async function fattConfig() { return fetchAPI('/api/fatturazione/config'); }
+export async function fattElenco(params: Record<string, string>) {
+  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
+  return fetchAPI(`/api/fatturazione/fatture?${q}`);
+}
+export async function fattRiepilogo(societa = '', anno = 0) {
+  return fetchAPI(`/api/fatturazione/riepilogo?societa=${societa}&anno=${anno || ''}`);
+}
+export async function fattEsiti(limit = 100) { return fetchAPI(`/api/fatturazione/esiti?limit=${limit}`); }
+export async function fattDettaglio(id: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}`); }
+export async function fattCrea(body: Record<string, unknown>): Promise<Fattura> {
+  return fetchAPI('/api/fatturazione/fatture', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function fattModifica(id: string, body: Record<string, unknown>): Promise<Fattura> {
+  return fetchAPI(`/api/fatturazione/fatture/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+export async function fattElimina(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}`, { method: 'DELETE' }); }
+export async function fattEmetti(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}/emetti`, { method: 'POST' }); }
+export async function fattPagamento(id: string, body: { modalita?: FattModalita; data?: string; riferimento?: string; annulla?: boolean }) {
+  return fetchAPI(`/api/fatturazione/fatture/${id}/pagamento`, { method: 'POST', body: JSON.stringify(body) });
+}
+export async function fattLinkStripe(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}/link-stripe`, { method: 'POST' }); }
+export async function fattNotaCredito(id: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/nota-credito`, { method: 'POST' }); }
+export async function fattDuplica(id: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/duplica`, { method: 'POST' }); }
+export async function fattDaSessione(sessionId: string) { return fetchAPI(`/api/fatturazione/fatture/da-sessione/${sessionId}`, { method: 'POST' }); }
+export async function fattSincronizza() { return fetchAPI('/api/fatturazione/sincronizza', { method: 'POST' }); }
+export function fattUrlXml(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/xml`; }
+export function fattUrlStampa(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/stampa`; }

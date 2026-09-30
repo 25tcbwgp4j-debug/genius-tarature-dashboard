@@ -25,6 +25,7 @@ import {
   Bell,
   BellOff,
   Handshake,
+  Receipt,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -40,6 +41,7 @@ const navItems = [
   { href: "/nuovi-clienti", label: "Nuovi Clienti", icon: UserPlus },
   { href: "/partner", label: "Partner B2B", icon: Handshake },
   { href: "/rapporti", label: "Rapporti", icon: FileText },
+  { href: "/fatturazione", label: "Fatturazione", icon: Receipt },
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/automazioni", label: "Automazioni", icon: Activity },
   { href: "/enrichment", label: "Arricchimento", icon: Zap },

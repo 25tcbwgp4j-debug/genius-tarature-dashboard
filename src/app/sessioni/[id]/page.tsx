@@ -64,6 +64,7 @@ import { RecipientPanel } from "./RecipientPanel";
 import { ChangeCustomerDialog } from "./ChangeCustomerDialog";
 import { EditCustomerDialog } from "./EditCustomerDialog";
 import { ShipmentsPanel } from "./ShipmentsPanel";
+import { FatturaPanel } from "./FatturaPanel";
 
 interface InstrumentType {
   id: string;
@@ -1542,6 +1543,9 @@ export default function SessionDetail() {
 
       {/* === SPEDIZIONI UPS: ritiro dal cliente e riconsegna === */}
       <ShipmentsPanel sessionId={sessionId} />
+
+      {/* === FATTURA ELETTRONICA (Openapi SDI) === */}
+      <FatturaPanel sessionId={sessionId} />
 
       {/* === SEZIONE RICHIESTA RECENSIONE ===
            Visibile per sessioni completate o con review già inviata. */}
