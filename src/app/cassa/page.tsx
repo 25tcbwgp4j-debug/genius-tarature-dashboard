@@ -11,8 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Banknote, CreditCard, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
+import { DecInput, parseDec } from "@/components/DecInput";
+import { oggiRoma } from "@/lib/date";
+import { toastErrore } from "@/lib/errori";
+import Link from "next/link";
 import {
-  cassaAnnulla, cassaFattura, cassaRiprova, cassaScontrini, cassaScontrino, magPerCodice, magProdotti,
+  cassaAnnulla, cassaGiornata, cassaFattura, cassaRiprova, cassaScontrini, cassaScontrino, magPerCodice, magProdotti,
   type Prodotto, type RigaCassa, type Scontrino,
 } from "@/lib/api";
 
@@ -31,9 +35,14 @@ export default function CassaPage() {
   const [busy, setBusy] = useState("");
   const [oggi, setOggi] = useState<{ scontrini: Scontrino[]; totale: number; per_modalita: Record<string, number> } | null>(null);
   const [libera, setLibera] = useState({ descrizione: "", prezzo: "" });
+  const [cassaChiusa, setCassaChiusa] = useState(false);
 
-  const ricarica = useCallback(() => { cassaScontrini().then(setOggi).catch(() => undefined); }, []);
-  useEffect(() => { ricarica(); const t = setInterval(ricarica, 5000); return () => clearInterval(t); }, [ricarica]);
+  const ricarica = useCallback(() => {
+    cassaScontrini(oggiRoma()).then(setOggi).catch(() => undefined);
+    // gli scontrini finiscono nella cassa del giorno: se è già chiusa lo dico subito
+    cassaGiornata(oggiRoma()).then((r) => setCassaChiusa(r.giornata.stato === "chiusa")).catch(() => undefined);
+  }, []);
+  useEffect(() => { ricarica(); const t = setInterval(ricarica, 10000); return () => clearInterval(t); }, [ricarica]);
   useEffect(() => {
     if (q.trim().length < 2) { setTrovati([]); return; }
     const t = setTimeout(() => magProdotti(q.trim(), false, 12).then((r) => setTrovati(r.prodotti || [])).catch(() => undefined), 250);
@@ -55,31 +64,39 @@ export default function CassaPage() {
   const tot = Math.round(carrello.reduce((s, r) => s + r.quantita * r.prezzo * (1 - (r.sconto || 0) / 100), 0) * 100) / 100;
 
   async function scontrino(modalita: string) {
-    if (!carrello.length) return;
+    if (!carrello.length || busy) return;
+    if (carrello.some((r) => !(r.prezzo >= 0) || Number.isNaN(r.prezzo))) { toast.error("C'è un prezzo non valido nel carrello"); return; }
+    if (modalita === "non_riscosso" && !confirm(`Emettere lo scontrino da ${eur(tot)} come NON RISCOSSO (il cliente non paga adesso)?`)) return;
     setBusy(modalita);
     try {
       await cassaScontrino({ righe: carrello, pagamenti: [{ modalita, importo: tot }], codice_lotteria: lotteria || undefined });
       toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${MOD[modalita]})`);
       setCarrello([]); setLotteria(""); ricarica();
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(""); }
+    } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
   async function fattura() {
-    if (!carrello.length) return;
+    if (!carrello.length || busy) return;
     setBusy("fattura");
     try {
       const f = await cassaFattura({ righe: carrello });
       toast.success("Bozza di fattura creata: completa il cliente e inviala allo SdI");
       setCarrello([]);
       router.push(`/fatturazione?id=${f.id}`);
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(""); }
+    } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
   function setR(i: number, k: keyof RigaCassa, v: number | string) { setCarrello((c) => c.map((r, j) => (j === i ? { ...r, [k]: v } : r))); }
 
   return (
-    <div className="grid gap-4 p-4 md:p-6 lg:grid-cols-[1fr_380px]">
+    <div className="grid gap-4 p-1 md:p-2 lg:grid-cols-[1fr_380px]">
       <div className="space-y-4">
         <div className="flex items-center gap-3"><ShoppingCart className="size-6" /><h1 className="text-2xl font-semibold">Cassa</h1>
           <span className="text-sm text-muted-foreground">GENIUS LAB · registratore CUSTOM</span></div>
+        {cassaChiusa && (
+          <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200">
+            ⚠️ La cassa del giorno di oggi è CHIUSA: gli scontrini emessi adesso cambierebbero una giornata già chiusa.{" "}
+            <Link className="font-medium underline" href="/cassa/giornata">Apri cassa del giorno</Link>
+          </div>
+        )}
         <ScannerInput onCodice={scansiona} />
         <div className="relative">
           <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
@@ -102,14 +119,14 @@ export default function CassaPage() {
               <th className="p-2 text-right">IVA</th><th className="p-2 text-right">Totale</th><th /></tr></thead>
             <tbody>
               {carrello.map((r, i) => (
-                <tr key={i} className="border-b last:border-0">
+                <tr key={`${r.prodotto_id || "libera"}-${i}-${r.descrizione}`} className="border-b last:border-0">
                   <td className="p-2">{r.descrizione}{r.giacenza !== undefined && r.quantita > r.giacenza && <div className="text-xs text-amber-600">giacenza {r.giacenza}</div>}</td>
                   <td className="p-2"><div className="flex items-center justify-center gap-1">
                     <Button size="icon-xs" variant="outline" onClick={() => setR(i, "quantita", Math.max(1, r.quantita - 1))}><Minus /></Button>
                     <span className="w-6 text-center">{r.quantita}</span>
                     <Button size="icon-xs" variant="outline" onClick={() => setR(i, "quantita", r.quantita + 1)}><Plus /></Button></div></td>
-                  <td className="p-2 text-right"><input type="number" step="0.01" className="h-7 w-20 rounded border border-input bg-background px-1 text-right" value={r.prezzo}
-                    onChange={(e) => setR(i, "prezzo", Number(e.target.value))} /></td>
+                  <td className="p-2 text-right"><DecInput className="ml-auto h-7 w-24 px-1 text-right" value={r.prezzo}
+                    onValue={(v) => setR(i, "prezzo", v ?? 0)} /></td>
                   <td className="p-2 text-right">{r.aliquota}%</td>
                   <td className="p-2 text-right tabular-nums">{eur(r.quantita * r.prezzo)}</td>
                   <td className="p-2"><Button size="icon-xs" variant="ghost" onClick={() => setCarrello((c) => c.filter((_, j) => j !== i))}><Trash2 /></Button></td>
@@ -120,9 +137,13 @@ export default function CassaPage() {
           </table>
           <div className="flex flex-wrap items-end gap-2 border-t p-2">
             <Input className="h-8 flex-1" placeholder="Voce libera (es. Manodopera)" value={libera.descrizione} onChange={(e) => setLibera({ ...libera, descrizione: e.target.value })} />
-            <Input className="h-8 w-28" type="number" step="0.01" placeholder="Prezzo IVA incl." value={libera.prezzo} onChange={(e) => setLibera({ ...libera, prezzo: e.target.value })} />
+            <Input className="h-8 w-28" inputMode="decimal" placeholder="Prezzo IVA incl." value={libera.prezzo} onChange={(e) => setLibera({ ...libera, prezzo: e.target.value })} />
             <Button size="sm" variant="outline" disabled={!libera.descrizione || !libera.prezzo}
-              onClick={() => { setCarrello((c) => [...c, { descrizione: libera.descrizione, quantita: 1, prezzo: Number(libera.prezzo), aliquota: 22 }]); setLibera({ descrizione: "", prezzo: "" }); }}>
+              onClick={() => {
+                const pz = parseDec(libera.prezzo);
+                if (pz === null || Number.isNaN(pz) || pz < 0) { toast.error("Prezzo non valido (es. 25 o 12,50)"); return; }
+                setCarrello((c) => [...c, { descrizione: libera.descrizione, quantita: 1, prezzo: pz, aliquota: 22 }]); setLibera({ descrizione: "", prezzo: "" });
+              }}>
               <Plus /> Aggiungi</Button>
           </div>
         </Card>
@@ -140,7 +161,7 @@ export default function CassaPage() {
           </div>
           <Button variant="secondary" className="w-full" disabled={!carrello.length || !!busy} onClick={fattura}>
             {busy === "fattura" ? <Loader2 className="animate-spin" /> : <Receipt />} Fai fattura invece dello scontrino</Button>
-          {carrello.length > 0 && <Button variant="ghost" size="sm" className="w-full" onClick={() => setCarrello([])}><X /> Svuota carrello</Button>}
+          {carrello.length > 0 && <Button variant="ghost" size="sm" className="w-full" onClick={() => { if (confirm("Svuotare il carrello?")) setCarrello([]); }}><X /> Svuota carrello</Button>}
         </Card>
 
         <Card className="p-3">
@@ -159,8 +180,8 @@ export default function CassaPage() {
                   <span className={s.stato === "errore" ? "text-red-600" : s.stato === "simulato" ? "text-amber-600" : "text-muted-foreground"}>
                     {STATO[s.stato] || s.stato} · {s.pagamenti.map((p) => MOD[p.modalita] || p.modalita).join(", ")}{s.errore ? ` · ${s.errore}` : ""}</span>
                   <span className="flex gap-1">
-                    {(s.stato === "errore" || s.stato === "simulato") && <Button size="xs" variant="ghost" onClick={() => cassaRiprova(s.id).then(ricarica)}><RotateCcw /> Riprova</Button>}
-                    {["da_stampare", "errore", "simulato"].includes(s.stato) && <Button size="xs" variant="ghost" onClick={() => { if (confirm("Annullare lo scontrino e rimettere in giacenza gli articoli?")) cassaAnnulla(s.id).then(ricarica); }}>Annulla</Button>}
+                    {(s.stato === "errore" || s.stato === "simulato") && <Button size="xs" variant="ghost" onClick={() => cassaRiprova(s.id).then(ricarica).catch(toastErrore)}><RotateCcw /> Riprova</Button>}
+                    {["da_stampare", "errore", "simulato"].includes(s.stato) && <Button size="xs" variant="ghost" onClick={() => { if (confirm("Annullare lo scontrino e rimettere in giacenza gli articoli?")) cassaAnnulla(s.id).then(ricarica).catch(toastErrore); }}>Annulla</Button>}
                   </span>
                 </div>
               </div>

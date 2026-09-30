@@ -13,6 +13,9 @@ import { Input } from "@/components/ui/input";
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, Lock, Plus, Trash2, Unlock, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
+import { DecInput, parseDec } from "@/components/DecInput";
+import { oggiRoma, spostaGiorno } from "@/lib/date";
+import { toastErrore } from "@/lib/errori";
 import {
   cassaGiornata, cassaGiornataChiudi, cassaGiornataConfermaApertura, cassaGiornataElimina, cassaGiornataRiapri, cassaGiornataRiga, cassaGiornataSalva, cassaGiornataUrlExcel,
   type FoglioCassa, type Tagli,
@@ -22,28 +25,14 @@ const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { s
 const COL = [["contanti", "Contanti"], ["pos", "POS"], ["stripe", "Stripe"], ["bonifico", "Bonifico"], ["paypal", "PayPal"]] as const;
 const FONTE: Record<string, string> = { fattura: "auto", fattura_prec: "auto", scontrino: "dashboard", manuale: "a mano" };
 const TIPI_RIGA: [string, string][] = [
-  ["scontrino", "Scontrino (battuto in cassa)"], ["storno", "Storno scontrino (reso)"], ["acconto", "Acconto ordine cliente"],
+  ["scontrino", "Scontrino (battuto in cassa)"], ["storno", "Storno scontrino (reso)"], ["acconto", "Acconto (solo se NON registrato in Ordini)"],
   ["reso", "Rimborso in contanti"], ["fattura", "Fattura fuori dashboard"], ["altro", "Altro"],
 ];
 const TIPI_PRELIEVO: Record<string, string> = { eccesso: "Troppi contanti in cassa", spesa: "Spesa", altro: "Altro" };
-const oggiRoma = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Rome" }).format(new Date());
-const spostaGiorno = (g: string, n: number) => { const d = new Date(`${g}T12:00:00`); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
-const num = (s: string) => (s.trim() === "" ? null : Number(s.replace(",", ".")));
 const tondo = (v: number) => Math.round(v * 100) / 100;
-
-// campo importo con la virgola: tiene il testo mentre si scrive, passa fuori il numero
-function DecInput({ value, onValue, ...props }: { value: number | null | undefined; onValue: (v: number | null) => void } & Omit<React.ComponentProps<typeof Input>, "value" | "onChange">) {
-  const fmt = (v: number | null | undefined) => (v === null || v === undefined || v === 0 ? "" : String(v).replace(".", ","));
-  const [t, setT] = useState(fmt(value));
-  const [prec, setPrec] = useState(value);
-  if (value !== prec) {   // valore cambiato da fuori (altro giorno, server): riallineo il testo
-    setPrec(value);
-    if (num(t) !== (value || null)) setT(fmt(value));
-  }
-  return <Input inputMode="decimal" {...props} value={t} onChange={(e) => {
-    setT(e.target.value); const v = num(e.target.value); if (v === null || !Number.isNaN(v)) onValue(v);
-  }} />;
-}
+const dataIt = (g: string, o?: Intl.DateTimeFormatOptions) => new Date(`${g}T12:00:00Z`).toLocaleDateString("it-IT", { timeZone: "Europe/Rome", ...o });
+const RIGA_VUOTA = { tipo: "scontrino", numero: "", importo: "", modalita: "contanti", descrizione: "", modello: "", prodotto_id: "" };
+type Timer = ReturnType<typeof setTimeout>;
 
 // Conteggio contanti: colonna BANCONOTE e colonna MONETE affiancate
 function Contanti({ titolo, sotto, tagli, valori, onChange, disabled, colore }: {
@@ -98,101 +87,183 @@ function Riquadro({ titolo, valore, sotto, stato, children }: {
 }
 
 export default function CassaGiornataPage() {
-  const [giorno, setGiorno] = useState(oggiRoma());
+  const [giorno, setGiorno] = useState(oggiRoma);
+  const giornoRef = useRef(giorno);
   const [f, setF] = useState<FoglioCassa | null>(null);
   const [bozza, setBozza] = useState<FoglioCassa["giornata"] | null>(null);
+  const [errore, setErrore] = useState("");
   const [busy, setBusy] = useState("");
-  const vuotaRiga = { tipo: "scontrino", numero: "", importo: "", modalita: "contanti", descrizione: "", modello: "", prodotto_id: "" };
-  const [nuova, setNuova] = useState(vuotaRiga);
+  const [nuova, setNuova] = useState(RIGA_VUOTA);
   const [prel, setPrel] = useState({ importo: "", tipo: "eccesso", nota: "" });
-  const salvaT = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chiusa = f?.giornata.stato === "chiusa";
 
-  const applica = useCallback((r: FoglioCassa) => { setF(r); setBozza(r.giornata); }, []);
+  // Salvataggi con attesa di 700 ms: prima di ogni azione (chiusura, conferma, righe, prelievi, cambio giorno)
+  // si «svuotano» con flush(), così il backend lavora sempre sugli ultimi numeri scritti.
+  const salvaT = useRef<Timer | null>(null);
+  const reintT = useRef<Timer | null>(null);
+  const inSospeso = useRef<{ base?: () => Promise<void>; reint?: () => Promise<void> }>({});
+  const inVolo = useRef(new Set<Promise<void>>());
+  const lock = useRef(false);   // niente doppio Invio / doppio click
+
+  /** La risposta riguarda il giorno che sto guardando? (le risposte lente di un altro giorno si scartano) */
+  const perQuestoGiorno = useCallback((r: FoglioCassa) => !r.giornata?.giorno || r.giornata.giorno.slice(0, 10) === giornoRef.current, []);
+  const applica = useCallback((r: FoglioCassa) => {
+    if (!perQuestoGiorno(r)) return;
+    setF(r); setBozza(r.giornata); setErrore("");
+  }, [perQuestoGiorno]);
+  const traccia = useCallback((p: Promise<void>) => {
+    inVolo.current.add(p);
+    return p.finally(() => { inVolo.current.delete(p); });
+  }, []);
+  const flush = useCallback(async () => {
+    if (salvaT.current) { clearTimeout(salvaT.current); salvaT.current = null; }
+    if (reintT.current) { clearTimeout(reintT.current); reintT.current = null; }
+    const { base, reint } = inSospeso.current;
+    inSospeso.current = {};
+    await Promise.all([base?.(), reint?.(), ...inVolo.current]);
+  }, []);
+
   const ricarica = useCallback(() => {
-    cassaGiornata(giorno).then(applica).catch((e: Error) => toast.error(e.message));
-  }, [giorno, applica]);
-  useEffect(() => { setF(null); ricarica(); }, [ricarica]);
-  // fatture, scontrini e POS entrano da soli: aggiorno ogni minuto se la giornata è aperta
+    const g = giornoRef.current;
+    return cassaGiornata(g).then(applica).catch((e: Error) => { if (g === giornoRef.current) setErrore(e.message); });
+  }, [applica]);
+  useEffect(() => { giornoRef.current = giorno; ricarica(); }, [giorno, ricarica]);
+
+  /** Cambio giorno: prima salvo quello che è in sospeso sul giorno vecchio. */
+  const vaiA = useCallback(async (g: string) => {
+    await flush();
+    setF(null); setBozza(null); setErrore(""); setNuova(RIGA_VUOTA);
+    setGiorno(g);
+  }, [flush]);
+
+  // fatture, scontrini e POS entrano da soli: aggiorno ogni minuto se la giornata è aperta,
+  // ma MAI mentre si scrive o c'è un salvataggio in corso (altrimenti si cancella quello che si sta digitando)
   useEffect(() => {
     if (chiusa) return;
-    const t = setInterval(() => { if (!salvaT.current) ricarica(); }, 60000);
+    const t = setInterval(() => {
+      const el = document.activeElement;
+      const scrive = el instanceof HTMLElement && el.matches("input,textarea,select");
+      if (!salvaT.current && !reintT.current && !inVolo.current.size && !scrive && !document.hidden) ricarica();
+    }, 60000);
     return () => clearInterval(t);
   }, [chiusa, ricarica]);
+
+  // la pagina resta aperta sul banco: a mezzanotte si passa da sola al giorno nuovo
+  useEffect(() => {
+    let ultimo = oggiRoma();
+    const controlla = () => {
+      const o = oggiRoma();
+      if (o === ultimo) return;
+      const prima = ultimo; ultimo = o;
+      if (giornoRef.current === prima) { vaiA(o); toast.info("È cominciato un nuovo giorno: ti porto alla cassa di oggi"); }
+    };
+    window.addEventListener("focus", controlla);
+    document.addEventListener("visibilitychange", controlla);
+    const t = setInterval(controlla, 60000);
+    return () => { window.removeEventListener("focus", controlla); document.removeEventListener("visibilitychange", controlla); clearInterval(t); };
+  }, [vaiA]);
 
   function modifica(p: Partial<FoglioCassa["giornata"]>) {
     if (!bozza || chiusa) return;
     const b = { ...bozza, ...p };
     setBozza(b);
+    const g = giorno;
+    inSospeso.current.base = () => traccia(cassaGiornataSalva(g, {
+      apertura_tagli: b.apertura_tagli, chiusura_tagli: b.chiusura_tagli, pos_terminale: b.pos_terminale, rt_scontrini: b.rt_scontrini, note: b.note,
+    }).then((r) => { if (perQuestoGiorno(r)) setF(r); }).catch(toastErrore));
     if (salvaT.current) clearTimeout(salvaT.current);
-    salvaT.current = setTimeout(async () => {
+    salvaT.current = setTimeout(() => {
       salvaT.current = null;
-      try {
-        setF(await cassaGiornataSalva(giorno, {
-          apertura_tagli: b.apertura_tagli, chiusura_tagli: b.chiusura_tagli, pos_terminale: b.pos_terminale, rt_scontrini: b.rt_scontrini, note: b.note,
-        }));
-      } catch (e) { toast.error((e as Error).message); }
+      const run = inSospeso.current.base; inSospeso.current.base = undefined; run?.();
     }, 700);
   }
 
-  const reintT = useRef<ReturnType<typeof setTimeout> | null>(null);
   function modificaReintegro(p: { reintegro_tagli?: Tagli; reintegro_nota?: string }) {
     if (!bozza) return;
     const b = { ...bozza, ...p };
     setBozza(b);
+    const g = giorno;
+    inSospeso.current.reint = () => traccia(cassaGiornataSalva(g, { reintegro_tagli: b.reintegro_tagli || {}, reintegro_nota: b.reintegro_nota || "" })
+      .then((r) => { if (perQuestoGiorno(r)) setF(r); }).catch(toastErrore));
     if (reintT.current) clearTimeout(reintT.current);
-    reintT.current = setTimeout(async () => {
+    reintT.current = setTimeout(() => {
       reintT.current = null;
-      try { setF(await cassaGiornataSalva(giorno, { reintegro_tagli: b.reintegro_tagli || {}, reintegro_nota: b.reintegro_nota || "" })); }
-      catch (e) { toast.error((e as Error).message); }
+      const run = inSospeso.current.reint; inSospeso.current.reint = undefined; run?.();
     }, 700);
   }
 
-  async function confermaApertura() {
-    setBusy("apertura");
-    try { applica(await cassaGiornataConfermaApertura(giorno)); toast.success("Apertura confermata"); }
-    catch (e) { toast.error((e as Error).message); } finally { setBusy(""); }
+  /** Esegue un'azione una sola volta alla volta, dopo aver salvato quello che è in sospeso. */
+  async function azione(nome: string, fn: () => Promise<void>) {
+    if (lock.current) return;
+    lock.current = true; setBusy(nome);
+    try { await flush(); await fn(); }
+    catch (e) { toastErrore(e); }
+    finally { lock.current = false; setBusy(""); }
   }
 
-  async function salvaPrelievi(lista: FoglioCassa["giornata"]["prelievi"]) {
-    setBusy("prelievo");
-    try { applica(await cassaGiornataSalva(giorno, { prelievi: lista })); } catch (e) { toast.error((e as Error).message); } finally { setBusy(""); }
-  }
-  async function aggiungiPrelievo() {
-    const imp = num(prel.importo);
-    if (!imp || imp <= 0) { toast.error("Scrivi l'importo del prelievo"); return; }
-    await salvaPrelievi([...(bozza?.prelievi || []), { importo: imp, nota: prel.nota.trim(), tipo: prel.tipo }]);
-    setPrel({ importo: "", tipo: prel.tipo, nota: "" });
+  function confermaApertura() {
+    return azione("apertura", async () => {
+      const fresco = await cassaGiornata(giorno);   // i numeri appena salvati, non quelli a schermo
+      applica(fresco);
+      const rpf = fresco.riepilogo;
+      const diff = rpf.apertura_attesa === null ? 0 : tondo(rpf.apertura - rpf.apertura_attesa);
+      if (Math.abs(diff) >= 0.05 && !confirm(`I soldi contati (${eur(rpf.apertura)}) non corrispondono a quelli attesi (${eur(rpf.apertura_attesa)}). Confermare con differenza ${eur(diff)}?`)) return;
+      applica(await cassaGiornataConfermaApertura(giorno));
+      toast.success("Apertura confermata");
+    });
   }
 
-  async function aggiungi() {
-    const imp = num(nuova.importo);
-    if (!imp) { toast.error("Inserisci l'importo"); return; }
-    setBusy("riga");
-    try {
+  function salvaPrelievi(lista: FoglioCassa["giornata"]["prelievi"]) {
+    return azione("prelievo", async () => { applica(await cassaGiornataSalva(giorno, { prelievi: lista })); });
+  }
+  function aggiungiPrelievo() {
+    const imp = parseDec(prel.importo);
+    if (imp === null || Number.isNaN(imp) || imp <= 0) { toast.error("Scrivi l'importo del prelievo (es. 50 o 12,50)"); return; }
+    return azione("prelievo", async () => {
+      applica(await cassaGiornataSalva(giorno, { prelievi: [...(bozza?.prelievi || []), { importo: imp, nota: prel.nota.trim(), tipo: prel.tipo }] }));
+      setPrel((x) => ({ importo: "", tipo: x.tipo, nota: "" }));
+    });
+  }
+  function eliminaPrelievo(i: number) {
+    const p = bozza?.prelievi[i];
+    if (!p || !confirm(`Eliminare il prelievo di ${eur(p.importo)}${p.nota ? ` (${p.nota})` : ""}?`)) return;
+    return salvaPrelievi(bozza.prelievi.filter((_, j) => j !== i));
+  }
+
+  function aggiungi() {
+    const imp = parseDec(nuova.importo);
+    if (imp === null || Number.isNaN(imp) || imp === 0) { toast.error("Inserisci l'importo (es. 25 o 12,50)"); return; }
+    return azione("riga", async () => {
       applica(await cassaGiornataRiga({ giorno, tipo: nuova.tipo, numero: nuova.numero, descrizione: nuova.descrizione, modello: nuova.modello,
         prodotto_id: nuova.prodotto_id, [nuova.modalita]: imp }));
       const n = Number(nuova.numero);
-      setNuova({ ...vuotaRiga, tipo: nuova.tipo, modalita: nuova.modalita, numero: nuova.tipo === "scontrino" && n ? String(n + 1) : "" });
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(""); }
+      setNuova({ ...RIGA_VUOTA, tipo: nuova.tipo, modalita: nuova.modalita, numero: nuova.tipo === "scontrino" && n ? String(n + 1) : "" });
+    });
+  }
+  function eliminaRiga(id: string) {
+    if (!confirm("Eliminare questa riga?")) return;
+    return azione("elimina", async () => { applica(await cassaGiornataElimina(id)); });
   }
 
-  async function chiudi() {
+  function chiudi() {
     if (!f) return;
-    let forza = false, nota = "";
-    if (!f.conti_tornano) {
-      const m = prompt("I conti NON tornano. Per chiudere comunque scrivi il motivo della differenza:");
-      if (!m || m.trim().length < 5) return;
-      forza = true; nota = m.trim();
-    } else if (!confirm(`Chiudere la cassa del ${new Date(`${giorno}T12:00:00`).toLocaleDateString("it-IT")}? L'Excel andrà nella cartella DA FIRMARE.`)) return;
-    setBusy("chiudi");
-    try { applica(await cassaGiornataChiudi(giorno, forza, nota)); toast.success("Giornata chiusa"); }
-    catch (e) { toast.error((e as Error).message); } finally { setBusy(""); }
+    return azione("chiudi", async () => {
+      const fresco = await cassaGiornata(giorno);   // quadratura sui numeri appena salvati
+      applica(fresco);
+      let forza = false, nota = "";
+      if (!fresco.conti_tornano) {
+        const m = prompt("I conti NON tornano. Per chiudere comunque scrivi il motivo della differenza (almeno 5 lettere):");
+        if (!m || m.trim().length < 5) return;
+        forza = true; nota = m.trim();
+      } else if (!confirm(`Chiudere la cassa del ${dataIt(giorno)}? L'Excel andrà nella cartella DA FIRMARE.`)) return;
+      applica(await cassaGiornataChiudi(giorno, forza, nota));
+      toast.success("Giornata chiusa");
+    });
   }
 
-  async function riapri() {
+  function riapri() {
     if (!confirm("Riaprire la giornata per correggerla? Alla nuova chiusura l'Excel verrà rigenerato.")) return;
-    try { applica(await cassaGiornataRiapri(giorno)); } catch (e) { toast.error((e as Error).message); }
+    return azione("riapri", async () => { applica(await cassaGiornataRiapri(giorno)); });
   }
 
   const g = bozza;
@@ -203,25 +274,25 @@ export default function CassaGiornataPage() {
   const seraVuota = !Object.values(g?.chiusura_tagli || {}).some(Boolean);
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4 p-1 md:p-2">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-2 text-2xl font-semibold">Cassa del giorno</h1>
-        <Button size="icon" variant="outline" className="size-8" onClick={() => setGiorno(spostaGiorno(giorno, -1))}><ChevronLeft className="size-4" /></Button>
+        <Button size="icon" variant="outline" className="size-8" onClick={() => vaiA(spostaGiorno(giorno, -1))}><ChevronLeft className="size-4" /></Button>
         <label className="flex items-center gap-1"><CalendarDays className="size-4" />
-          <input type="date" className="h-8 rounded-md border border-input bg-background px-2 text-sm" value={giorno} onChange={(e) => e.target.value && setGiorno(e.target.value)} />
+          <input type="date" className="h-8 rounded-md border border-input bg-background px-2 text-sm" value={giorno} onChange={(e) => e.target.value && vaiA(e.target.value)} />
         </label>
-        <Button size="icon" variant="outline" className="size-8" onClick={() => setGiorno(spostaGiorno(giorno, 1))}><ChevronRight className="size-4" /></Button>
-        {giorno !== oggiRoma() && <Button size="sm" variant="ghost" onClick={() => setGiorno(oggiRoma())}>Oggi</Button>}
+        <Button size="icon" variant="outline" className="size-8" onClick={() => vaiA(spostaGiorno(giorno, 1))}><ChevronRight className="size-4" /></Button>
+        {giorno !== oggiRoma() && <Button size="sm" variant="ghost" onClick={() => vaiA(oggiRoma())}>Oggi</Button>}
         {f && !f.giornata.futura && (
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chiusa ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"}`}>
             {chiusa ? `CHIUSA${f.giornata.chiusa_da ? ` da ${f.giornata.chiusa_da}` : ""}${f.giornata.file_scaricato_il ? " · in DA FIRMARE" : " · Excel in arrivo in DA FIRMARE"}` : "APERTA"}
           </span>
         )}
         <div className="ml-auto flex gap-2">
-          <a href={cassaGiornataUrlExcel(giorno)}><Button size="sm" variant="outline"><FileSpreadsheet className="mr-1 size-4" />Excel</Button></a>
+          {!f?.giornata.futura && <Button size="sm" variant="outline" onClick={() => { window.location.href = cassaGiornataUrlExcel(giorno); }}><FileSpreadsheet className="mr-1 size-4" />Excel</Button>}
           {f?.giornata.futura ? null : chiusa
-            ? <Button size="sm" variant="outline" onClick={riapri}><Unlock className="mr-1 size-4" />Riapri</Button>
-            : <Button size="sm" onClick={chiudi} disabled={!f || busy === "chiudi"} className={f?.conti_tornano ? "bg-emerald-600 hover:bg-emerald-700" : ""}>
+            ? <Button size="sm" variant="outline" onClick={riapri} disabled={!!busy}>{busy === "riapri" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Unlock className="mr-1 size-4" />}Riapri</Button>
+            : <Button size="sm" onClick={chiudi} disabled={!f || !!busy} className={f?.conti_tornano ? "bg-emerald-600 hover:bg-emerald-700" : ""}>
                 {busy === "chiudi" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Lock className="mr-1 size-4" />}Chiudi giornata
               </Button>}
         </div>
@@ -229,10 +300,14 @@ export default function CassaGiornataPage() {
 
       {f?.giornata.futura ? (
         <Card className="p-6 text-center text-muted-foreground">
-          📅 Il {new Date(`${giorno}T12:00:00`).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })} deve ancora arrivare: la cassa si apre quel giorno.
-          <div className="mt-2"><Button size="sm" variant="outline" onClick={() => setGiorno(oggiRoma())}>Vai alla cassa di oggi</Button></div>
+          📅 Il {dataIt(giorno, { weekday: "long", day: "numeric", month: "long" })} deve ancora arrivare: la cassa si apre quel giorno.
+          <div className="mt-2"><Button size="sm" variant="outline" onClick={() => vaiA(oggiRoma())}>Vai alla cassa di oggi</Button></div>
         </Card>
-      ) : !f || !g || !rp ? <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" />Carico…</div> : (<>
+      ) : !f || !g || !rp ? (errore
+        ? <Card className="space-y-2 p-4 text-sm"><div className="font-medium text-red-700">Non riesco a caricare la cassa del {dataIt(giorno)}</div>
+            <div className="text-muted-foreground">{errore}</div>
+            <Button size="sm" onClick={() => { setErrore(""); ricarica(); }}>Riprova</Button></Card>
+        : <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" />Carico…</div>) : (<>
         {g.origine === "excel" && (
           <div className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm dark:bg-sky-950/30">
             📄 Giornata importata dal file Excel <b>{g.file_excel}</b>: le righe sono quelle dell&apos;Excel firmato.{g.note ? ` ${g.note.split("\n").slice(-1)[0]}` : ""}
@@ -255,7 +330,7 @@ export default function CassaGiornataPage() {
         {/* CONTANTI: MATTINA · SERA · CONTO */}
         <div className="grid gap-3 lg:grid-cols-[1fr_1fr_280px]">
           <Contanti titolo="☀️ Mattina — apertura cassa" colore="border-amber-300 bg-amber-50/60 dark:bg-amber-950/20"
-            sotto={g.nuova && g.apertura_da ? `Precompilata con la sera del ${new Date(`${g.apertura_da}T12:00:00`).toLocaleDateString("it-IT")}: correggi se serve` : "Conta i soldi in cassa quando apri"}
+            sotto={g.nuova && g.apertura_da ? `Precompilata con la sera del ${dataIt(g.apertura_da)}: correggi se serve` : "Conta i soldi in cassa quando apri"}
             tagli={f.tagli_apertura} valori={g.apertura_tagli || {}} disabled={chiusa} onChange={(t) => modifica({ apertura_tagli: t })} />
           <Contanti titolo="🌙 Sera — chiusura cassa" colore="border-indigo-300 bg-indigo-50/60 dark:bg-indigo-950/20"
             sotto="Conta i soldi rimasti in cassa a fine giornata (dopo i prelievi)"
@@ -284,15 +359,15 @@ export default function CassaGiornataPage() {
                 <Riquadro titolo="☀️ Apertura del mattino" stato={g.apertura_confermata_il ? "ok" : "manca"}
                   valore={eur(rp.apertura)}
                   sotto={attesa === null ? "Nessuna chiusura precedente registrata" :
-                    <>la sera del {rp.apertura_attesa_da ? new Date(`${rp.apertura_attesa_da}T12:00:00`).toLocaleDateString("it-IT") : "giorno prima"} (chiusura + reintegro) doveva lasciare <b>{eur(attesa)}</b>{!ok && <> · <b className="text-red-700">differenza {eur(diff)}</b></>}</>}>
+                    <>la sera del {rp.apertura_attesa_da ? dataIt(rp.apertura_attesa_da) : "giorno prima"} (chiusura + reintegro) doveva lasciare <b>{eur(attesa)}</b>{!ok && <> · <b className="text-red-700">differenza {eur(diff)}</b></>}</>}>
                   {g.apertura_confermata_il ? (
                     <div className="text-sm font-medium text-emerald-700">
-                      ✓ Confermata da {g.apertura_confermata_da} alle {new Date(g.apertura_confermata_il).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                      ✓ Confermata da {g.apertura_confermata_da} alle {new Date(g.apertura_confermata_il).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" })}
                       {g.apertura_differenza ? ` · differenza ${eur(g.apertura_differenza)}` : " · corrisponde"}
                     </div>
                   ) : !chiusa && (
-                    <Button className={`mt-1 w-full ${ok ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"}`} disabled={busy === "apertura"}
-                      onClick={() => { if (ok || confirm(`I soldi contati (${eur(rp.apertura)}) non corrispondono a quelli attesi (${eur(attesa)}). Confermare con differenza ${eur(diff)}?`)) confermaApertura(); }}>
+                    <Button className={`mt-1 w-full ${ok ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"}`} disabled={!!busy}
+                      onClick={confermaApertura}>
                       {busy === "apertura" ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
                       {ok ? "✓ La cassa corrisponde" : "Conferma apertura con differenza"}
                     </Button>
@@ -344,19 +419,19 @@ export default function CassaGiornataPage() {
               <span className="rounded bg-muted px-1.5 text-xs">{TIPI_PRELIEVO[p.tipo || "altro"] || p.tipo}</span>
               <span className="flex-1 text-muted-foreground">{p.nota}</span>
               {!chiusa && <button className="text-muted-foreground hover:text-red-600" title="Elimina prelievo"
-                onClick={() => salvaPrelievi(g.prelievi.filter((_, j) => j !== i))}><Trash2 className="size-4" /></button>}
+                onClick={() => eliminaPrelievo(i)}><Trash2 className="size-4" /></button>}
             </div>
           ))}
           {!chiusa && (
             <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 p-2">
               <Input className="h-9 w-28 border-2 text-right font-semibold" inputMode="decimal" placeholder="€ importo" value={prel.importo}
-                onChange={(e) => setPrel({ ...prel, importo: e.target.value })} onKeyDown={(e) => e.key === "Enter" && aggiungiPrelievo()} />
+                onChange={(e) => setPrel({ ...prel, importo: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); aggiungiPrelievo(); } }} />
               <select className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={prel.tipo} onChange={(e) => setPrel({ ...prel, tipo: e.target.value })}>
                 {Object.entries(TIPI_PRELIEVO).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
               <Input className="h-9 min-w-[180px] flex-1" placeholder="motivo (es. versati in banca, spesa cinesi…)" value={prel.nota}
-                onChange={(e) => setPrel({ ...prel, nota: e.target.value })} onKeyDown={(e) => e.key === "Enter" && aggiungiPrelievo()} />
-              <Button size="sm" onClick={aggiungiPrelievo} disabled={busy === "prelievo"}>
+                onChange={(e) => setPrel({ ...prel, nota: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); aggiungiPrelievo(); } }} />
+              <Button size="sm" onClick={aggiungiPrelievo} disabled={!!busy}>
                 {busy === "prelievo" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}Aggiungi prelievo
               </Button>
             </div>
@@ -377,16 +452,16 @@ export default function CassaGiornataPage() {
                   onScelto={(a) => setNuova({ ...nuova, descrizione: a.descrizione, prodotto_id: a.prodotto_id || "",
                     importo: a.prezzo_ivato !== null ? String(a.prezzo_ivato).replace(".", ",") : nuova.importo })} />
                 <Input className="h-9 w-28 border-2 text-right font-semibold" placeholder="€ importo" inputMode="decimal" value={nuova.importo}
-                  onChange={(e) => setNuova({ ...nuova, importo: e.target.value })} onKeyDown={(e) => e.key === "Enter" && aggiungi()} />
+                  onChange={(e) => setNuova({ ...nuova, importo: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); aggiungi(); } }} />
                 <select className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={nuova.modalita} onChange={(e) => setNuova({ ...nuova, modalita: e.target.value })}>
                   {COL.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                 </select>
               </div>
               <div className="flex flex-wrap items-end gap-2">
                 <Input className="h-9 min-w-[240px] flex-1" placeholder="Cosa paga? (es. SCHEDA 63020, cavo Apple USB-C…)" value={nuova.descrizione}
-                  onChange={(e) => setNuova({ ...nuova, descrizione: e.target.value, prodotto_id: "" })} onKeyDown={(e) => e.key === "Enter" && aggiungi()} />
+                  onChange={(e) => setNuova({ ...nuova, descrizione: e.target.value, prodotto_id: "" })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); aggiungi(); } }} />
                 <Input className="h-9 w-40" placeholder="Modello" value={nuova.modello} onChange={(e) => setNuova({ ...nuova, modello: e.target.value })} />
-                <Button onClick={aggiungi} disabled={busy === "riga"}>{busy === "riga" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}Aggiungi riga</Button>
+                <Button onClick={aggiungi} disabled={!!busy}>{busy === "riga" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}Aggiungi riga</Button>
               </div>
               <div className="text-xs text-muted-foreground">Finché la cassa non è collegata alla dashboard, gli scontrini battuti sul registratore si registrano qui con il loro numero.</div>
             </div>
@@ -407,9 +482,7 @@ export default function CassaGiornataPage() {
                   <td className="max-w-[280px] truncate px-2" title={r.descrizione}>{r.descrizione}</td>
                   <td className="px-2">{r.modello}</td>
                   <td className="px-2 text-right">{r.fonte === "manuale" && !chiusa && (
-                    <button className="text-muted-foreground hover:text-red-600" title="Elimina riga" onClick={async () => {
-                      if (confirm("Eliminare questa riga?")) { try { applica(await cassaGiornataElimina(r.id)); } catch (e) { toast.error((e as Error).message); } }
-                    }}><Trash2 className="size-4" /></button>)}</td>
+                    <button className="text-muted-foreground hover:text-red-600" title="Elimina riga" disabled={!!busy} onClick={() => eliminaRiga(r.id)}><Trash2 className="size-4" /></button>)}</td>
                 </tr>
               ))}
               {!f.righe.length && <tr><td colSpan={10} className="px-2 py-4 text-center text-muted-foreground">Nessun movimento</td></tr>}

@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Plus, Search, Send, Trash2, Truck, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
+import { DecInput } from "@/components/DecInput";
+import { oggiRoma } from "@/lib/date";
+import { toastErrore } from "@/lib/errori";
 import {
   fattCatalogo,
   fattCrea,
@@ -60,7 +63,7 @@ export function Editor({
 }) {
   const [societa, setSocieta] = useState<FattSocieta>(iniziale?.societa || anagrafica?.societa || societaDefault);
   const [tipoDoc, setTipoDoc] = useState(iniziale?.tipo_documento || "TD01");
-  const [data, setData] = useState(iniziale?.data || new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(iniziale?.data || oggiRoma());
   const c0: FattControparte = iniziale?.controparte || (anagrafica ? {
     denominazione: anagrafica.denominazione || "", piva: anagrafica.piva || "", cf: anagrafica.cf || "",
     sdi: anagrafica.sdi || "", pec: anagrafica.pec || "", indirizzo: anagrafica.indirizzo || "", cap: anagrafica.cap || "",
@@ -73,12 +76,21 @@ export function Editor({
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [anagraficaId, setAnagraficaId] = useState<string | null>(iniziale?.anagrafica_id || anagrafica?.id || null);
   const [salvaAnag, setSalvaAnag] = useState(true);
+  // Bozza nata a prezzi IVA inclusa (ordini, cassa, conversioni): si riapre a prezzi ivati ricostruiti dal «lordo»,
+  // non con i netti a 8 decimali (e il totale resta al centesimo quello pagato dal cliente).
+  const tuttiLordi = !!iniziale?.righe?.length && iniziale.righe.every((r) => r.lordo !== null && r.lordo !== undefined);
   const [righe, setRighe] = useState<FattRiga[]>(
     iniziale?.righe?.length
-      ? iniziale.righe.map((r) => ({ ...r, prezzo_ivato: null }))
+      ? iniziale.righe.map((r) => tuttiLordi
+        ? { ...r, prezzo_unitario: null,
+            prezzo_ivato: Math.round((Number(r.lordo) / (Number(r.quantita) || 1) / (1 - Number(r.sconto || 0) / 100 || 1)) * 100) / 100 }
+        : { ...r, prezzo_ivato: null })
       : [rigaVuota(societaDefault === "gingy" ? 10 : 22)],
   );
-  const [prezziIvati, setPrezziIvati] = useState(!iniziale?.righe?.length);
+  const [prezziIvati, setPrezziIvati] = useState(!iniziale?.righe?.length || tuttiLordi);
+  const [idSalvato, setIdSalvato] = useState<string | null>(iniziale?.id || null);   // dopo il primo salvataggio si MODIFICA, non si ricrea
+  const [sporco, setSporco] = useState(false);
+  const chiudi = () => { if (sporco && !confirm("Chiudere senza salvare? Le modifiche andranno perse.")) return; onClose(); };
   const [modalita, setModalita] = useState<FattModalita>(iniziale?.pagamento_modalita || "bonifico");
   const [pagata, setPagata] = useState(iniziale?.pagamento_stato === "pagata");
   const [scadenza, setScadenza] = useState(iniziale?.scadenza || "");
@@ -189,11 +201,13 @@ export function Editor({
   }
 
   async function salva(invia: boolean) {
+    if (salvando) return;
     const b = corpo();
     if (!b.righe.length) { toast.error("Aggiungi almeno una riga"); return; }
     setSalvando(invia ? "invio" : "bozza");
     try {
-      const f = iniziale?.id ? await fattModifica(iniziale.id, b) : await fattCrea(b);
+      const f = idSalvato ? await fattModifica(idSalvato, b) : await fattCrea(b);
+      setIdSalvato(f.id); setSporco(false);
       if (invia) {
         const r = await fattEmetti(f.id);
         if (r.ok) toast.success(`Fattura ${r.numero} inviata allo SdI`);
@@ -203,7 +217,7 @@ export function Editor({
       }
       onSaved(f.id);
     } catch (e) {
-      toast.error((e as Error).message || "Errore");
+      toastErrore(e);
     } finally {
       setSalvando("");
     }
@@ -213,11 +227,11 @@ export function Editor({
   const lab = "text-xs text-muted-foreground";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-2 sm:p-6" onClick={onClose}>
-      <div className="w-full max-w-4xl rounded-xl bg-background shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-2 sm:p-6" onClick={chiudi}>
+      <div className="w-full max-w-4xl rounded-xl bg-background shadow-xl" onClick={(e) => e.stopPropagation()} onChangeCapture={() => setSporco(true)}>
         <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="font-semibold">{iniziale?.id ? "Modifica bozza" : "Nuova fattura"}</h2>
-          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Chiudi"><X /></Button>
+          <h2 className="font-semibold">{idSalvato ? "Modifica bozza" : "Nuova fattura"}</h2>
+          <Button variant="ghost" size="icon-sm" onClick={chiudi} aria-label="Chiudi"><X /></Button>
         </div>
 
         <div className="space-y-5 p-4">
@@ -339,14 +353,14 @@ export function Editor({
               {righe.map((r, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 rounded-md border p-2">
                   <input className={`${campo} col-span-12 sm:col-span-5`} placeholder="Descrizione" value={r.descrizione} onChange={(e) => setR(i, "descrizione", e.target.value)} />
-                  <input className={`${campo} col-span-3 sm:col-span-1`} type="number" min={0} step="0.01" title="Quantità" value={r.quantita} onChange={(e) => setR(i, "quantita", e.target.value)} />
-                  <input className={`${campo} col-span-4 sm:col-span-2`} type="number" step="0.01" placeholder={prezziIvati ? "Prezzo IVA incl." : "Prezzo netto"}
-                    value={(prezziIvati ? r.prezzo_ivato : r.prezzo_unitario) ?? ""}
-                    onChange={(e) => setR(i, prezziIvati ? "prezzo_ivato" : "prezzo_unitario", e.target.value === "" ? null : e.target.value)} />
+                  <DecInput className={`${campo} col-span-3 sm:col-span-1`} title="Quantità" value={Number(r.quantita)} onValue={(v) => { setR(i, "quantita", v ?? 1); setSporco(true); }} />
+                  <DecInput className={`${campo} col-span-4 sm:col-span-2`} placeholder={prezziIvati ? "Prezzo IVA incl." : "Prezzo netto"}
+                    value={(prezziIvati ? r.prezzo_ivato : r.prezzo_unitario) ?? null}
+                    onValue={(v) => { setR(i, prezziIvati ? "prezzo_ivato" : "prezzo_unitario", v); setSporco(true); }} />
                   <select className={`${campo} col-span-3 sm:col-span-1`} value={r.aliquota} onChange={(e) => setR(i, "aliquota", Number(e.target.value))}>
                     {ALIQUOTE.map((a) => <option key={a} value={a}>{a}%</option>)}
                   </select>
-                  <input className={`${campo} col-span-2 sm:col-span-1`} type="number" min={0} max={100} title="Sconto %" placeholder="sc.%" value={r.sconto || ""} onChange={(e) => setR(i, "sconto", e.target.value)} />
+                  <DecInput className={`${campo} col-span-2 sm:col-span-1`} title="Sconto %" placeholder="sc.%" vuotoSeZero value={Number(r.sconto || 0)} onValue={(v) => { setR(i, "sconto", Math.min(100, Math.max(0, v ?? 0))); setSporco(true); }} />
                   <div className="col-span-10 flex items-center justify-end text-sm tabular-nums sm:col-span-1">
                     {eur(stimaTotali([righePerCalcolo[i]]).totale)}
                   </div>
@@ -388,7 +402,7 @@ export function Editor({
         </div>
 
         <div className="flex flex-wrap justify-end gap-2 border-t px-4 py-3">
-          <Button variant="ghost" onClick={onClose}>Annulla</Button>
+          <Button variant="ghost" onClick={chiudi}>Annulla</Button>
           <Button variant="outline" disabled={!!salvando} onClick={() => salva(false)}>
             {salvando === "bozza" && <Loader2 className="animate-spin" />} Salva bozza
           </Button>

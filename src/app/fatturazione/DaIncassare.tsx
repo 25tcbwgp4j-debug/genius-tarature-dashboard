@@ -16,6 +16,8 @@ import {
   type FattCredito, type FattModalita,
 } from "@/lib/api";
 import { MODALITA_LABEL, STATI, dataIt, eur } from "./util";
+import { oggiRoma } from "@/lib/date";
+import { toastErrore } from "@/lib/errori";
 
 type Periodo = "tutto" | "mese" | "mese_prec" | "anno" | "anno_prec" | "giorno" | "intervallo";
 const PERIODI: [Periodo, string][] = [
@@ -65,7 +67,7 @@ export function DaIncassare({
   const [allega, setAllega] = useState(false);
   const [busy, setBusy] = useState("");
   const [mod, setMod] = useState<FattModalita>("bonifico");
-  const oggi = new Date().toISOString().slice(0, 10);
+  const oggi = oggiRoma();
   const emessa = direzione === "emessa";
   const per = useMemo(() => calcolaPeriodo(periodo, giorno, dal, al), [periodo, giorno, dal, al]);
 
@@ -109,6 +111,7 @@ export function DaIncassare({
     } catch (e) { toast.error((e as Error).message); } finally { setBusy(""); }
   }
   async function incassa(c: FattCredito) {
+    if (busy) return;
     const ids = scelte(c);
     if (!ids.length) { toast.error("Seleziona almeno una fattura"); return; }
     if (!confirm(`Segnare ${ids.length} fatture come ${emessa ? "incassate" : "pagate"} (${MODALITA_LABEL[mod]}, oggi)?`)) return;
@@ -117,7 +120,7 @@ export function DaIncassare({
       await fattPagamentoMultiplo({ ids, modalita: mod });
       toast.success(`${ids.length} fatture segnate ${emessa ? "incassate" : "pagate"}`);
       setAperto(null); carica(); onCambiato();
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(""); }
+    } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
 
   const campo = "h-8 rounded-md border border-input bg-background px-2 text-sm";

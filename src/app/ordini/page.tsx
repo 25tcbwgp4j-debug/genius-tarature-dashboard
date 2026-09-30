@@ -5,37 +5,46 @@
 // al saldo «Converti in scontrino» o «Converti in fattura» per la parte che resta.
 // Preventivo: si converte in ordine, in fattura o in scontrino.
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowRightLeft, Ban, FileText, Loader2, Pencil, Plus, Receipt, Save, Search, Trash2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
+import { DecInput, parseDec } from "@/components/DecInput";
+import { oggiRoma } from "@/lib/date";
+import { toastErrore } from "@/lib/errori";
 import {
-  docAcconto, docAnnulla, docConverti, docCrea, docDettaglio, docElenco, docModifica, fattAnagrafiche, fattCatalogo,
+  cassaGiornata, docAcconto, docAnnulla, docConverti, docCrea, docDettaglio, docElenco, docModifica, fattAnagrafiche, fattCatalogo,
   type DocumentoCliente, type FattAnagrafica, type FattVoceCatalogo, type RigaDoc,
 } from "@/lib/api";
 
 const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
-const num = (s: string) => Number(String(s).replace(",", ".")) || 0;
 const MOD: [string, string][] = [["contanti", "Contanti"], ["pos_sumup", "POS SumUp"], ["bonifico", "Bonifico"], ["paypal", "PayPal"], ["carta_stripe", "Carta online (Stripe)"]];
 const MOD_L = Object.fromEntries(MOD);
 const STATO: Record<string, string> = {
   aperto: "bg-amber-100 text-amber-800", saldato: "bg-emerald-100 text-emerald-800", convertito: "bg-sky-100 text-sky-800", annullato: "bg-muted text-muted-foreground",
 };
-const dataIt = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("it-IT");
+const dataIt = (d: string) => new Date(`${d.slice(0, 10)}T12:00:00Z`).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" });
+// chiave stabile per ogni riga dell'editor (con l'indice, togliendo una riga i campi «slittavano»)
+let seqRiga = 0;
+const chiaveRiga = () => `r${++seqRiga}`;
+type RigaUI = RigaDoc & { _k: string };
 const campo = "h-9 rounded-md border border-input bg-background px-2 text-sm";
 
 type Bozza = { id?: string; tipo: "ordine" | "preventivo"; cliente_nome: string; telefono: string; email: string; anagrafica_id: string | null;
-  controparte: DocumentoCliente["controparte"]; rif: string; note: string; righe: RigaDoc[] };
+  controparte: DocumentoCliente["controparte"]; rif: string; note: string; righe: (RigaDoc & { _k?: string })[] };
 const bozzaVuota = (tipo: "ordine" | "preventivo"): Bozza => ({ tipo, cliente_nome: "", telefono: "", email: "", anagrafica_id: null, controparte: {}, rif: "", note: "", righe: [] });
 
 function Editor({ iniziale, listino, onChiudi, onSalvato }: {
   iniziale: Bozza; listino: FattVoceCatalogo[]; onChiudi: () => void; onSalvato: (d: DocumentoCliente) => void;
 }) {
-  const [b, setB] = useState<Bozza>(iniziale);
+  const [b, setBozza] = useState<Omit<Bozza, "righe"> & { righe: RigaUI[] }>(() => ({ ...iniziale, righe: iniziale.righe.map((r) => ({ ...r, _k: r._k || chiaveRiga() })) }));
+  const [sporco, setSporco] = useState(false);
+  const setB = (nb: Omit<Bozza, "righe"> & { righe: RigaUI[] }) => { setBozza(nb); setSporco(true); };
+  const chiudi = () => { if (sporco && !confirm("Chiudere senza salvare? Le modifiche andranno perse.")) return; onChiudi(); };
   const [q, setQ] = useState("");
   const [trovati, setTrovati] = useState<FattAnagrafica[]>([]);
   const [busy, setBusy] = useState(false);
@@ -48,22 +57,25 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
   const riga = (i: number, p: Partial<RigaDoc>) => setB({ ...b, righe: b.righe.map((r, j) => (j === i ? { ...r, ...p } : r)) });
 
   async function salva() {
+    if (busy) return;
     if (!b.cliente_nome.trim()) { toast.error("Scrivi il nome del cliente"); return; }
-    if (!b.righe.some((r) => r.descrizione.trim())) { toast.error("Aggiungi almeno una riga"); return; }
+    const righe = b.righe.filter((r) => r.descrizione.trim()).map(({ _k, ...r }) => { void _k; return r; });
+    if (!righe.length) { toast.error("Aggiungi almeno una riga"); return; }
+    if (righe.some((r) => !(r.quantita > 0))) { toast.error("Ogni riga deve avere una quantità maggiore di zero"); return; }
     setBusy(true);
     try {
       const corpo = { tipo: b.tipo, cliente_nome: b.cliente_nome.trim(), telefono: b.telefono, email: b.email, anagrafica_id: b.anagrafica_id,
-        controparte: b.controparte, rif: b.rif, note: b.note, righe: b.righe };
+        controparte: b.controparte, rif: b.rif, note: b.note, righe };
       onSalvato(b.id ? await docModifica(b.id, corpo) : await docCrea(corpo));
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onChiudi}>
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={chiudi}>
       <div className="h-full w-full max-w-3xl space-y-3 overflow-y-auto bg-background p-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">{b.id ? "Modifica" : "Nuovo"} {b.tipo === "ordine" ? "ordine cliente" : "preventivo"}</h2>
-          <Button size="icon" variant="ghost" onClick={onChiudi}><X className="size-4" /></Button>
+          <Button size="icon" variant="ghost" onClick={chiudi}><X className="size-4" /></Button>
         </div>
         <Card className="space-y-2 p-3">
           <div className="text-sm font-medium">Cliente</div>
@@ -92,24 +104,25 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
         </Card>
         <Card className="space-y-2 p-3">
           <div className="text-sm font-medium">Articoli</div>
-          <CercaArticolo listino={listino} onScelto={(a) => setB({ ...b, righe: [...b.righe, { descrizione: a.descrizione, quantita: 1, prezzo_ivato: a.prezzo_ivato ?? 0, aliquota: a.aliquota, prodotto_id: a.prodotto_id || null }] })} />
-          <table className="w-full text-sm">
+          <CercaArticolo listino={listino} onScelto={(a) => setB({ ...b, righe: [...b.righe, { _k: chiaveRiga(), descrizione: a.descrizione, quantita: 1, prezzo_ivato: a.prezzo_ivato ?? 0, aliquota: a.aliquota, prodotto_id: a.prodotto_id || null }] })} />
+          <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm">
             <thead className="text-xs text-muted-foreground"><tr><th className="text-left">Descrizione</th><th className="w-16">Q.tà</th><th className="w-28">Prezzo IVA incl.</th><th className="w-16">IVA %</th><th className="w-24 text-right">Totale</th><th className="w-8" /></tr></thead>
             <tbody>
               {b.righe.map((r, i) => (
-                <tr key={i}>
+                <tr key={r._k}>
                   <td className="py-0.5 pr-1"><Input className="h-8" value={r.descrizione} onChange={(e) => riga(i, { descrizione: e.target.value })} /></td>
-                  <td className="pr-1"><Input className="h-8 text-right" inputMode="decimal" value={r.quantita} onChange={(e) => riga(i, { quantita: num(e.target.value) })} /></td>
-                  <td className="pr-1"><Input className="h-8 text-right" inputMode="decimal" defaultValue={String(r.prezzo_ivato).replace(".", ",")} onChange={(e) => riga(i, { prezzo_ivato: num(e.target.value) })} /></td>
-                  <td className="pr-1"><Input className="h-8 text-right" inputMode="numeric" value={r.aliquota} onChange={(e) => riga(i, { aliquota: num(e.target.value) })} /></td>
+                  <td className="pr-1"><DecInput className="h-8 text-right" value={r.quantita} onValue={(v) => riga(i, { quantita: v ?? 0 })} /></td>
+                  <td className="pr-1"><DecInput className="h-8 text-right" value={r.prezzo_ivato} onValue={(v) => riga(i, { prezzo_ivato: v ?? 0 })} /></td>
+                  <td className="pr-1"><select className={`${campo} h-8 w-full`} value={r.aliquota} onChange={(e) => riga(i, { aliquota: Number(e.target.value) })}>
+                    {[22, 10, 5, 4, 0].map((a) => <option key={a} value={a}>{a}</option>)}</select></td>
                   <td className="text-right tabular-nums">{eur(r.quantita * r.prezzo_ivato * (1 - (r.sconto || 0) / 100))}</td>
-                  <td><button className="text-muted-foreground hover:text-red-600" onClick={() => setB({ ...b, righe: b.righe.filter((_, j) => j !== i) })}><Trash2 className="size-4" /></button></td>
+                  <td><button className="text-muted-foreground hover:text-red-600" title="Togli riga" onClick={() => setB({ ...b, righe: b.righe.filter((_, j) => j !== i) })}><Trash2 className="size-4" /></button></td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
           <div className="flex items-center justify-between">
-            <Button size="sm" variant="outline" onClick={() => setB({ ...b, righe: [...b.righe, { descrizione: "", quantita: 1, prezzo_ivato: 0, aliquota: 22 }] })}><Plus className="mr-1 size-4" />Riga libera</Button>
+            <Button size="sm" variant="outline" onClick={() => setB({ ...b, righe: [...b.righe, { _k: chiaveRiga(), descrizione: "", quantita: 1, prezzo_ivato: 0, aliquota: 22 }] })}><Plus className="mr-1 size-4" />Riga libera</Button>
             <span className="text-lg font-semibold">Totale {eur(tot)}</span>
           </div>
         </Card>
@@ -118,7 +131,7 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
           <Input placeholder="Note (tempi di consegna, fornitore…)" value={b.note} onChange={(e) => setB({ ...b, note: e.target.value })} />
         </Card>
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onChiudi}>Annulla</Button>
+          <Button variant="outline" onClick={chiudi}>Annulla</Button>
           <Button onClick={salva} disabled={busy}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Save className="mr-1 size-4" />}Salva</Button>
         </div>
       </div>
@@ -129,22 +142,67 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
 function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChiudi: () => void; onCambiato: () => void; onModifica: (d: DocumentoCliente) => void }) {
   const router = useRouter();
   const [d, setD] = useState<DocumentoCliente | null>(null);
+  const [errore, setErrore] = useState("");
   const [azione, setAzione] = useState<"" | "acconto" | "scontrino" | "fattura">("");
-  const [f, setF] = useState({ importo: "", modalita: "contanti", certificato: "scontrino" as "scontrino" | "fattura", numero: "", pagata: true });
+  const [f, setF] = useState({ importo: "", modalita: "contanti", certificato: "scontrino" as "scontrino" | "fattura", numero: "", pagata: false });
   const [busy, setBusy] = useState(false);
-  const carica = useCallback(() => { docDettaglio(id).then(setD).catch((e: Error) => toast.error(e.message)); }, [id]);
+  const [cassaOggiChiusa, setCassaOggiChiusa] = useState(false);
+  const carica = useCallback(() => {
+    docDettaglio(id).then((r) => { setD(r); setErrore(""); }).catch((e: Error) => setErrore(e.message || "Errore"));
+  }, [id]);
   useEffect(() => { carica(); }, [carica]);
 
+  /** Apre il pannello dell'azione con i valori giusti (numero scontrino sempre vuoto: niente numeri riusati). */
+  function apri(a: "acconto" | "scontrino" | "fattura") {
+    setAzione(a);
+    setF(a === "fattura"
+      ? { importo: "", modalita: "bonifico", certificato: "fattura", numero: "", pagata: false }
+      : { importo: "", modalita: "contanti", certificato: "scontrino", numero: "", pagata: false });
+    setCassaOggiChiusa(false);
+    // acconti e scontrini entrano nella cassa di OGGI: avviso subito se è già chiusa
+    cassaGiornata(oggiRoma()).then((r) => setCassaOggiChiusa(r.giornata.stato === "chiusa")).catch(() => undefined);
+  }
+
   async function esegui(fn: () => Promise<DocumentoCliente & { fattura?: { id: string }; ordine?: { id: string; sigla: string } }>, ok: string) {
+    if (busy) return;
     setBusy(true);
     try {
       const r = await fn();
       toast.success(ok); setAzione(""); carica(); onCambiato();
       if (r.fattura?.id) { toast.info("Apro la fattura: controlla i dati del cliente e inviala allo SdI"); router.push(`/fatturazione?id=${r.fattura.id}`); }
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
 
-  if (!d) return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"><Loader2 className="size-6 animate-spin text-white" /></div>;
+  function conferma() {
+    if (!d) return;
+    if (azione === "acconto") {
+      const imp = parseDec(f.importo);
+      if (imp === null || Number.isNaN(imp) || imp <= 0) { toast.error("Scrivi l'importo dell'acconto (es. 50 o 12,50)"); return; }
+      if (imp > d.residuo + 0.001) { toast.error(`L'acconto supera quanto resta da pagare (${eur(d.residuo)})`); return; }
+      if (f.certificato === "scontrino" && !f.numero.trim()) { toast.error("Scrivi il numero dello scontrino battuto in cassa"); return; }
+      esegui(() => docAcconto(d.id, { importo: imp, modalita: f.modalita, certificato: f.certificato, scontrino_numero: f.numero.trim() }), "Acconto registrato: è nella cassa di oggi");
+    } else if (azione === "scontrino") {
+      if (!f.numero.trim()) { toast.error("Scrivi il numero dello scontrino battuto in cassa"); return; }
+      esegui(() => docConverti(d.id, { a: "scontrino", modalita: f.modalita, scontrino_numero: f.numero.trim() }), "Scontrino registrato nella cassa di oggi");
+    } else {
+      esegui(() => docConverti(d.id, { a: "fattura", modalita: f.modalita, pagata: f.pagata }), "Fattura creata in bozza");
+    }
+  }
+
+  if (!d) return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onChiudi}>
+      {errore ? (
+        <div className="max-w-sm space-y-3 rounded-lg bg-background p-4 text-sm shadow-lg" onClick={(e) => e.stopPropagation()}>
+          <div className="font-medium">Non riesco ad aprire il documento</div>
+          <div className="text-muted-foreground">{errore}</div>
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={onChiudi}>Chiudi</Button>
+            <Button size="sm" onClick={() => { setErrore(""); carica(); }}>Riprova</Button>
+          </div>
+        </div>
+      ) : <Loader2 className="size-6 animate-spin text-white" />}
+    </div>
+  );
   const aperto = d.stato === "aperto";
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onChiudi}>
@@ -197,9 +255,9 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
 
         {aperto && (
           <div className="flex flex-wrap gap-2">
-            {d.tipo === "ordine" && <Button onClick={() => { setAzione("acconto"); setF({ ...f, importo: "" }); }}><Wallet className="mr-1 size-4" />Registra acconto</Button>}
-            <Button variant="outline" onClick={() => setAzione("scontrino")}><Receipt className="mr-1 size-4" />{d.tipo === "ordine" && d.pagato ? "Saldo:" : ""} Converti in scontrino</Button>
-            <Button variant="outline" onClick={() => setAzione("fattura")}><FileText className="mr-1 size-4" />{d.tipo === "ordine" && d.pagato ? "Saldo:" : ""} Converti in fattura</Button>
+            {d.tipo === "ordine" && <Button onClick={() => apri("acconto")}><Wallet className="mr-1 size-4" />Registra acconto</Button>}
+            <Button variant="outline" onClick={() => apri("scontrino")}><Receipt className="mr-1 size-4" />{d.tipo === "ordine" && d.pagato ? "Saldo:" : ""} Converti in scontrino</Button>
+            <Button variant="outline" onClick={() => apri("fattura")}><FileText className="mr-1 size-4" />{d.tipo === "ordine" && d.pagato ? "Saldo:" : ""} Converti in fattura</Button>
             {d.tipo === "preventivo" && <Button variant="outline" disabled={busy} onClick={() => esegui(async () => {
               const r = await docConverti(d.id, { a: "ordine" }); if (r.ordine) toast.success(`Creato ${r.ordine.sigla}`); return r;
             }, "Preventivo convertito in ordine cliente")}><ArrowRightLeft className="mr-1 size-4" />Converti in ordine</Button>}
@@ -213,8 +271,14 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
             <div className="font-medium">
               {azione === "acconto" ? "Acconto sull'ordine" : azione === "scontrino" ? `Scontrino per ${eur(d.residuo)}` : `Fattura${d.pagato ? ` (scala gli acconti: resta ${eur(d.residuo)})` : ` per ${eur(d.residuo)}`}`}
             </div>
+            {cassaOggiChiusa && azione !== "fattura" && (
+              <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200">
+                La cassa di oggi è CHIUSA: per registrare l&apos;incasso va prima riaperta.{" "}
+                <a className="font-medium underline" href="/cassa/giornata">Apri cassa del giorno</a>
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-2">
-              {azione === "acconto" && <Input className="h-9 w-28 border-2 text-right font-semibold" inputMode="decimal" placeholder="€ acconto" value={f.importo} onChange={(e) => setF({ ...f, importo: e.target.value })} />}
+              {azione === "acconto" && <Input className="h-9 w-32 border-2 text-right font-semibold" inputMode="decimal" placeholder={`€ max ${eur(d.residuo)}`} value={f.importo} onChange={(e) => setF({ ...f, importo: e.target.value })} />}
               <select className={campo} value={f.modalita} onChange={(e) => setF({ ...f, modalita: e.target.value })}>
                 {MOD.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
@@ -225,12 +289,8 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
               )}
               {((azione === "acconto" && f.certificato === "scontrino") || azione === "scontrino") &&
                 <Input className="h-9 w-32" placeholder="N. scontrino *" value={f.numero} onChange={(e) => setF({ ...f, numero: e.target.value })} />}
-              {azione === "fattura" && <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={f.pagata} onChange={(e) => setF({ ...f, pagata: e.target.checked })} />già pagata</label>}
-              <Button disabled={busy} onClick={() => {
-                if (azione === "acconto") esegui(() => docAcconto(d.id, { importo: num(f.importo), modalita: f.modalita, certificato: f.certificato, scontrino_numero: f.numero }), "Acconto registrato: è nella cassa di oggi");
-                else if (azione === "scontrino") esegui(() => docConverti(d.id, { a: "scontrino", modalita: f.modalita, scontrino_numero: f.numero }), "Scontrino registrato nella cassa di oggi");
-                else esegui(() => docConverti(d.id, { a: "fattura", modalita: f.modalita, pagata: f.pagata }), "Fattura creata in bozza");
-              }}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}Conferma</Button>
+              {azione === "fattura" && <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={f.pagata} onChange={(e) => setF({ ...f, pagata: e.target.checked })} />già pagata (incasso di oggi)</label>}
+              <Button disabled={busy} onClick={conferma}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}Conferma</Button>
               <Button variant="ghost" onClick={() => setAzione("")}>Chiudi</Button>
             </div>
             <div className="text-xs text-muted-foreground">
@@ -245,21 +305,33 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
 }
 
 export default function OrdiniPage() {
+  return <Suspense fallback={<div className="p-6"><Loader2 className="animate-spin" /></div>}><Pagina /></Suspense>;
+}
+
+function Pagina() {
+  const router = useRouter();
+  const sp = useSearchParams();
   const [tipo, setTipo] = useState<"ordine" | "preventivo">("ordine");
   const [stato, setStato] = useState("aperto");
   const [q, setQ] = useState("");
   const [lista, setLista] = useState<DocumentoCliente[] | null>(null);
+  const [errore, setErrore] = useState("");
   const [listino, setListino] = useState<FattVoceCatalogo[]>([]);
   const [editor, setEditor] = useState<Bozza | null>(null);
-  // si apre da link: /ordini?id=<documento>
-  const [aperto, setAperto] = useState<string | null>(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("id")));
+  // si apre da link: /ordini?id=<documento> (letto con useSearchParams: niente differenze server/client)
+  const [apertoLocale, setAperto] = useState<string | null>(null);
+  const idLink = sp.get("id");
+  const aperto = apertoLocale ?? idLink;
+  const chiudiDettaglio = () => { setAperto(null); if (idLink) router.replace("/ordini"); };
 
-  const carica = useCallback(() => { docElenco(tipo, stato, q).then(setLista).catch((e: Error) => toast.error(e.message)); }, [tipo, stato, q]);
+  const carica = useCallback(() => {
+    docElenco(tipo, stato, q).then((r) => { setLista(r); setErrore(""); }).catch((e: Error) => { setErrore(e.message); setLista([]); });
+  }, [tipo, stato, q]);
   useEffect(() => { const t = setTimeout(carica, 200); return () => clearTimeout(t); }, [carica]);
   useEffect(() => { fattCatalogo("genius").then((r) => setListino(r.voci || [])).catch(() => undefined); }, []);
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4 p-1 md:p-2">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-2 text-2xl font-semibold">Ordini e preventivi</h1>
         <Button className="ml-auto" onClick={() => setEditor(bozzaVuota(tipo))}><Plus className="mr-1 size-4" />Nuovo {tipo === "ordine" ? "ordine cliente" : "preventivo"}</Button>
@@ -282,7 +354,9 @@ export default function OrdiniPage() {
           </thead>
           <tbody>
             {lista === null && <tr><td colSpan={8} className="p-4 text-center"><Loader2 className="inline size-4 animate-spin" /></td></tr>}
-            {lista?.length === 0 && <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">Nessun {tipo === "ordine" ? "ordine" : "preventivo"}</td></tr>}
+            {errore && <tr><td colSpan={8} className="p-4 text-center text-red-700">Non riesco a caricare l&apos;elenco: {errore}{" "}
+              <Button size="xs" variant="outline" onClick={() => { setErrore(""); setLista(null); carica(); }}>Riprova</Button></td></tr>}
+            {!errore && lista?.length === 0 && <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">Nessun {tipo === "ordine" ? "ordine" : "preventivo"}</td></tr>}
             {lista?.map((d) => (
               <tr key={d.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => setAperto(d.id)}>
                 <td className="px-3 py-2 font-medium">{d.sigla}</td><td>{dataIt(d.data)}</td><td>{d.cliente}</td><td className="text-muted-foreground">{d.rif}</td>
@@ -296,8 +370,8 @@ export default function OrdiniPage() {
       </Card>
       {editor && <Editor iniziale={editor} listino={listino} onChiudi={() => setEditor(null)}
         onSalvato={(d) => { setEditor(null); carica(); setAperto(d.id); toast.success(`${d.sigla} salvato`); }} />}
-      {aperto && <Dettaglio id={aperto} onChiudi={() => setAperto(null)} onCambiato={carica}
-        onModifica={(d) => { setAperto(null); setEditor({ id: d.id, tipo: d.tipo, cliente_nome: d.cliente_nome || "", telefono: d.telefono || "", email: d.email || "",
+      {aperto && <Dettaglio key={aperto} id={aperto} onChiudi={chiudiDettaglio} onCambiato={carica}
+        onModifica={(d) => { chiudiDettaglio(); setEditor({ id: d.id, tipo: d.tipo, cliente_nome: d.cliente_nome || "", telefono: d.telefono || "", email: d.email || "",
           anagrafica_id: d.anagrafica_id, controparte: d.controparte || {}, rif: d.rif || "", note: d.note || "", righe: d.righe }); }} />}
     </div>
   );

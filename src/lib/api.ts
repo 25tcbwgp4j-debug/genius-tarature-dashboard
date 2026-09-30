@@ -31,7 +31,7 @@ async function fetchAPI(path: string, options: RequestInit = {}) {
     }
     const error = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = error.detail;
-    const err = new Error(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map((e: any) => e.msg || JSON.stringify(e)).join('; ')
+    const err = new Error(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map((e: { msg?: string }) => e.msg || JSON.stringify(e)).join('; ')
       : (detail && typeof detail === 'object' && 'messaggio' in detail ? String(detail.messaggio) : `API Error: ${res.status}`))) as ApiError;
     err.status = res.status;
     err.detail = detail;
@@ -720,6 +720,8 @@ export interface FattRiga {
   sconto?: number | null;
   riferimento_normativo?: string | null;
   prezzo_totale?: number;
+  /** totale riga IVA inclusa, presente se la riga è nata a prezzo ivato */
+  lordo?: number | null;
 }
 export interface FattControparte {
   denominazione?: string; nome?: string; cognome?: string;
@@ -761,7 +763,7 @@ export async function fattModifica(id: string, body: Record<string, unknown>): P
   return fetchAPI(`/api/fatturazione/fatture/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 export async function fattElimina(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}`, { method: 'DELETE' }); }
-export async function fattEmetti(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}/emetti`, { method: 'POST' }); }
+export async function fattEmetti(id: string): Promise<{ ok: boolean; numero?: string | null; errore?: string | null }> { return fetchAPI(`/api/fatturazione/fatture/${id}/emetti`, { method: 'POST' }); }
 export async function fattPagamento(id: string, body: { modalita?: FattModalita; data?: string; riferimento?: string; annulla?: boolean }) {
   return fetchAPI(`/api/fatturazione/fatture/${id}/pagamento`, { method: 'POST', body: JSON.stringify(body) });
 }
@@ -850,7 +852,8 @@ export async function incImportaCsv(file: File): Promise<{ nuovi: number; gia_pr
   }
   return res.json();
 }
-export async function incAzione(id: string, body: { azione: string; fattura_ids?: string[]; session_id?: string | null; proforma_id?: string; modalita?: string; emetti?: boolean; nota?: string; forza?: boolean }) {
+export async function incAzione(id: string, body: { azione: string; fattura_ids?: string[]; session_id?: string | null; proforma_id?: string; modalita?: string; emetti?: boolean; nota?: string; forza?: boolean }):
+  Promise<{ incasso?: { esito?: string | null }; da_spedire?: DaSpedire | null; [k: string]: unknown }> {
   return fetchAPI(`/api/incassi/${id}/azione`, { method: 'POST', body: JSON.stringify(body) });
 }
 export async function incSessione(sessionId: string): Promise<{ incassi: { id: string; fonte: IncFonte; data: string; importo: number; ordinante: string | null; stato: string; esito: string | null }[]; da_spedire: DaSpedire | null }> {
@@ -886,7 +889,7 @@ export interface Scontrino {
   id: string; stato: string; righe: RigaCassa[]; totale: number; pagamenti: { modalita: string; importo: number }[];
   codice_lotteria: string | null; numero_rt: string | null; errore: string | null; risposta_rt: string | null; created_at: string;
 }
-export async function magProdotti(q = '', sottoScorta = false, limit = 300) {
+export async function magProdotti(q = '', sottoScorta = false, limit = 300): Promise<{ prodotti: Prodotto[]; totale_righe: number | null; valore_magazzino: number }> {
   return fetchAPI(`/api/magazzino/prodotti?q=${encodeURIComponent(q)}&sotto_scorta=${sottoScorta}&limit=${limit}`);
 }
 export async function magPerCodice(codice: string): Promise<Prodotto> { return fetchAPI(`/api/magazzino/codice/${encodeURIComponent(codice)}`); }

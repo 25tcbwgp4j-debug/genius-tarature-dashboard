@@ -29,6 +29,7 @@ import {
   Receipt,
   ShoppingCart,
   Boxes,
+  NotebookPen,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -47,7 +48,7 @@ const navItems = [
   { href: "/fatturazione", label: "Fatturazione", icon: Receipt },
   { href: "/cassa", label: "Scontrino (registratore)", icon: ShoppingCart },
   { href: "/cassa/giornata", label: "Cassa del giorno", icon: Calculator },
-  { href: "/ordini", label: "Ordini e preventivi", icon: ClipboardList },
+  { href: "/ordini", label: "Ordini e preventivi", icon: NotebookPen },
   { href: "/magazzino", label: "Magazzino", icon: Boxes },
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/automazioni", label: "Automazioni", icon: Activity },
@@ -60,14 +61,12 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const [unread, setUnread] = useState(0);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  // il drawer mobile è aperto «per» una rotta: cambiando pagina si chiude da solo (senza setState in un effect)
+  const [apertoSu, setApertoSu] = useState<string | null>(null);
+  const mobileOpen = apertoSu === pathname;
+  const setMobileOpen = (v: boolean) => setApertoSu(v ? pathname : null);
   const { theme, toggleTheme } = useTheme();
   const push = usePushNotifications();
-
-  // Chiude il drawer mobile quando cambia rotta
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
 
   useEffect(() => {
     if (pathname === "/login" || pathname.startsWith("/login/")) return;
@@ -99,7 +98,7 @@ export function Sidebar() {
         type="button"
         onClick={() => setMobileOpen(true)}
         aria-label="Apri menu"
-        className="lg:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm"
+        className="lg:hidden print:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm"
         style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
       >
         <Menu className="w-5 h-5 text-gray-700 dark:text-gray-200" />
@@ -111,12 +110,12 @@ export function Sidebar() {
           type="button"
           onClick={() => setMobileOpen(false)}
           aria-label="Chiudi menu"
-          className="lg:hidden fixed inset-0 bg-black/40 z-40"
+          className="lg:hidden print:hidden fixed inset-0 bg-black/40 z-40"
         />
       )}
 
       <aside
-        className={`w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col fixed lg:static inset-y-0 left-0 z-50 transform transition-transform lg:transform-none ${
+        className={`print:hidden w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col fixed lg:static inset-y-0 left-0 z-50 transform transition-transform lg:transform-none ${
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
         style={{ paddingTop: "env(safe-area-inset-top)" }}

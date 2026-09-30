@@ -12,7 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Boxes, Loader2, PackagePlus, Plus, Printer, Save, Search, Tag, X } from "lucide-react";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
-import { magCrea, magModifica, magMovimento, magPerCodice, magProdotti, magProdotto, type Prodotto } from "@/lib/api";
+import { dec0 } from "@/components/DecInput";
+import { toastErrore } from "@/lib/errori";
+import { type ApiError, magCrea, magModifica, magMovimento, magPerCodice, magProdotti, magProdotto, type Prodotto } from "@/lib/api";
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
 
@@ -42,32 +44,42 @@ export default function MagazzinoPage() {
 
   // Carico rapido con lo scanner: se l'articolo esiste aggiunge la quantità, altrimenti apre «nuovo articolo» col codice
   const caricoScanner = useCallback(async (codice: string) => {
+    let p: Prodotto;
     try {
-      const p = await magPerCodice(codice);
+      p = await magPerCodice(codice);
+    } catch (e) {
+      // SOLO «non trovato» apre il nuovo articolo; rete/server/sessione → errore (niente articoli doppi)
+      if ((e as ApiError).status === 404) setNuovo({ barcode: codice, descrizione: "", prezzo: 0, aliquota: 22, giacenza_iniziale: caricoQta });
+      else toastErrore(e);
+      return;
+    }
+    try {
       const r = await magMovimento(p.id, { tipo: "carico", quantita: caricoQta, causale: "Carico con scanner" });
       toast.success(`${p.descrizione}: +${caricoQta} → giacenza ${r.giacenza}`);
       carica();
-    } catch {
-      setNuovo({ barcode: codice, descrizione: "", prezzo: 0, aliquota: 22, giacenza_iniziale: caricoQta });
-    }
+    } catch (e) { toastErrore(e); }
   }, [caricoQta, carica]);
 
+  const [creando, setCreando] = useState(false);
   async function salvaNuovo() {
-    if (!nuovo?.descrizione) { toast.error("Serve la descrizione"); return; }
+    if (creando) return;
+    if (!nuovo?.descrizione?.trim()) { toast.error("Serve la descrizione"); return; }
+    setCreando(true);
     try { const p = await magCrea(nuovo); toast.success(`Creato ${p.descrizione} (${p.barcode})`); setNuovo(null); carica(); }
-    catch (e) { toast.error((e as Error).message); }
+    catch (e) { toastErrore(e); } finally { setCreando(false); }
   }
+  const apri = (id: string) => magProdotto(id).then(setAperto).catch(toastErrore);
 
   const campo = "h-8 w-full rounded-md border border-input bg-background px-2 text-sm";
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4 p-1 md:p-2">
       <div className="flex flex-wrap items-center gap-3">
         <Boxes className="size-6" /><h1 className="text-2xl font-semibold">Magazzino</h1>
         <span className="text-sm text-muted-foreground">{righe.length} articoli · valore (a costo) {eur(valore)}</span>
-        <div className="ml-auto flex gap-2">
-          {etichette.length > 0 && <Button variant="outline" onClick={() => window.print()}><Printer /> Stampa {etichette.length} etichette</Button>}
+        <div className="ml-auto flex gap-2 print:hidden">
           <Link href="/magazzino/carico"><Button variant="outline"><PackagePlus /> Carico e inventario</Button></Link>
+          {etichette.length > 0 && <Button variant="outline" onClick={() => window.print()}><Printer /> Stampa {etichette.length} etichette</Button>}
           <Button onClick={() => setNuovo({ descrizione: "", prezzo: 0, aliquota: 22, giacenza_iniziale: 0 })}><Plus /> Nuovo articolo</Button>
         </div>
       </div>
@@ -94,7 +106,7 @@ export default function MagazzinoPage() {
               <th className="p-2 text-right">Costo</th><th className="p-2 text-right">Giacenza</th></tr></thead>
             <tbody>
               {righe.map((p) => (
-                <tr key={p.id} className="cursor-pointer border-b last:border-0 hover:bg-muted/50" onClick={() => magProdotto(p.id).then(setAperto)}>
+                <tr key={p.id} className="cursor-pointer border-b last:border-0 hover:bg-muted/50" onClick={() => apri(p.id)}>
                   <td className="p-2" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" title="Etichetta da stampare" checked={etichette.some((x) => x.id === p.id)}
                       onChange={(e) => setEtichette((l) => e.target.checked ? [...l, p] : l.filter((x) => x.id !== p.id))} /></td>
@@ -123,20 +135,24 @@ export default function MagazzinoPage() {
       </div>
 
       {(nuovo || aperto) && (
-        <Scheda p={aperto} nuovo={nuovo} setNuovo={setNuovo} onClose={() => { setAperto(null); setNuovo(null); }} onSalvaNuovo={salvaNuovo}
-          onCambiato={(p) => { carica(); if (p) magProdotto(p.id).then(setAperto); }} campo={campo} />
+        <Scheda p={aperto} nuovo={nuovo} setNuovo={setNuovo} onClose={() => { setAperto(null); setNuovo(null); }} onSalvaNuovo={salvaNuovo} creando={creando}
+          onCambiato={(p) => { carica(); if (p) apri(p.id); }} campo={campo} />
       )}
     </div>
   );
 }
 
-function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo }: {
-  p: Prodotto | null; nuovo: (Partial<Prodotto> & { giacenza_iniziale?: number }) | null;
+function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, creando }: {
+  p: Prodotto | null; nuovo: (Partial<Prodotto> & { giacenza_iniziale?: number }) | null; creando: boolean;
   setNuovo: (n: Partial<Prodotto> & { giacenza_iniziale?: number }) => void; onClose: () => void; onSalvaNuovo: () => void;
   onCambiato: (p: Prodotto | null) => void; campo: string;
 }) {
   const [f, setF] = useState<Partial<Prodotto>>(p || {});
   const [mov, setMov] = useState({ tipo: "carico", quantita: 1, causale: "" });
+  const [busy, setBusy] = useState("");
+  // i numeri si scrivono come testo (virgola ammessa) e si convertono al salvataggio
+  const NUMERICI = new Set<string>(["prezzo", "aliquota", "costo", "scorta_minima"]);
+  const [testi, setTesti] = useState<Record<string, string>>({});
   const dati = nuovo || f;
   const set = (k: keyof Prodotto | "giacenza_iniziale", v: string | number) => nuovo ? setNuovo({ ...nuovo, [k]: v }) : setF((x) => ({ ...x, [k]: v }));
   const CAMPI: [keyof Prodotto, string, string][] = [["descrizione", "Descrizione", "text"], ["barcode", "Codice a barre (vuoto = interno)", "text"],
@@ -144,12 +160,15 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo }
     ["prezzo", "Prezzo di vendita IVA incl.", "number"], ["aliquota", "IVA %", "number"], ["costo", "Costo d'acquisto", "number"], ["scorta_minima", "Scorta minima", "number"]];
 
   async function salva() {
-    if (!p) return;
-    try { const r = await magModifica(p.id, f); toast.success("Salvato"); onCambiato(r); } catch (e) { toast.error((e as Error).message); }
+    if (!p || busy) return;
+    setBusy("salva");
+    try { const r = await magModifica(p.id, f); toast.success("Salvato"); onCambiato(r); } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
   async function movimento() {
-    if (!p) return;
-    try { const r = await magMovimento(p.id, mov); toast.success(`Giacenza: ${r.giacenza}`); onCambiato(p); } catch (e) { toast.error((e as Error).message); }
+    if (!p || busy) return;
+    if (!mov.quantita && mov.tipo !== "inventario") { toast.error("Scrivi la quantità"); return; }
+    setBusy("mov");
+    try { const r = await magMovimento(p.id, mov); toast.success(`Giacenza: ${r.giacenza}`); onCambiato(p); } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
 
   return (
@@ -160,14 +179,17 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo }
         <div className="grid grid-cols-2 gap-2">
           {CAMPI.map(([k, l, t]) => (
             <label key={k} className={`space-y-1 ${k === "descrizione" ? "col-span-2" : ""}`}><div className="text-xs text-muted-foreground">{l}</div>
-              <input type={t} step="0.01" className={campo} value={(dati[k] as string | number | undefined) ?? ""} onChange={(e) => set(k, t === "number" ? Number(e.target.value) : e.target.value)} /></label>
+              {NUMERICI.has(k)
+                ? <input type="text" inputMode="decimal" className={campo} value={testi[k] ?? String((dati[k] as number | undefined) ?? "").replace(".", ",")}
+                    onChange={(e) => { setTesti((x) => ({ ...x, [k]: e.target.value })); set(k, dec0(e.target.value)); }} />
+                : <input type={t} className={campo} value={(dati[k] as string | undefined) ?? ""} onChange={(e) => set(k, e.target.value)} />}</label>
           ))}
           {nuovo && <label className="space-y-1"><div className="text-xs text-muted-foreground">Giacenza iniziale</div>
             <input type="number" className={campo} value={nuovo.giacenza_iniziale ?? 0} onChange={(e) => set("giacenza_iniziale", Number(e.target.value))} /></label>}
         </div>
-        {nuovo ? <Button onClick={onSalvaNuovo}><Save /> Crea articolo</Button> : (
+        {nuovo ? <Button onClick={onSalvaNuovo} disabled={creando}>{creando ? <Loader2 className="animate-spin" /> : <Save />} Crea articolo</Button> : (
           <>
-            <div className="flex gap-2"><Button onClick={salva}><Save /> Salva</Button>
+            <div className="flex gap-2"><Button onClick={salva} disabled={!!busy}>{busy === "salva" ? <Loader2 className="animate-spin" /> : <Save />} Salva</Button>
               {p?.barcode && <div className="rounded border p-2"><Barcode value={p.barcode} /></div>}</div>
             <Card className="space-y-2 p-3">
               <div className="flex items-center gap-2 text-sm font-medium"><Tag className="size-4" /> Movimento · giacenza attuale <b>{Number(p?.giacenza)}</b></div>
@@ -176,7 +198,7 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo }
                   <option value="carico">Carico (+)</option><option value="scarico">Scarico (−)</option><option value="rettifica">Rettifica (±)</option><option value="inventario">Inventario (= contati)</option></select>
                 <input type="number" className="h-8 w-20 rounded-md border border-input bg-background px-2 text-sm" value={mov.quantita} onChange={(e) => setMov({ ...mov, quantita: Number(e.target.value) })} />
                 <input className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-sm" placeholder="Causale (fornitore, fattura…)" value={mov.causale} onChange={(e) => setMov({ ...mov, causale: e.target.value })} />
-                <Button size="sm" onClick={movimento}>Registra</Button>
+                <Button size="sm" onClick={movimento} disabled={!!busy}>{busy === "mov" ? <Loader2 className="animate-spin" /> : null}Registra</Button>
               </div>
             </Card>
             <div className="text-sm font-medium">Movimenti</div>

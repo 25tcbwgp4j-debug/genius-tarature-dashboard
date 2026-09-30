@@ -23,6 +23,8 @@ import { Chiusure } from "./Chiusure";
 import type { FattAnagrafica } from "@/lib/api";
 import { Dettaglio } from "./Dettaglio";
 import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
+import { annoRoma, oggiRoma } from "@/lib/date";
+import { toastErrore } from "@/lib/errori";
 
 type Tab = "emessa" | "ricevuta" | "incassare" | "pagare" | "clienti" | "fornitori" | "chiusure" | "esiti";
 interface Esito { id: string; tipo: string; descrizione: string; data: string;
@@ -47,7 +49,7 @@ function Pagina() {
   const [loading, setLoading] = useState(false);
   const [aperta, setAperta] = useState<string | null>(null);
   const [editor, setEditor] = useState<{ f: Fattura | null; anag?: FattAnagrafica } | null>(null);
-  const [anno, setAnno] = useState<number>(new Date().getFullYear());
+  const [anno, setAnno] = useState<number>(annoRoma);
   const [prove, setProve] = useState(false);
   const [mese, setMese] = useState(0);
   const [sel, setSel] = useState<Record<string, boolean>>({});
@@ -84,12 +86,12 @@ function Pagina() {
         const r = await fattEsiti(150);
         setEsiti(r.esiti || []);
       } else if (tab === "emessa" || tab === "ricevuta") {
-        const ultimo = mese ? new Date(anno || 2026, mese, 0).getDate() : 0;
+        const ultimo = mese ? new Date(anno || annoRoma(), mese, 0).getDate() : 0;
         const conPeriodo = periodo !== "tutto";
         const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q, anno: anno && !conPeriodo ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
           da: conPeriodo ? per.dal : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-01` : "",
           a: conPeriodo ? per.al : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimo}` : "" });
-        const oggiIso = new Date().toISOString().slice(0, 10);
+        const oggiIso = oggiRoma();
         setRighe((r.fatture || []).filter((f: Fattura) => !soloScadute || (f.pagamento_stato !== "pagata" && f.tipo_documento !== "TD04" && (f.scadenza || f.data || "") < oggiIso)));
         setSel({});
       }
@@ -123,10 +125,10 @@ function Pagina() {
   function azzera() {
     setTab("emessa"); setStato(""); setPagamento(""); setQ(""); setMese(0); setProve(false); setSel({});
     setPeriodo("tutto"); setPGiorno(""); setPDal(""); setPAl(""); setSoloScadute(false); setCercaCrediti("");
-    setAnno(new Date().getFullYear()); setSocieta("");
+    setAnno(annoRoma()); setSocieta("");
     if (sp.toString()) router.replace("/fatturazione");
   }
-  const filtriAttivi = !!(stato || pagamento || q || mese || prove || periodo !== "tutto" || soloScadute || societa || anno !== new Date().getFullYear() || tab !== "emessa");
+  const filtriAttivi = !!(stato || pagamento || q || mese || prove || periodo !== "tutto" || soloScadute || societa || anno !== annoRoma() || tab !== "emessa");
 
   function chiudiDettaglio() {
     setAperta(null);
@@ -151,12 +153,17 @@ function Pagina() {
     if (!selIds.length) return;
     if (!confirm(`Segnare ${selIds.length} fatture come ${tab === "emessa" ? "incassate" : "pagate"} (${modMulti}, oggi)?`)) return;
     try { await fattPagamentoMultiplo({ ids: selIds, modalita: modMulti }); toast.success(`${selIds.length} fatture aggiornate`); carica(); }
-    catch (e) { toast.error((e as Error).message); }
+    catch (e) { toastErrore(e); }
   }
-  const exportUrl = fattUrlExport({ direzione: tab === "ricevuta" ? "ricevuta" : "emessa", societa, anno: anno ? String(anno) : "", stato, pagamento, q, prove: prove ? "true" : "" });
+  const conPeriodoExp = periodo !== "tutto";
+  const ultimoExp = mese ? new Date(anno || annoRoma(), mese, 0).getDate() : 0;
+  const exportUrl = fattUrlExport({ direzione: tab === "ricevuta" ? "ricevuta" : "emessa", societa, anno: anno && !conPeriodoExp ? String(anno) : "", stato, pagamento, q,
+    prove: prove ? "true" : "",
+    da: conPeriodoExp ? per.dal : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-01` : "",
+    a: conPeriodoExp ? per.al : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimoExp}` : "" });
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4 p-1 md:p-2">
       <div className="flex flex-wrap items-center gap-3">
         <FileText className="size-6" />
         <h1 className="text-2xl font-semibold">Fatturazione</h1>
@@ -168,7 +175,7 @@ function Pagina() {
         )}
         <div className="ml-auto flex flex-wrap gap-2">
           <select className={sel_cls} value={anno} onChange={(e) => setAnno(Number(e.target.value))}>
-            {[2026, 2025, 2024].map((a) => <option key={a} value={a}>{a}</option>)}
+            {Array.from({ length: Math.max(4, annoRoma() - 2022) }, (_, i) => annoRoma() - i).map((a) => <option key={a} value={a}>{a}</option>)}
             <option value={0}>Tutti gli anni</option>
           </select>
           <select className={sel_cls} value={societa} onChange={(e) => setSocieta(e.target.value)}>
@@ -338,7 +345,7 @@ function Pagina() {
               {righe.map((f) => {
                 const st = STATI[f.stato] || { label: f.stato, cls: "bg-muted" };
                 const nc = f.tipo_documento === "TD04";
-                const scaduta = f.pagamento_stato !== "pagata" && f.scadenza && f.scadenza < new Date().toISOString().slice(0, 10);
+                const scaduta = f.pagamento_stato !== "pagata" && f.scadenza && f.scadenza < oggiRoma();
                 return (
                   <tr key={f.id} className="cursor-pointer border-b last:border-0 hover:bg-muted/50" onClick={() => setAperta(f.id)}>
                     <td className="p-2" onClick={(e) => e.stopPropagation()}>

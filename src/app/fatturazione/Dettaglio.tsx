@@ -10,11 +10,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { docDaFattura } from "@/lib/api";
+import { toastErrore } from "@/lib/errori";
 import {
   fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattInvia, fattLinkStripe, fattNotaCredito,
   fattPagamento, fattUrlPdf, fattUrlStampa, fattUrlXml, type FattModalita, type Fattura,
 } from "@/lib/api";
 import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
+
+const MODALITA_SCONTRINO: Record<string, string> = { contanti: "Contanti", pos_sumup: "POS SumUp", bonifico: "Bonifico", paypal: "PayPal", carta_stripe: "Carta (Stripe)" };
 
 export function Dettaglio({
   id, onClose, onChanged, onEdit, onOpen,
@@ -32,6 +35,7 @@ export function Dettaglio({
   const [dest, setDest] = useState("");
   const [msgInvio, setMsgInvio] = useState("");
   const [errore, setErrore] = useState("");
+  const [conv, setConv] = useState<{ numero: string; modalita: string } | null>(null);   // conversione in scontrino
 
   const carica = useCallback(() => {
     fattDettaglio(id).then((r) => { setF(r); setErrore(""); })
@@ -39,7 +43,20 @@ export function Dettaglio({
   }, [id]);
   useEffect(() => { carica(); }, [carica]);
 
+  /** Bozza → ordine / preventivo / scontrino (la bozza viene eliminata dal backend). */
+  async function converti(body: { a: "ordine" | "preventivo" | "scontrino"; scontrino_numero?: string; modalita?: string }) {
+    if (busy) return;
+    setBusy("conv");
+    try {
+      const r = await docDaFattura(id, body);
+      toast.success(r.documento ? `Creato ${r.documento.sigla}` : "Scontrino registrato nella cassa di oggi");
+      setConv(null); onChanged(); onClose();
+      if (r.documento) window.location.href = `/ordini?id=${r.documento.id}`;
+    } catch (err) { toastErrore(err); } finally { setBusy(""); }
+  }
+
   async function azione<T>(nome: string, fn: () => Promise<T>, ok?: (r: T) => void) {
+    if (busy) return;
     setBusy(nome);
     try {
       const r = await fn();
@@ -47,7 +64,7 @@ export function Dettaglio({
       carica();
       onChanged();
     } catch (e) {
-      toast.error((e as Error).message || "Errore");
+      toastErrore(e);
     } finally {
       setBusy("");
     }
@@ -128,22 +145,15 @@ export function Dettaglio({
             {inviabile && <Button size="sm" variant="outline" onClick={() => onEdit(f)}><Pencil /> Modifica</Button>}
             {emessa && ["bozza", "errore", "scartata"].includes(f.stato) && (
               <select className="h-8 rounded-md border border-input bg-background px-2 text-sm" value="" disabled={!!busy}
-                onChange={async (e) => {
+                onChange={(e) => {
                   const a = e.target.value as "ordine" | "preventivo" | "scontrino";
                   if (!a) return;
-                  let body: { a: typeof a; scontrino_numero?: string; modalita?: string } = { a };
                   if (a === "scontrino") {
-                    const n = prompt("Numero dello scontrino battuto in cassa:");
-                    if (!n) return;
-                    const m = prompt("Pagato con: contanti, pos_sumup, bonifico, paypal", f.pagamento_modalita || "contanti");
-                    body = { a, scontrino_numero: n.trim(), modalita: (m || "contanti").trim() };
-                  } else if (!confirm(`Trasformare questa bozza in ${a === "ordine" ? "ordine cliente" : "preventivo"}? La bozza di fattura verrà eliminata.`)) return;
-                  try {
-                    const r = await docDaFattura(f.id, body);
-                    toast.success(r.documento ? `Creato ${r.documento.sigla}` : "Scontrino registrato nella cassa di oggi");
-                    onChanged(); onClose();
-                    if (r.documento) window.location.href = `/ordini?id=${r.documento.id}`;
-                  } catch (err) { toast.error((err as Error).message); }
+                    setConv({ numero: "", modalita: f.pagamento_modalita && f.pagamento_modalita in MODALITA_SCONTRINO ? f.pagamento_modalita : "contanti" });
+                    return;
+                  }
+                  if (!confirm(`Trasformare questa bozza in ${a === "ordine" ? "ordine cliente" : "preventivo"}? La bozza di fattura verrà eliminata.`)) return;
+                  converti({ a });
                 }}>
                 <option value="">⇄ Converti in…</option>
                 <option value="ordine">Ordine cliente</option>
@@ -185,6 +195,24 @@ export function Dettaglio({
               </Button>
             )}
           </div>
+
+          {conv && (
+            <div className="space-y-2 rounded-lg border border-primary/40 p-3">
+              <div className="text-sm font-medium">Converti in scontrino — {eur(f.totale)} nella cassa di oggi (la bozza di fattura verrà eliminata)</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <input className="h-8 w-40 rounded-md border border-input bg-background px-2 text-sm" placeholder="N. scontrino *" value={conv.numero}
+                  onChange={(e) => setConv({ ...conv, numero: e.target.value })} />
+                <select className="h-8 rounded-md border border-input bg-background px-2 text-sm" value={conv.modalita} onChange={(e) => setConv({ ...conv, modalita: e.target.value })}>
+                  {Object.entries(MODALITA_SCONTRINO).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+                <Button size="sm" disabled={!!busy || !conv.numero.trim()}
+                  onClick={() => { if (confirm(`Registrare lo scontrino n. ${conv.numero.trim()} da ${eur(f.totale)} (${MODALITA_SCONTRINO[conv.modalita]}) ed eliminare la bozza di fattura?`)) converti({ a: "scontrino", scontrino_numero: conv.numero.trim(), modalita: conv.modalita }); }}>
+                  {busy === "conv" ? <Loader2 className="animate-spin" /> : <Receipt />} Conferma
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConv(null)}>Annulla</Button>
+              </div>
+            </div>
+          )}
 
           {invio && (
             <div className="space-y-2 rounded-lg border border-primary/40 p-3">
@@ -271,7 +299,7 @@ export function Dettaglio({
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span>{emessa ? "Incassata" : "Pagata"} il {dataIt(f.pagato_il)} con {MODALITA_LABEL[f.pagamento_modalita || ""] || "—"}
                     {f.pagamento_rif ? ` (rif. ${f.pagamento_rif})` : ""}</span>
-                  <Button size="xs" variant="ghost" disabled={!!busy} onClick={() => azione("ann", () => fattPagamento(f.id, { annulla: true }))}><Undo2 /> Annulla</Button>
+                  <Button size="xs" variant="ghost" disabled={!!busy} onClick={() => { if (confirm(`Annullare l'incasso del ${dataIt(f.pagato_il)} (${MODALITA_LABEL[f.pagamento_modalita || ""] || "—"})? La fattura tornerà «${emessa ? "da incassare" : "da pagare"}».`)) azione("ann", () => fattPagamento(f.id, { annulla: true })); }}><Undo2 /> Annulla</Button>
                 </div>
               ) : (
                 <>
@@ -286,9 +314,18 @@ export function Dettaglio({
                     ))}
                     {emessa && f.stato !== "bozza" && (
                       <Button size="sm" variant="secondary" disabled={!!busy}
-                        onClick={() => azione("stripe", () => fattLinkStripe(f.id), (r) => {
-                          if (r.url) { navigator.clipboard?.writeText(r.url).catch(() => undefined); toast.success("Link di pagamento copiato (valido 24 ore)"); window.open(r.url, "_blank"); }
-                        })}>
+                        onClick={() => {
+                          // la finestra si apre SUBITO (dentro il click), altrimenti il browser la blocca come popup
+                          const w = window.open("about:blank", "_blank");
+                          let aperto = false;
+                          azione("stripe", () => fattLinkStripe(f.id), (r) => {
+                            if (!r.url) return;
+                            aperto = true;
+                            navigator.clipboard?.writeText(r.url).catch(() => undefined);
+                            toast.success("Link di pagamento copiato (valido 24 ore)");
+                            if (w) w.location.href = r.url; else window.open(r.url, "_blank");
+                          }).then(() => { if (!aperto) w?.close(); });
+                        }}>
                         <Link2 /> Link pagamento con carta
                       </Button>
                     )}

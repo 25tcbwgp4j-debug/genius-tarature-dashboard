@@ -17,6 +17,7 @@ import {
   type ApiError, type DaSpedire, type IncFonte, type IncFontiStato, type IncProposta, type Incasso,
 } from "@/lib/api";
 import { dataIt, eur } from "./util";
+import { toastErrore } from "@/lib/errori";
 
 const FONTI: { k: IncFonte; label: string; icon: typeof Banknote }[] = [
   { k: "banca", label: "Banca (bonifici)", icon: Banknote },
@@ -66,15 +67,17 @@ export function Incassi({ onClose, onApriFattura, onCambiato }: {
     } catch (e) { toast.error((e as Error).message); } finally { setBusy(""); if (file.current) file.current.value = ""; }
   }
 
-  async function esegui(inc: Incasso, body: Parameters<typeof incAzione>[1], conferma: string) {
+  async function esegui(inc: Incasso, body: Parameters<typeof incAzione>[1], conferma: string): Promise<void> {
     if (!confirm(conferma)) return;
     setBusy(inc.id);
+    let seguito: null | (() => Promise<void>) = null;   // seconda chiamata dopo un 409 (fuori dal try: busy resta coerente)
     try {
       const r = await incAzione(inc.id, body);
       toast.success(r.incasso?.esito || "Fatto");
-      if (r.da_spedire) {
-        toast.warning(`Sessione ${r.da_spedire.numero || ""} ${r.da_spedire.cliente || ""}: pagata, DA SPEDIRE`, {
-          action: { label: "Apri sessione", onClick: () => window.open(`/sessioni/${r.da_spedire.session_id}`, "_blank") },
+      const ds = r.da_spedire;
+      if (ds) {
+        toast.warning(`Sessione ${ds.numero || ""} ${ds.cliente || ""}: pagata, DA SPEDIRE`, {
+          action: { label: "Apri sessione", onClick: () => window.open(`/sessioni/${ds.session_id}`, "_blank") },
           duration: 15000,
         });
       }
@@ -84,13 +87,14 @@ export function Incassi({ onClose, onApriFattura, onCambiato }: {
       const err = e as ApiError;
       if (err.status === 409 && err.detail?.fattura && body.session_id) {
         const dop = err.detail.fattura as { id: string; numero: string };
-        setBusy("");
         if (confirm(`${err.message}.\n\nOK = collega la fattura ${dop.numero} alla sessione e segnala incassata con questo pagamento (niente doppione)`)) {
-          return esegui(inc, { azione: "collega_fattura", session_id: body.session_id, fattura_ids: [dop.id] }, "Confermi?");
+          seguito = () => esegui(inc, { azione: "collega_fattura", session_id: body.session_id, fattura_ids: [dop.id] }, "Confermi?");
+        } else if (confirm("Creare comunque una NUOVA fattura quietanzata?")) {
+          seguito = () => esegui(inc, { ...body, forza: true }, "Confermi la nuova fattura?");
         }
-        if (confirm("Creare comunque una NUOVA fattura quietanzata?")) return esegui(inc, { ...body, forza: true }, "Confermi la nuova fattura?");
-      } else toast.error(err.message);
-    } finally { setBusy(""); }
+      } else toastErrore(err);
+    } finally { if (!seguito) setBusy(""); }
+    if (seguito) await seguito();
   }
 
   function azioni(inc: Incasso, p: IncProposta) {

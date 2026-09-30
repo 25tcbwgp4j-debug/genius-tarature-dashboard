@@ -9,6 +9,7 @@ import { Archive, CalendarDays, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { fattChiusura, fattUrlChiusura, fattUrlPacchetto } from "@/lib/api";
 import { eur } from "./util";
+import { oggiRoma } from "@/lib/date";
 
 interface Dati {
   etichetta: string; n_emesse: number; n_ricevute: number; n_incassi: number;
@@ -18,20 +19,23 @@ interface Dati {
 }
 
 export function Chiusure({ societa }: { societa: string }) {
-  const [giorno, setGiorno] = useState(new Date().toISOString().slice(0, 10));
+  const [giorno, setGiorno] = useState(oggiRoma);
   const [periodo, setPeriodo] = useState<"giorno" | "mese">("giorno");
   const [d, setD] = useState<(Dati & { _k: string }) | null>(null);
+  const [err, setErr] = useState<{ k: string; m: string } | null>(null);
+  const [tentativo, setTentativo] = useState(0);
   const soc = societa || "genius";
   const chiave = `${soc}|${periodo}|${giorno}`;
-  const loading = d?._k !== chiave;
+  const errore = err?.k === chiave ? err.m : "";
+  const loading = d?._k !== chiave && !errore;
 
   useEffect(() => {
     let vivo = true;
     fattChiusura(soc, periodo, giorno)
       .then((r: Dati) => { if (vivo) setD({ ...r, _k: `${soc}|${periodo}|${giorno}` }); })
-      .catch((e: Error) => toast.error(e.message));
+      .catch((e: Error) => { if (vivo) { setErr({ k: `${soc}|${periodo}|${giorno}`, m: e.message }); toast.error(e.message); } });
     return () => { vivo = false; };
-  }, [soc, periodo, giorno]);
+  }, [soc, periodo, giorno, tentativo]);
 
   return (
     <div className="space-y-3">
@@ -45,7 +49,10 @@ export function Chiusure({ societa }: { societa: string }) {
         </a>
         <a href={fattUrlPacchetto(soc, giorno)}><Button size="sm"><Archive /> Pacchetto commercialista (ZIP del mese)</Button></a>
       </div>
-      {loading || !d ? <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div> : (
+      {errore ? (
+        <div className="space-y-2 rounded-md border border-red-300 p-3 text-sm"><div className="text-red-700">Non riesco a caricare la chiusura: {errore}</div>
+          <Button size="sm" variant="outline" onClick={() => { setErr(null); setTentativo((t) => t + 1); }}>Riprova</Button></div>
+      ) : loading || !d || d._k !== chiave ? <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div> : (
         <>
           <div className="text-sm text-muted-foreground">{periodo === "giorno" ? "Chiusura di giornata" : "Riepilogo mensile"} {d.etichetta}</div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
