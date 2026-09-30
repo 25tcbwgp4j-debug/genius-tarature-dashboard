@@ -928,7 +928,7 @@ export interface FoglioCassa {
     apertura: number; prelievi: number; chiusura_teorica: number; chiusura_contata: number; pos_terminale: number | null; pos_da_sumup: number | null;
     fatture_n: number; fatture_totale: number; fatture_prec_totale: number; scontrini_n: number; scontrini_totale: number; altro_totale: number;
   };
-  controlli: ControlloCassa[]; conti_tornano: boolean; tagli: string[];
+  controlli: ControlloCassa[]; conti_tornano: boolean; tagli: string[]; tagli_apertura: string[]; tagli_chiusura: string[];
 }
 export async function cassaGiornata(giorno: string): Promise<FoglioCassa> { return fetchAPI(`/api/cassa/giornata?giorno=${giorno}`); }
 export async function cassaGiornataSalva(giorno: string, body: Partial<FoglioCassa['giornata']>): Promise<FoglioCassa> {

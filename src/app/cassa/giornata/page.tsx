@@ -37,18 +37,19 @@ function DecInput({ value, onValue, ...props }: { value: number | null | undefin
   }} />;
 }
 
-function TagliBox({ titolo, tagli, valori, onChange, disabled }: {
-  titolo: string; tagli: string[]; valori: Tagli; onChange: (t: Tagli) => void; disabled: boolean;
+function TagliBox({ titolo, sotto, tagli, tutti, valori, onChange, disabled }: {
+  titolo: string; sotto?: string; tagli: string[]; tutti: string[]; valori: Tagli; onChange: (t: Tagli) => void; disabled: boolean;
 }) {
-  const tot = tagli.reduce((s, t) => s + Number(t) * (valori[t] || 0), 0);
-  const visibili = tagli.filter((t) => Number(t) >= 0.5 || valori[t]);
+  const tot = tutti.reduce((s, t) => s + Number(t) * (valori[t] || 0), 0);
+  const visibili = tutti.filter((t) => tagli.includes(t) || valori[t]);
   return (
     <div className="space-y-1">
-      <div className="flex items-baseline justify-between"><span className="text-sm font-medium">{titolo}</span><span className="font-semibold tabular-nums">{eur(tot)}</span></div>
+      <div className="flex items-baseline justify-between"><span className="font-medium">{titolo}</span><span className="text-lg font-semibold tabular-nums">{eur(tot)}</span></div>
+      {sotto && <div className="text-xs text-muted-foreground">{sotto}</div>}
       <div className="grid grid-cols-2 gap-x-3 gap-y-1">
         {visibili.map((t) => (
           <label key={t} className="flex items-center gap-2 text-xs">
-            <span className="w-16 text-muted-foreground">{Number(t) >= 5 ? "€" : "moneta"} {t.replace(".", ",")}</span>
+            <span className="w-24 text-muted-foreground">{Number(t) >= 5 ? "banconote" : "monete"} € {t.replace(".", ",")}</span>
             <Input type="number" min={0} inputMode="numeric" className="h-7 w-16 px-1 text-right" disabled={disabled}
               value={valori[t] ?? ""} onChange={(e) => onChange({ ...valori, [t]: Math.max(0, parseInt(e.target.value || "0", 10) || 0) })} />
             <span className="tabular-nums text-muted-foreground">{eur(Number(t) * (valori[t] || 0))}</span>
@@ -169,6 +170,62 @@ export default function CassaGiornataPage() {
           </div>
         </Card>
 
+        {/* CONTANTI, PRELIEVI, POS, REGISTRATORE */}
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card className="space-y-3 p-3">
+            <TagliBox titolo="☀️ Mattina — apertura cassa" tutti={f.tagli} tagli={f.tagli_apertura}
+              sotto={g.nuova && g.apertura_da ? `Precompilata con la chiusura del ${new Date(`${g.apertura_da}T12:00:00`).toLocaleDateString("it-IT")}: correggi se serve` : "Conta i soldi in cassa quando apri"}
+              valori={g.apertura_tagli || {}} disabled={chiusa} onChange={(t) => modifica({ apertura_tagli: t })} />
+          </Card>
+          <Card className="space-y-3 p-3">
+            <TagliBox titolo="🌙 Sera — chiusura cassa" sotto="Conta i soldi rimasti in cassa a fine giornata" tutti={f.tagli} tagli={f.tagli_chiusura}
+              valori={g.chiusura_tagli || {}} disabled={chiusa} onChange={(t) => modifica({ chiusura_tagli: t })} />
+            <div className="space-y-1 border-t pt-2 text-sm tabular-nums">
+              <div className="flex justify-between"><span>Mattina</span><span>{eur(f.riepilogo.apertura)}</span></div>
+              <div className="flex justify-between"><span>+ incassi in contanti</span><span>{eur(f.totali.contanti)}</span></div>
+              <div className="flex justify-between"><span>− prelievi</span><span>{eur(f.riepilogo.prelievi)}</span></div>
+              <div className="flex justify-between border-t pt-1 font-medium"><span>= dovrebbero esserci</span><span>{eur(f.riepilogo.chiusura_teorica)}</span></div>
+              <div className="flex justify-between"><span>contati la sera</span><span>{eur(f.riepilogo.chiusura_contata)}</span></div>
+              {(() => { const d = Math.round((f.riepilogo.chiusura_contata - f.riepilogo.chiusura_teorica) * 100) / 100; const vuota = !Object.keys(g.chiusura_tagli || {}).length;
+                return <div className={`flex justify-between font-semibold ${vuota ? "text-muted-foreground" : Math.abs(d) < 0.05 ? "text-emerald-600" : "text-red-600"}`}>
+                  <span>Differenza</span><span>{vuota ? "conta la cassa" : Math.abs(d) < 0.05 ? "✓ torna" : eur(d)}</span></div>; })()}
+            </div>
+          </Card>
+          <Card className="space-y-3 p-3">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-sm font-medium">Prelievi di cassa
+                {!chiusa && <Button size="sm" variant="ghost" className="h-7" onClick={() => modifica({ prelievi: [...(g.prelievi || []), { importo: 0, nota: "" }] })}><Plus className="size-3" /></Button>}
+              </div>
+              {(g.prelievi || []).map((p, i) => (
+                <div key={i} className="flex gap-1">
+                  <DecInput className="h-7 w-24 text-right" placeholder="€" disabled={chiusa} value={p.importo}
+                    onValue={(v) => modifica({ prelievi: g.prelievi.map((x, j) => (j === i ? { ...x, importo: v || 0 } : x)) })} />
+                  <Input className="h-7 flex-1" placeholder="motivo (es. cinesi, spesa…)" disabled={chiusa} value={p.nota}
+                    onChange={(e) => modifica({ prelievi: g.prelievi.map((x, j) => (j === i ? { ...x, nota: e.target.value } : x)) })} />
+                  {!chiusa && <button className="text-muted-foreground hover:text-red-600" onClick={() => modifica({ prelievi: g.prelievi.filter((_, j) => j !== i) })}><Trash2 className="size-4" /></button>}
+                </div>
+              ))}
+              {!(g.prelievi || []).length && <div className="text-xs text-muted-foreground">Nessun prelievo</div>}
+            </div>
+            <label className="block space-y-1 border-t pt-2 text-sm">
+              <span className="font-medium">Riepilogo terminale POS (totale del giorno)</span>
+              <DecInput className="h-8" disabled={chiusa} placeholder={f.riepilogo.pos_da_sumup !== null ? `da SumUp: ${eur(f.riepilogo.pos_da_sumup)}` : "es. 792,06"}
+                value={g.pos_terminale} onValue={(v) => modifica({ pos_terminale: v })} />
+              <span className="text-xs text-muted-foreground">{f.riepilogo.pos_da_sumup !== null ? "Letto da SumUp: scrivi solo per correggere." : "Dallo scontrino di chiusura del POS (finché non colleghiamo l'API SumUp)."}</span>
+            </label>
+            <label className="block space-y-1 text-sm">
+              <span className="font-medium">Chiusura registratore: totale scontrini</span>
+              <DecInput className="h-8" disabled={chiusa} placeholder="dalla chiusura fiscale giornaliera" value={g.rt_scontrini}
+                onValue={(v) => modifica({ rt_scontrini: v })} />
+            </label>
+            <label className="block space-y-1 text-sm">
+              <span className="font-medium">Note</span>
+              <textarea className="min-h-16 w-full rounded-md border border-input bg-background p-2 text-sm" disabled={chiusa} value={g.note ?? ""}
+                onChange={(e) => modifica({ note: e.target.value })} />
+            </label>
+          </Card>
+        </div>
+
         {/* RIEPILOGO */}
         <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {[["Fatture del giorno", `${f.riepilogo.fatture_n} · ${eur(f.riepilogo.fatture_totale)}`], ["Fatture prec. incassate", eur(f.riepilogo.fatture_prec_totale)],
@@ -226,53 +283,6 @@ export default function CassaGiornataPage() {
           )}
         </Card>
 
-        {/* CONTANTI, PRELIEVI, POS, REGISTRATORE */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="space-y-3 p-3">
-            <TagliBox titolo={`Apertura contanti${g.nuova && g.apertura_da ? ` (dalla chiusura del ${new Date(`${g.apertura_da}T12:00:00`).toLocaleDateString("it-IT")})` : ""}`}
-              tagli={f.tagli} valori={g.apertura_tagli || {}} disabled={chiusa} onChange={(t) => modifica({ apertura_tagli: t })} />
-          </Card>
-          <Card className="space-y-3 p-3">
-            <TagliBox titolo="Chiusura contanti (conteggio)" tagli={f.tagli} valori={g.chiusura_tagli || {}} disabled={chiusa} onChange={(t) => modifica({ chiusura_tagli: t })} />
-            <div className="border-t pt-2 text-sm">
-              <div className="flex justify-between"><span>In cassa dovrebbero esserci</span><b className="tabular-nums">{eur(f.riepilogo.chiusura_teorica)}</b></div>
-              <div className="text-xs text-muted-foreground">apertura {eur(f.riepilogo.apertura)} + contanti {eur(f.totali.contanti)} − prelievi {eur(f.riepilogo.prelievi)}</div>
-            </div>
-          </Card>
-          <Card className="space-y-3 p-3">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-sm font-medium">Prelievi di cassa
-                {!chiusa && <Button size="sm" variant="ghost" className="h-7" onClick={() => modifica({ prelievi: [...(g.prelievi || []), { importo: 0, nota: "" }] })}><Plus className="size-3" /></Button>}
-              </div>
-              {(g.prelievi || []).map((p, i) => (
-                <div key={i} className="flex gap-1">
-                  <DecInput className="h-7 w-24 text-right" placeholder="€" disabled={chiusa} value={p.importo}
-                    onValue={(v) => modifica({ prelievi: g.prelievi.map((x, j) => (j === i ? { ...x, importo: v || 0 } : x)) })} />
-                  <Input className="h-7 flex-1" placeholder="motivo (es. cinesi, spesa…)" disabled={chiusa} value={p.nota}
-                    onChange={(e) => modifica({ prelievi: g.prelievi.map((x, j) => (j === i ? { ...x, nota: e.target.value } : x)) })} />
-                  {!chiusa && <button className="text-muted-foreground hover:text-red-600" onClick={() => modifica({ prelievi: g.prelievi.filter((_, j) => j !== i) })}><Trash2 className="size-4" /></button>}
-                </div>
-              ))}
-              {!(g.prelievi || []).length && <div className="text-xs text-muted-foreground">Nessun prelievo</div>}
-            </div>
-            <label className="block space-y-1 border-t pt-2 text-sm">
-              <span className="font-medium">Riepilogo terminale POS (totale del giorno)</span>
-              <DecInput className="h-8" disabled={chiusa} placeholder={f.riepilogo.pos_da_sumup !== null ? `da SumUp: ${eur(f.riepilogo.pos_da_sumup)}` : "es. 792,06"}
-                value={g.pos_terminale} onValue={(v) => modifica({ pos_terminale: v })} />
-              <span className="text-xs text-muted-foreground">{f.riepilogo.pos_da_sumup !== null ? "Letto da SumUp: scrivi solo per correggere." : "Dallo scontrino di chiusura del POS (finché non colleghiamo l'API SumUp)."}</span>
-            </label>
-            <label className="block space-y-1 text-sm">
-              <span className="font-medium">Chiusura registratore: totale scontrini</span>
-              <DecInput className="h-8" disabled={chiusa} placeholder="dalla chiusura fiscale giornaliera" value={g.rt_scontrini}
-                onValue={(v) => modifica({ rt_scontrini: v })} />
-            </label>
-            <label className="block space-y-1 text-sm">
-              <span className="font-medium">Note</span>
-              <textarea className="min-h-16 w-full rounded-md border border-input bg-background p-2 text-sm" disabled={chiusa} value={g.note ?? ""}
-                onChange={(e) => modifica({ note: e.target.value })} />
-            </label>
-          </Card>
-        </div>
       </>)}
     </div>
   );
