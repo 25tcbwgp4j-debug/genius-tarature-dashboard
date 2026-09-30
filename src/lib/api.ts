@@ -750,7 +750,7 @@ export async function fattElenco(params: Record<string, string>) {
   return fetchAPI(`/api/fatturazione/fatture?${q}`);
 }
 export async function fattRiepilogo(societa = '', anno = 0) {
-  return fetchAPI(`/api/fatturazione/riepilogo?societa=${societa}&anno=${anno || ''}`);
+  return fetchAPI(`/api/fatturazione/riepilogo?societa=${societa}&anno=${anno || 0}`);
 }
 export async function fattEsiti(limit = 100) { return fetchAPI(`/api/fatturazione/esiti?limit=${limit}`); }
 export async function fattDettaglio(id: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}`); }
@@ -803,7 +803,7 @@ export interface FattCredito {
   fatture: { id: string; numero: string | null; data: string | null; scadenza: string | null; totale: number; stato: string; pagamento_modalita: string | null }[];
 }
 export async function fattCrediti(societa: string, direzione = 'emessa', anno = 0, dal = '', al = ''): Promise<{ clienti: FattCredito[]; totale: number; scaduto: number }> {
-  return fetchAPI(`/api/fatturazione/crediti?societa=${societa}&direzione=${direzione}&anno=${anno || ''}&dal=${dal}&al=${al}`);
+  return fetchAPI(`/api/fatturazione/crediti?societa=${societa}&direzione=${direzione}&anno=${anno || 0}&dal=${dal}&al=${al}`);
 }
 export function fattUrlEstratto(societa: string, chiave: string, ids: string[] = [], messaggio = '', dal = '', al = '') {
   return `${API_PROXY}/api/fatturazione/estratto?societa=${societa}&chiave=${encodeURIComponent(chiave)}&ids=${ids.join(',')}&messaggio=${encodeURIComponent(messaggio)}&dal=${dal}&al=${al}`;
