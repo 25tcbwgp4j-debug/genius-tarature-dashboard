@@ -921,7 +921,7 @@ export interface FoglioCassa {
   giornata: {
     giorno: string; stato: 'aperta' | 'chiusa'; apertura_tagli: Tagli; chiusura_tagli: Tagli; prelievi: { importo: number; nota: string; tipo?: string }[];
     pos_terminale: number | null; rt_scontrini: number | null; note: string | null; chiusa_il?: string | null; chiusa_da?: string | null;
-    file_scaricato_il?: string | null; nuova?: boolean; apertura_da?: string | null;
+    file_scaricato_il?: string | null; nuova?: boolean; apertura_da?: string | null; futura?: boolean; origine?: string; file_excel?: string | null;
   };
   righe: RigaGiornata[]; totali: Record<'contanti' | 'pos' | 'stripe' | 'bonifico' | 'paypal', number>; totale_giorno: number;
   riepilogo: {

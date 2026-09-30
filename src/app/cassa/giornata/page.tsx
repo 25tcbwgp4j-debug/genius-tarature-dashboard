@@ -193,14 +193,14 @@ export default function CassaGiornataPage() {
         </label>
         <Button size="icon" variant="outline" className="size-8" onClick={() => setGiorno(spostaGiorno(giorno, 1))}><ChevronRight className="size-4" /></Button>
         {giorno !== oggiRoma() && <Button size="sm" variant="ghost" onClick={() => setGiorno(oggiRoma())}>Oggi</Button>}
-        {f && (
+        {f && !f.giornata.futura && (
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chiusa ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"}`}>
             {chiusa ? `CHIUSA${f.giornata.chiusa_da ? ` da ${f.giornata.chiusa_da}` : ""}${f.giornata.file_scaricato_il ? " · in DA FIRMARE" : " · Excel in arrivo in DA FIRMARE"}` : "APERTA"}
           </span>
         )}
         <div className="ml-auto flex gap-2">
           <a href={cassaGiornataUrlExcel(giorno)}><Button size="sm" variant="outline"><FileSpreadsheet className="mr-1 size-4" />Excel</Button></a>
-          {chiusa
+          {f?.giornata.futura ? null : chiusa
             ? <Button size="sm" variant="outline" onClick={riapri}><Unlock className="mr-1 size-4" />Riapri</Button>
             : <Button size="sm" onClick={chiudi} disabled={!f || busy === "chiudi"} className={f?.conti_tornano ? "bg-emerald-600 hover:bg-emerald-700" : ""}>
                 {busy === "chiudi" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Lock className="mr-1 size-4" />}Chiudi giornata
@@ -208,7 +208,17 @@ export default function CassaGiornataPage() {
         </div>
       </div>
 
-      {!f || !g || !rp ? <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" />Carico…</div> : (<>
+      {f?.giornata.futura ? (
+        <Card className="p-6 text-center text-muted-foreground">
+          📅 Il {new Date(`${giorno}T12:00:00`).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })} deve ancora arrivare: la cassa si apre quel giorno.
+          <div className="mt-2"><Button size="sm" variant="outline" onClick={() => setGiorno(oggiRoma())}>Vai alla cassa di oggi</Button></div>
+        </Card>
+      ) : !f || !g || !rp ? <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" />Carico…</div> : (<>
+        {g.origine === "excel" && (
+          <div className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm dark:bg-sky-950/30">
+            📄 Giornata importata dal file Excel <b>{g.file_excel}</b>: le righe sono quelle dell&apos;Excel firmato.{g.note ? ` ${g.note.split("\n").slice(-1)[0]}` : ""}
+          </div>
+        )}
         {/* QUADRATURA */}
         <Card className={`flex flex-wrap items-center gap-3 p-3 ${f.conti_tornano ? "border-2 border-emerald-500" : "border-2 border-red-300"}`}>
           {f.conti_tornano ? <CheckCircle2 className="size-6 text-emerald-600" /> : <XCircle className="size-6 text-red-600" />}
