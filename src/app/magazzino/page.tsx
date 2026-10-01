@@ -35,8 +35,10 @@ export default function MagazzinoPage() {
   const [nuovo, setNuovo] = useState<Partial<Prodotto> & { giacenza_iniziale?: number } | null>(null);
   const [etichette, setEtichette] = useState<Prodotto[]>([]);
   const [caricoQta, setCaricoQta] = useState(1);
-  // l'operatore vede il magazzino ma non lo modifica (carico, scarico, inventario, articoli: solo amministratore)
-  const { admin: puoModificare, caricato } = usePermessi();
+  // 02/10/2026: anche l'operatore usa il magazzino (articoli, carico, scarico); rettifica e inventario
+  // gli chiedono l'autorizzazione dell'amministratore (dialogo globale). Backend vecchio: puo.magazzino_modifica=false.
+  const { permessi, caricato } = usePermessi();
+  const puoModificare = !!permessi?.puo.magazzino_modifica;
 
   const carica = useCallback(async () => {
     setLoading(true);
@@ -89,7 +91,7 @@ export default function MagazzinoPage() {
 
       {caricato && !puoModificare && (
         <div className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900 print:hidden dark:bg-sky-950/30 dark:text-sky-200">
-          Consultazione: carico, scarico, inventario e modifica degli articoli sono riservati all&apos;amministratore.
+          Consultazione: la modifica del magazzino non è abilitata per questo utente.
         </div>
       )}
       {puoModificare && <Card className="space-y-2 p-3 print:hidden">

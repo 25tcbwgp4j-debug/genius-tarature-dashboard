@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PermessiProvider } from "@/components/permessi";
 import { AutorizzazioneDialog } from "@/components/AutorizzazioneDialog";
+import { GuardiaTitolare } from "@/components/RiservatoTitolare";
 
 const geist = Geist({
   variable: "--font-geist",
@@ -66,7 +67,7 @@ export default function RootLayout({
           <PermessiProvider>
             <Sidebar />
             <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 p-3 sm:p-6 pt-14 sm:pt-14 lg:pt-6 print:p-0">
-              {children}
+              <GuardiaTitolare>{children}</GuardiaTitolare>
               <AggiornaVersione />
             </main>
             {/* operazioni protette dell'operatore: password dell'admin sul posto o richiesta in attesa */}

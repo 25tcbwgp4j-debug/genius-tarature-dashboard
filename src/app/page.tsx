@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { listSessions, getReconciliationToday, getStatistics } from "@/lib/api";
+import { listSessions, getReconciliationToday, getStatistics, getScheduleStats } from "@/lib/api";
 import { ClipboardList, Wrench, Package, AlertTriangle, Users } from "lucide-react";
 import Link from "next/link";
 import { STATUS_CONFIG, getStatusConfig } from "@/lib/constants";
@@ -21,16 +21,20 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ oggi: 0, attive: 0, pronti: 0, scadenze: 0 });
   const [reconciliation, setReconciliation] = useState<ReconciliationSnapshot | null>(null);
-  // le statistiche sono riservate all'amministratore: l'operatore non le chiede (il backend risponderebbe 403)
+  // statistiche e riconciliazione clienti sono del titolare: l'operatore non le chiede (il backend risponderebbe 403).
+  // All'operatore le scadenze dei prossimi 30 giorni arrivano dallo scadenzario, che è anche suo.
   const { admin, caricato } = usePermessi();
 
   useEffect(() => {
+    if (!caricato) return;   // si aspetta di sapere chi è collegato: niente chiamate che darebbero 403
     setLoading(true);
     setError(null);
     Promise.all([
       listSessions({ limit: 20 }).catch(() => null),
-      getReconciliationToday().catch(() => null),
-      admin ? getStatistics().catch(() => null) : Promise.resolve(null),
+      admin ? getReconciliationToday().catch(() => null) : Promise.resolve(null),
+      admin
+        ? getStatistics().catch(() => null)
+        : getScheduleStats().then((s: { entro_30_giorni?: number }) => ({ scadenze_prossime_30gg: s?.entro_30_giorni ?? 0 })).catch(() => null),
     ])
       .then(([data, recon, statistics]) => {
         if (data) {
@@ -56,7 +60,7 @@ export default function Home() {
         if (recon) setReconciliation(recon);
       })
       .finally(() => setLoading(false));
-  }, [admin]);
+  }, [admin, caricato]);
 
   return (
     <div className="space-y-6">
@@ -102,7 +106,7 @@ export default function Home() {
               <AlertTriangle className="w-5 h-5 text-red-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{caricato && !admin ? "—" : stats.scadenze}</p>
+              <p className="text-2xl font-bold">{stats.scadenze}</p>
               <p className="text-sm text-gray-500">Scadenze prossime</p>
             </div>
           </div>

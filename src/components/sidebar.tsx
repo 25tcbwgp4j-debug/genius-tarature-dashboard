@@ -41,9 +41,10 @@ import { getStats } from "@/lib/chat-api";
 import { useTheme } from "@/components/theme-provider";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { usePermessi } from "@/components/permessi";
+import { paginaDelTitolare } from "@/lib/riservate";
 
-// soloAdmin: voci nascoste all'operatore ordinario (livelli di accesso 01/10/2026)
-type Voce = { href: string; label: string; icon: typeof ClipboardList; soloAdmin?: boolean };
+// Voci nascoste all'operatore: quelle delle sezioni del titolare (lib/riservate.ts, 02/10/2026)
+type Voce = { href: string; label: string; icon: typeof ClipboardList };
 const navItems: Voce[] = [
   { href: "/", label: "Registro", icon: ClipboardList },
   { href: "/chat", label: "Chat WhatsApp", icon: MessageSquare },
@@ -62,11 +63,11 @@ const navItems: Voce[] = [
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/automazioni", label: "Automazioni", icon: Activity },
   { href: "/enrichment", label: "Arricchimento", icon: Zap },
-  { href: "/statistiche", label: "Statistiche", icon: BarChart3, soloAdmin: true },
-  { href: "/statistiche/fatturato", label: "Fatturato negozio", icon: TrendingUp, soloAdmin: true },
+  { href: "/statistiche", label: "Statistiche", icon: BarChart3 },
+  { href: "/statistiche/fatturato", label: "Fatturato negozio", icon: TrendingUp },
   { href: "/autorizzazioni", label: "Autorizzazioni", icon: ShieldCheck },
-  { href: "/utenti", label: "Utenti", icon: UserCog, soloAdmin: true },
-  { href: "/audit", label: "Registro modifiche", icon: History, soloAdmin: true },
+  { href: "/utenti", label: "Utenti", icon: UserCog },
+  { href: "/audit", label: "Registro modifiche", icon: History },
   { href: "/qrcode", label: "QR Code", icon: QrCode },
   { href: "/impostazioni", label: "Impostazioni", icon: Settings },
 ];
@@ -81,10 +82,12 @@ export function Sidebar() {
   const { theme, toggleTheme } = useTheme();
   const push = usePushNotifications();
   const { admin, nInAttesa } = usePermessi();
-  const voci = navItems.filter((v) => !v.soloAdmin || admin);
+  // finché i permessi non arrivano si mostrano solo le voci del banco (niente lampo delle voci del titolare)
+  const voci = navItems.filter((v) => admin || !paginaDelTitolare(v.href));
 
   useEffect(() => {
-    if (pathname === "/login" || pathname.startsWith("/login/")) return;
+    // messaggi non letti della chat: la chat è del titolare (l'operatore riceverebbe 403)
+    if (!admin || pathname === "/login" || pathname.startsWith("/login/")) return;
     let cancelled = false;
     const fetchCount = () => {
       getStats()
@@ -99,7 +102,7 @@ export function Sidebar() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [pathname]);
+  }, [pathname, admin]);
 
   // Non mostrare la sidebar sulla pagina login
   if (pathname === "/login" || pathname.startsWith("/login/")) {
@@ -193,7 +196,8 @@ export function Sidebar() {
             {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             {theme === "dark" ? "Tema chiaro" : "Tema scuro"}
           </button>
-          {push.status !== "unsupported" && (
+          {/* le notifiche push sono quelle dei messaggi WhatsApp: solo per il titolare */}
+          {admin && push.status !== "unsupported" && (
             <button
               type="button"
               onClick={() => (push.status === "subscribed" ? push.unsubscribe() : push.subscribe())}

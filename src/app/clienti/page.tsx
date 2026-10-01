@@ -36,9 +36,12 @@ import { toast } from "sonner";
 import { ParseCustomerModal } from "./ParseCustomerModal";
 import { ReconcileModal } from "./ReconcileModal";
 import { SimplyfattSyncModal } from "./SimplyfattSyncModal";
+import { usePermessi } from "@/components/permessi";
 import { GitMerge, RefreshCw } from "lucide-react";
 
 export default function ClientiPage() {
+  // riconciliazione e sync SimplyFatt sono del titolare (02/10/2026); eliminare un cliente era già solo admin
+  const { admin } = usePermessi();
   const [query, setQuery] = useState("");
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -167,13 +170,13 @@ export default function ClientiPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Clienti</h2>
         <div className="flex gap-2">
-          <Button
+          {admin && <Button
             onClick={() => setReconcileOpen(true)}
             className="bg-amber-600 hover:bg-amber-700 text-white"
           >
             <GitMerge className="w-4 h-4 mr-2" />
             Riconciliazione clienti
-          </Button>
+          </Button>}
           <Button
             onClick={() => setParseOpen(true)}
             className="bg-purple-600 hover:bg-purple-700 text-white"
@@ -181,13 +184,13 @@ export default function ClientiPage() {
             <Sparkles className="w-4 h-4 mr-2" />
             Incolla dati (AI)
           </Button>
-          <Button
+          {admin && <Button
             onClick={() => setSfSyncOpen(true)}
             className="bg-teal-600 hover:bg-teal-700 text-white"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Sync SimplyFatt
-          </Button>
+          </Button>}
         </div>
       </div>
       <ParseCustomerModal
@@ -563,7 +566,7 @@ export default function ClientiPage() {
                       >
                         {c.do_not_contact ? <UserCheck className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
                       </button>
-                      <button
+                      {admin && <button
                         onClick={async () => {
                           if (!confirm(`Eliminare il cliente "${c.company_name}"?\nQuesta azione non puo essere annullata.`)) return;
                           try {
@@ -579,7 +582,7 @@ export default function ClientiPage() {
                         title="Elimina cliente"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                      </button>}
                     </div>
                   </div>
                 )}

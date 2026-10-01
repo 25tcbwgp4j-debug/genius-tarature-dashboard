@@ -37,7 +37,7 @@ function seguiRichiesta(id: string) {
         const ricarica = { label: "Aggiorna la pagina", onClick: () => window.location.reload() };
         if (a.stato === "eseguita" || a.stato === "approvata") toast.success(`Autorizzato da ${a.decisa_da || "l'amministratore"}: operazione eseguita`, { duration: 20000, action: ricarica });
         else if (a.stato === "rifiutata") toast.error(`L'amministratore ha rifiutato: ${a.descrizione || "operazione"}`, { duration: 20000 });
-        else toast.error("Approvata, ma l'operazione non è riuscita: controlla nella pagina Autorizzazioni", { duration: 20000 });
+        else toast.error("Approvata, ma l'operazione non è riuscita: avvisa l'amministratore", { duration: 20000 });
         return;
       }
     } catch { /* rete: si riprova */ }

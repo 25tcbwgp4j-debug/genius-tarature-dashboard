@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyJwt, AUTH_COOKIE_NAME } from "@/lib/auth";
+import { paginaDelTitolare } from "@/lib/riservate";
 
 // Proxy Next.js 16 (ex middleware): protegge tutte le route tranne /login e static.
 // Verifica il JWT HS256 nel cookie httpOnly, redirige a /login se mancante o invalido.
@@ -11,8 +12,8 @@ import { verifyJwt, AUTH_COOKIE_NAME } from "@/lib/auth";
 // che operatori trovino logout improvviso al 31° giorno di uso silenzioso.
 
 const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"];
-// livelli di accesso 01/10/2026: statistiche e carico/inventario di magazzino solo per l'amministratore
-const ADMIN_ONLY_PATHS = ["/utenti", "/audit", "/statistiche", "/magazzino/carico"];
+// livelli di accesso: le sezioni del titolare sono in lib/riservate.ts (02/10/2026: il magazzino, carico
+// compreso, è anche dell'operatore)
 // Soglia refresh: rinnova se mancano <7gg alla scadenza
 const REFRESH_THRESHOLD_SEC = 7 * 24 * 60 * 60;
 
@@ -56,11 +57,9 @@ export async function proxy(request: NextRequest) {
   }
 
   // Gating admin-only su rotte server-rendered (oltre al backend che gia' rifiuta)
-  if (ADMIN_ONLY_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
-    if (payload.role !== "admin") {
-      const url = new URL("/", request.url);
-      return NextResponse.redirect(url);
-    }
+  // L'operatore che apre a mano l'URL vede «Riservato al titolare» (l'indirizzo resta quello che ha scritto)
+  if (!isApiCall && paginaDelTitolare(pathname) && payload.role !== "admin") {
+    return NextResponse.rewrite(new URL("/riservato", request.url));
   }
 
   // Espone i dati utente alle pagine via header di RICHIESTA.
