@@ -16,6 +16,8 @@ interface Dati {
   tot_emesse: { imponibile: number; iva: number; totale: number };
   tot_ricevute: { imponibile: number; iva: number; totale: number };
   tot_incassi: number; incassi_per_modalita: Record<string, number>; imponibile_per_aliquota: Record<string, number>;
+  /** registro del regime del margine (beni usati) del periodo: fatture + scontrini */
+  regime_margine?: { righe: number; corrispettivi: number; costi: number; margine: number; iva: number; senza_costo: number };
 }
 
 export function Chiusure({ societa }: { societa: string }) {
@@ -72,6 +74,18 @@ export function Chiusure({ societa }: { societa: string }) {
               {Object.entries(d.imponibile_per_aliquota).map(([k, v]) => <div key={k} className="flex justify-between text-sm"><span>{k}</span><span className="tabular-nums">{eur(v)}</span></div>)}
             </Card>
           </div>
+          {!!d.regime_margine?.righe && (
+            <Card className="p-3">
+              <div className="mb-2 text-sm font-medium">Regime del margine — beni usati (art. 36 DL 41/1995)</div>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-sm sm:grid-cols-4">
+                <span>Vendite ({d.regime_margine.righe})</span><span className="tabular-nums">{eur(d.regime_margine.corrispettivi)}</span>
+                <span>Prezzi di acquisto</span><span className="tabular-nums">{eur(d.regime_margine.costi)}</span>
+                <span>Margine</span><span className="tabular-nums">{eur(d.regime_margine.margine)}</span>
+                <span className="font-medium">IVA sul margine (22/122)</span><span className="font-medium tabular-nums">{eur(d.regime_margine.iva)}</span>
+              </div>
+              {d.regime_margine.senza_costo > 0 && <div className="mt-1 text-xs text-red-700 dark:text-red-300">{d.regime_margine.senza_costo} righe senza prezzo di acquisto: l&apos;IVA è calcolata sull&apos;intero prezzo, completale.</div>}
+            </Card>
+          )}
           <p className="text-xs text-muted-foreground">Gli scontrini del registratore di cassa non sono ancora compresi: si aggiungono con il collegamento alla cassa.</p>
         </>
       )}

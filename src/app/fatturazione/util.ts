@@ -79,3 +79,23 @@ export function stimaTotali(righe: FattRiga[]) {
   }
   return { imponibile, iva, totale: Math.round((imponibile + iva) * 100) / 100 };
 }
+
+// Regime del margine (beni usati, art. 36 DL 41/1995): l'IVA è COMPRESA nel margine (prezzo - costo) e si calcola
+// come margine × 22/122; con margine negativo niente IVA (metodo analitico).
+export function ivaMargine(prezzo: number, costo: number | null | undefined, aliquota = 22) {
+  const m = Math.round((Number(prezzo || 0) - Number(costo || 0)) * 100) / 100;
+  const iva = m > 0 ? Math.round((m * aliquota / (100 + aliquota)) * 100) / 100 : 0;
+  return { margine: m, iva };
+}
+
+// Nature IVA per le righe senza imposta, con il riferimento normativo proposto (FatturaPA 1.2.3, guida AdE v1.10)
+export const NATURE_IVA: Record<string, { label: string; rif: string }> = {
+  "N4": { label: "N4 esente (art. 10)", rif: "Operazione esente art. 10 DPR 633/1972" },
+  "N3.4": { label: "N3.4 non imponibile art. 72 (ambasciate, organismi internaz.)", rif: "Operazione non imponibile art. 72 DPR 633/1972" },
+  "N3.1": { label: "N3.1 non imponibile esportazione (art. 8)", rif: "Operazione non imponibile art. 8 c. 1 DPR 633/1972" },
+  "N3.2": { label: "N3.2 cessione intracomunitaria", rif: "Operazione non imponibile art. 41 DL 331/1993" },
+  "N2.2": { label: "N2.2 fuori campo / non soggetta (altri casi)", rif: "Operazione non soggetta" },
+  "N2.1": { label: "N2.1 non soggetta art. 7 (servizi UE/extra UE)", rif: "Operazione non soggetta artt. 7-7septies DPR 633/1972" },
+  "N1": { label: "N1 esclusa art. 15", rif: "Esclusa art. 15 DPR 633/1972" },
+  "N7": { label: "N7 IVA assolta in altro Stato UE", rif: "" },
+};

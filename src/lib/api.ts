@@ -818,6 +818,11 @@ export interface FattRiga {
   prezzo_totale?: number;
   /** totale riga IVA inclusa, presente se la riga è nata a prezzo ivato */
   lordo?: number | null;
+  /** 'margine' = regime del margine beni usati (art. 36 DL 41/1995): aliquota 0 + natura N5 */
+  regime?: 'margine' | null;
+  /** prezzo di acquisto per pezzo (regime del margine): non va nell'XML, serve per l'IVA sul margine */
+  costo_acquisto?: number | null;
+  prodotto_id?: string | null;
 }
 export interface FattControparte {
   denominazione?: string; nome?: string; cognome?: string;
@@ -836,6 +841,8 @@ export interface Fattura {
   pagamento_rif?: string | null; scadenza: string | null; causale?: string | null; note?: string | null;
   session_id: string | null; errore: string | null; inviata_il: string | null; created_at: string;
   fattura_collegata_id?: string | null;
+  /** estremi della dichiarazione/attestazione del cliente (es. modulo dell'ambasciata, art. 72): stampati in fattura */
+  estremi_esenzione?: string | null;
   origine?: string; anagrafica_id?: string | null; operatore?: string | null;
   esiti?: { id: string; tipo: string; descrizione: string; data: string }[];
   controlli?: string[];
@@ -917,7 +924,8 @@ export function fattUrlPdf(id: string, download = false) { return `${API_PROXY}/
 export async function fattInvia(id: string, body: { canale: 'email' | 'whatsapp'; email?: string; telefono?: string; messaggio?: string }) {
   return fetchAPI(`/api/fatturazione/fatture/${id}/invia`, { method: 'POST', body: JSON.stringify(body) });
 }
-export interface FattVoceCatalogo { gruppo: string; codice: string | null; descrizione: string; prezzo_ivato: number | null; aliquota: number }
+export interface FattVoceCatalogo { gruppo: string; codice: string | null; descrizione: string; prezzo_ivato: number | null; aliquota: number;
+  natura?: string | null; regime?: 'margine' | null; costo_acquisto?: number | null }
 export async function fattCatalogo(societa: string): Promise<{ voci: FattVoceCatalogo[] }> {
   return fetchAPI(`/api/fatturazione/catalogo?societa=${societa}`);
 }
@@ -997,9 +1005,13 @@ export interface Prodotto {
   categoria: string | null; marca: string | null; ubicazione: string | null; unita: string | null;
   prezzo: number; aliquota: number; costo: number; giacenza: number; scorta_minima: number;
   gestisce_giacenza: boolean; attivo: boolean; origine: string;
+  /** ordinario = aliquota · margine = usato / conto vendita (regime del margine) · esente = esente/non imponibile */
+  regime_iva?: 'ordinario' | 'margine' | 'esente';
   movimenti?: { id: string; tipo: string; quantita: number; causale: string | null; created_at: string; creato_da: string | null }[];
 }
-export interface RigaCassa { prodotto_id?: string | null; descrizione: string; quantita: number; prezzo: number; aliquota: number; sconto?: number }
+export interface RigaCassa { prodotto_id?: string | null; descrizione: string; quantita: number; prezzo: number; aliquota: number; sconto?: number;
+  /** regime IVA della riga: margine (N5) o esente (N4/N3.x); senza = aliquota */
+  regime?: 'margine' | 'esente' | null; natura?: string | null; costo_acquisto?: number | null }
 export interface Scontrino {
   id: string; stato: string; righe: RigaCassa[]; totale: number; pagamenti: { modalita: string; importo: number }[];
   codice_lotteria: string | null; numero_rt: string | null; errore: string | null; risposta_rt: string | null; created_at: string;

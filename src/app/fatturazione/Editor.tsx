@@ -28,24 +28,15 @@ import {
   type FattSocieta,
   type Fattura,
 } from "@/lib/api";
-import { MODALITA_LABEL, SOCIETA_LABEL, TIPI_LABEL, eur, stimaTotali } from "./util";
+import { MODALITA_LABEL, NATURE_IVA, SOCIETA_LABEL, TIPI_LABEL, eur, ivaMargine, stimaTotali } from "./util";
 
 type TipoCliente = "azienda" | "privato" | "estero";
 interface ClienteAnagrafica { id: string; company_name?: string; vat_number?: string; tax_id?: string; sdi_code?: string;
   pec?: string; address?: string; zip_code?: string; city?: string; province?: string; email?: string;
   _fonte?: "fatturazione" | "tarature"; _anag?: FattAnagrafica }
-const ALIQUOTE = [22, 10, 5, 4, 0];
-const NATURE: Record<string, string> = {
-  "N1": "N1 escluse art. 15",
-  "N2.1": "N2.1 non soggette art. 7",
-  "N2.2": "N2.2 non soggette altri casi",
-  "N3.1": "N3.1 non imponibili esportazioni",
-  "N3.2": "N3.2 cessioni intracomunitarie",
-  "N4": "N4 esenti",
-  "N5": "N5 regime del margine",
-  "N6.1": "N6.1 reverse charge rottami",
-  "N7": "N7 IVA assolta in altro Stato UE",
-};
+// Regime IVA della riga: aliquota, «margine» (beni usati, N5) o «0» = esente / non imponibile / fuori campo (natura)
+const REGIMI: [string, string][] = [["22", "22%"], ["10", "10%"], ["5", "5%"], ["4", "4%"], ["margine", "Margine (usato)"], ["0", "Esente / non imp."]];
+const regimeRiga = (r: FattRiga) => (r.regime === "margine" || r.natura === "N5" ? "margine" : String(Number(r.aliquota ?? 22)));
 
 const rigaVuota = (aliquota = 22): FattRiga => ({ descrizione: "", quantita: 1, prezzo_ivato: null, prezzo_unitario: null, aliquota, sconto: 0 });
 
@@ -112,7 +103,8 @@ export function Editor({
     const ivato = v.prezzo_ivato;
     const netto = ivato === null ? null : Math.round((ivato / (1 + v.aliquota / 100)) * 100) / 100;
     const riga: FattRiga = { descrizione: v.descrizione, quantita, aliquota: v.aliquota, sconto: 0,
-      prezzo_ivato: prezziIvati ? ivato : null, prezzo_unitario: prezziIvati ? null : netto };
+      prezzo_ivato: prezziIvati ? ivato : null, prezzo_unitario: prezziIvati ? null : netto,
+      ...(v.regime === "margine" ? { regime: "margine", natura: "N5", costo_acquisto: v.costo_acquisto ?? null } : {}) };
     setRighe((p) => {
       const vuota = p.findIndex((r) => !r.descrizione.trim() && !r.prezzo_ivato && !r.prezzo_unitario);
       return vuota >= 0 ? p.map((r, j) => (j === vuota ? riga : r)) : [...p, riga];
@@ -177,6 +169,21 @@ export function Editor({
   function setR(i: number, k: keyof FattRiga, v: string | number | null) {
     setRighe((p) => p.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
   }
+  /** Cambio di regime IVA della riga: aliquota, regime del margine o esente/non imponibile (con natura e riferimento). */
+  function setRegime(i: number, v: string) {
+    setRighe((p) => p.map((r, j) => {
+      if (j !== i) return r;
+      if (v === "margine") return { ...r, aliquota: 0, natura: "N5", regime: "margine", riferimento_normativo: null };
+      if (v === "0") {
+        const n = r.natura && r.natura !== "N5" ? r.natura : "N4";
+        return { ...r, aliquota: 0, natura: n, regime: null, riferimento_normativo: NATURE_IVA[n]?.rif || null, costo_acquisto: null };
+      }
+      return { ...r, aliquota: Number(v), natura: null, regime: null, riferimento_normativo: null, costo_acquisto: null };
+    }));
+    setSporco(true);
+  }
+  const serveEstremi = righe.some((r) => Number(r.aliquota) === 0 && r.natura && r.natura !== "N5");
+  const [estremi, setEstremi] = useState(iniziale?.estremi_esenzione || "");
 
   function corpo() {
     const cp: FattControparte = { ...cliente };
@@ -188,12 +195,16 @@ export function Editor({
       righe: righePerCalcolo.filter((r) => r.descrizione.trim()).map((r) => ({
         ...r,
         quantita: Number(r.quantita || 1),
-        aliquota: Number(r.aliquota ?? 22),
+        aliquota: regimeRiga(r) === "margine" ? 0 : Number(r.aliquota ?? 22),
         sconto: Number(r.sconto || 0),
         prezzo_ivato: r.prezzo_ivato === null || r.prezzo_ivato === undefined ? null : Number(r.prezzo_ivato),
         prezzo_unitario: r.prezzo_unitario === null || r.prezzo_unitario === undefined ? null : Number(r.prezzo_unitario),
-        natura: Number(r.aliquota) === 0 ? (r.natura || "N2.2") : null,
+        ...(regimeRiga(r) === "margine"
+          ? { natura: "N5", regime: "margine" as const,
+              costo_acquisto: r.costo_acquisto === null || r.costo_acquisto === undefined ? null : Number(r.costo_acquisto) }
+          : { natura: Number(r.aliquota) === 0 ? (r.natura || "N2.2") : null, regime: null, costo_acquisto: null }),
       })),
+      estremi_esenzione: estremi.trim() || null,
       pagamento_modalita: modalita, scadenza: scadenza || null, causale, note,
       customer_id: customerId || undefined,
       anagrafica_id: anagraficaId || undefined,
@@ -360,25 +371,56 @@ export function Editor({
                   <DecInput className={`${campo} col-span-4 sm:col-span-2`} placeholder={prezziIvati ? "Prezzo IVA incl." : "Prezzo netto"}
                     value={(prezziIvati ? r.prezzo_ivato : r.prezzo_unitario) ?? null}
                     onValue={(v) => { setR(i, prezziIvati ? "prezzo_ivato" : "prezzo_unitario", v); setSporco(true); }} />
-                  <select className={`${campo} col-span-3 sm:col-span-1`} value={r.aliquota} onChange={(e) => setR(i, "aliquota", Number(e.target.value))}>
-                    {ALIQUOTE.map((a) => <option key={a} value={a}>{a}%</option>)}
+                  <select className={`${campo} col-span-3 sm:col-span-1 px-1`} title="IVA / regime" value={regimeRiga(r)} onChange={(e) => setRegime(i, e.target.value)}>
+                    {REGIMI.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                   </select>
                   <DecInput className={`${campo} col-span-2 sm:col-span-1`} title="Sconto %" placeholder="sc.%" vuotoSeZero value={Number(r.sconto || 0)} onValue={(v) => { setR(i, "sconto", Math.min(100, Math.max(0, v ?? 0))); setSporco(true); }} />
                   <div className="col-span-10 flex items-center justify-end text-sm tabular-nums sm:col-span-1">
                     {eur(stimaTotali([righePerCalcolo[i]]).totale)}
                   </div>
                   <Button variant="ghost" size="icon-sm" className="col-span-2 sm:col-span-1" onClick={() => setRighe((p) => p.filter((_, j) => j !== i))} aria-label="Togli riga"><Trash2 /></Button>
-                  {Number(r.aliquota) === 0 && (
-                    <div className="col-span-12 grid grid-cols-2 gap-2">
-                      <select className={campo} value={r.natura || "N2.2"} onChange={(e) => setR(i, "natura", e.target.value)}>
-                        {Object.entries(NATURE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  {regimeRiga(r) === "margine" && (() => {
+                    const prezzoRiga = stimaTotali([righePerCalcolo[i]]).totale;
+                    const costoRiga = r.costo_acquisto === null || r.costo_acquisto === undefined ? null : Number(r.costo_acquisto) * Number(r.quantita || 1);
+                    const m = ivaMargine(prezzoRiga, costoRiga);
+                    return (
+                      <div className="col-span-12 flex flex-wrap items-center gap-2 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                        <span className="font-medium">Regime del margine</span>
+                        <label className="flex items-center gap-1">prezzo di acquisto / da girare al cliente (per pezzo)
+                          <DecInput className={`${campo} h-7 w-24`} placeholder="es. 300" value={r.costo_acquisto ?? null}
+                            onValue={(v) => { setR(i, "costo_acquisto", v); setSporco(true); }} /></label>
+                        {costoRiga === null
+                          ? <span className="text-red-700 dark:text-red-300">serve il prezzo di acquisto</span>
+                          : <span className="tabular-nums">margine {eur(m.margine)} · IVA sul margine {eur(m.iva)} (22/122, non esposta)</span>}
+                        <span className="w-full text-[11px] opacity-80">In fattura: IVA 0 + natura N5, totale = prezzo intero, dicitura «Regime del margine – beni usati». Il costo non va in fattura.</span>
+                      </div>
+                    );
+                  })()}
+                  {Number(r.aliquota) === 0 && regimeRiga(r) !== "margine" && (
+                    <div className="col-span-12 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <select className={campo} value={r.natura || "N2.2"} onChange={(e) => {
+                        const n = e.target.value;
+                        const preset = Object.values(NATURE_IVA).some((x) => x.rif === (r.riferimento_normativo || ""));
+                        setRighe((p) => p.map((x, j) => (j === i ? { ...x, natura: n,
+                          riferimento_normativo: (!x.riferimento_normativo || preset) ? (NATURE_IVA[n]?.rif || null) : x.riferimento_normativo } : x)));
+                        setSporco(true);
+                      }}>
+                        {Object.entries(NATURE_IVA).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                       </select>
-                      <input className={campo} placeholder="Riferimento normativo (es. Art. 10 DPR 633/72)" value={r.riferimento_normativo || ""} onChange={(e) => setR(i, "riferimento_normativo", e.target.value)} />
+                      <input className={campo} placeholder="Riferimento normativo (obbligatorio, es. Art. 10 DPR 633/72)" value={r.riferimento_normativo || ""} onChange={(e) => setR(i, "riferimento_normativo", e.target.value)} />
                     </div>
                   )}
                 </div>
               ))}
             </div>
+            {serveEstremi && (
+              <label className="block space-y-1 rounded-md border border-sky-200 bg-sky-50/50 p-2 dark:bg-sky-950/20">
+                <div className={lab}>Estremi della dichiarazione / attestazione del cliente (vanno nel testo della fattura)
+                  {righe.some((r) => r.natura === "N3.4") && <b className="text-red-700 dark:text-red-300"> — obbligatori per l&apos;art. 72</b>}</div>
+                <input className={campo} value={estremi} onChange={(e) => setEstremi(e.target.value)}
+                  placeholder="es. Ambasciata di … — modulo di esenzione n. 123/2026 del 28/09/2026, vidimato dal MAECI" />
+              </label>
+            )}
             <div className="ml-auto w-full max-w-xs space-y-1 text-sm">
               <div className="flex justify-between"><span>Imponibile</span><span className="tabular-nums">{eur(tot.imponibile)}</span></div>
               <div className="flex justify-between"><span>IVA</span><span className="tabular-nums">{eur(tot.iva)}</span></div>

@@ -192,6 +192,12 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, 
                     onChange={(e) => { setTesti((x) => ({ ...x, [k]: e.target.value })); set(k, dec0(e.target.value)); }} />
                 : <input type={t} className={campo} disabled={solaLettura} value={(dati[k] as string | undefined) ?? ""} onChange={(e) => set(k, e.target.value)} />}</label>
           ))}
+          <label className="col-span-2 space-y-1"><div className="text-xs text-muted-foreground">Regime IVA in cassa e in fattura</div>
+            <select className={campo} disabled={solaLettura} value={dati.regime_iva || "ordinario"} onChange={(e) => set("regime_iva", e.target.value)}>
+              <option value="ordinario">Ordinario (aliquota IVA sopra)</option>
+              <option value="margine">Regime del margine — usato / conto vendita (costo = prezzo di acquisto o da girare al cliente)</option>
+              <option value="esente">Esente / non imponibile</option>
+            </select></label>
           {nuovo && <label className="space-y-1"><div className="text-xs text-muted-foreground">Giacenza iniziale</div>
             <input type="number" className={campo} value={nuovo.giacenza_iniziale ?? 0} onChange={(e) => set("giacenza_iniziale", Number(e.target.value))} /></label>}
         </div>

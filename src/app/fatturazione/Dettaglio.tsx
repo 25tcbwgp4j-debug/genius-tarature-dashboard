@@ -273,7 +273,9 @@ export function Dettaglio({
                     <td className="p-2">{r.descrizione}</td>
                     <td className="p-2 text-right tabular-nums">{Number(r.quantita || 1)}</td>
                     <td className="p-2 text-right tabular-nums">{eur(r.prezzo_unitario)}</td>
-                    <td className="p-2 text-right">{Number(r.aliquota)}%{r.natura ? ` ${r.natura}` : ""}</td>
+                    <td className="p-2 text-right">{r.natura === "N5"
+                      ? <span title={r.costo_acquisto != null ? `Prezzo di acquisto ${eur(r.costo_acquisto)} per pezzo` : "Prezzo di acquisto non indicato"}>Margine</span>
+                      : <>{Number(r.aliquota)}%{r.natura ? ` ${r.natura}` : ""}</>}</td>
                     <td className="p-2 text-right tabular-nums">{eur(r.prezzo_totale)}</td>
                   </tr>
                 ))}
@@ -286,6 +288,7 @@ export function Dettaglio({
             </div>
           </div>
           {f.causale && <div className="text-sm"><span className="text-muted-foreground">Causale: </span>{f.causale}</div>}
+          {f.estremi_esenzione && <div className="text-sm"><span className="text-muted-foreground">Estremi dichiarazione del cliente: </span>{f.estremi_esenzione}</div>}
           {f.collegata && (
             <div className="text-sm">Storna la fattura{" "}
               <button className="underline" onClick={() => onOpen(f.collegata!.id)}>n. {f.collegata.numero} del {dataIt(f.collegata.data)}</button></div>
