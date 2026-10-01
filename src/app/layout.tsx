@@ -1,3 +1,4 @@
+import { AggiornaVersione } from "@/components/AggiornaVersione";
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import Script from "next/script";
@@ -66,6 +67,7 @@ export default function RootLayout({
             <Sidebar />
             <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 p-3 sm:p-6 pt-14 sm:pt-14 lg:pt-6 print:p-0">
               {children}
+              <AggiornaVersione />
             </main>
             {/* operazioni protette dell'operatore: password dell'admin sul posto o richiesta in attesa */}
             <AutorizzazioneDialog />
