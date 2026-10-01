@@ -181,6 +181,15 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
   function conferma(modForzata?: string) {
     if (!d) return;
     const mod = modForzata || f.modalita;
+    // POS e PayPal passano SOLO dalla verifica automatica (pulsanti qui sotto): niente conferma «sulla parola»
+    if (!modForzata && (mod === "pos_sumup" || mod === "paypal") && azione !== "fattura") {
+      toast.error("Con POS o PayPal usa i pulsanti di pagamento qui sotto: l'incasso si registra quando SumUp/PayPal lo confermano");
+      return;
+    }
+    if (!modForzata && (mod === "pos_sumup" || mod === "paypal") && azione === "fattura" && f.pagata) {
+      toast.error("Fattura «già pagata» con POS/PayPal: usa i pulsanti di pagamento qui sotto (verifica automatica)");
+      return;
+    }
     if (azione === "acconto") {
       const imp = parseDec(f.importo);
       if (imp === null || Number.isNaN(imp) || imp <= 0) { toast.error("Scrivi l'importo dell'acconto (es. 50 o 12,50)"); return; }
@@ -264,6 +273,10 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
             {d.session_id && <a className="text-primary underline" href={`/sessioni/${d.session_id}`}>apri la sessione di taratura</a>}
           </div>
         )}
+        {d.tipo === "proforma" && (
+          // il pro forma si vede com'è: lo stesso PDF che riceve il cliente (layout della fattura)
+          <iframe key={`${d.id}-${d.totale}`} src={`${getDocumentoPdfUrl(d.id).split("?")[0]}?v=${d.totale}`} title={`Pro forma ${d.sigla || ""}`} className="h-[70vh] w-full rounded border bg-white" />
+        )}
 
         {aperto && (
           <div className="flex flex-wrap gap-2">
@@ -312,9 +325,10 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
               const ok = imp > 0 && !Number.isNaN(imp) && imp <= d.residuo + 0.001 && (!serveNumero || !!f.numero.trim());
               return (
                 <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200 bg-sky-50/50 p-2 dark:bg-sky-950/20">
-                  <span className="text-xs text-muted-foreground">oppure incassa col POS{serveNumero && !f.numero.trim() ? " (prima scrivi il n. scontrino)" : ""}:</span>
+                  <span className="text-xs text-muted-foreground">oppure incassa con POS / PayPal (si registra da solo a pagamento verificato){serveNumero && !f.numero.trim() ? " — prima scrivi il n. scontrino" : ""}:</span>
                   <PagaPos importo={ok ? imp : 0} descrizione={`${azione === "acconto" ? "Acconto" : "Saldo"} ${d.sigla || ""}`.trim()}
-                    rifTipo={`documento_${azione}`} rifId={d.id} disabled={busy || !ok} onPagato={() => conferma("pos_sumup")} />
+                    rifTipo={`documento_${azione}`} rifId={d.id} disabled={busy || !ok} generico paypal
+                    onPagato={(p) => conferma(p.metodo === "paypal" ? "paypal" : "pos_sumup")} />
                 </div>
               );
             })()}

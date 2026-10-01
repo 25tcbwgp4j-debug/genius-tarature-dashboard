@@ -485,6 +485,11 @@ export default function SessionDetail() {
       // Estrai il canale WhatsApp usato (template Meta vs free text) dalla
       // risposta del backend per dare feedback chiaro all'operatore.
       const wa = res?.notifications?.whatsapp;
+      const em = res?.notifications?.email;
+      // email fallita (Resend): si dice, anche se WhatsApp è andato
+      if (em && typeof em === "object" && em.error) {
+        toast.error(`Email NON inviata: ${String(em.error).slice(0, 200)}`);
+      }
       let detail = successMsg;
       if (wa && typeof wa === "object") {
         if (wa.ok) {
@@ -591,9 +596,10 @@ export default function SessionDetail() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      {/* Header: titolo e stato sopra, pulsanti in una griglia regolare sotto (01/10: dopo la rimozione di «Fattura XML»
+          i pulsanti uscivano dalla pagina) — 2 colonne su telefono, 3 su tablet, 4 su desktop, tutti della stessa altezza */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Indietro
@@ -618,12 +624,17 @@ export default function SessionDetail() {
               </Badge>
             );
           })()}
+          <span className={`text-[11px] ${agenteStampa ? "text-emerald-700" : "text-muted-foreground"}`}
+            title="Agente di stampa sul Mac del banco: stampa da solo etichette e ricevute">
+            {agenteStampa === null ? "" : agenteStampa ? "● stampante pronta" : "○ agente di stampa spento"}
+          </span>
         </div>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 [&_button]:h-9">
           {!editingSession ? (
             <Button
               variant="outline"
               size="sm"
+              className="w-full"
               onClick={() => {
                 setEditSessionData({
                   operator: session.operator || "",
@@ -636,23 +647,23 @@ export default function SessionDetail() {
               <Pencil className="w-4 h-4 mr-1" /> Modifica
             </Button>
           ) : (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setEditingSession(false)}>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="flex-1" onClick={() => setEditingSession(false)}>
                 <X className="w-4 h-4 mr-1" /> Annulla
               </Button>
-              <Button size="sm" onClick={handleSaveSession} disabled={actionLoading === "save_session"}>
+              <Button size="sm" className="flex-1" onClick={handleSaveSession} disabled={actionLoading === "save_session"}>
                 {actionLoading === "save_session" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
                 Salva
               </Button>
-            </>
+            </div>
           )}
-          <div className="flex items-center">
+          <div className="flex min-w-0 items-center">
             <Button
               variant="outline"
               size="sm"
               onClick={() => stampaDiretta("ricevuta")}
               disabled={actionLoading === "stampa_ricevuta"}
-              className="rounded-r-none bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+              className="min-w-0 flex-1 rounded-r-none bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
               title="Stampa subito la ricevuta in 2 copie sulla stampante A4 del banco (agente di stampa)"
             >
               {actionLoading === "stampa_ricevuta" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Printer className="w-4 h-4 mr-1" />}
@@ -662,13 +673,13 @@ export default function SessionDetail() {
               className="rounded-l-none border-l-0 px-2 text-xs bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
               title="Apri il PDF della ricevuta (stampa dal browser)">PDF</Button>
           </div>
-          <div className="flex items-center">
+          <div className="flex min-w-0 items-center">
             <Button
               variant="outline"
               size="sm"
               onClick={() => stampaDiretta("etichette")}
               disabled={actionLoading === "stampa_etichette"}
-              className="rounded-r-none bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
+              className="min-w-0 flex-1 rounded-r-none bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
               title="Stampa subito le etichette 50x22mm sulla Brother QL-700 (agente di stampa del banco)"
             >
               {actionLoading === "stampa_etichette" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Tag className="w-4 h-4 mr-1" />}
@@ -678,15 +689,11 @@ export default function SessionDetail() {
               className="rounded-l-none border-l-0 px-2 text-xs bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
               title="Apri il PDF delle etichette (stampa dal browser con il formato Genius Lab 50x22)">PDF</Button>
           </div>
-          <span className={`text-[11px] ${agenteStampa ? "text-emerald-700" : "text-muted-foreground"}`}
-            title="Agente di stampa sul Mac del banco: stampa da solo etichette e ricevute">
-            {agenteStampa === null ? "" : agenteStampa ? "● stampante pronta" : "○ agente di stampa spento"}
-          </span>
           <Button
             variant="outline"
             size="sm"
             onClick={() => document.getElementById("spedizioni")?.scrollIntoView({ behavior: "smooth" })}
-            className="bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+            className="w-full min-w-0 bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
             title="Corriere: flag spedizione, costo in fattura, ritiro e riconsegna UPS"
           >
             <Truck className="w-4 h-4 mr-1" />
@@ -699,7 +706,7 @@ export default function SessionDetail() {
             size="sm"
             disabled={!(session.instruments || []).some((i: { rdt_number?: string | null }) => !!i.rdt_number)}
             onClick={() => { window.location.href = getSessionReportsZipUrl(sessionId); }}
-            className="bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+            className="w-full bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
             title="Scarica in un unico ZIP i rapporti di taratura generati per questa sessione"
           >
             <FileDown className="w-4 h-4 mr-1" />
@@ -723,7 +730,7 @@ export default function SessionDetail() {
                 toast.error(msg);
               } finally { setActionLoading(null); }
             }}
-            className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+            className="w-full bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
             title="Invia al cliente via email tutti i certificati LAT/ACCREDIA dei campioni di riferimento"
           >
             {actionLoading === "lat_cert" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ShieldCheck className="w-4 h-4 mr-1" />}
@@ -732,6 +739,7 @@ export default function SessionDetail() {
           <Button
             variant="destructive"
             size="sm"
+            className="w-full"
             onClick={handleDeleteSession}
             disabled={actionLoading === "delete"}
           >

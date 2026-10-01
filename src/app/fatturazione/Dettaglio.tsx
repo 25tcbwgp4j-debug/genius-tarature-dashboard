@@ -309,18 +309,22 @@ export function Dettaglio({
                   <input className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" placeholder="Riferimento (CRO bonifico, n. ricevuta POS…) — facoltativo"
                     value={rif} onChange={(e) => setRif(e.target.value)} />
                   <div className="flex flex-wrap gap-2">
-                    {modalitaPagamento.map((m) => (
+                    {modalitaPagamento.filter((m) => !(emessa && Number(f.totale) > 0 && (m.k === "pos_sumup" || m.k === "paypal"))).map((m) => (
                       <Button key={m.k} size="sm" variant="outline" disabled={!!busy}
                         onClick={() => azione("pag", () => fattPagamento(f.id, { modalita: m.k, riferimento: rif }), () => toast.success(`Segnata ${emessa ? "incassata" : "pagata"}: ${m.label}`))}>
                         <m.icon /> {m.label}
                       </Button>
                     ))}
                     {emessa && Number(f.totale) > 0 && (
-                      // POS SumUp via Cloud API: l'importo arriva sul terminale scelto, a pagamento riuscito si registra l'incasso
+                      // POS SumUp e PayPal con VERIFICA: la fattura si segna pagata solo quando SumUp/PayPal registrano il pagamento
                       <PagaPos importo={Number(f.totale)} descrizione={`Fattura ${f.numero || ""} ${f.controparte_nome || ""}`.trim()}
-                        rifTipo="fattura" rifId={f.id} disabled={!!busy}
-                        onPagato={(p) => azione("pag", () => fattPagamento(f.id, { modalita: "pos_sumup", riferimento: rif || `SumUp ${p.client_transaction_id || p.id}`.slice(0, 200) }),
-                          () => toast.success("Incassata: POS SumUp"))} />
+                        rifTipo="fattura" rifId={f.id} disabled={!!busy} generico paypal
+                        onPagato={(p) => {
+                          const pp = p.metodo === "paypal";
+                          const prova = p.transaction_code ? `${pp ? "PayPal" : "SumUp"} ${p.transaction_code}` : `${pp ? "PayPal" : "SumUp"} ${p.confermato_manualmente ? "confermato a mano" : p.id}`;
+                          return azione("pag", () => fattPagamento(f.id, { modalita: pp ? "paypal" : "pos_sumup", riferimento: (rif ? `${rif} · ${prova}` : prova).slice(0, 200) }),
+                            () => toast.success(`Incassata: ${pp ? "PayPal" : "POS SumUp"} verificato`));
+                        }} />
                     )}
                     {emessa && Number(f.totale) > 0 && (
                       // bonifico istantaneo: si segna pagata solo dopo aver visto l'accredito sul conto SumUp (l'admin può forzare)

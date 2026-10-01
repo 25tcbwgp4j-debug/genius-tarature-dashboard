@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, Lock, Plus, Trash2, Undo2, Unlock, XCircle } from "lucide-react";
 import { StornoDialog, type OggettoStorno } from "@/components/StornoDialog";
+import { usePermessi } from "@/components/permessi";
 import { PagaPos } from "@/components/PagaPos";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
@@ -104,6 +105,7 @@ function Bloccato({ da, il, extra, onSblocca, busy }: { da?: string | null; il?:
 }
 
 export default function CassaGiornataPage() {
+  const { admin } = usePermessi();
   const [giorno, setGiorno] = useState(oggiRoma);
   const giornoRef = useRef(giorno);
   const [f, setF] = useState<FoglioCassa | null>(null);
@@ -270,6 +272,11 @@ export default function CassaGiornataPage() {
     const imp = parseDec(nuova.importo);
     if (imp === null || Number.isNaN(imp) || imp === 0) { toast.error("Inserisci l'importo (es. 25 o 12,50)"); return; }
     const mod = modForzata || nuova.modalita;
+    // oggi un incasso POS/PayPal si registra solo dopo la verifica automatica (pulsanti sotto); i giorni passati restano liberi
+    if (!modForzata && (mod === "pos" || mod === "paypal") && giorno === oggiRoma() && imp > 0) {
+      if (!admin) { toast.error("POS e PayPal di oggi: usa i pulsanti di pagamento sotto, la riga si aggiunge quando SumUp/PayPal confermano"); return; }
+      if (!confirm("Registrare la riga POS/PayPal SENZA verifica del pagamento (solo amministratore)?")) return;
+    }
     return azione("riga", async () => {
       applica(await cassaGiornataRiga({ giorno, tipo: nuova.tipo, numero: nuova.numero, descrizione: nuova.descrizione, modello: nuova.modello,
         prodotto_id: nuova.prodotto_id, [mod]: imp }));
@@ -414,9 +421,9 @@ export default function CassaGiornataPage() {
                 const imp = parseDec(nuova.importo);
                 return (
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-muted-foreground">oppure incassa col POS (la riga si aggiunge da sola a pagamento riuscito):</span>
+                    <span className="text-xs text-muted-foreground">oppure incassa con POS / PayPal (la riga si aggiunge da sola a pagamento verificato):</span>
                     <PagaPos importo={imp && imp > 0 ? imp : 0} descrizione={(nuova.descrizione || "GENIUS LAB").slice(0, 100)} rifTipo="cassa_riga"
-                      disabled={!!busy} onPagato={() => aggiungi("pos")} />
+                      disabled={!!busy} generico paypal onPagato={(p) => aggiungi(p.metodo === "paypal" ? "paypal" : "pos")} />
                   </div>
                 );
               })()}

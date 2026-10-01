@@ -272,6 +272,9 @@ export function getFatturaXmlUrl(sessionId: string): string {
 }
 
 // PDF di un documento pro forma (PF n/AAAA)
+export function getProformaAnteprimaPdfUrl(sessionId: string): string {
+  return `${API_PROXY}/api/sessions/${sessionId}/proforma-documento/anteprima.pdf?t=${Date.now()}`;
+}
 export function getDocumentoPdfUrl(documentoId: string): string {
   return `${API_PROXY}/api/documenti/${documentoId}/pdf?t=${Date.now()}`;
 }
@@ -1016,7 +1019,7 @@ export async function magModifica(id: string, body: Partial<Prodotto>): Promise<
 export async function magMovimento(id: string, body: { tipo: string; quantita: number; causale?: string; costo?: number }) {
   return fetchAPI(`/api/magazzino/prodotti/${id}/movimento`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string }): Promise<Scontrino> {
+export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string; pos_incasso_id?: string }): Promise<Scontrino> {
   return fetchAPI('/api/cassa/scontrini', { method: 'POST', body: JSON.stringify(body) });
 }
 export async function cassaScontrini(giorno = '') { return fetchAPI(`/api/cassa/scontrini?giorno=${giorno}`); }
@@ -1090,17 +1093,22 @@ export async function cassaApriCassetto(motivo = ''): Promise<{ ok: boolean; id:
 
 // === POS SUMUP (Cloud API) — 01/10/2026 ===
 export interface LettorePos { id: string; nome: string; abbinamento: string; modello?: string; seriale?: string; online: boolean | null; stato?: string | null; batteria?: number | null }
-export interface IncassoPos { id: string; stato: 'in_attesa' | 'pagato' | 'fallito' | 'annullato' | 'errore'; importo?: number; lettore_id?: string; checkout_id?: string | null; client_transaction_id?: string | null; dettaglio?: unknown }
+export interface IncassoPos { id: string; stato: 'in_attesa' | 'pagato' | 'fallito' | 'annullato' | 'errore'; importo?: number; lettore_id?: string | null;
+  checkout_id?: string | null; client_transaction_id?: string | null; dettaglio?: unknown; metodo?: 'pos' | 'paypal'; modo?: 'lettore' | 'transazioni' | 'paypal';
+  transaction_code?: string | null; link_pagamento?: string | null; paypal_order_id?: string | null; confermato_manualmente?: boolean; created_at?: string }
 export async function posLettori(): Promise<{ lettori: LettorePos[] }> { return fetchAPI('/api/pos/lettori'); }
 export async function posAbbina(codice: string, nome: string): Promise<{ ok: boolean }> {
   return fetchAPI('/api/pos/abbina', { method: 'POST', body: JSON.stringify({ codice, nome }) });
 }
 export async function posRimuovi(id: string): Promise<{ ok: boolean }> { return fetchAPI(`/api/pos/lettori/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
-export async function posIncassa(body: { lettore_id: string; lettore_nome?: string; importo: number; descrizione?: string; rif_tipo?: string; rif_id?: string }): Promise<IncassoPos> {
+export async function posIncassa(body: { lettore_id?: string; lettore_nome?: string; importo: number; descrizione?: string; rif_tipo?: string; rif_id?: string; metodo?: 'pos' | 'paypal' }): Promise<IncassoPos> {
   return fetchAPI('/api/pos/incassa', { method: 'POST', body: JSON.stringify(body) });
 }
 export async function posStato(id: string): Promise<IncassoPos> { return fetchAPI(`/api/pos/incassi/${id}`); }
 export async function posAnnulla(id: string): Promise<IncassoPos> { return fetchAPI(`/api/pos/incassi/${id}/annulla`, { method: 'POST' }); }
+export async function posConfermaManuale(id: string, body: { transaction_code?: string; nota?: string }): Promise<IncassoPos> {
+  return fetchAPI(`/api/pos/incassi/${id}/conferma-manuale`, { method: 'POST', body: JSON.stringify(body) });
+}
 
 export function cassaGiornataUrlExcel(giorno: string) { return `${API_PROXY}/api/cassa/giornata/excel?giorno=${giorno}`; }
 

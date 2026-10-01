@@ -6,14 +6,14 @@
 // - oppure bozza da controllare prima dell'invio.
 // - pagamento arrivato (verifica pagamenti) e avviso «DA SPEDIRE» se la riconsegna va fatta col corriere.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Banknote, ExternalLink, FileEdit, FileSpreadsheet, FileText, Loader2, Receipt, Send, Truck } from "lucide-react";
 import { toast } from "sonner";
 import {
-  fattCollegaSessione, fattDaSessione, fattStatoSessione, getDocumentoPdfUrl, incSessione, proformaSessioneCrea, proformaSessioneStato,
+  fattCollegaSessione, fattDaSessione, fattStatoSessione, getDocumentoPdfUrl, getProformaAnteprimaPdfUrl, incSessione, proformaSessioneCrea, proformaSessioneStato,
   type ApiError, type DaSpedire, type ProformaSessioneStato,
 } from "@/lib/api";
 
@@ -45,33 +45,28 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
     } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
   }
 
+  // anteprima = lo STESSO PDF del pro forma definitivo (stesso layout della fattura: cedente, cessionario, IVA, IBAN)
+  // URL fisso per tutta la vita del dialogo (le funzioni aggiungono ?t=ora: a ogni render l'iframe si ricaricherebbe)
+  const pdfUrl = useMemo(() => (doc ? getDocumentoPdfUrl(doc.id) : getProformaAnteprimaPdfUrl(sessionId)), [doc, sessionId]);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onChiudi}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-lg bg-background shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="border-b px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4" onClick={onChiudi}>
+      <div className="flex max-h-[95vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-background shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="border-b px-5 py-3">
           <h3 className="text-lg font-semibold">{doc ? `Pro forma ${doc.sigla}` : "Prepara pro forma di fattura"}</h3>
-          <p className="text-xs text-muted-foreground">{doc ? `del ${new Date(doc.data).toLocaleDateString("it-IT")} · ${doc.stato}` : "Anteprima: righe e totali sono quelli della fattura di questa sessione"}</p>
+          <p className="text-xs text-muted-foreground">{doc ? `del ${new Date(doc.data).toLocaleDateString("it-IT")} · ${doc.stato}` : "Anteprima: è il documento che verrà creato, con le righe e i totali della fattura di questa sessione"}</p>
         </div>
-        <div className="space-y-2 px-5 py-4 text-sm">
+        <div className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-3 text-sm sm:px-5">
           {errore && <p className="text-red-600">{errore}</p>}
           {!v && !errore && <Loader2 className="animate-spin" />}
           {v && (
             <>
-              <div className="rounded border">
-                <table className="w-full text-xs"><tbody>
-                  {v.righe.map((r, i) => (
-                    <tr key={i} className={"border-b last:border-0 " + (/spedizion/i.test(r.descrizione) ? "bg-blue-50 dark:bg-blue-950/30" : "")}>
-                      <td className="px-2 py-1.5">{r.quantita !== 1 ? `${r.quantita} × ` : ""}{r.descrizione}</td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-right font-mono">{eur(r.lordo ?? r.prezzo_totale * (1 + r.aliquota / 100))}</td>
-                    </tr>
-                  ))}
-                  {!v.righe.length && <tr><td className="p-2 text-muted-foreground">Nessuno strumento in sessione</td></tr>}
-                </tbody></table>
+              <iframe src={pdfUrl} title="Anteprima pro forma" className="h-[65vh] w-full rounded border bg-white" />
+              <div className="flex flex-wrap justify-end gap-x-4 text-xs text-muted-foreground">
+                <span>Imponibile <b className="font-mono">{eur(v.imponibile)}</b></span>
+                <span>IVA <b className="font-mono">{eur(v.iva)}</b></span>
+                <span className="text-base font-bold text-orange-700">Totale {eur(v.totale)}</span>
               </div>
-              {st?.anteprima?.shipping_by_customer && <p className="text-xs text-amber-700">Spedizione a carico del cliente: nessun costo di spedizione.</p>}
-              <div className="flex justify-between text-xs text-muted-foreground"><span>Imponibile</span><span className="font-mono">{eur(v.imponibile)}</span></div>
-              <div className="flex justify-between text-xs text-muted-foreground"><span>IVA</span><span className="font-mono">{eur(v.iva)}</span></div>
-              <div className="mt-2 flex justify-between border-t-2 border-orange-600 pt-2 text-base font-bold"><span>TOTALE (IVA incl.)</span><span className="font-mono text-orange-700">{eur(v.totale)}</span></div>
+              {!v.righe.length && <p className="text-muted-foreground">Nessuno strumento in sessione</p>}
             </>
           )}
         </div>

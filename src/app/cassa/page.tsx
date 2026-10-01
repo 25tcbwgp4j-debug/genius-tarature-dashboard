@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Banknote, CreditCard, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, Wallet, X } from "lucide-react";
+import { Banknote, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, X } from "lucide-react";
 import { StornoDialog } from "@/components/StornoDialog";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { PagaPos } from "@/components/PagaPos";
@@ -69,13 +69,13 @@ export default function CassaPage() {
 
   const tot = Math.round(carrello.reduce((s, r) => s + r.quantita * r.prezzo * (1 - (r.sconto || 0) / 100), 0) * 100) / 100;
 
-  async function scontrino(modalita: string) {
+  async function scontrino(modalita: string, posIncassoId?: string) {
     if (!carrello.length || busy) return;
     if (carrello.some((r) => !(r.prezzo >= 0) || Number.isNaN(r.prezzo))) { toast.error("C'è un prezzo non valido nel carrello"); return; }
     if (modalita === "non_riscosso" && !confirm(`Emettere lo scontrino da ${eur(tot)} come NON RISCOSSO (il cliente non paga adesso)?`)) return;
     setBusy(modalita);
     try {
-      await cassaScontrino({ righe: carrello, pagamenti: [{ modalita, importo: tot }], codice_lotteria: lotteria || undefined });
+      await cassaScontrino({ righe: carrello, pagamenti: [{ modalita, importo: tot }], codice_lotteria: lotteria || undefined, pos_incasso_id: posIncassoId });
       toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${MOD[modalita]})`);
       setCarrello([]); setLotteria(""); ricarica();
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
@@ -161,18 +161,16 @@ export default function CassaPage() {
           <Input className="h-8" placeholder="Codice lotteria scontrini (facoltativo)" maxLength={8} value={lotteria} onChange={(e) => setLotteria(e.target.value.toUpperCase())} />
           <div className="grid grid-cols-2 gap-2">
             <Button disabled={!carrello.length || !!busy} onClick={() => scontrino("contanti")}>{busy === "contanti" ? <Loader2 className="animate-spin" /> : <Banknote />} Contanti</Button>
-            <Button disabled={!carrello.length || !!busy} onClick={() => scontrino("pos_sumup")}>{busy === "pos_sumup" ? <Loader2 className="animate-spin" /> : <CreditCard />} POS SumUp</Button>
-            <Button variant="outline" disabled={!carrello.length || !!busy} onClick={() => scontrino("paypal")}><Wallet /> PayPal</Button>
             <Button variant="outline" disabled={!carrello.length || !!busy} onClick={() => scontrino("non_riscosso")}>Non riscosso</Button>
             {/* bonifico istantaneo: lo scontrino parte solo dopo aver visto l'accredito sul conto SumUp */}
             <VerificaBonifico className="col-span-2" importo={tot} etichettaConferma="Emetti scontrino" disabled={!carrello.length || !!busy}
               onConfermato={() => scontrino("bonifico")} />
           </div>
           <div className="space-y-1 rounded-md border border-sky-200 bg-sky-50/50 p-2 dark:bg-sky-950/20">
-            <div className="text-xs text-muted-foreground">Paga col POS: l&apos;importo arriva solo sul terminale scelto, a pagamento riuscito parte lo scontrino</div>
+            <div className="text-xs text-muted-foreground">POS e PayPal: lo scontrino parte da solo quando SumUp / PayPal registrano il pagamento</div>
             <div className="grid grid-cols-2 gap-2">
               <PagaPos importo={tot} descrizione={`GENIUS LAB scontrino ${eur(tot)}`} rifTipo="scontrino" disabled={!carrello.length || !!busy}
-                onPagato={() => scontrino("pos_sumup")} />
+                generico paypal onPagato={(p) => scontrino(p.metodo === "paypal" ? "paypal" : "pos_sumup", p.id)} />
             </div>
           </div>
           <Button variant="secondary" className="w-full" disabled={!carrello.length || !!busy} onClick={fattura}>
