@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Banknote, Download, FileText, Loader2, Plus, RefreshCw, RotateCcw, Search, Send, Truck, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
-  fattConfig, fattElenco, fattPagamentoMultiplo, fattUrlExport, type FattModalita, fattEsiti, fattRiepilogo, fattSincronizza,
+  fattConfig, fattElenco, fattPagamentoMultiplo, fattUrlExport, type FattModalita, fattEsiti, fattRiepilogo, fattSincronizza, fattRicevuteStato, fattRicevuteViste, type FattRicevuteStato,
   incElenco, type DaSpedire, type FattSocieta, type Fattura,
 } from "@/lib/api";
 import Link from "next/link";
@@ -59,6 +59,7 @@ function Pagina() {
   const [sel, setSel] = useState<Record<string, boolean>>({});
   const [modMulti, setModMulti] = useState<FattModalita>("bonifico");
   const [sync, setSync] = useState(false);
+  const [ricStato, setRicStato] = useState<FattRicevuteStato | null>(null);
   const [periodo, setPeriodo] = useState<Parameters<typeof calcolaPeriodo>[0]>("tutto");
   const [pGiorno, setPGiorno] = useState("");
   const [pDal, setPDal] = useState("");
@@ -76,11 +77,14 @@ function Pagina() {
   useEffect(() => { caricaIncassi(); }, [caricaIncassi]);
 
   useEffect(() => { fattConfig().then(setCfg).catch(() => undefined); }, []);
+  const caricaRicStato = useCallback(() => { fattRicevuteStato().then(setRicStato).catch(() => undefined); }, []);
+  useEffect(() => { caricaRicStato(); }, [caricaRicStato]);
   useEffect(() => {
     const id = sp.get("id");
     if (id) setAperta(id);
     if (sp.get("nuova")) setEditor({ f: null });
     if (sp.get("incassi")) setIncassiAperti(true);
+    if (sp.get("tab") === "ricevuta") setTab("ricevuta");   // link del riepilogo Telegram
   }, [sp]);
 
   const carica = useCallback(async () => {
@@ -98,6 +102,10 @@ function Pagina() {
         const oggiIso = oggiRoma();
         setRighe((r.fatture || []).filter((f: Fattura) => !soloScadute || (f.pagamento_stato !== "pagata" && f.tipo_documento !== "TD04" && (f.scadenza || f.data || "") < oggiIso)));
         setSel({});
+        // aperta la scheda Ricevute: le nuove restano evidenziate in questa vista, il badge si azzera
+        if (tab === "ricevuta" && (r.fatture || []).some((f: Fattura) => !f.vista_il)) {
+          fattRicevuteViste().then(caricaRicStato).catch(() => undefined);
+        }
       }
       // il riepilogo non deve bloccare l'elenco (es. operatore: totali riservati)
       setRie(await fattRiepilogo(societa, anno).catch(() => null));
@@ -106,7 +114,7 @@ function Pagina() {
     } finally {
       setLoading(false);
     }
-  }, [tab, societa, stato, pagamento, q, anno, prove, mese, periodo, per.dal, per.al, soloScadute]);
+  }, [tab, societa, stato, pagamento, q, anno, prove, mese, periodo, per.dal, per.al, soloScadute, caricaRicStato]);
 
   useEffect(() => {
     const t = setTimeout(carica, q ? 300 : 0);
@@ -117,8 +125,13 @@ function Pagina() {
     setSync(true);
     try {
       const r = await fattSincronizza();
-      toast.success(`Aggiornati ${r.esiti_aggiornati || 0} esiti · ${r.passive_nuove || 0} fatture ricevute nuove`);
+      const ric = r.ricevute as { ok?: boolean; nuove?: { fornitore: string; numero: string; totale: number }[] } | undefined;
+      const testo = `${r.messaggio || `${r.passive_nuove || 0} fatture ricevute nuove`} · esiti emesse aggiornati: ${r.esiti_aggiornati || 0}`;
+      const elenco = (ric?.nuove || []).slice(0, 8).map((x) => `${x.fornitore} n. ${x.numero} — ${eur(x.totale)}`).join(" · ");
+      if (r.ok === false || ric?.ok === false) toast.error(testo, { duration: 15000 });
+      else toast.success(testo, { description: elenco || undefined, duration: 10000 });
       carica();
+      caricaRicStato();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -244,12 +257,23 @@ function Pagina() {
         </Card>
       )}
 
+      {ricStato?.ultimo && (
+        <div className={`text-xs ${ricStato.ultimo.ok ? "text-muted-foreground" : "font-medium text-red-600"}`}
+          title={ricStato.ultimo.messaggio}>
+          Fatture ricevute — ultimo controllo SdI: {new Date(ricStato.ultimo.quando).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+          {" "}({ricStato.ultimo.trigger === "manuale" ? "manuale" : ricStato.ultimo.trigger === "giornaliero" ? "giro delle 8/14" : "automatico ogni 15'"}, {ricStato.ultimo.fonte === "effatta" ? "Effatta" : ricStato.ultimo.fonte})
+          {" · "}{ricStato.ultimo.ok ? `${ricStato.ultimo.controllate} in Effatta negli ultimi 3 mesi, ${ricStato.ultimo.nuove} nuove` : ricStato.ultimo.messaggio}
+          {ricStato.ultimo_con_novita && <> · ultimo arrivo: {new Date(ricStato.ultimo_con_novita.quando).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} ({ricStato.ultimo_con_novita.nuove})</>}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 border-b">
         {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["incassare", "Da incassare"], ["pagare", "Da pagare"], ["clienti", "Clienti"], ["fornitori", "Fornitori"], ["chiusure", "Chiusure"], ["esiti", "Esiti SdI"]] as [Tab, string][]).map(([k, l]) => (
           <button key={k} onClick={() => { if (k === "incassare" || k === "pagare") setCercaCrediti(q); setTab(k); setStato(""); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === k ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}>
             {l}
             {k === "incassare" && rie && (rie.da_incassare ?? 0) > 0 && <span className="ml-1 rounded bg-amber-500/15 px-1 text-[10px] text-amber-700 dark:text-amber-300">{eur(rie.da_incassare ?? 0)}</span>}
+            {k === "ricevuta" && (ricStato?.nuove_da_vedere ?? 0) > 0 && <span className="ml-1 rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white" title="Fatture ricevute arrivate dallo SdI e non ancora viste">{ricStato?.nuove_da_vedere} nuove</span>}
             {k === "pagare" && rie && (rie.da_pagare ?? 0) > 0 && <span className="ml-1 rounded bg-muted px-1 text-[10px]">{eur(rie.da_pagare ?? 0)}</span>}
           </button>
         ))}
@@ -361,6 +385,7 @@ function Pagina() {
                       {f.numero || <span className="text-muted-foreground">bozza</span>}
                       {f.tipo_documento !== "TD01" && <div className="text-xs text-muted-foreground">{TIPI_LABEL[f.tipo_documento] || f.tipo_documento}</div>}
                       {f.ambiente === "sandbox" && <span className="ml-1 rounded bg-orange-500/15 px-1 text-[10px] text-orange-700 dark:text-orange-300">PROVA</span>}
+                      {tab === "ricevuta" && !f.vista_il && <span className="ml-1 rounded bg-red-600 px-1 text-[10px] font-semibold text-white" title="Arrivata dallo SdI, non ancora vista">NUOVA</span>}
                       {f.origine === "simplyfatt" && <span className="ml-1 rounded bg-muted px-1 text-[10px] text-muted-foreground" title="Importata dallo storico SimplyFatt">SF</span>}
                     </td>
                     <td className="p-2 whitespace-nowrap">{dataIt(f.data)}</td>

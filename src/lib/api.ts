@@ -872,7 +872,7 @@ export interface Fattura {
   fattura_collegata_id?: string | null;
   /** estremi della dichiarazione/attestazione del cliente (es. modulo dell'ambasciata, art. 72): stampati in fattura */
   estremi_esenzione?: string | null;
-  origine?: string; anagrafica_id?: string | null; operatore?: string | null;
+  origine?: string; anagrafica_id?: string | null; operatore?: string | null; vista_il?: string | null;
   esiti?: { id: string; tipo: string; descrizione: string; data: string }[];
   controlli?: string[];
   collegata?: { id: string; numero: string; data: string; totale: number } | null;
@@ -907,6 +907,11 @@ export async function fattDaSessione(sessionId: string, forza = false, operatore
 export async function fattCollegaSessione(sessionId: string, fatturaId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}/collega`, { method: 'POST', body: JSON.stringify({ fattura_id: fatturaId }) }); }
 export async function fattStatoSessione(sessionId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}`, { cache: 'no-store' }); }
 export async function fattSincronizza() { return fetchAPI('/api/fatturazione/sincronizza', { method: 'POST' }); }
+// Fatture ricevute dallo SdI (01/10/2026): ultimo controllo (fonte, esito) e badge «nuove»
+export interface FattSyncLog { quando: string; fonte: string; trigger: string; ok: boolean; controllate: number; nuove: number; messaggio: string }
+export interface FattRicevuteStato { ultimo: FattSyncLog | null; ultimo_con_novita: FattSyncLog | null; nuove_da_vedere: number }
+export async function fattRicevuteStato(societa = ''): Promise<FattRicevuteStato> { return fetchAPI(`/api/fatturazione/ricevute/stato?societa=${encodeURIComponent(societa)}`, { cache: 'no-store' }); }
+export async function fattRicevuteViste(societa = '') { return fetchAPI(`/api/fatturazione/ricevute/viste?societa=${encodeURIComponent(societa)}`, { method: 'POST' }); }
 export function fattUrlXml(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/xml`; }
 export function fattUrlStampa(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/stampa`; }
 
