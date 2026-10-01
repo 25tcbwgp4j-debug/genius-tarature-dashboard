@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { Settings, Loader2, Pencil, Save, X, Plus, Trash2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { PosImpostazioni } from "@/components/PosImpostazioni";
 
 interface SettingField {
   key: string;
@@ -506,6 +507,9 @@ export default function ImpostazioniPage() {
           ))}
         </div>
       </Card>
+
+      {/* === POS SUMUP === */}
+      <PosImpostazioni />
 
       {/* === TEMPLATE MESSAGGI === */}
       <Card className="p-6">

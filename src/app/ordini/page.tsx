@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowRightLeft, Ban, FileText, Loader2, Pencil, Plus, Receipt, Save, Search, Trash2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
+import { PagaPos } from "@/components/PagaPos";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
@@ -176,19 +177,21 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
 
-  function conferma() {
+  /** modForzata = «pos_sumup» quando il cliente ha appena pagato sul POS SumUp (la fattura nasce già pagata). */
+  function conferma(modForzata?: string) {
     if (!d) return;
+    const mod = modForzata || f.modalita;
     if (azione === "acconto") {
       const imp = parseDec(f.importo);
       if (imp === null || Number.isNaN(imp) || imp <= 0) { toast.error("Scrivi l'importo dell'acconto (es. 50 o 12,50)"); return; }
       if (imp > d.residuo + 0.001) { toast.error(`L'acconto supera quanto resta da pagare (${eur(d.residuo)})`); return; }
       if (f.certificato === "scontrino" && !f.numero.trim()) { toast.error("Scrivi il numero dello scontrino battuto in cassa"); return; }
-      esegui(() => docAcconto(d.id, { importo: imp, modalita: f.modalita, certificato: f.certificato, scontrino_numero: f.numero.trim() }), "Acconto registrato: è nella cassa di oggi");
+      esegui(() => docAcconto(d.id, { importo: imp, modalita: mod, certificato: f.certificato, scontrino_numero: f.numero.trim() }), "Acconto registrato: è nella cassa di oggi");
     } else if (azione === "scontrino") {
       if (!f.numero.trim()) { toast.error("Scrivi il numero dello scontrino battuto in cassa"); return; }
-      esegui(() => docConverti(d.id, { a: "scontrino", modalita: f.modalita, scontrino_numero: f.numero.trim() }), "Scontrino registrato nella cassa di oggi");
+      esegui(() => docConverti(d.id, { a: "scontrino", modalita: mod, scontrino_numero: f.numero.trim() }), "Scontrino registrato nella cassa di oggi");
     } else {
-      esegui(() => docConverti(d.id, { a: "fattura", modalita: f.modalita, pagata: f.pagata }), "Fattura creata in bozza");
+      esegui(() => docConverti(d.id, { a: "fattura", modalita: mod, pagata: modForzata ? true : f.pagata }), "Fattura creata in bozza");
     }
   }
 
@@ -293,9 +296,22 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
               {((azione === "acconto" && f.certificato === "scontrino") || azione === "scontrino") &&
                 <Input className="h-9 w-32" placeholder="N. scontrino *" value={f.numero} onChange={(e) => setF({ ...f, numero: e.target.value })} />}
               {azione === "fattura" && <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={f.pagata} onChange={(e) => setF({ ...f, pagata: e.target.checked })} />già pagata (incasso di oggi)</label>}
-              <Button disabled={busy} onClick={conferma}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}Conferma</Button>
+              <Button disabled={busy} onClick={() => conferma()}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}Conferma</Button>
               <Button variant="ghost" onClick={() => setAzione("")}>Chiudi</Button>
             </div>
+            {(() => {
+              // incasso col POS SumUp: l'importo va sul terminale scelto, a pagamento riuscito si registra con «POS SumUp»
+              const imp = azione === "acconto" ? (parseDec(f.importo) ?? 0) : d.residuo;
+              const serveNumero = (azione === "acconto" && f.certificato === "scontrino") || azione === "scontrino";
+              const ok = imp > 0 && !Number.isNaN(imp) && imp <= d.residuo + 0.001 && (!serveNumero || !!f.numero.trim());
+              return (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200 bg-sky-50/50 p-2 dark:bg-sky-950/20">
+                  <span className="text-xs text-muted-foreground">oppure incassa col POS{serveNumero && !f.numero.trim() ? " (prima scrivi il n. scontrino)" : ""}:</span>
+                  <PagaPos importo={ok ? imp : 0} descrizione={`${azione === "acconto" ? "Acconto" : "Saldo"} ${d.sigla || ""}`.trim()}
+                    rifTipo={`documento_${azione}`} rifId={d.id} disabled={busy || !ok} onPagato={() => conferma("pos_sumup")} />
+                </div>
+              );
+            })()}
             <div className="text-xs text-muted-foreground">
               {azione === "fattura" ? "Si apre la bozza in Fatturazione: controlla i dati del cliente e inviala allo SdI."
                 : "Finché il registratore non è collegato, batti lo scontrino sulla cassa e scrivi qui il suo numero: la riga va da sola nella cassa del giorno."}

@@ -1,9 +1,10 @@
 "use client";
 
 // CASSA DEL GIORNO (GENIUS LAB) — il vecchio Excel «BASE CASSA» che si compila da solo.
-// In alto: quadratura, contanti di mattina e di sera (banconote | monete), chiusure del giorno (POS, registratore,
-// fatture, note di credito, acconti degli ordini, rimborsi) e prelievi. Sotto: tutte le righe del giorno;
+// In alto le REGISTRAZIONI del giorno (quadratura, righe, totali, chiusure POS/registratore/fatture, prelievi):
 // fatture e scontrini della dashboard entrano da soli, gli scontrini battuti alla cassa si aggiungono a mano.
+// In fondo i CONTEGGI (apertura del mattino, contanti della sera, reintegro serale): ogni blocco si conferma e
+// resta bloccato (01/10/2026), lo sblocca solo l'amministratore (autorizzazione «sblocca_conteggio»).
 // Se i conti tornano si chiude la giornata e l'Excel finisce nella cartella DA FIRMARE.
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, Lock, Plus, Trash2, Undo2, Unlock, XCircle } from "lucide-react";
 import { StornoDialog, type OggettoStorno } from "@/components/StornoDialog";
+import { PagaPos } from "@/components/PagaPos";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { DecInput, parseDec } from "@/components/DecInput";
@@ -19,7 +21,7 @@ import { oggiRoma, spostaGiorno } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 import {
   cassaAnnulla, cassaScontrini, type RigaGiornata, type Scontrino,
-  cassaGiornata, cassaGiornataChiudi, cassaGiornataConfermaApertura, cassaGiornataElimina, cassaGiornataRiapri, cassaGiornataRiga, cassaGiornataSalva, cassaGiornataUrlExcel,
+  cassaGiornata, cassaGiornataChiudi, cassaGiornataConferma, cassaGiornataConfermaApertura, cassaGiornataSblocca, type BloccoCassa, cassaGiornataElimina, cassaGiornataRiapri, cassaGiornataRiga, cassaGiornataSalva, cassaGiornataUrlExcel,
   type FoglioCassa, type Tagli,
 } from "@/lib/api";
 
@@ -84,6 +86,19 @@ function Riquadro({ titolo, valore, sotto, stato, children }: {
       {valore !== undefined && <div className="text-xl font-bold tabular-nums">{valore}</div>}
       {sotto && <div className="text-xs text-muted-foreground">{sotto}</div>}
       {children}
+    </div>
+  );
+}
+
+/** Blocco confermato: chi e quando, più lo sblocco (all'operatore chiede l'autorizzazione dell'amministratore). */
+function Bloccato({ da, il, extra, onSblocca, busy }: { da?: string | null; il?: string | null; extra?: string; onSblocca?: () => void; busy?: boolean }) {
+  const ora = il ? new Date(il).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }) : "";
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-400 bg-emerald-50 px-2 py-1.5 text-sm dark:bg-emerald-950/30">
+      <Lock className="size-4 text-emerald-700" />
+      <span className="flex-1 font-medium text-emerald-800 dark:text-emerald-200">Confermato da {da || "—"} il {ora}{extra || ""}</span>
+      {onSblocca && <Button size="xs" variant="ghost" disabled={busy} onClick={onSblocca} title="Riapre il blocco alla modifica (serve l'amministratore)">
+        {busy ? <Loader2 className="size-3 animate-spin" /> : <Unlock className="size-3" />} Sblocca</Button>}
     </div>
   );
 }
@@ -171,8 +186,11 @@ export default function CassaGiornataPage() {
     const b = { ...bozza, ...p };
     setBozza(b);
     const g = giorno;
+    // i blocchi confermati non si rimandano (il server rifiuterebbe ogni modifica con 409)
     inSospeso.current.base = () => traccia(cassaGiornataSalva(g, {
-      apertura_tagli: b.apertura_tagli, chiusura_tagli: b.chiusura_tagli, pos_terminale: b.pos_terminale, rt_scontrini: b.rt_scontrini, note: b.note,
+      ...(b.apertura_confermata_il ? {} : { apertura_tagli: b.apertura_tagli }),
+      ...(b.chiusura_confermata_il ? {} : { chiusura_tagli: b.chiusura_tagli }),
+      pos_terminale: b.pos_terminale, rt_scontrini: b.rt_scontrini, note: b.note,
     }).then((r) => { if (perQuestoGiorno(r)) setF(r); }).catch(toastErrore));
     if (salvaT.current) clearTimeout(salvaT.current);
     salvaT.current = setTimeout(() => {
@@ -216,6 +234,20 @@ export default function CassaGiornataPage() {
     });
   }
 
+  function confermaBlocco(blocco: "chiusura" | "reintegro") {
+    const nome = blocco === "chiusura" ? "il conteggio dei contanti della sera" : "il reintegro serale";
+    if (!confirm(`Confermare ${nome}? Dopo la conferma non si modifica più (salvo sblocco dell'amministratore).`)) return;
+    return azione(`conferma-${blocco}`, async () => {
+      applica(await cassaGiornataConferma(giorno, blocco));
+      toast.success(blocco === "chiusura" ? "Conteggio della sera confermato" : "Reintegro confermato");
+    });
+  }
+  function sblocca(blocco: BloccoCassa) {
+    const nome = blocco === "apertura" ? "l'apertura del mattino" : blocco === "chiusura" ? "il conteggio della sera" : "il reintegro serale";
+    if (!confirm(`Sbloccare ${nome} per correggerlo? Serve l'autorizzazione dell'amministratore.`)) return;
+    return azione(`sblocca-${blocco}`, async () => { applica(await cassaGiornataSblocca(giorno, blocco)); toast.success("Sbloccato: ora si può correggere"); });
+  }
+
   function salvaPrelievi(lista: FoglioCassa["giornata"]["prelievi"]) {
     return azione("prelievo", async () => { applica(await cassaGiornataSalva(giorno, { prelievi: lista })); });
   }
@@ -233,12 +265,14 @@ export default function CassaGiornataPage() {
     return salvaPrelievi(bozza.prelievi.filter((_, j) => j !== i));
   }
 
-  function aggiungi() {
+  /** modForzata = «pos» quando il cliente ha appena pagato sul POS SumUp. */
+  function aggiungi(modForzata?: string) {
     const imp = parseDec(nuova.importo);
     if (imp === null || Number.isNaN(imp) || imp === 0) { toast.error("Inserisci l'importo (es. 25 o 12,50)"); return; }
+    const mod = modForzata || nuova.modalita;
     return azione("riga", async () => {
       applica(await cassaGiornataRiga({ giorno, tipo: nuova.tipo, numero: nuova.numero, descrizione: nuova.descrizione, modello: nuova.modello,
-        prodotto_id: nuova.prodotto_id, [nuova.modalita]: imp }));
+        prodotto_id: nuova.prodotto_id, [mod]: imp }));
       const n = Number(nuova.numero);
       setNuova({ ...RIGA_VUOTA, tipo: nuova.tipo, modalita: nuova.modalita, numero: nuova.tipo === "scontrino" && n ? String(n + 1) : "" });
     });
@@ -293,6 +327,9 @@ export default function CassaGiornataPage() {
   const rp = f?.riepilogo;
   const diffContanti = rp ? tondo(rp.chiusura_contata - rp.chiusura_teorica) : 0;
   const seraVuota = !Object.values(g?.chiusura_tagli || {}).some(Boolean);
+  const apBloccata = !!g?.apertura_confermata_il;
+  const chBloccata = !!g?.chiusura_confermata_il;
+  const reBloccato = !!g?.reintegro_confermata_il;
 
   return (
     <div className="space-y-4 p-1 md:p-2">
@@ -348,66 +385,79 @@ export default function CassaGiornataPage() {
           <span className="ml-auto text-sm text-muted-foreground">Incassi del giorno <b className="text-foreground">{eur(f.totale_giorno)}</b></span>
         </Card>
 
-        {/* CONTANTI: MATTINA · SERA · CONTO */}
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_280px]">
-          <Contanti titolo="☀️ Mattina — apertura cassa" colore="border-amber-300 bg-amber-50/60 dark:bg-amber-950/20"
-            sotto={g.nuova && g.apertura_da ? `Precompilata con la sera del ${dataIt(g.apertura_da)}: correggi se serve` : "Conta i soldi in cassa quando apri"}
-            tagli={f.tagli_apertura} valori={g.apertura_tagli || {}} disabled={chiusa} onChange={(t) => modifica({ apertura_tagli: t })} />
-          <Contanti titolo="🌙 Sera — chiusura cassa" colore="border-indigo-300 bg-indigo-50/60 dark:bg-indigo-950/20"
-            sotto="Conta i soldi rimasti in cassa a fine giornata (dopo i prelievi)"
-            tagli={f.tagli_chiusura} valori={g.chiusura_tagli || {}} disabled={chiusa} onChange={(t) => modifica({ chiusura_tagli: t })} />
-          <Riquadro titolo="Conto dei contanti" stato={seraVuota ? "manca" : Math.abs(diffContanti) < 0.05 ? "ok" : "ko"}>
-            <div className="space-y-1 text-sm tabular-nums">
-              <div className="flex justify-between"><span>Mattina</span><span>{eur(rp.apertura)}</span></div>
-              <div className="flex justify-between"><span>+ incassi in contanti</span><span>{eur(f.totali.contanti)}</span></div>
-              <div className="flex justify-between"><span>− prelievi</span><span>{eur(rp.prelievi)}</span></div>
-              <div className="flex justify-between border-t pt-1 font-semibold"><span>= devono esserci</span><span>{eur(rp.chiusura_teorica)}</span></div>
-              <div className="flex justify-between"><span>contati la sera</span><span>{eur(rp.chiusura_contata)}</span></div>
-              <div className={`flex justify-between border-t pt-1 text-lg font-bold ${seraVuota ? "text-muted-foreground" : Math.abs(diffContanti) < 0.05 ? "text-emerald-700" : "text-red-700"}`}>
-                <span>Differenza</span><span>{seraVuota ? "conta la cassa" : Math.abs(diffContanti) < 0.05 ? "✓ torna" : eur(diffContanti)}</span>
+        {/* RIGHE DEL GIORNO */}
+        <Card className="overflow-x-auto p-0">
+          {!chiusa && (
+            <div className="space-y-2 border-b bg-muted/30 p-3">
+              <div className="text-sm font-semibold">Aggiungi una riga</div>
+              <div className="flex flex-wrap items-end gap-2">
+                <select className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={nuova.tipo} onChange={(e) => setNuova({ ...nuova, tipo: e.target.value })}>
+                  {TIPI_RIGA.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+                <Input className="h-9 w-20" placeholder="N. scontr." value={nuova.numero} onChange={(e) => setNuova({ ...nuova, numero: e.target.value })} />
+                <CercaArticolo className="min-w-[260px] flex-1"
+                  onScelto={(a) => setNuova({ ...nuova, descrizione: a.descrizione, prodotto_id: a.prodotto_id || "",
+                    importo: a.prezzo_ivato !== null ? String(a.prezzo_ivato).replace(".", ",") : nuova.importo })} />
+                <Input className="h-9 w-28 border-2 text-right font-semibold" placeholder="€ importo" inputMode="decimal" value={nuova.importo}
+                  onChange={(e) => setNuova({ ...nuova, importo: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); aggiungi(); } }} />
+                <select className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={nuova.modalita} onChange={(e) => setNuova({ ...nuova, modalita: e.target.value })}>
+                  {COL.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
               </div>
-            </div>
-          </Riquadro>
-        </div>
-
-        {/* CONFERMA APERTURA (mattino) · REINTEGRO (sera) */}
-        <div className="grid gap-3 lg:grid-cols-2">
-            {g.origine === "excel" ? <div /> : (() => {
-              const attesa = rp.apertura_attesa;
-              const diff = attesa === null ? 0 : tondo(rp.apertura - attesa);
-              const ok = Math.abs(diff) < 0.05;
-              return (
-                <Riquadro titolo="☀️ Apertura del mattino" stato={g.apertura_confermata_il ? "ok" : "manca"}
-                  valore={eur(rp.apertura)}
-                  sotto={attesa === null ? "Nessuna chiusura precedente registrata" :
-                    <>la sera del {rp.apertura_attesa_da ? dataIt(rp.apertura_attesa_da) : "giorno prima"} (chiusura + reintegro) doveva lasciare <b>{eur(attesa)}</b>{!ok && <> · <b className="text-red-700">differenza {eur(diff)}</b></>}</>}>
-                  {g.apertura_confermata_il ? (
-                    <div className="text-sm font-medium text-emerald-700">
-                      ✓ Confermata da {g.apertura_confermata_da} alle {new Date(g.apertura_confermata_il).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" })}
-                      {g.apertura_differenza ? ` · differenza ${eur(g.apertura_differenza)}` : " · corrisponde"}
-                    </div>
-                  ) : !chiusa && (
-                    <Button className={`mt-1 w-full ${ok ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"}`} disabled={!!busy}
-                      onClick={confermaApertura}>
-                      {busy === "apertura" ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
-                      {ok ? "✓ La cassa corrisponde" : "Conferma apertura con differenza"}
-                    </Button>
-                  )}
-                  {!g.apertura_confermata_il && !chiusa && <div className="text-xs text-muted-foreground">L&apos;addetto alla cassa conta i soldi: se tornano preme il tasto, se no corregge i tagli qui sopra e conferma.</div>}
-                </Riquadro>
-              );
-            })()}
-            <div className="space-y-2">
-              <Contanti titolo="➕ Reintegro serale (per domani)" colore="border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/20"
-                sotto="Banconote e monete aggiunte la sera dopo la chiusura (es. da 6 a 10 banconote da 20): si segna anche a cassa chiusa"
-                tagli={f.tagli_apertura} valori={g.reintegro_tagli || {}} disabled={false} onChange={(t) => modificaReintegro({ reintegro_tagli: t })} />
-              <div className="flex flex-wrap items-center gap-2">
-                <Input className="h-8 flex-1" placeholder="da dove arrivano (es. cassaforte, cambio in banca…)" value={g.reintegro_nota ?? ""}
-                  onChange={(e) => modificaReintegro({ reintegro_nota: e.target.value })} />
-                <span className="rounded-md border-2 border-emerald-400 bg-background px-3 py-1 text-sm font-semibold">Cassa per domani: {eur(rp.cassa_per_domani)}</span>
+              <div className="flex flex-wrap items-end gap-2">
+                <Input className="h-9 min-w-[240px] flex-1" placeholder="Cosa paga? (es. SCHEDA 63020, cavo Apple USB-C…)" value={nuova.descrizione}
+                  onChange={(e) => setNuova({ ...nuova, descrizione: e.target.value, prodotto_id: "" })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); aggiungi(); } }} />
+                <Input className="h-9 w-40" placeholder="Modello" value={nuova.modello} onChange={(e) => setNuova({ ...nuova, modello: e.target.value })} />
+                <Button onClick={() => aggiungi()} disabled={!!busy}>{busy === "riga" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}Aggiungi riga</Button>
               </div>
+              {giorno === oggiRoma() && ["scontrino", "acconto", "fattura", "altro"].includes(nuova.tipo) && (() => {
+                const imp = parseDec(nuova.importo);
+                return (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground">oppure incassa col POS (la riga si aggiunge da sola a pagamento riuscito):</span>
+                    <PagaPos importo={imp && imp > 0 ? imp : 0} descrizione={(nuova.descrizione || "GENIUS LAB").slice(0, 100)} rifTipo="cassa_riga"
+                      disabled={!!busy} onPagato={() => aggiungi("pos")} />
+                  </div>
+                );
+              })()}
+              <div className="text-xs text-muted-foreground">Finché la cassa non è collegata alla dashboard, gli scontrini battuti sul registratore si registrano qui con il loro numero.</div>
             </div>
-        </div>
+          )}
+          <table className="w-full min-w-[860px] text-sm">
+            <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+              <tr><th className="px-2 py-2 text-left">Documento</th><th className="px-2 text-left">Num.</th>
+                {COL.map(([k, l]) => <th key={k} className="px-2 text-right">{l}</th>)}
+                <th className="px-2 text-left">Cosa paga?</th><th className="px-2 text-left">Modello</th><th className="px-2" /></tr>
+            </thead>
+            <tbody>
+              <tr className="border-t bg-muted/20"><td className="px-2 py-1 font-medium">APERTURA</td><td>cassa</td><td className="px-2 text-right tabular-nums">{eur(rp.apertura)}</td><td colSpan={7} /></tr>
+              {f.righe.map((r) => {
+                const negativo = ["STORNO", "ANNULLO"].includes(r.tipo);
+                const stornabile = r.tipo === "SCONTRINO" && (r.fonte === "manuale" || r.fonte === "scontrino") && r.totale > 0;
+                return (
+                <tr key={`${r.fonte}-${r.id}`} className={`border-t ${negativo ? "bg-red-50/70 dark:bg-red-950/20" : ""}`}>
+                  <td className="px-2 py-1">{negativo
+                    ? <span className="rounded bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">{r.tipo}</span>
+                    : r.tipo}<span className="ml-1 text-[10px] text-muted-foreground">{FONTE[r.fonte]}</span></td>
+                  <td className="px-2">{r.numero}</td>
+                  {COL.map(([k]) => <td key={k} className={`px-2 text-right tabular-nums ${r[k] ? (r[k] < 0 ? "text-red-600" : "") : "text-muted-foreground/40"}`}>{r[k] ? eur(r[k]) : "0"}</td>)}
+                  <td className="max-w-[280px] truncate px-2" title={r.descrizione}>{r.descrizione}</td>
+                  <td className="px-2">{r.modello}</td>
+                  <td className="whitespace-nowrap px-2 text-right">
+                    {stornabile && (
+                      <button className="mr-2 text-muted-foreground hover:text-red-600" title="Storno / reso o annullo (va nella cassa di oggi)" disabled={!!busy}
+                        onClick={() => apriStorno(r)}>{busy === "storno" ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}</button>)}
+                    {r.fonte === "manuale" && !chiusa && (
+                      <button className="text-muted-foreground hover:text-red-600" title="Elimina riga" disabled={!!busy} onClick={() => eliminaRiga(r.id)}><Trash2 className="size-4" /></button>)}</td>
+                </tr>
+                );
+              })}
+              {!f.righe.length && <tr><td colSpan={10} className="px-2 py-4 text-center text-muted-foreground">Nessun movimento</td></tr>}
+              <tr className="border-t-2 font-semibold"><td className="px-2 py-1" colSpan={2}>TOTALI</td>
+                {COL.map(([k]) => <td key={k} className="px-2 text-right tabular-nums">{eur(f.totali[k] + (k === "contanti" ? rp.apertura : 0))}</td>)}<td colSpan={3} /></tr>
+            </tbody>
+          </table>
+        </Card>
 
         {/* CHIUSURE DEL GIORNO */}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -459,70 +509,6 @@ export default function CassaGiornataPage() {
           )}
         </Card>
 
-        {/* RIGHE DEL GIORNO */}
-        <Card className="overflow-x-auto p-0">
-          {!chiusa && (
-            <div className="space-y-2 border-b bg-muted/30 p-3">
-              <div className="text-sm font-semibold">Aggiungi una riga</div>
-              <div className="flex flex-wrap items-end gap-2">
-                <select className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={nuova.tipo} onChange={(e) => setNuova({ ...nuova, tipo: e.target.value })}>
-                  {TIPI_RIGA.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                </select>
-                <Input className="h-9 w-20" placeholder="N. scontr." value={nuova.numero} onChange={(e) => setNuova({ ...nuova, numero: e.target.value })} />
-                <CercaArticolo className="min-w-[260px] flex-1"
-                  onScelto={(a) => setNuova({ ...nuova, descrizione: a.descrizione, prodotto_id: a.prodotto_id || "",
-                    importo: a.prezzo_ivato !== null ? String(a.prezzo_ivato).replace(".", ",") : nuova.importo })} />
-                <Input className="h-9 w-28 border-2 text-right font-semibold" placeholder="€ importo" inputMode="decimal" value={nuova.importo}
-                  onChange={(e) => setNuova({ ...nuova, importo: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); aggiungi(); } }} />
-                <select className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={nuova.modalita} onChange={(e) => setNuova({ ...nuova, modalita: e.target.value })}>
-                  {COL.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                </select>
-              </div>
-              <div className="flex flex-wrap items-end gap-2">
-                <Input className="h-9 min-w-[240px] flex-1" placeholder="Cosa paga? (es. SCHEDA 63020, cavo Apple USB-C…)" value={nuova.descrizione}
-                  onChange={(e) => setNuova({ ...nuova, descrizione: e.target.value, prodotto_id: "" })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); aggiungi(); } }} />
-                <Input className="h-9 w-40" placeholder="Modello" value={nuova.modello} onChange={(e) => setNuova({ ...nuova, modello: e.target.value })} />
-                <Button onClick={aggiungi} disabled={!!busy}>{busy === "riga" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}Aggiungi riga</Button>
-              </div>
-              <div className="text-xs text-muted-foreground">Finché la cassa non è collegata alla dashboard, gli scontrini battuti sul registratore si registrano qui con il loro numero.</div>
-            </div>
-          )}
-          <table className="w-full min-w-[860px] text-sm">
-            <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-              <tr><th className="px-2 py-2 text-left">Documento</th><th className="px-2 text-left">Num.</th>
-                {COL.map(([k, l]) => <th key={k} className="px-2 text-right">{l}</th>)}
-                <th className="px-2 text-left">Cosa paga?</th><th className="px-2 text-left">Modello</th><th className="px-2" /></tr>
-            </thead>
-            <tbody>
-              <tr className="border-t bg-muted/20"><td className="px-2 py-1 font-medium">APERTURA</td><td>cassa</td><td className="px-2 text-right tabular-nums">{eur(rp.apertura)}</td><td colSpan={7} /></tr>
-              {f.righe.map((r) => {
-                const negativo = ["STORNO", "ANNULLO"].includes(r.tipo);
-                const stornabile = r.tipo === "SCONTRINO" && (r.fonte === "manuale" || r.fonte === "scontrino") && r.totale > 0;
-                return (
-                <tr key={`${r.fonte}-${r.id}`} className={`border-t ${negativo ? "bg-red-50/70 dark:bg-red-950/20" : ""}`}>
-                  <td className="px-2 py-1">{negativo
-                    ? <span className="rounded bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">{r.tipo}</span>
-                    : r.tipo}<span className="ml-1 text-[10px] text-muted-foreground">{FONTE[r.fonte]}</span></td>
-                  <td className="px-2">{r.numero}</td>
-                  {COL.map(([k]) => <td key={k} className={`px-2 text-right tabular-nums ${r[k] ? (r[k] < 0 ? "text-red-600" : "") : "text-muted-foreground/40"}`}>{r[k] ? eur(r[k]) : "0"}</td>)}
-                  <td className="max-w-[280px] truncate px-2" title={r.descrizione}>{r.descrizione}</td>
-                  <td className="px-2">{r.modello}</td>
-                  <td className="whitespace-nowrap px-2 text-right">
-                    {stornabile && (
-                      <button className="mr-2 text-muted-foreground hover:text-red-600" title="Storno / reso o annullo (va nella cassa di oggi)" disabled={!!busy}
-                        onClick={() => apriStorno(r)}>{busy === "storno" ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}</button>)}
-                    {r.fonte === "manuale" && !chiusa && (
-                      <button className="text-muted-foreground hover:text-red-600" title="Elimina riga" disabled={!!busy} onClick={() => eliminaRiga(r.id)}><Trash2 className="size-4" /></button>)}</td>
-                </tr>
-                );
-              })}
-              {!f.righe.length && <tr><td colSpan={10} className="px-2 py-4 text-center text-muted-foreground">Nessun movimento</td></tr>}
-              <tr className="border-t-2 font-semibold"><td className="px-2 py-1" colSpan={2}>TOTALI</td>
-                {COL.map(([k]) => <td key={k} className="px-2 text-right tabular-nums">{eur(f.totali[k] + (k === "contanti" ? rp.apertura : 0))}</td>)}<td colSpan={3} /></tr>
-            </tbody>
-          </table>
-        </Card>
-
         <Card className="p-3">
           <label className="block space-y-1 text-sm">
             <span className="font-medium">Note della giornata</span>
@@ -530,6 +516,92 @@ export default function CassaGiornataPage() {
               onChange={(e) => modifica({ note: e.target.value })} />
           </label>
         </Card>
+        {/* CONTEGGI DI CASSA (in fondo): apertura del mattino · conteggio della sera · reintegro serale.
+            Ogni blocco si CONFERMA e da lì non si modifica più (lo sblocca solo l'amministratore). */}
+        <div className="flex items-center gap-2 pt-2">
+          <h2 className="text-lg font-semibold">Conteggi di cassa</h2>
+          <span className="text-xs text-muted-foreground">ogni blocco confermato resta bloccato: per correggerlo serve lo sblocco dell&apos;amministratore</span>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_280px]">
+          {/* ☀️ APERTURA DEL MATTINO */}
+          <div className="space-y-2">
+            <Contanti titolo="☀️ Mattina — apertura cassa" colore="border-amber-300 bg-amber-50/60 dark:bg-amber-950/20"
+              sotto={apBloccata ? "Apertura confermata: bloccata" : g.nuova && g.apertura_da ? `Precompilata con la sera del ${dataIt(g.apertura_da)}: correggi se serve` : "Conta i soldi in cassa quando apri"}
+              tagli={f.tagli_apertura} valori={g.apertura_tagli || {}} disabled={chiusa || apBloccata} onChange={(t) => modifica({ apertura_tagli: t })} />
+            {g.origine !== "excel" && (() => {
+              const attesa = rp.apertura_attesa;
+              const diff = attesa === null ? 0 : tondo(rp.apertura - attesa);
+              const ok = Math.abs(diff) < 0.05;
+              return (
+                <Riquadro titolo="Conferma apertura" stato={apBloccata ? "ok" : "manca"}
+                  sotto={attesa === null ? "Nessuna chiusura precedente registrata" :
+                    <>la sera del {rp.apertura_attesa_da ? dataIt(rp.apertura_attesa_da) : "giorno prima"} (chiusura + reintegro) doveva lasciare <b>{eur(attesa)}</b>{!ok && <> · <b className="text-red-700">differenza {eur(diff)}</b></>}</>}>
+                  {apBloccata ? (
+                    <Bloccato da={g.apertura_confermata_da} il={g.apertura_confermata_il} extra={g.apertura_differenza ? ` · differenza ${eur(g.apertura_differenza)}` : " · corrisponde"}
+                      onSblocca={chiusa ? undefined : () => sblocca("apertura")} busy={busy === "sblocca-apertura"} />
+                  ) : !chiusa && (
+                    <>
+                      <Button className={`mt-1 w-full ${ok ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"}`} disabled={!!busy} onClick={confermaApertura}>
+                        {busy === "apertura" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Lock className="mr-1 size-4" />}
+                        {ok ? "Conferma: la cassa corrisponde" : "Conferma apertura con differenza"}
+                      </Button>
+                      <div className="text-xs text-muted-foreground">Conta i soldi: se tornano premi Conferma, se no correggi i tagli qui sopra e conferma. Dopo la conferma l&apos;apertura non si modifica più.</div>
+                    </>
+                  )}
+                </Riquadro>
+              );
+            })()}
+          </div>
+
+          {/* 🌙 CONTEGGIO CONTANTI DELLA SERA (chiusura) */}
+          <div className="space-y-2">
+            <Contanti titolo="🌙 Sera — conteggio contanti (chiusura)" colore="border-indigo-300 bg-indigo-50/60 dark:bg-indigo-950/20"
+              sotto={chBloccata ? "Conteggio confermato: bloccato" : "Conta i soldi rimasti in cassa a fine giornata (dopo i prelievi)"}
+              tagli={f.tagli_chiusura} valori={g.chiusura_tagli || {}} disabled={chiusa || chBloccata} onChange={(t) => modifica({ chiusura_tagli: t })} />
+            {chBloccata ? (
+              <Bloccato da={g.chiusura_confermata_da} il={g.chiusura_confermata_il} onSblocca={chiusa ? undefined : () => sblocca("chiusura")} busy={busy === "sblocca-chiusura"} />
+            ) : !chiusa && (
+              <Button className="w-full" disabled={!!busy || seraVuota} onClick={() => confermaBlocco("chiusura")}
+                title={seraVuota ? "Conta prima i contanti" : "Blocca il conteggio della sera"}>
+                {busy === "conferma-chiusura" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Lock className="mr-1 size-4" />}Conferma conteggio della sera
+              </Button>
+            )}
+          </div>
+
+          <Riquadro titolo="Conto dei contanti" stato={seraVuota ? "manca" : Math.abs(diffContanti) < 0.05 ? "ok" : "ko"}>
+            <div className="space-y-1 text-sm tabular-nums">
+              <div className="flex justify-between"><span>Mattina</span><span>{eur(rp.apertura)}</span></div>
+              <div className="flex justify-between"><span>+ incassi in contanti</span><span>{eur(f.totali.contanti)}</span></div>
+              <div className="flex justify-between"><span>− prelievi</span><span>{eur(rp.prelievi)}</span></div>
+              <div className="flex justify-between border-t pt-1 font-semibold"><span>= devono esserci</span><span>{eur(rp.chiusura_teorica)}</span></div>
+              <div className="flex justify-between"><span>contati la sera</span><span>{eur(rp.chiusura_contata)}</span></div>
+              <div className={`flex justify-between border-t pt-1 text-lg font-bold ${seraVuota ? "text-muted-foreground" : Math.abs(diffContanti) < 0.05 ? "text-emerald-700" : "text-red-700"}`}>
+                <span>Differenza</span><span>{seraVuota ? "conta la cassa" : Math.abs(diffContanti) < 0.05 ? "✓ torna" : eur(diffContanti)}</span>
+              </div>
+            </div>
+          </Riquadro>
+        </div>
+
+        {/* ➕ REINTEGRO SERALE */}
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="space-y-2">
+            <Contanti titolo="➕ Reintegro serale (per domani)" colore="border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/20"
+              sotto={reBloccato ? "Reintegro confermato: bloccato" : "Banconote e monete aggiunte la sera dopo la chiusura (es. da 6 a 10 banconote da 20): si segna anche a cassa chiusa"}
+              tagli={f.tagli_apertura} valori={g.reintegro_tagli || {}} disabled={reBloccato} onChange={(t) => modificaReintegro({ reintegro_tagli: t })} />
+            <div className="flex flex-wrap items-center gap-2">
+              <Input className="h-8 flex-1" placeholder="da dove arrivano (es. cassaforte, cambio in banca…)" value={g.reintegro_nota ?? ""} disabled={reBloccato}
+                onChange={(e) => modificaReintegro({ reintegro_nota: e.target.value })} />
+              <span className="rounded-md border-2 border-emerald-400 bg-background px-3 py-1 text-sm font-semibold">Cassa per domani: {eur(rp.cassa_per_domani)}</span>
+            </div>
+            {reBloccato ? (
+              <Bloccato da={g.reintegro_confermata_da} il={g.reintegro_confermata_il} onSblocca={() => sblocca("reintegro")} busy={busy === "sblocca-reintegro"} />
+            ) : (
+              <Button className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={!!busy} onClick={() => confermaBlocco("reintegro")}>
+                {busy === "conferma-reintegro" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Lock className="mr-1 size-4" />}Conferma reintegro serale
+              </Button>
+            )}
+          </div>
+        </div>
       </>)}
       <StornoDialog oggetto={storno} onClose={() => setStorno(null)} onFatto={() => {
         ricarica();

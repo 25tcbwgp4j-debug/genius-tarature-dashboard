@@ -91,6 +91,7 @@ export const TIPI_AUTORIZZAZIONE: Record<string, string> = {
   elimina_fattura: "Eliminare una fattura", nota_credito: "Fare una nota di credito", annulla_incasso: "Annullare l'incasso di una fattura",
   annulla_scontrino: "Annullare uno scontrino", storno_scontrino: "Stornare (reso) uno scontrino", elimina_riga_cassa: "Cancellare una riga della cassa del giorno",
   riapri_cassa: "Riaprire una cassa già chiusa", annulla_documento: "Annullare un ordine/preventivo",
+  sblocca_conteggio: "Sbloccare un conteggio di cassa già confermato",
 };
 export async function autIo(): Promise<Permessi> { return fetchAPI('/api/autorizzazioni/io'); }
 /** stato: 'in_attesa' oppure '' per tutte (storico). L'operatore vede solo le sue. */
@@ -1010,6 +1011,7 @@ export interface FoglioCassa {
     pos_terminale: number | null; rt_scontrini: number | null; note: string | null; chiusa_il?: string | null; chiusa_da?: string | null;
     file_scaricato_il?: string | null; nuova?: boolean; apertura_da?: string | null; futura?: boolean; origine?: string; file_excel?: string | null;
     reintegro_tagli?: Tagli; reintegro_nota?: string | null; apertura_confermata_il?: string | null; apertura_confermata_da?: string | null; apertura_differenza?: number | null;
+    chiusura_confermata_il?: string | null; chiusura_confermata_da?: string | null; reintegro_confermata_il?: string | null; reintegro_confermata_da?: string | null;
   };
   righe: RigaGiornata[]; totali: Record<'contanti' | 'pos' | 'stripe' | 'bonifico' | 'paypal', number>; totale_giorno: number;
   riepilogo: {
@@ -1041,6 +1043,33 @@ export async function cassaGiornataRiapri(giorno: string): Promise<FoglioCassa> 
 export async function cassaGiornataConfermaApertura(giorno: string): Promise<FoglioCassa> {
   return fetchAPI('/api/cassa/giornata/conferma-apertura', { method: 'POST', body: JSON.stringify({ giorno }) });
 }
+export type BloccoCassa = 'apertura' | 'chiusura' | 'reintegro';
+/** Conferma (blocca) un conteggio: dopo non si modifica più, salvo sblocco autorizzato dall'amministratore. */
+export async function cassaGiornataConferma(giorno: string, blocco: BloccoCassa): Promise<FoglioCassa> {
+  return fetchAPI('/api/cassa/giornata/conferma', { method: 'POST', body: JSON.stringify({ giorno, blocco }) });
+}
+export async function cassaGiornataSblocca(giorno: string, blocco: BloccoCassa): Promise<FoglioCassa> {
+  return fetchAPI('/api/cassa/giornata/sblocca', { method: 'POST', body: JSON.stringify({ giorno, blocco }) });
+}
+/** Apre il cassetto del registratore (lo fa l'agente sul Mac del negozio). */
+export async function cassaApriCassetto(motivo = ''): Promise<{ ok: boolean; id: string }> {
+  return fetchAPI('/api/cassa/apri-cassetto', { method: 'POST', body: JSON.stringify({ motivo }) });
+}
+
+// === POS SUMUP (Cloud API) — 01/10/2026 ===
+export interface LettorePos { id: string; nome: string; abbinamento: string; modello?: string; seriale?: string; online: boolean | null; stato?: string | null; batteria?: number | null }
+export interface IncassoPos { id: string; stato: 'in_attesa' | 'pagato' | 'fallito' | 'annullato' | 'errore'; importo?: number; lettore_id?: string; checkout_id?: string | null; client_transaction_id?: string | null; dettaglio?: unknown }
+export async function posLettori(): Promise<{ lettori: LettorePos[] }> { return fetchAPI('/api/pos/lettori'); }
+export async function posAbbina(codice: string, nome: string): Promise<{ ok: boolean }> {
+  return fetchAPI('/api/pos/abbina', { method: 'POST', body: JSON.stringify({ codice, nome }) });
+}
+export async function posRimuovi(id: string): Promise<{ ok: boolean }> { return fetchAPI(`/api/pos/lettori/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+export async function posIncassa(body: { lettore_id: string; lettore_nome?: string; importo: number; descrizione?: string; rif_tipo?: string; rif_id?: string }): Promise<IncassoPos> {
+  return fetchAPI('/api/pos/incassa', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function posStato(id: string): Promise<IncassoPos> { return fetchAPI(`/api/pos/incassi/${id}`); }
+export async function posAnnulla(id: string): Promise<IncassoPos> { return fetchAPI(`/api/pos/incassi/${id}/annulla`, { method: 'POST' }); }
+
 export function cassaGiornataUrlExcel(giorno: string) { return `${API_PROXY}/api/cassa/giornata/excel?giorno=${giorno}`; }
 
 // === PREVENTIVI E ORDINI CLIENTE — 30/09/2026 ===

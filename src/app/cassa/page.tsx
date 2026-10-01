@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Banknote, CreditCard, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, Wallet, X } from "lucide-react";
 import { StornoDialog } from "@/components/StornoDialog";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
+import { PagaPos } from "@/components/PagaPos";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
 import { DecInput, parseDec } from "@/components/DecInput";
@@ -166,6 +167,13 @@ export default function CassaPage() {
             {/* bonifico istantaneo: lo scontrino parte solo dopo aver visto l'accredito sul conto SumUp */}
             <VerificaBonifico className="col-span-2" importo={tot} etichettaConferma="Emetti scontrino" disabled={!carrello.length || !!busy}
               onConfermato={() => scontrino("bonifico")} />
+          </div>
+          <div className="space-y-1 rounded-md border border-sky-200 bg-sky-50/50 p-2 dark:bg-sky-950/20">
+            <div className="text-xs text-muted-foreground">Paga col POS: l&apos;importo arriva solo sul terminale scelto, a pagamento riuscito parte lo scontrino</div>
+            <div className="grid grid-cols-2 gap-2">
+              <PagaPos importo={tot} descrizione={`GENIUS LAB scontrino ${eur(tot)}`} rifTipo="scontrino" disabled={!carrello.length || !!busy}
+                onPagato={() => scontrino("pos_sumup")} />
+            </div>
           </div>
           <Button variant="secondary" className="w-full" disabled={!carrello.length || !!busy} onClick={fattura}>
             {busy === "fattura" ? <Loader2 className="animate-spin" /> : <Receipt />} Fai fattura invece dello scontrino</Button>

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { docDaFattura } from "@/lib/api";
+import { PagaPos } from "@/components/PagaPos";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { toastErrore } from "@/lib/errori";
 import {
@@ -314,6 +315,13 @@ export function Dettaglio({
                         <m.icon /> {m.label}
                       </Button>
                     ))}
+                    {emessa && Number(f.totale) > 0 && (
+                      // POS SumUp via Cloud API: l'importo arriva sul terminale scelto, a pagamento riuscito si registra l'incasso
+                      <PagaPos importo={Number(f.totale)} descrizione={`Fattura ${f.numero || ""} ${f.controparte_nome || ""}`.trim()}
+                        rifTipo="fattura" rifId={f.id} disabled={!!busy}
+                        onPagato={(p) => azione("pag", () => fattPagamento(f.id, { modalita: "pos_sumup", riferimento: rif || `SumUp ${p.client_transaction_id || p.id}`.slice(0, 200) }),
+                          () => toast.success("Incassata: POS SumUp"))} />
+                    )}
                     {emessa && Number(f.totale) > 0 && (
                       // bonifico istantaneo: si segna pagata solo dopo aver visto l'accredito sul conto SumUp (l'admin può forzare)
                       <VerificaBonifico importo={Number(f.totale)} testo={f.controparte_nome || ""} etichettaConferma="Segna pagata" disabled={!!busy}
