@@ -1483,7 +1483,7 @@ export default function SessionDetail() {
       </div>
 
       {/* === FATTURA ELETTRONICA (Openapi SDI) === */}
-      <FatturaPanel sessionId={sessionId} aggiorna={fatturaAggiorna} />
+      <FatturaPanel sessionId={sessionId} aggiorna={fatturaAggiorna} onCambio={loadSession} />
 
       {dialogPf && (
         <ProformaDialog
@@ -1492,6 +1492,7 @@ export default function SessionDetail() {
           onCreato={() => {
             setDialogPf(false);
             setFatturaAggiorna((n) => n + 1);
+            loadSession();
             const ch = pfDopo;
             setPfDopo(null);
             if (ch) apriAnteprimaProforma(ch);

@@ -1,16 +1,18 @@
 "use client";
 
-// Fattura della sessione di taratura (GENIUS LAB):
-// - EMETTI FATTURA SUBITO (cliente al banco): crea e invia allo SdI in un colpo solo
-// - PRO FORMA → pagamento (pulsanti PROFORMA qui sopra) → TRASFORMA IN FATTURA (riprende pro forma e pagamento)
-// - oppure bozza da controllare prima dell'invio.
+// Fattura della sessione di taratura (GENIUS LAB) — regole di Christian del 01/10/2026:
+// - dalla sessione NON si emette e non si invia MAI la fattura allo SdI;
+// - «Prepara bozza da controllare»: bozza dalla sessione, o DAL pro forma se c'è (il pro forma diventa «convertito»),
+//   poi si va da soli in Fatturazione sul dettaglio della bozza (pagamento, operatore, emissione). Se la bozza c'è già si apre quella;
+// - «Converti in scontrino» (il cliente non vuole la fattura): pagina Scontrino precompilata con le righe della sessione;
+// - un solo pro forma per sessione; pro forma via email / WhatsApp con i pulsanti PROFORMA qui sopra;
 // - pagamento arrivato (verifica pagamenti) e avviso «DA SPEDIRE» se la riconsegna va fatta col corriere.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Banknote, ExternalLink, FileEdit, FileSpreadsheet, FileText, Loader2, Receipt, Send, Truck } from "lucide-react";
+import { Banknote, ExternalLink, FileEdit, FileSpreadsheet, FileText, Loader2, Receipt, ShoppingCart, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import {
@@ -37,15 +39,21 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
   const v = doc ? { righe: doc.righe_calcolate, imponibile: doc.imponibile, iva: doc.iva, totale: doc.totale } : st?.anteprima
     ? { righe: st.anteprima.righe_calcolate, imponibile: st.anteprima.imponibile, iva: st.anteprima.iva, totale: st.anteprima.totale } : null;
 
+  // il ref blocca il secondo clic anche prima che React ridisegni il pulsante disabilitato
+  const inCorso = useRef(false);
+  const [creato, setCreato] = useState(false);
   async function conferma() {
+    if (inCorso.current || creato) return;
     if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    inCorso.current = true;
     setBusy(true);
     try {
       const r = await proformaSessioneCrea(sessionId, operatore);
       const sigla = r.documento.sigla || `PF ${r.documento.numero}/${r.documento.anno}`;
       toast.success(r.gia_presente ? `C'era già il pro forma ${sigla}` : `Pro forma ${sigla} preparato`);
+      setCreato(true);   // dopo la conferma il pulsante non torna più attivo
       onCreato(sigla);
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { toast.error((e as Error).message); inCorso.current = false; } finally { setBusy(false); }
   }
 
   // anteprima = lo STESSO PDF del pro forma definitivo (stesso layout della fattura: cedente, cessionario, IVA, IBAN)
@@ -79,7 +87,7 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
           {doc ? (
             <Button className="flex-1" onClick={() => window.open(getDocumentoPdfUrl(doc.id), "_blank")}><FileText /> Apri PDF</Button>
           ) : (
-            <Button className="flex-1 bg-orange-600 hover:bg-orange-700" disabled={busy || !v || !v.righe.length || !operatore} onClick={conferma}>
+            <Button className="flex-1 bg-orange-600 hover:bg-orange-700" disabled={busy || creato || !v || !v.righe.length || !operatore} onClick={conferma}>
               {busy ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />} Conferma e crea pro forma</Button>
           )}
         </div>
@@ -88,12 +96,13 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
   );
 }
 
-export function FatturaPanel({ sessionId, aggiorna = 0 }: { sessionId: string; aggiorna?: number }) {
+export function FatturaPanel({ sessionId, aggiorna = 0, onCambio }: { sessionId: string; aggiorna?: number; onCambio?: () => void }) {
   const router = useRouter();
   const [dialogPf, setDialogPf] = useState(false);
   const [pf, setPf] = useState<ProformaSessioneStato["documento"]>(null);
   const [st, setSt] = useState<Stato | null>(null);
   const [busy, setBusy] = useState("");
+  const inCorso = useRef(false);
   const [operatore, setOperatore] = useOperatore();
   const [inc, setInc] = useState<{ incassi: { id: string; fonte: string; data: string; importo: number; ordinante: string | null; esito: string | null }[]; da_spedire: DaSpedire | null } | null>(null);
 
@@ -103,18 +112,26 @@ export function FatturaPanel({ sessionId, aggiorna = 0 }: { sessionId: string; a
     proformaSessioneStato(sessionId).then((r) => setPf(r.documento)).catch(() => undefined);
   }, [sessionId]);
   useEffect(() => { carica(); }, [carica, aggiorna]);
+  // tornando sulla scheda (es. dopo aver emesso la fattura in Fatturazione) lo stato si aggiorna da solo
+  useEffect(() => {
+    const vis = () => { if (document.visibilityState === "visible") carica(); };
+    document.addEventListener("visibilitychange", vis);
+    window.addEventListener("focus", carica);
+    return () => { document.removeEventListener("visibilitychange", vis); window.removeEventListener("focus", carica); };
+  }, [carica]);
+  // dopo ogni azione: si ricarica il pannello E la sessione (pulsanti PROFORMA, stato pagamento)
+  const aggiornaTutto = useCallback(() => { carica(); onCambio?.(); }, [carica, onCambio]);
 
-  async function crea(emetti: boolean, forza = false) {
+  async function bozza(forza = false) {
     if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
-    if (emetti && !forza && !confirm("Emettere subito la fattura e inviarla allo SdI?")) return;
-    setBusy(emetti ? "emetti" : "bozza");
+    if (inCorso.current && !forza) return;
+    inCorso.current = true;
+    setBusy("bozza");
     try {
-      const r = await fattDaSessione(sessionId, emetti, forza, operatore);
-      if (r.gia_presente) { toast.info(`Questa sessione ha già la fattura ${r.numero || "(bozza)"}`); router.push(`/fatturazione?id=${r.id}`); return; }
-      if (emetti) {
-        if (r.invio?.ok) toast.success(`Fattura ${r.invio.numero} emessa e inviata allo SdI`);
-        else toast.error(`Fattura in bozza: ${r.invio?.errore || "da completare"}`);
-      } else toast.success("Bozza di fattura preparata: controllala e inviala allo SdI");
+      const r = await fattDaSessione(sessionId, forza, operatore);
+      if (r.gia_presente) toast.info(`Questa sessione ha già la fattura ${r.numero || "(bozza)"}: la apro`);
+      else toast.success(pf ? `Bozza preparata dal pro forma ${pf.sigla}: scegli il pagamento ed emettila` : "Bozza preparata: scegli il pagamento ed emettila");
+      aggiornaTutto();
       router.push(`/fatturazione?id=${r.id}`);
     } catch (e) {
       const err = e as ApiError;
@@ -125,18 +142,18 @@ export function FatturaPanel({ sessionId, aggiorna = 0 }: { sessionId: string; a
           try {
             await fattCollegaSessione(sessionId, dop.id);
             toast.success(`Fattura ${dop.numero} collegata alla sessione`);
-            carica();
+            aggiornaTutto();
           } catch (e2) { toast.error((e2 as Error).message); }
-        } else if (confirm("Creare comunque una NUOVA fattura per questa sessione?")) {
-          setBusy("");
-          return crea(emetti, true);
+        } else if (confirm("Creare comunque una NUOVA bozza di fattura per questa sessione?")) {
+          return bozza(true);
         }
       } else toast.error(err.message);
-    } finally { setBusy(""); }
+    } finally { inCorso.current = false; setBusy(""); }
   }
 
   const pagata = st?.sessione?.payment_status === "pagato";
   const f = st?.fattura;
+  const pfAperto = pf && pf.stato === "aperto" ? pf : null;
 
   return (
     <Card className="space-y-3 p-4">
@@ -146,7 +163,7 @@ export function FatturaPanel({ sessionId, aggiorna = 0 }: { sessionId: string; a
         <div className="ml-auto flex flex-wrap gap-1.5 text-xs">
           {pf ? (
             <button className="rounded bg-orange-500/15 px-1.5 py-0.5 text-orange-800 underline-offset-2 hover:underline dark:text-orange-200" onClick={() => setDialogPf(true)}>
-              Pro forma {pf.sigla} · {eur(pf.totale)}</button>
+              Pro forma {pf.sigla} · {eur(pf.totale)}{pf.stato === "convertito" ? ` · convertito${pf.convertito_in?.tipo === "scontrino" ? " in scontrino" : " in fattura"}` : ""}</button>
           ) : st?.proforma && <span className="rounded bg-muted px-1.5 py-0.5">Pro forma {st.proforma.proforma_number} · {eur(st.proforma.total)}</span>}
           <span className={`rounded px-1.5 py-0.5 ${pagata ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
             {pagata ? `Pagata (${st?.sessione?.payment_method || "—"})` : "Da pagare"}</span>
@@ -173,28 +190,34 @@ export function FatturaPanel({ sessionId, aggiorna = 0 }: { sessionId: string; a
       {f ? (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span>Fattura <b>{f.numero || "bozza"}</b> · {eur(f.totale)} · {f.stato} · {f.pagamento_stato === "pagata" ? "incassata" : "da incassare"}</span>
-          <Button size="sm" variant="outline" className="ml-auto" onClick={() => router.push(`/fatturazione?id=${f.id}`)}><ExternalLink /> Apri</Button>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => router.push(`/fatturazione?id=${f.id}`)}>
+            <ExternalLink /> {f.stato === "bozza" ? "Apri la bozza in Fatturazione" : "Apri"}</Button>
         </div>
+      ) : pf?.stato === "convertito" && pf.convertito_in?.tipo === "scontrino" ? (
+        <p className="text-sm text-muted-foreground">Sessione chiusa con lo scontrino al registratore (il cliente non ha voluto la fattura).</p>
       ) : (
         <>
           <p className="text-sm text-muted-foreground">
-            {st?.proforma
-              ? pagata ? "La pro forma è pagata: trasformala in fattura." : "Pro forma inviata: quando il cliente paga (o anche prima) puoi trasformarla in fattura."
-              : "Cliente al banco? Emetti subito la fattura. Altrimenti prepara il PRO FORMA (qui sotto), invialo con PROFORMA EMAIL / WHATSAPP, fatti pagare e poi trasformalo in fattura."}
+            Qui si prepara solo la <b>bozza</b>{pfAperto ? <> (nasce dal pro forma <b>{pfAperto.sigla}</b>)</> : null}: pagamento, operatore ed emissione allo SdI
+            si fanno in Fatturazione, dove ti porto da solo. Il pro forma si manda con PROFORMA EMAIL / WHATSAPP qui sopra.
           </p>
           <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => crea(true)} disabled={!!busy || !operatore}>
-              {busy === "emetti" ? <Loader2 className="animate-spin" /> : <Send />} {st?.proforma ? "Trasforma pro forma in fattura e invia" : "Emetti fattura subito"}</Button>
-            <Button variant="outline" onClick={() => crea(false)} disabled={!!busy || !operatore}>
+            <Button onClick={() => bozza()} disabled={!!busy || !operatore}>
               {busy === "bozza" ? <Loader2 className="animate-spin" /> : <FileEdit />} Prepara bozza da controllare</Button>
-            <Button variant="outline" onClick={() => setDialogPf(true)} disabled={!!busy}
-              title={pf ? "Il pro forma della sessione esiste già: aprilo" : "Anteprima del pro forma con le righe della fattura; si crea solo se confermi"}>
-              <FileSpreadsheet /> {pf ? `Pro forma ${pf.sigla}` : "Prepara pro forma di fattura"}</Button>
+            {!pf && (
+              <Button variant="outline" onClick={() => setDialogPf(true)} disabled={!!busy}
+                title="Anteprima del pro forma con le righe della fattura; si crea solo se confermi">
+                <FileSpreadsheet /> Prepara pro forma di fattura</Button>
+            )}
+            <Button variant="outline" disabled={!!busy}
+              title="Caso raro: il cliente non vuole la fattura. Apre lo Scontrino (registratore) con le righe della sessione"
+              onClick={() => { if (confirm("Il cliente non vuole la fattura?\n\nApro lo Scontrino (registratore) con le righe di questa sessione: lì scegli operatore e pagamento.")) router.push(`/cassa?sessione=${sessionId}`); }}>
+              <ShoppingCart /> Converti in scontrino</Button>
           </div>
         </>
       )}
-      {dialogPf && <ProformaDialog sessionId={sessionId} onChiudi={() => setDialogPf(false)} onCreato={() => { setDialogPf(false); carica(); }} />}
+      {dialogPf && <ProformaDialog sessionId={sessionId} onChiudi={() => setDialogPf(false)} onCreato={() => { setDialogPf(false); aggiornaTutto(); }} />}
     </Card>
   );
 }

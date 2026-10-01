@@ -283,10 +283,10 @@ export function getDocumentoPdfUrl(documentoId: string): string {
 export interface ProformaRigaCalcolata { descrizione: string; quantita: number; prezzo_unitario: number; aliquota: number; prezzo_totale: number; lordo: number | null }
 export interface ProformaSessioneStato {
   documento: (DocumentoCliente & { righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number }) | null;
-  anteprima: { righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number; totale: number; causale: string; shipping_by_customer?: boolean } | null;
+  anteprima: { righe?: RigaDoc[]; session_number?: number | null; righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number; totale: number; causale: string; shipping_by_customer?: boolean } | null;
 }
 export async function proformaSessioneStato(sessionId: string): Promise<ProformaSessioneStato> {
-  return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`);
+  return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`, { cache: 'no-store' });
 }
 export async function proformaSessioneCrea(sessionId: string, operatore: string): Promise<{ gia_presente: boolean; documento: DocumentoCliente }> {
   return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`, { method: 'POST', body: JSON.stringify({ operatore }) });
@@ -866,9 +866,10 @@ export async function fattPagamento(id: string, body: { modalita?: FattModalita;
 export async function fattLinkStripe(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}/link-stripe`, { method: 'POST' }); }
 export async function fattNotaCredito(id: string, operatore: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/nota-credito`, { method: 'POST', body: JSON.stringify({ operatore }) }); }
 export async function fattDuplica(id: string, operatore: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/duplica`, { method: 'POST', body: JSON.stringify({ operatore }) }); }
-export async function fattDaSessione(sessionId: string, emetti = false, forza = false, operatore = '') { return fetchAPI(`/api/fatturazione/fatture/da-sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ emetti, forza, operatore }) }); }
+// dalla sessione si prepara SOLO la bozza (anche dal pro forma): pagamento ed emissione si fanno in Fatturazione
+export async function fattDaSessione(sessionId: string, forza = false, operatore = '') { return fetchAPI(`/api/fatturazione/fatture/da-sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ forza, operatore }) }); }
 export async function fattCollegaSessione(sessionId: string, fatturaId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}/collega`, { method: 'POST', body: JSON.stringify({ fattura_id: fatturaId }) }); }
-export async function fattStatoSessione(sessionId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}`); }
+export async function fattStatoSessione(sessionId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}`, { cache: 'no-store' }); }
 export async function fattSincronizza() { return fetchAPI('/api/fatturazione/sincronizza', { method: 'POST' }); }
 export function fattUrlXml(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/xml`; }
 export function fattUrlStampa(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/stampa`; }
@@ -1021,7 +1022,7 @@ export async function magModifica(id: string, body: Partial<Prodotto>): Promise<
 export async function magMovimento(id: string, body: { tipo: string; quantita: number; causale?: string; costo?: number }) {
   return fetchAPI(`/api/magazzino/prodotti/${id}/movimento`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string; pos_incasso_id?: string; operatore: string }): Promise<Scontrino> {
+export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string; pos_incasso_id?: string; operatore: string; session_id?: string }): Promise<Scontrino> {
   return fetchAPI('/api/cassa/scontrini', { method: 'POST', body: JSON.stringify(body) });
 }
 export async function cassaScontrini(giorno = '') { return fetchAPI(`/api/cassa/scontrini?giorno=${giorno}`); }
