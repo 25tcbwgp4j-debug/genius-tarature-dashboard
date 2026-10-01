@@ -1032,13 +1032,14 @@ export interface PagamentoDoc {
   scontrino_numero: string | null; fattura_id: string | null;
 }
 export interface DocumentoCliente {
-  id: string; tipo: 'preventivo' | 'ordine'; anno: number; numero: number; sigla: string; data: string;
+  id: string; tipo: TipoDocumento; anno: number; numero: number; sigla: string; data: string;
   stato: 'aperto' | 'convertito' | 'saldato' | 'annullato'; anagrafica_id: string | null; controparte: FattControparte;
   cliente_nome: string | null; cliente?: string; telefono: string | null; email: string | null; righe: RigaDoc[]; totale: number;
   rif: string | null; note: string | null; convertito_in: { tipo: string; id?: string; sigla?: string; numero?: string } | null;
   pagamenti?: PagamentoDoc[]; pagato: number; residuo: number; created_at: string;
 }
-export async function docElenco(tipo: 'preventivo' | 'ordine', stato = '', q = ''): Promise<DocumentoCliente[]> {
+export type TipoDocumento = 'preventivo' | 'ordine' | 'proforma' | 'ddt';
+export async function docElenco(tipo: TipoDocumento, stato = '', q = ''): Promise<DocumentoCliente[]> {
   return fetchAPI(`/api/documenti?tipo=${tipo}&stato=${stato}&q=${encodeURIComponent(q)}`);
 }
 export async function docDettaglio(id: string): Promise<DocumentoCliente> { return fetchAPI(`/api/documenti/${id}`); }

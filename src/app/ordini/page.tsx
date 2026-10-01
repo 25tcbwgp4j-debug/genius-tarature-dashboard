@@ -19,6 +19,7 @@ import { toastErrore } from "@/lib/errori";
 import {
   cassaGiornata, docAcconto, docAnnulla, docConverti, docCrea, docDettaglio, docElenco, docModifica, fattAnagrafiche, fattCatalogo,
   type DocumentoCliente, type FattAnagrafica, type FattVoceCatalogo, type RigaDoc,
+  type TipoDocumento,
 } from "@/lib/api";
 
 const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
@@ -34,9 +35,11 @@ const chiaveRiga = () => `r${++seqRiga}`;
 type RigaUI = RigaDoc & { _k: string };
 const campo = "h-9 rounded-md border border-input bg-background px-2 text-sm";
 
-type Bozza = { id?: string; tipo: "ordine" | "preventivo"; cliente_nome: string; telefono: string; email: string; anagrafica_id: string | null;
+const NOME: Record<TipoDocumento, string> = { ordine: "ordine cliente", preventivo: "preventivo", proforma: "fattura pro forma", ddt: "documento di trasporto" };
+const TITOLO: Record<TipoDocumento, string> = { ordine: "Ordine cliente", preventivo: "Preventivo", proforma: "Fattura pro forma", ddt: "Documento di trasporto" };
+type Bozza = { id?: string; tipo: TipoDocumento; cliente_nome: string; telefono: string; email: string; anagrafica_id: string | null;
   controparte: DocumentoCliente["controparte"]; rif: string; note: string; righe: (RigaDoc & { _k?: string })[] };
-const bozzaVuota = (tipo: "ordine" | "preventivo"): Bozza => ({ tipo, cliente_nome: "", telefono: "", email: "", anagrafica_id: null, controparte: {}, rif: "", note: "", righe: [] });
+const bozzaVuota = (tipo: TipoDocumento): Bozza => ({ tipo, cliente_nome: "", telefono: "", email: "", anagrafica_id: null, controparte: {}, rif: "", note: "", righe: [] });
 
 function Editor({ iniziale, listino, onChiudi, onSalvato }: {
   iniziale: Bozza; listino: FattVoceCatalogo[]; onChiudi: () => void; onSalvato: (d: DocumentoCliente) => void;
@@ -74,7 +77,7 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={chiudi}>
       <div className="h-full w-full max-w-3xl space-y-3 overflow-y-auto bg-background p-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{b.id ? "Modifica" : "Nuovo"} {b.tipo === "ordine" ? "ordine cliente" : "preventivo"}</h2>
+          <h2 className="text-lg font-semibold">{b.id ? "Modifica" : "Nuovo"} {NOME[b.tipo]}</h2>
           <Button size="icon" variant="ghost" onClick={chiudi}><X className="size-4" /></Button>
         </div>
         <Card className="space-y-2 p-3">
@@ -209,7 +212,7 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
       <div className="h-full w-full max-w-2xl space-y-3 overflow-y-auto bg-background p-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h2 className="text-lg font-semibold">{d.tipo === "ordine" ? "Ordine cliente" : "Preventivo"} {d.sigla}</h2>
+            <h2 className="text-lg font-semibold">{TITOLO[d.tipo]} {d.sigla}</h2>
             <div className="text-sm text-muted-foreground">{dataIt(d.data)} · {d.cliente_nome || d.controparte?.denominazione}{d.telefono ? ` · ${d.telefono}` : ""}{d.rif ? ` · ${d.rif}` : ""}</div>
           </div>
           <div className="flex items-center gap-2">
@@ -258,7 +261,7 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
             {d.tipo === "ordine" && <Button onClick={() => apri("acconto")}><Wallet className="mr-1 size-4" />Registra acconto</Button>}
             <Button variant="outline" onClick={() => apri("scontrino")}><Receipt className="mr-1 size-4" />{d.tipo === "ordine" && d.pagato ? "Saldo:" : ""} Converti in scontrino</Button>
             <Button variant="outline" onClick={() => apri("fattura")}><FileText className="mr-1 size-4" />{d.tipo === "ordine" && d.pagato ? "Saldo:" : ""} Converti in fattura</Button>
-            {d.tipo === "preventivo" && <Button variant="outline" disabled={busy} onClick={() => esegui(async () => {
+            {(d.tipo === "preventivo" || d.tipo === "proforma") && <Button variant="outline" disabled={busy} onClick={() => esegui(async () => {
               const r = await docConverti(d.id, { a: "ordine" }); if (r.ordine) toast.success(`Creato ${r.ordine.sigla}`); return r;
             }, "Preventivo convertito in ordine cliente")}><ArrowRightLeft className="mr-1 size-4" />Converti in ordine</Button>}
             <Button variant="ghost" onClick={() => onModifica(d)}><Pencil className="mr-1 size-4" />Modifica</Button>
@@ -311,7 +314,7 @@ export default function OrdiniPage() {
 function Pagina() {
   const router = useRouter();
   const sp = useSearchParams();
-  const [tipo, setTipo] = useState<"ordine" | "preventivo">("ordine");
+  const [tipo, setTipo] = useState<TipoDocumento>("ordine");
   const [stato, setStato] = useState("aperto");
   const [q, setQ] = useState("");
   const [lista, setLista] = useState<DocumentoCliente[] | null>(null);
@@ -334,10 +337,10 @@ function Pagina() {
     <div className="space-y-4 p-1 md:p-2">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-2 text-2xl font-semibold">Ordini e preventivi</h1>
-        <Button className="ml-auto" onClick={() => setEditor(bozzaVuota(tipo))}><Plus className="mr-1 size-4" />Nuovo {tipo === "ordine" ? "ordine cliente" : "preventivo"}</Button>
+        <Button className="ml-auto" onClick={() => setEditor(bozzaVuota(tipo))}><Plus className="mr-1 size-4" />Nuovo {NOME[tipo]}</Button>
       </div>
       <div className="flex flex-wrap items-center gap-2 border-b">
-        {([["ordine", "Ordini cliente"], ["preventivo", "Preventivi"]] as const).map(([k, l]) => (
+        {([["ordine", "Ordini cliente"], ["preventivo", "Preventivi"], ["proforma", "Pro forma"], ["ddt", "DDT"]] as const).map(([k, l]) => (
           <button key={k} onClick={() => { setTipo(k); setLista(null); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${tipo === k ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}>{l}</button>
         ))}
@@ -356,7 +359,7 @@ function Pagina() {
             {lista === null && <tr><td colSpan={8} className="p-4 text-center"><Loader2 className="inline size-4 animate-spin" /></td></tr>}
             {errore && <tr><td colSpan={8} className="p-4 text-center text-red-700">Non riesco a caricare l&apos;elenco: {errore}{" "}
               <Button size="xs" variant="outline" onClick={() => { setErrore(""); setLista(null); carica(); }}>Riprova</Button></td></tr>}
-            {!errore && lista?.length === 0 && <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">Nessun {tipo === "ordine" ? "ordine" : "preventivo"}</td></tr>}
+            {!errore && lista?.length === 0 && <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">Nessun documento: {NOME[tipo]}</td></tr>}
             {lista?.map((d) => (
               <tr key={d.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => setAperto(d.id)}>
                 <td className="px-3 py-2 font-medium">{d.sigla}</td><td>{dataIt(d.data)}</td><td>{d.cliente}</td><td className="text-muted-foreground">{d.rif}</td>
