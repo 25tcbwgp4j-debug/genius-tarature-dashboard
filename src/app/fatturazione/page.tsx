@@ -3,6 +3,7 @@
 // FATTURAZIONE (30/09/2026) — fatture emesse e ricevute delle 3 società, esiti SdI,
 // incassi (contanti, POS SumUp, carta Stripe, bonifico). Trasmissione tramite Openapi.
 
+import { BadgeOperatore } from "@/components/Operatore";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
@@ -343,6 +344,7 @@ function Pagina() {
                 {!societa && <th className="p-2">Società</th>}
                 <th className="p-2 text-right">Imponibile</th><th className="p-2 text-right">Totale</th>
                 <th className="p-2">Stato SdI</th><th className="p-2">Pagamento</th>
+                {tab === "emessa" && <th className="p-2" title="Operatore">Op.</th>}
               </tr>
             </thead>
             <tbody>
@@ -377,11 +379,12 @@ function Pagina() {
                             {tab === "emessa" ? "da incassare" : "da pagare"}{f.scadenza ? ` · ${dataIt(f.scadenza)}` : ""}
                           </span>}
                     </td>
+                    {tab === "emessa" && <td className="p-2"><BadgeOperatore op={f.operatore} /></td>}
                   </tr>
                 );
               })}
               {!righe.length && (
-                <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">
+                <tr><td colSpan={10} className="p-8 text-center text-muted-foreground">
                   {tab === "emessa" ? "Nessuna fattura emessa con questi filtri" : "Nessuna fattura ricevuta: arrivano da sole dallo SdI quando i fornitori usano il nostro codice destinatario"}
                 </td></tr>
               )}

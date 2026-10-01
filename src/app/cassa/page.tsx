@@ -12,6 +12,7 @@ import { Banknote, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCar
 import { StornoDialog } from "@/components/StornoDialog";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { PagaPos } from "@/components/PagaPos";
+import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
 import { DecInput, parseDec } from "@/components/DecInput";
@@ -34,7 +35,7 @@ export default function CassaPage() {
   const [carrello, setCarrello] = useState<(RigaCassa & { giacenza?: number })[]>([]);
   const [q, setQ] = useState("");
   const [trovati, setTrovati] = useState<Prodotto[]>([]);
-  const [lotteria, setLotteria] = useState("");
+  const [operatore, setOperatore] = useOperatore();
   const [busy, setBusy] = useState("");
   const [oggi, setOggi] = useState<{ scontrini: Scontrino[]; totale: number; per_modalita: Record<string, number> } | null>(null);
   const [libera, setLibera] = useState({ descrizione: "", prezzo: "" });
@@ -71,20 +72,22 @@ export default function CassaPage() {
 
   async function scontrino(modalita: string, posIncassoId?: string) {
     if (!carrello.length || busy) return;
+    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     if (carrello.some((r) => !(r.prezzo >= 0) || Number.isNaN(r.prezzo))) { toast.error("C'è un prezzo non valido nel carrello"); return; }
     if (modalita === "non_riscosso" && !confirm(`Emettere lo scontrino da ${eur(tot)} come NON RISCOSSO (il cliente non paga adesso)?`)) return;
     setBusy(modalita);
     try {
-      await cassaScontrino({ righe: carrello, pagamenti: [{ modalita, importo: tot }], codice_lotteria: lotteria || undefined, pos_incasso_id: posIncassoId });
-      toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${MOD[modalita]})`);
-      setCarrello([]); setLotteria(""); ricarica();
+      await cassaScontrino({ righe: carrello, pagamenti: [{ modalita, importo: tot }], pos_incasso_id: posIncassoId, operatore });
+      toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${MOD[modalita]} · ${operatore})`);
+      setCarrello([]); ricarica();
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
   async function fattura() {
     if (!carrello.length || busy) return;
+    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     setBusy("fattura");
     try {
-      const f = await cassaFattura({ righe: carrello });
+      const f = await cassaFattura({ righe: carrello, operatore });
       toast.success("Bozza di fattura creata: completa il cliente e inviala allo SdI");
       setCarrello([]);
       router.push(`/fatturazione?id=${f.id}`);
@@ -158,22 +161,22 @@ export default function CassaPage() {
       <div className="space-y-4">
         <Card className="space-y-3 p-4">
           <div className="flex items-baseline justify-between"><span className="text-sm text-muted-foreground">Totale</span><span className="text-3xl font-bold tabular-nums">{eur(tot)}</span></div>
-          <Input className="h-8" placeholder="Codice lotteria scontrini (facoltativo)" maxLength={8} value={lotteria} onChange={(e) => setLotteria(e.target.value.toUpperCase())} />
+          <SceltaOperatore value={operatore} onChange={setOperatore} />
           <div className="grid grid-cols-2 gap-2">
-            <Button disabled={!carrello.length || !!busy} onClick={() => scontrino("contanti")}>{busy === "contanti" ? <Loader2 className="animate-spin" /> : <Banknote />} Contanti</Button>
-            <Button variant="outline" disabled={!carrello.length || !!busy} onClick={() => scontrino("non_riscosso")}>Non riscosso</Button>
+            <Button disabled={!carrello.length || !!busy || !operatore} onClick={() => scontrino("contanti")}>{busy === "contanti" ? <Loader2 className="animate-spin" /> : <Banknote />} Contanti</Button>
+            <Button variant="outline" disabled={!carrello.length || !!busy || !operatore} onClick={() => scontrino("non_riscosso")}>Non riscosso</Button>
             {/* bonifico istantaneo: lo scontrino parte solo dopo aver visto l'accredito sul conto SumUp */}
-            <VerificaBonifico className="col-span-2" importo={tot} etichettaConferma="Emetti scontrino" disabled={!carrello.length || !!busy}
+            <VerificaBonifico className="col-span-2" importo={tot} etichettaConferma="Emetti scontrino" disabled={!carrello.length || !!busy || !operatore}
               onConfermato={() => scontrino("bonifico")} />
           </div>
           <div className="space-y-1 rounded-md border border-sky-200 bg-sky-50/50 p-2 dark:bg-sky-950/20">
             <div className="text-xs text-muted-foreground">POS e PayPal: lo scontrino parte da solo quando SumUp / PayPal registrano il pagamento</div>
             <div className="grid grid-cols-2 gap-2">
-              <PagaPos importo={tot} descrizione={`GENIUS LAB scontrino ${eur(tot)}`} rifTipo="scontrino" disabled={!carrello.length || !!busy}
+              <PagaPos importo={tot} descrizione={`GENIUS LAB scontrino ${eur(tot)}`} rifTipo="scontrino" disabled={!carrello.length || !!busy || !operatore}
                 generico paypal onPagato={(p) => scontrino(p.metodo === "paypal" ? "paypal" : "pos_sumup", p.id)} />
             </div>
           </div>
-          <Button variant="secondary" className="w-full" disabled={!carrello.length || !!busy} onClick={fattura}>
+          <Button variant="secondary" className="w-full" disabled={!carrello.length || !!busy || !operatore} onClick={fattura}>
             {busy === "fattura" ? <Loader2 className="animate-spin" /> : <Receipt />} Fai fattura invece dello scontrino</Button>
           {carrello.length > 0 && <Button variant="ghost" size="sm" className="w-full" onClick={() => { if (confirm("Svuotare il carrello?")) setCarrello([]); }}><X /> Svuota carrello</Button>}
         </Card>
@@ -197,7 +200,8 @@ export default function CassaPage() {
                 <div className="flex justify-between">
                   <span className={s.stato === "annullato" ? "line-through opacity-60" : ""}>
                     {negativo && <span className="mr-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{doc === "annullo" ? "ANNULLO" : "RESO"}</span>}
-                    {new Date(s.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · {s.numero_rt ? `n. ${s.numero_rt}` : ""}</span>
+                    {new Date(s.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · {s.numero_rt ? `n. ${s.numero_rt}` : ""}
+                    <BadgeOperatore op={s.operatore} className="ml-1" /></span>
                   <span className={`tabular-nums ${negativo ? "font-semibold text-red-700 dark:text-red-300" : s.stato === "annullato" ? "line-through opacity-60" : ""}`}>{negativo ? "− " : ""}{eur(Number(s.totale))}</span>
                 </div>
                 {negativo && s.motivo && <div className="text-xs text-muted-foreground">Motivo: {s.motivo}</div>}

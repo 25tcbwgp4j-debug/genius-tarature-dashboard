@@ -14,6 +14,7 @@ import { ArrowRightLeft, Ban, FileText, Loader2, Pencil, Plus, Receipt, Save, Se
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { PagaPos } from "@/components/PagaPos";
+import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
@@ -52,6 +53,7 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
   const [q, setQ] = useState("");
   const [trovati, setTrovati] = useState<FattAnagrafica[]>([]);
   const [busy, setBusy] = useState(false);
+  const [operatore, setOperatore] = useOperatore();
   useEffect(() => {
     if (q.trim().length < 2) return;
     const t = setTimeout(() => fattAnagrafiche("genius", "cliente", q.trim(), 8).then((r) => setTrovati(r.anagrafiche || [])).catch(() => setTrovati([])), 250);
@@ -62,6 +64,7 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
 
   async function salva() {
     if (busy) return;
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     if (!b.cliente_nome.trim()) { toast.error("Scrivi il nome del cliente"); return; }
     const righe = b.righe.filter((r) => r.descrizione.trim()).map(({ _k, ...r }) => { void _k; return r; });
     if (!righe.length) { toast.error("Aggiungi almeno una riga"); return; }
@@ -69,7 +72,7 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
     setBusy(true);
     try {
       const corpo = { tipo: b.tipo, cliente_nome: b.cliente_nome.trim(), telefono: b.telefono, email: b.email, anagrafica_id: b.anagrafica_id,
-        controparte: b.controparte, rif: b.rif, note: b.note, righe };
+        controparte: b.controparte, rif: b.rif, note: b.note, righe, operatore };
       onSalvato(b.id ? await docModifica(b.id, corpo) : await docCrea(corpo));
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
@@ -134,9 +137,10 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
           <Input placeholder="Riferimento (es. SCHEDA 63020)" value={b.rif} onChange={(e) => setB({ ...b, rif: e.target.value })} />
           <Input placeholder="Note (tempi di consegna, fornitore…)" value={b.note} onChange={(e) => setB({ ...b, note: e.target.value })} />
         </Card>
+        <SceltaOperatore value={operatore} onChange={setOperatore} />
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={chiudi}>Annulla</Button>
-          <Button onClick={salva} disabled={busy}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Save className="mr-1 size-4" />}Salva</Button>
+          <Button onClick={salva} disabled={busy || !operatore}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Save className="mr-1 size-4" />}Salva</Button>
         </div>
       </div>
     </div>
@@ -150,6 +154,7 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
   const [azione, setAzione] = useState<"" | "acconto" | "scontrino" | "fattura">("");
   const [f, setF] = useState({ importo: "", modalita: "contanti", certificato: "scontrino" as "scontrino" | "fattura", numero: "", pagata: false });
   const [busy, setBusy] = useState(false);
+  const [operatore, setOperatore] = useOperatore();
   const [cassaOggiChiusa, setCassaOggiChiusa] = useState(false);
   const carica = useCallback(() => {
     docDettaglio(id).then((r) => { setD(r); setErrore(""); }).catch((e: Error) => setErrore(e.message || "Errore"));
@@ -180,6 +185,7 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
   /** modForzata = «pos_sumup» quando il cliente ha appena pagato sul POS SumUp (la fattura nasce già pagata). */
   function conferma(modForzata?: string) {
     if (!d) return;
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     const mod = modForzata || f.modalita;
     // POS e PayPal passano SOLO dalla verifica automatica (pulsanti qui sotto): niente conferma «sulla parola»
     if (!modForzata && (mod === "pos_sumup" || mod === "paypal") && azione !== "fattura") {
@@ -195,12 +201,12 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
       if (imp === null || Number.isNaN(imp) || imp <= 0) { toast.error("Scrivi l'importo dell'acconto (es. 50 o 12,50)"); return; }
       if (imp > d.residuo + 0.001) { toast.error(`L'acconto supera quanto resta da pagare (${eur(d.residuo)})`); return; }
       if (f.certificato === "scontrino" && !f.numero.trim()) { toast.error("Scrivi il numero dello scontrino battuto in cassa"); return; }
-      esegui(() => docAcconto(d.id, { importo: imp, modalita: mod, certificato: f.certificato, scontrino_numero: f.numero.trim() }), "Acconto registrato: è nella cassa di oggi");
+      esegui(() => docAcconto(d.id, { importo: imp, modalita: mod, certificato: f.certificato, scontrino_numero: f.numero.trim(), operatore }), "Acconto registrato: è nella cassa di oggi");
     } else if (azione === "scontrino") {
       if (!f.numero.trim()) { toast.error("Scrivi il numero dello scontrino battuto in cassa"); return; }
-      esegui(() => docConverti(d.id, { a: "scontrino", modalita: mod, scontrino_numero: f.numero.trim() }), "Scontrino registrato nella cassa di oggi");
+      esegui(() => docConverti(d.id, { a: "scontrino", modalita: mod, scontrino_numero: f.numero.trim(), operatore }), "Scontrino registrato nella cassa di oggi");
     } else {
-      esegui(() => docConverti(d.id, { a: "fattura", modalita: mod, pagata: modForzata ? true : f.pagata }), "Fattura creata in bozza");
+      esegui(() => docConverti(d.id, { a: "fattura", modalita: mod, pagata: modForzata ? true : f.pagata, operatore }), "Fattura creata in bozza");
     }
   }
 
@@ -225,7 +231,7 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
         <div className="flex items-start justify-between gap-2">
           <div>
             <h2 className="text-lg font-semibold">{TITOLO[d.tipo]} {d.sigla}</h2>
-            <div className="text-sm text-muted-foreground">{dataIt(d.data)} · {d.cliente_nome || d.controparte?.denominazione}{d.telefono ? ` · ${d.telefono}` : ""}{d.rif ? ` · ${d.rif}` : ""}</div>
+            <div className="text-sm text-muted-foreground">{dataIt(d.data)}{d.operatore ? <> · fatto da <BadgeOperatore op={d.operatore} /></> : ""} · {d.cliente_nome || d.controparte?.denominazione}{d.telefono ? ` · ${d.telefono}` : ""}{d.rif ? ` · ${d.rif}` : ""}</div>
           </div>
           <div className="flex items-center gap-2">
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATO[d.stato]}`}>{d.stato.toUpperCase()}</span>
@@ -278,13 +284,14 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
           <iframe key={`${d.id}-${d.totale}`} src={`${getDocumentoPdfUrl(d.id).split("?")[0]}?v=${d.totale}`} title={`Pro forma ${d.sigla || ""}`} className="h-[70vh] w-full rounded border bg-white" />
         )}
 
+        {aperto && <SceltaOperatore value={operatore} onChange={setOperatore} compatto />}
         {aperto && (
           <div className="flex flex-wrap gap-2">
             {d.tipo === "ordine" && <Button onClick={() => apri("acconto")}><Wallet className="mr-1 size-4" />Registra acconto</Button>}
             <Button variant="outline" onClick={() => apri("scontrino")}><Receipt className="mr-1 size-4" />{d.tipo === "ordine" && d.pagato ? "Saldo:" : ""} Converti in scontrino</Button>
             <Button variant="outline" onClick={() => apri("fattura")}><FileText className="mr-1 size-4" />{d.tipo === "ordine" && d.pagato ? "Saldo:" : ""} Converti in fattura</Button>
-            {(d.tipo === "preventivo" || d.tipo === "proforma") && <Button variant="outline" disabled={busy} onClick={() => esegui(async () => {
-              const r = await docConverti(d.id, { a: "ordine" }); if (r.ordine) toast.success(`Creato ${r.ordine.sigla}`); return r;
+            {(d.tipo === "preventivo" || d.tipo === "proforma") && <Button variant="outline" disabled={busy || !operatore} onClick={() => esegui(async () => {
+              const r = await docConverti(d.id, { a: "ordine", operatore }); if (r.ordine) toast.success(`Creato ${r.ordine.sigla}`); return r;
             }, "Preventivo convertito in ordine cliente")}><ArrowRightLeft className="mr-1 size-4" />Converti in ordine</Button>}
             <Button variant="ghost" onClick={() => onModifica(d)}><Pencil className="mr-1 size-4" />Modifica</Button>
             {!d.pagato && <Button variant="ghost" className="text-red-600" disabled={busy} onClick={() => confirm(`Annullare ${d.sigla}?`) && esegui(() => docAnnulla(d.id), "Annullato")}><Ban className="mr-1 size-4" />Annulla</Button>}
@@ -315,7 +322,7 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
               {((azione === "acconto" && f.certificato === "scontrino") || azione === "scontrino") &&
                 <Input className="h-9 w-32" placeholder="N. scontrino *" value={f.numero} onChange={(e) => setF({ ...f, numero: e.target.value })} />}
               {azione === "fattura" && <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={f.pagata} onChange={(e) => setF({ ...f, pagata: e.target.checked })} />già pagata (incasso di oggi)</label>}
-              <Button disabled={busy} onClick={() => conferma()}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}Conferma</Button>
+              <Button disabled={busy || !operatore} onClick={() => conferma()}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}Conferma</Button>
               <Button variant="ghost" onClick={() => setAzione("")}>Chiudi</Button>
             </div>
             {(() => {
@@ -327,7 +334,7 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
                 <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200 bg-sky-50/50 p-2 dark:bg-sky-950/20">
                   <span className="text-xs text-muted-foreground">oppure incassa con POS / PayPal (si registra da solo a pagamento verificato){serveNumero && !f.numero.trim() ? " — prima scrivi il n. scontrino" : ""}:</span>
                   <PagaPos importo={ok ? imp : 0} descrizione={`${azione === "acconto" ? "Acconto" : "Saldo"} ${d.sigla || ""}`.trim()}
-                    rifTipo={`documento_${azione}`} rifId={d.id} disabled={busy || !ok} generico paypal
+                    rifTipo={`documento_${azione}`} rifId={d.id} disabled={busy || !ok || !operatore} generico paypal
                     onPagato={(p) => conferma(p.metodo === "paypal" ? "paypal" : "pos_sumup")} />
                 </div>
               );
@@ -387,19 +394,20 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
         <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
             <tr><th className="px-3 py-2 text-left">Numero</th><th className="text-left">Data</th><th className="text-left">Cliente</th><th className="text-left">Rif.</th>
-              <th className="text-right">Totale</th>{tipo === "ordine" && <><th className="text-right">Acconti</th><th className="px-3 text-right">Resta</th></>}<th className="px-3 text-left">Stato</th></tr>
+              <th className="text-right">Totale</th>{tipo === "ordine" && <><th className="text-right">Acconti</th><th className="px-3 text-right">Resta</th></>}<th className="px-3 text-left">Stato</th><th className="px-3 text-left" title="Operatore">Op.</th></tr>
           </thead>
           <tbody>
-            {lista === null && <tr><td colSpan={8} className="p-4 text-center"><Loader2 className="inline size-4 animate-spin" /></td></tr>}
-            {errore && <tr><td colSpan={8} className="p-4 text-center text-red-700">Non riesco a caricare l&apos;elenco: {errore}{" "}
+            {lista === null && <tr><td colSpan={9} className="p-4 text-center"><Loader2 className="inline size-4 animate-spin" /></td></tr>}
+            {errore && <tr><td colSpan={9} className="p-4 text-center text-red-700">Non riesco a caricare l&apos;elenco: {errore}{" "}
               <Button size="xs" variant="outline" onClick={() => { setErrore(""); setLista(null); carica(); }}>Riprova</Button></td></tr>}
-            {!errore && lista?.length === 0 && <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">Nessun documento: {NOME[tipo]}</td></tr>}
+            {!errore && lista?.length === 0 && <tr><td colSpan={9} className="p-4 text-center text-muted-foreground">Nessun documento: {NOME[tipo]}</td></tr>}
             {lista?.map((d) => (
               <tr key={d.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => setAperto(d.id)}>
                 <td className="px-3 py-2 font-medium">{d.sigla}</td><td>{dataIt(d.data)}</td><td>{d.cliente}</td><td className="text-muted-foreground">{d.rif}</td>
                 <td className="text-right tabular-nums">{eur(d.totale)}</td>
                 {tipo === "ordine" && <><td className="text-right tabular-nums">{d.pagato ? eur(d.pagato) : "—"}</td><td className="px-3 text-right font-semibold tabular-nums">{eur(d.residuo)}</td></>}
                 <td className="px-3"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATO[d.stato]}`}>{d.stato}</span></td>
+                <td className="px-3"><BadgeOperatore op={d.operatore} /></td>
               </tr>
             ))}
           </tbody>

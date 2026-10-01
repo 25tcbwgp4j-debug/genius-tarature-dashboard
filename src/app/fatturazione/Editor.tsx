@@ -10,6 +10,7 @@ import { Loader2, Plus, Search, Send, Trash2, Truck, Wrench, X } from "lucide-re
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { DecInput } from "@/components/DecInput";
+import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 import {
@@ -61,6 +62,7 @@ export function Editor({
   onClose: () => void;
   onSaved: (id: string) => void;
 }) {
+  const [operatore, setOperatore] = useOperatore();
   const [societa, setSocieta] = useState<FattSocieta>(iniziale?.societa || anagrafica?.societa || societaDefault);
   const [tipoDoc, setTipoDoc] = useState(iniziale?.tipo_documento || "TD01");
   const [data, setData] = useState(iniziale?.data || oggiRoma());
@@ -196,12 +198,13 @@ export function Editor({
       customer_id: customerId || undefined,
       anagrafica_id: anagraficaId || undefined,
       salva_anagrafica: !anagraficaId && salvaAnag,
-      pagata,
+      pagata, operatore,
     };
   }
 
   async function salva(invia: boolean) {
     if (salvando) return;
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     const b = corpo();
     if (!b.righe.length) { toast.error("Aggiungi almeno una riga"); return; }
     setSalvando(invia ? "invio" : "bozza");
@@ -209,7 +212,7 @@ export function Editor({
       const f = idSalvato ? await fattModifica(idSalvato, b) : await fattCrea(b);
       setIdSalvato(f.id); setSporco(false);
       if (invia) {
-        const r = await fattEmetti(f.id);
+        const r = await fattEmetti(f.id, operatore);
         if (r.ok) toast.success(`Fattura ${r.numero} inviata allo SdI`);
         else toast.error(`Invio non riuscito: ${r.errore}`);
       } else {
@@ -401,12 +404,13 @@ export function Editor({
           </div>
         </div>
 
-        <div className="flex flex-wrap justify-end gap-2 border-t px-4 py-3">
+        <div className="border-t px-4 pt-3"><SceltaOperatore className="ml-auto max-w-md" value={operatore} onChange={setOperatore} compatto /></div>
+        <div className="flex flex-wrap justify-end gap-2 px-4 py-3">
           <Button variant="ghost" onClick={chiudi}>Annulla</Button>
-          <Button variant="outline" disabled={!!salvando} onClick={() => salva(false)}>
+          <Button variant="outline" disabled={!!salvando || !operatore} onClick={() => salva(false)}>
             {salvando === "bozza" && <Loader2 className="animate-spin" />} Salva bozza
           </Button>
-          <Button disabled={!!salvando} onClick={() => salva(true)}>
+          <Button disabled={!!salvando || !operatore} onClick={() => salva(true)}>
             {salvando === "invio" ? <Loader2 className="animate-spin" /> : <Send />} Salva e invia allo SdI
           </Button>
         </div>

@@ -288,8 +288,8 @@ export interface ProformaSessioneStato {
 export async function proformaSessioneStato(sessionId: string): Promise<ProformaSessioneStato> {
   return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`);
 }
-export async function proformaSessioneCrea(sessionId: string): Promise<{ gia_presente: boolean; documento: DocumentoCliente }> {
-  return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`, { method: 'POST', body: '{}' });
+export async function proformaSessioneCrea(sessionId: string, operatore: string): Promise<{ gia_presente: boolean; documento: DocumentoCliente }> {
+  return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`, { method: 'POST', body: JSON.stringify({ operatore }) });
 }
 
 // === STAMPA DIRETTA (coda + agente sul Mac del banco) ===
@@ -836,7 +836,7 @@ export interface Fattura {
   pagamento_rif?: string | null; scadenza: string | null; causale?: string | null; note?: string | null;
   session_id: string | null; errore: string | null; inviata_il: string | null; created_at: string;
   fattura_collegata_id?: string | null;
-  origine?: string; anagrafica_id?: string | null;
+  origine?: string; anagrafica_id?: string | null; operatore?: string | null;
   esiti?: { id: string; tipo: string; descrizione: string; data: string }[];
   controlli?: string[];
   collegata?: { id: string; numero: string; data: string; totale: number } | null;
@@ -859,14 +859,14 @@ export async function fattModifica(id: string, body: Record<string, unknown>): P
   return fetchAPI(`/api/fatturazione/fatture/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 export async function fattElimina(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}`, { method: 'DELETE' }); }
-export async function fattEmetti(id: string): Promise<{ ok: boolean; numero?: string | null; errore?: string | null }> { return fetchAPI(`/api/fatturazione/fatture/${id}/emetti`, { method: 'POST' }); }
+export async function fattEmetti(id: string, operatore: string): Promise<{ ok: boolean; numero?: string | null; errore?: string | null }> { return fetchAPI(`/api/fatturazione/fatture/${id}/emetti`, { method: 'POST', body: JSON.stringify({ operatore }) }); }
 export async function fattPagamento(id: string, body: { modalita?: FattModalita; data?: string; riferimento?: string; annulla?: boolean }) {
   return fetchAPI(`/api/fatturazione/fatture/${id}/pagamento`, { method: 'POST', body: JSON.stringify(body) });
 }
 export async function fattLinkStripe(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}/link-stripe`, { method: 'POST' }); }
-export async function fattNotaCredito(id: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/nota-credito`, { method: 'POST' }); }
-export async function fattDuplica(id: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/duplica`, { method: 'POST' }); }
-export async function fattDaSessione(sessionId: string, emetti = false, forza = false) { return fetchAPI(`/api/fatturazione/fatture/da-sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ emetti, forza }) }); }
+export async function fattNotaCredito(id: string, operatore: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/nota-credito`, { method: 'POST', body: JSON.stringify({ operatore }) }); }
+export async function fattDuplica(id: string, operatore: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/duplica`, { method: 'POST', body: JSON.stringify({ operatore }) }); }
+export async function fattDaSessione(sessionId: string, emetti = false, forza = false, operatore = '') { return fetchAPI(`/api/fatturazione/fatture/da-sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ emetti, forza, operatore }) }); }
 export async function fattCollegaSessione(sessionId: string, fatturaId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}/collega`, { method: 'POST', body: JSON.stringify({ fattura_id: fatturaId }) }); }
 export async function fattStatoSessione(sessionId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}`); }
 export async function fattSincronizza() { return fetchAPI('/api/fatturazione/sincronizza', { method: 'POST' }); }
@@ -948,7 +948,7 @@ export async function incImportaCsv(file: File): Promise<{ nuovi: number; gia_pr
   }
   return res.json();
 }
-export async function incAzione(id: string, body: { azione: string; fattura_ids?: string[]; session_id?: string | null; proforma_id?: string; modalita?: string; emetti?: boolean; nota?: string; forza?: boolean }):
+export async function incAzione(id: string, body: { azione: string; fattura_ids?: string[]; session_id?: string | null; proforma_id?: string; modalita?: string; emetti?: boolean; nota?: string; forza?: boolean; operatore?: string }):
   Promise<{ incasso?: { esito?: string | null }; da_spedire?: DaSpedire | null; [k: string]: unknown }> {
   return fetchAPI(`/api/incassi/${id}/azione`, { method: 'POST', body: JSON.stringify(body) });
 }
@@ -1004,6 +1004,8 @@ export interface Scontrino {
   codice_lotteria: string | null; numero_rt: string | null; errore: string | null; risposta_rt: string | null; created_at: string;
   /** vendita (default) · reso · annullo: i documenti di reso/annullo hanno importi da leggere in NEGATIVO */
   tipo_documento?: 'vendita' | 'reso' | 'annullo' | null; rif_scontrino_id?: string | null; motivo?: string | null; creato_da?: string | null;
+  /** CHR · VALE · DUMY · ALTRO: chi l'ha battuto */
+  operatore?: string | null; data_rt?: string | null;
 }
 export async function magProdotti(q = '', sottoScorta = false, limit = 300): Promise<{ prodotti: Prodotto[]; totale_righe: number | null; valore_magazzino: number }> {
   return fetchAPI(`/api/magazzino/prodotti?q=${encodeURIComponent(q)}&sotto_scorta=${sottoScorta}&limit=${limit}`);
@@ -1019,17 +1021,17 @@ export async function magModifica(id: string, body: Partial<Prodotto>): Promise<
 export async function magMovimento(id: string, body: { tipo: string; quantita: number; causale?: string; costo?: number }) {
   return fetchAPI(`/api/magazzino/prodotti/${id}/movimento`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string; pos_incasso_id?: string }): Promise<Scontrino> {
+export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string; pos_incasso_id?: string; operatore: string }): Promise<Scontrino> {
   return fetchAPI('/api/cassa/scontrini', { method: 'POST', body: JSON.stringify(body) });
 }
 export async function cassaScontrini(giorno = '') { return fetchAPI(`/api/cassa/scontrini?giorno=${giorno}`); }
 export async function cassaAnnulla(id: string) { return fetchAPI(`/api/cassa/scontrini/${id}/annulla`, { method: 'POST' }); }
 /** Reso (anche parziale) o annullo di uno scontrino GIÀ EMESSO: nasce un documento negativo nella cassa di oggi. */
-export async function cassaStornoScontrino(id: string, body: { tipo: 'reso' | 'annullo'; righe?: { indice: number; quantita: number }[]; modalita?: string; motivo: string; numero_rt?: string; numero_originale?: string }): Promise<Scontrino> {
+export async function cassaStornoScontrino(id: string, body: { tipo: 'reso' | 'annullo'; righe?: { indice: number; quantita: number }[]; modalita?: string; motivo: string; numero_rt?: string; numero_originale?: string; operatore: string }): Promise<Scontrino> {
   return fetchAPI(`/api/cassa/scontrini/${id}/storno`, { method: 'POST', body: JSON.stringify(body) });
 }
 export async function cassaRiprova(id: string) { return fetchAPI(`/api/cassa/scontrini/${id}/riprova`, { method: 'POST' }); }
-export async function cassaFattura(body: { righe: RigaCassa[]; pagamenti?: { modalita: string }[]; pagata?: boolean }): Promise<Fattura> {
+export async function cassaFattura(body: { righe: RigaCassa[]; pagamenti?: { modalita: string }[]; pagata?: boolean; operatore: string }): Promise<Fattura> {
   return fetchAPI('/api/cassa/fattura', { method: 'POST', body: JSON.stringify(body) });
 }
 
@@ -1038,6 +1040,8 @@ export type Tagli = Record<string, number>;
 export interface RigaGiornata {
   id: string; tipo: string; numero: string; descrizione: string; modello: string; fonte: 'fattura' | 'fattura_prec' | 'scontrino' | 'manuale';
   contanti: number; pos: number; stripe: number; bonifico: number; paypal: number; totale: number;
+  /** orario HH:MM della registrazione ("" = senza orario, in coda alla giornata) e operatore */
+  orario?: string; ts?: string | null; operatore?: string;
 }
 export interface ControlloCassa { chiave: string; nome: string; atteso: number | null; trovato: number; differenza: number | null; ok: boolean; mancante: boolean; nota: string }
 export interface FoglioCassa {
@@ -1066,7 +1070,7 @@ export async function cassaGiornataRiga(body: Record<string, string | number>): 
 }
 export async function cassaGiornataElimina(id: string): Promise<FoglioCassa> { return fetchAPI(`/api/cassa/giornata/movimenti/${id}`, { method: 'DELETE' }); }
 /** Storno (anche parziale) o annullo di una riga «scontrino» battuta a mano: riga negativa nella cassa di OGGI. */
-export async function cassaGiornataStorno(id: string, body: { tipo: 'storno' | 'annullo'; numero: string; importo?: number; modalita?: string; motivo: string }): Promise<FoglioCassa & { ok: boolean }> {
+export async function cassaGiornataStorno(id: string, body: { tipo: 'storno' | 'annullo'; numero: string; importo?: number; modalita?: string; motivo: string; operatore: string }): Promise<FoglioCassa & { ok: boolean }> {
   return fetchAPI(`/api/cassa/giornata/movimenti/${id}/storno`, { method: 'POST', body: JSON.stringify(body) });
 }
 export async function cassaGiornataChiudi(giorno: string, forza = false, nota = ''): Promise<FoglioCassa> {
@@ -1124,6 +1128,8 @@ export interface DocumentoCliente {
   cliente_nome: string | null; cliente?: string; telefono: string | null; email: string | null; righe: RigaDoc[]; totale: number;
   rif: string | null; note: string | null; convertito_in: { tipo: string; id?: string; sigla?: string; numero?: string } | null;
   pagamenti?: PagamentoDoc[]; pagato: number; residuo: number; created_at: string; session_id?: string | null;
+  /** CHR · VALE · DUMY · ALTRO */
+  operatore?: string | null;
 }
 export type TipoDocumento = 'preventivo' | 'ordine' | 'proforma' | 'ddt';
 export async function docElenco(tipo: TipoDocumento, stato = '', q = ''): Promise<DocumentoCliente[]> {
@@ -1137,15 +1143,15 @@ export async function docModifica(id: string, body: Partial<DocumentoCliente>): 
   return fetchAPI(`/api/documenti/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 export async function docAnnulla(id: string): Promise<DocumentoCliente> { return fetchAPI(`/api/documenti/${id}/annulla`, { method: 'POST' }); }
-export async function docAcconto(id: string, body: { importo: number; modalita: string; certificato: 'scontrino' | 'fattura'; scontrino_numero?: string }):
+export async function docAcconto(id: string, body: { importo: number; modalita: string; certificato: 'scontrino' | 'fattura'; scontrino_numero?: string; operatore: string }):
   Promise<DocumentoCliente & { fattura?: { id: string } }> {
   return fetchAPI(`/api/documenti/${id}/acconto`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function docConverti(id: string, body: { a: 'ordine' | 'fattura' | 'scontrino'; modalita?: string; scontrino_numero?: string; pagata?: boolean }):
+export async function docConverti(id: string, body: { a: 'ordine' | 'fattura' | 'scontrino'; modalita?: string; scontrino_numero?: string; pagata?: boolean; operatore: string }):
   Promise<DocumentoCliente & { fattura?: { id: string }; ordine?: { id: string; sigla: string } }> {
   return fetchAPI(`/api/documenti/${id}/converti`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function docDaFattura(fid: string, body: { a: 'ordine' | 'preventivo' | 'scontrino'; modalita?: string; scontrino_numero?: string }):
+export async function docDaFattura(fid: string, body: { a: 'ordine' | 'preventivo' | 'scontrino'; modalita?: string; scontrino_numero?: string; operatore: string }):
   Promise<{ ok: boolean; documento?: { id: string; sigla: string; tipo: string } }> {
   return fetchAPI(`/api/documenti/da-fattura/${fid}`, { method: 'POST', body: JSON.stringify(body) });
 }

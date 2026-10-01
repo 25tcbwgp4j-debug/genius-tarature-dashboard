@@ -18,6 +18,7 @@ import {
 } from "@/lib/api";
 import { dataIt, eur } from "./util";
 import { usePermessi } from "@/components/permessi";
+import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
 
 const FONTI: { k: IncFonte; label: string; icon: typeof Banknote }[] = [
@@ -37,6 +38,7 @@ export function Incassi({ onClose, onApriFattura, onCambiato }: {
   const { admin } = usePermessi();
   const [esito, setEsito] = useState<Record<string, { ok: boolean; nuovi?: number; nota?: string }> | null>(null);
   const [busy, setBusy] = useState("");
+  const [operatore, setOperatore] = useOperatore();
   const [loading, setLoading] = useState(true);
   const file = useRef<HTMLInputElement>(null);
 
@@ -70,7 +72,12 @@ export function Incassi({ onClose, onApriFattura, onCambiato }: {
   }
 
   async function esegui(inc: Incasso, body: Parameters<typeof incAzione>[1], conferma: string): Promise<void> {
+    // quando nasce una fattura serve sapere chi la fa
+    if (["proforma_in_fattura", "sessione_in_fattura"].includes(body.azione) && !operatore) {
+      toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO) prima di creare la fattura"); return;
+    }
     if (!confirm(conferma)) return;
+    body = { ...body, operatore: operatore || undefined };
     setBusy(inc.id);
     let seguito: null | (() => Promise<void>) = null;   // seconda chiamata dopo un 409 (fuori dal try: busy resta coerente)
     try {
@@ -114,14 +121,14 @@ export function Incassi({ onClose, onApriFattura, onCambiato }: {
         `${q}: segnare incassate le fatture ${p.numero}?`)}><CheckCircle2 /> Segna incassate le fatture {p.numero}</Button>);
     }
     if (p.tipo === "proforma") {
-      out.push(<Button key="pf" size="xs" disabled={b} onClick={() => esegui(inc, { azione: "proforma_in_fattura", proforma_id: p.id, session_id: p.session_id, emetti: true },
+      out.push(<Button key="pf" size="xs" disabled={b || !operatore} onClick={() => esegui(inc, { azione: "proforma_in_fattura", proforma_id: p.id, session_id: p.session_id, emetti: true },
         `${q}: trasformare la pro forma ${p.numero} (${p.nome}) in FATTURA QUIETANZATA e inviarla allo SdI?\nLa sessione viene segnata pagata.`)}>
         <Receipt /> Pro forma → fattura quietanzata e SdI</Button>);
       out.push(<Button key="ps" size="xs" variant="outline" disabled={b} onClick={() => esegui(inc, { azione: "sessione_pagata", session_id: p.session_id },
         `${q}: segnare pagata la sessione, senza fare ancora la fattura?`)}>Solo segna pagata</Button>);
     }
     if (p.tipo === "sessione") {
-      out.push(<Button key="sf" size="xs" disabled={b} onClick={() => esegui(inc, { azione: "sessione_in_fattura", session_id: p.session_id, emetti: true },
+      out.push(<Button key="sf" size="xs" disabled={b || !operatore} onClick={() => esegui(inc, { azione: "sessione_in_fattura", session_id: p.session_id, emetti: true },
         `${q}: emettere la fattura quietanzata della sessione ${p.numero} (${p.nome}) e inviarla allo SdI?`)}>
         <Receipt /> Fattura quietanzata e SdI</Button>);
       out.push(<Button key="ss" size="xs" variant="outline" disabled={b} onClick={() => esegui(inc, { azione: "sessione_pagata", session_id: p.session_id },
@@ -141,6 +148,7 @@ export function Incassi({ onClose, onApriFattura, onCambiato }: {
             <h2 className="text-lg font-semibold">Verifica pagamenti</h2>
             <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Chiudi"><X /></Button>
           </div>
+          <SceltaOperatore className="max-w-md" value={operatore} onChange={setOperatore} compatto />
           <div className="flex flex-wrap gap-2">
             <Button size="sm" disabled={!!busy} onClick={() => verifica(["banca", "pos", "paypal", "stripe"])}>
               {busy === "verifica" ? <Loader2 className="animate-spin" /> : <RefreshCw />} Verifica tutti i pagamenti

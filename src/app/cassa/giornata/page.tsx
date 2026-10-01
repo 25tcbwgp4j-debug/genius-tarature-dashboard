@@ -15,6 +15,7 @@ import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet,
 import { StornoDialog, type OggettoStorno } from "@/components/StornoDialog";
 import { usePermessi } from "@/components/permessi";
 import { PagaPos } from "@/components/PagaPos";
+import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { DecInput, parseDec } from "@/components/DecInput";
@@ -116,6 +117,7 @@ export default function CassaGiornataPage() {
   const [prel, setPrel] = useState({ importo: "", tipo: "eccesso", nota: "" });
   const chiusa = f?.giornata.stato === "chiusa";
   const [storno, setStorno] = useState<OggettoStorno | null>(null);
+  const [operatore, setOperatore] = useOperatore();
 
   // Salvataggi con attesa di 700 ms: prima di ogni azione (chiusura, conferma, righe, prelievi, cambio giorno)
   // si «svuotano» con flush(), così il backend lavora sempre sugli ultimi numeri scritti.
@@ -269,6 +271,7 @@ export default function CassaGiornataPage() {
 
   /** modForzata = «pos» quando il cliente ha appena pagato sul POS SumUp. */
   function aggiungi(modForzata?: string) {
+    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     const imp = parseDec(nuova.importo);
     if (imp === null || Number.isNaN(imp) || imp === 0) { toast.error("Inserisci l'importo (es. 25 o 12,50)"); return; }
     const mod = modForzata || nuova.modalita;
@@ -279,7 +282,7 @@ export default function CassaGiornataPage() {
     }
     return azione("riga", async () => {
       applica(await cassaGiornataRiga({ giorno, tipo: nuova.tipo, numero: nuova.numero, descrizione: nuova.descrizione, modello: nuova.modello,
-        prodotto_id: nuova.prodotto_id, [mod]: imp }));
+        prodotto_id: nuova.prodotto_id, [mod]: imp, operatore }));
       const n = Number(nuova.numero);
       setNuova({ ...RIGA_VUOTA, tipo: nuova.tipo, modalita: nuova.modalita, numero: nuova.tipo === "scontrino" && n ? String(n + 1) : "" });
     });
@@ -397,6 +400,7 @@ export default function CassaGiornataPage() {
           {!chiusa && (
             <div className="space-y-2 border-b bg-muted/30 p-3">
               <div className="text-sm font-semibold">Aggiungi una riga</div>
+              <SceltaOperatore className="max-w-md" value={operatore} onChange={setOperatore} compatto />
               <div className="flex flex-wrap items-end gap-2">
                 <select className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={nuova.tipo} onChange={(e) => setNuova({ ...nuova, tipo: e.target.value })}>
                   {TIPI_RIGA.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
@@ -415,7 +419,7 @@ export default function CassaGiornataPage() {
                 <Input className="h-9 min-w-[240px] flex-1" placeholder="Cosa paga? (es. SCHEDA 63020, cavo Apple USB-C…)" value={nuova.descrizione}
                   onChange={(e) => setNuova({ ...nuova, descrizione: e.target.value, prodotto_id: "" })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); aggiungi(); } }} />
                 <Input className="h-9 w-40" placeholder="Modello" value={nuova.modello} onChange={(e) => setNuova({ ...nuova, modello: e.target.value })} />
-                <Button onClick={() => aggiungi()} disabled={!!busy}>{busy === "riga" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}Aggiungi riga</Button>
+                <Button onClick={() => aggiungi()} disabled={!!busy || !operatore}>{busy === "riga" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}Aggiungi riga</Button>
               </div>
               {giorno === oggiRoma() && ["scontrino", "acconto", "fattura", "altro"].includes(nuova.tipo) && (() => {
                 const imp = parseDec(nuova.importo);
@@ -423,30 +427,33 @@ export default function CassaGiornataPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-muted-foreground">oppure incassa con POS / PayPal (la riga si aggiunge da sola a pagamento verificato):</span>
                     <PagaPos importo={imp && imp > 0 ? imp : 0} descrizione={(nuova.descrizione || "GENIUS LAB").slice(0, 100)} rifTipo="cassa_riga"
-                      disabled={!!busy} generico paypal onPagato={(p) => aggiungi(p.metodo === "paypal" ? "paypal" : "pos")} />
+                      disabled={!!busy || !operatore} generico paypal onPagato={(p) => aggiungi(p.metodo === "paypal" ? "paypal" : "pos")} />
                   </div>
                 );
               })()}
               <div className="text-xs text-muted-foreground">Finché la cassa non è collegata alla dashboard, gli scontrini battuti sul registratore si registrano qui con il loro numero.</div>
             </div>
           )}
-          <table className="w-full min-w-[860px] text-sm">
+          <table className="w-full min-w-[960px] text-sm">
             <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-              <tr><th className="px-2 py-2 text-left">Documento</th><th className="px-2 text-left">Num.</th>
+              <tr><th className="px-2 py-2 text-left">Orario</th><th className="px-2 text-left">Documento</th><th className="px-2 text-left">Num.</th>
+                <th className="px-2 text-left" title="Operatore">Op.</th>
                 {COL.map(([k, l]) => <th key={k} className="px-2 text-right">{l}</th>)}
                 <th className="px-2 text-left">Cosa paga?</th><th className="px-2 text-left">Modello</th><th className="px-2" /></tr>
             </thead>
             <tbody>
-              <tr className="border-t bg-muted/20"><td className="px-2 py-1 font-medium">APERTURA</td><td>cassa</td><td className="px-2 text-right tabular-nums">{eur(rp.apertura)}</td><td colSpan={7} /></tr>
+              <tr className="border-t bg-muted/20"><td /><td className="px-2 py-1 font-medium">APERTURA</td><td>cassa</td><td /><td className="px-2 text-right tabular-nums">{eur(rp.apertura)}</td><td colSpan={7} /></tr>
               {f.righe.map((r) => {
                 const negativo = ["STORNO", "ANNULLO"].includes(r.tipo);
                 const stornabile = r.tipo === "SCONTRINO" && (r.fonte === "manuale" || r.fonte === "scontrino") && r.totale > 0;
                 return (
                 <tr key={`${r.fonte}-${r.id}`} className={`border-t ${negativo ? "bg-red-50/70 dark:bg-red-950/20" : ""}`}>
+                  <td className="px-2 py-1 tabular-nums text-muted-foreground" title={r.orario ? undefined : "senza orario: in coda alla giornata"}>{r.orario || "—"}</td>
                   <td className="px-2 py-1">{negativo
                     ? <span className="rounded bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">{r.tipo}</span>
                     : r.tipo}<span className="ml-1 text-[10px] text-muted-foreground">{FONTE[r.fonte]}</span></td>
                   <td className="px-2">{r.numero}</td>
+                  <td className="px-2"><BadgeOperatore op={r.operatore} /></td>
                   {COL.map(([k]) => <td key={k} className={`px-2 text-right tabular-nums ${r[k] ? (r[k] < 0 ? "text-red-600" : "") : "text-muted-foreground/40"}`}>{r[k] ? eur(r[k]) : "0"}</td>)}
                   <td className="max-w-[280px] truncate px-2" title={r.descrizione}>{r.descrizione}</td>
                   <td className="px-2">{r.modello}</td>
@@ -459,8 +466,8 @@ export default function CassaGiornataPage() {
                 </tr>
                 );
               })}
-              {!f.righe.length && <tr><td colSpan={10} className="px-2 py-4 text-center text-muted-foreground">Nessun movimento</td></tr>}
-              <tr className="border-t-2 font-semibold"><td className="px-2 py-1" colSpan={2}>TOTALI</td>
+              {!f.righe.length && <tr><td colSpan={12} className="px-2 py-4 text-center text-muted-foreground">Nessun movimento</td></tr>}
+              <tr className="border-t-2 font-semibold"><td className="px-2 py-1" colSpan={4}>TOTALI</td>
                 {COL.map(([k]) => <td key={k} className="px-2 text-right tabular-nums">{eur(f.totali[k] + (k === "contanti" ? rp.apertura : 0))}</td>)}<td colSpan={3} /></tr>
             </tbody>
           </table>

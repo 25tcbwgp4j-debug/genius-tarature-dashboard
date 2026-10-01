@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Banknote, ExternalLink, FileEdit, FileSpreadsheet, FileText, Loader2, Receipt, Send, Truck } from "lucide-react";
 import { toast } from "sonner";
+import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import {
   fattCollegaSessione, fattDaSessione, fattStatoSessione, getDocumentoPdfUrl, getProformaAnteprimaPdfUrl, incSessione, proformaSessioneCrea, proformaSessioneStato,
   type ApiError, type DaSpedire, type ProformaSessioneStato,
@@ -30,15 +31,17 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
   const [st, setSt] = useState<ProformaSessioneStato | null>(null);
   const [errore, setErrore] = useState("");
   const [busy, setBusy] = useState(false);
+  const [operatore, setOperatore] = useOperatore();
   useEffect(() => { proformaSessioneStato(sessionId).then(setSt).catch((e: Error) => setErrore(e.message)); }, [sessionId]);
   const doc = st?.documento;
   const v = doc ? { righe: doc.righe_calcolate, imponibile: doc.imponibile, iva: doc.iva, totale: doc.totale } : st?.anteprima
     ? { righe: st.anteprima.righe_calcolate, imponibile: st.anteprima.imponibile, iva: st.anteprima.iva, totale: st.anteprima.totale } : null;
 
   async function conferma() {
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     setBusy(true);
     try {
-      const r = await proformaSessioneCrea(sessionId);
+      const r = await proformaSessioneCrea(sessionId, operatore);
       const sigla = r.documento.sigla || `PF ${r.documento.numero}/${r.documento.anno}`;
       toast.success(r.gia_presente ? `C'era già il pro forma ${sigla}` : `Pro forma ${sigla} preparato`);
       onCreato(sigla);
@@ -53,7 +56,7 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
       <div className="flex max-h-[95vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-background shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="border-b px-5 py-3">
           <h3 className="text-lg font-semibold">{doc ? `Pro forma ${doc.sigla}` : "Prepara pro forma di fattura"}</h3>
-          <p className="text-xs text-muted-foreground">{doc ? `del ${new Date(doc.data).toLocaleDateString("it-IT")} · ${doc.stato}` : "Anteprima: è il documento che verrà creato, con le righe e i totali della fattura di questa sessione"}</p>
+          <p className="text-xs text-muted-foreground">{doc && doc.operatore ? <>fatto da <BadgeOperatore op={doc.operatore} /> · </> : null}{doc ? `del ${new Date(doc.data).toLocaleDateString("it-IT")} · ${doc.stato}` : "Anteprima: è il documento che verrà creato, con le righe e i totali della fattura di questa sessione"}</p>
         </div>
         <div className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-3 text-sm sm:px-5">
           {errore && <p className="text-red-600">{errore}</p>}
@@ -70,12 +73,13 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
             </>
           )}
         </div>
+        {!doc && <div className="border-t px-5 pt-3"><SceltaOperatore value={operatore} onChange={setOperatore} compatto /></div>}
         <div className="flex gap-2 border-t bg-muted/40 px-5 py-3">
           <Button variant="outline" className="flex-1" onClick={onChiudi}>Chiudi</Button>
           {doc ? (
             <Button className="flex-1" onClick={() => window.open(getDocumentoPdfUrl(doc.id), "_blank")}><FileText /> Apri PDF</Button>
           ) : (
-            <Button className="flex-1 bg-orange-600 hover:bg-orange-700" disabled={busy || !v || !v.righe.length} onClick={conferma}>
+            <Button className="flex-1 bg-orange-600 hover:bg-orange-700" disabled={busy || !v || !v.righe.length || !operatore} onClick={conferma}>
               {busy ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />} Conferma e crea pro forma</Button>
           )}
         </div>
@@ -90,6 +94,7 @@ export function FatturaPanel({ sessionId, aggiorna = 0 }: { sessionId: string; a
   const [pf, setPf] = useState<ProformaSessioneStato["documento"]>(null);
   const [st, setSt] = useState<Stato | null>(null);
   const [busy, setBusy] = useState("");
+  const [operatore, setOperatore] = useOperatore();
   const [inc, setInc] = useState<{ incassi: { id: string; fonte: string; data: string; importo: number; ordinante: string | null; esito: string | null }[]; da_spedire: DaSpedire | null } | null>(null);
 
   const carica = useCallback(() => {
@@ -100,10 +105,11 @@ export function FatturaPanel({ sessionId, aggiorna = 0 }: { sessionId: string; a
   useEffect(() => { carica(); }, [carica, aggiorna]);
 
   async function crea(emetti: boolean, forza = false) {
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     if (emetti && !forza && !confirm("Emettere subito la fattura e inviarla allo SdI?")) return;
     setBusy(emetti ? "emetti" : "bozza");
     try {
-      const r = await fattDaSessione(sessionId, emetti, forza);
+      const r = await fattDaSessione(sessionId, emetti, forza, operatore);
       if (r.gia_presente) { toast.info(`Questa sessione ha già la fattura ${r.numero || "(bozza)"}`); router.push(`/fatturazione?id=${r.id}`); return; }
       if (emetti) {
         if (r.invio?.ok) toast.success(`Fattura ${r.invio.numero} emessa e inviata allo SdI`);
@@ -176,10 +182,11 @@ export function FatturaPanel({ sessionId, aggiorna = 0 }: { sessionId: string; a
               ? pagata ? "La pro forma è pagata: trasformala in fattura." : "Pro forma inviata: quando il cliente paga (o anche prima) puoi trasformarla in fattura."
               : "Cliente al banco? Emetti subito la fattura. Altrimenti prepara il PRO FORMA (qui sotto), invialo con PROFORMA EMAIL / WHATSAPP, fatti pagare e poi trasformalo in fattura."}
           </p>
+          <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => crea(true)} disabled={!!busy}>
+            <Button onClick={() => crea(true)} disabled={!!busy || !operatore}>
               {busy === "emetti" ? <Loader2 className="animate-spin" /> : <Send />} {st?.proforma ? "Trasforma pro forma in fattura e invia" : "Emetti fattura subito"}</Button>
-            <Button variant="outline" onClick={() => crea(false)} disabled={!!busy}>
+            <Button variant="outline" onClick={() => crea(false)} disabled={!!busy || !operatore}>
               {busy === "bozza" ? <Loader2 className="animate-spin" /> : <FileEdit />} Prepara bozza da controllare</Button>
             <Button variant="outline" onClick={() => setDialogPf(true)} disabled={!!busy}
               title={pf ? "Il pro forma della sessione esiste già: aprilo" : "Anteprima del pro forma con le righe della fattura; si crea solo se confermi"}>

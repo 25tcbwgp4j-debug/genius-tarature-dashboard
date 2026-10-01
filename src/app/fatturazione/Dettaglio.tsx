@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { docDaFattura } from "@/lib/api";
 import { PagaPos } from "@/components/PagaPos";
+import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { toastErrore } from "@/lib/errori";
 import {
@@ -32,6 +33,7 @@ export function Dettaglio({
 }) {
   const [f, setF] = useState<Fattura | null>(null);
   const [busy, setBusy] = useState("");
+  const [operatore, setOperatore] = useOperatore();
   const [rif, setRif] = useState("");
   const [invio, setInvio] = useState<"" | "email" | "whatsapp">("");
   const [dest, setDest] = useState("");
@@ -48,9 +50,10 @@ export function Dettaglio({
   /** Bozza → ordine / preventivo / scontrino (la bozza viene eliminata dal backend). */
   async function converti(body: { a: "ordine" | "preventivo" | "scontrino"; scontrino_numero?: string; modalita?: string }) {
     if (busy) return;
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     setBusy("conv");
     try {
-      const r = await docDaFattura(id, body);
+      const r = await docDaFattura(id, { ...body, operatore });
       toast.success(r.documento ? `Creato ${r.documento.sigla}` : "Scontrino registrato nella cassa di oggi");
       setConv(null); onChanged(); onClose();
       if (r.documento) window.location.href = `/ordini?id=${r.documento.id}`;
@@ -117,6 +120,7 @@ export function Dettaglio({
               <span className={`rounded px-1.5 py-0.5 text-xs ${pagata ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
                 {pagata ? `${emessa ? "Incassata" : "Pagata"} ${dataIt(f.pagato_il)}` : emessa ? "Da incassare" : "Da pagare"}
               </span>
+              {f.operatore && <span className="flex items-center gap-1 text-xs text-muted-foreground">fatta da <BadgeOperatore op={f.operatore} /></span>}
               {f.ambiente === "sandbox" && <span className="rounded bg-orange-500/15 px-1.5 py-0.5 text-xs text-orange-700 dark:text-orange-300">PROVA</span>}
             </div>
           </div>
@@ -136,17 +140,19 @@ export function Dettaglio({
             </div>
           )}
 
+          {/* Operatore: obbligatorio per inviare allo SdI, note di credito, copie e conversioni */}
+          {emessa && <SceltaOperatore className="max-w-md" value={operatore} onChange={setOperatore} compatto />}
           {/* Azioni */}
           <div className="flex flex-wrap gap-2">
             {inviabile && (
-              <Button size="sm" disabled={!!busy || !!f.controlli?.length}
-                onClick={() => azione("emetti", () => fattEmetti(f.id), (r) => r.ok ? toast.success(`Fattura ${r.numero} inviata allo SdI`) : toast.error(`Invio non riuscito: ${r.errore}`))}>
+              <Button size="sm" disabled={!!busy || !!f.controlli?.length || !operatore}
+                onClick={() => azione("emetti", () => fattEmetti(f.id, operatore), (r) => r.ok ? toast.success(`Fattura ${r.numero} inviata allo SdI`) : toast.error(`Invio non riuscito: ${r.errore}`))}>
                 {busy === "emetti" ? <Loader2 className="animate-spin" /> : <Send />} {f.stato === "bozza" ? "Invia allo SdI" : "Reinvia allo SdI"}
               </Button>
             )}
             {inviabile && <Button size="sm" variant="outline" onClick={() => onEdit(f)}><Pencil /> Modifica</Button>}
             {emessa && ["bozza", "errore", "scartata"].includes(f.stato) && (
-              <select className="h-8 rounded-md border border-input bg-background px-2 text-sm" value="" disabled={!!busy}
+              <select className="h-8 rounded-md border border-input bg-background px-2 text-sm" value="" disabled={!!busy || !operatore}
                 onChange={(e) => {
                   const a = e.target.value as "ordine" | "preventivo" | "scontrino";
                   if (!a) return;
@@ -180,14 +186,14 @@ export function Dettaglio({
             <a href={fattUrlXml(f.id)}><Button size="sm" variant="outline"><FileCode2 /> XML</Button></a>
             {/* nota di credito: solo su fatture trasmesse allo SdI (come il backend); per l'operatore serve l'autorizzazione dell'admin */}
             {emessa && f.numero && ["inviata", "consegnata", "non_consegnata"].includes(f.stato) && f.tipo_documento !== "TD04" && (
-              <Button size="sm" variant="outline" disabled={!!busy}
-                onClick={() => azione("nc", () => fattNotaCredito(f.id), (r) => { toast.success("Nota di credito preparata"); onOpen(r.id); })}>
+              <Button size="sm" variant="outline" disabled={!!busy || !operatore}
+                onClick={() => azione("nc", () => fattNotaCredito(f.id, operatore), (r) => { toast.success("Nota di credito preparata"); onOpen(r.id); })}>
                 <RotateCcw /> Nota di credito
               </Button>
             )}
             {emessa && (
-              <Button size="sm" variant="outline" disabled={!!busy}
-                onClick={() => azione("dup", () => fattDuplica(f.id), (r) => { toast.success("Copia pronta: modificala e inviala"); onEdit(r); })}>
+              <Button size="sm" variant="outline" disabled={!!busy || !operatore}
+                onClick={() => azione("dup", () => fattDuplica(f.id, operatore), (r) => { toast.success("Copia pronta: modificala e inviala"); onEdit(r); })}>
                 <Copy /> Copia in nuova fattura
               </Button>
             )}

@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { parseDec } from "@/components/DecInput";
+import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { eInAttesa, toastErrore } from "@/lib/errori";
 import { cassaGiornataStorno, cassaStornoScontrino, type RigaGiornata, type Scontrino } from "@/lib/api";
 
@@ -47,6 +48,7 @@ function Corpo({ oggetto, onClose, onFatto }: { oggetto: OggettoStorno; onClose:
   const [numero, setNumero] = useState("");
   const [originale, setOriginale] = useState("");
   const [busy, setBusy] = useState(false);
+  const [operatore, setOperatore] = useOperatore();
   // scontrino dashboard: quantità da rendere per riga (default: tutto)
   const [qta, setQta] = useState<number[]>(() => (sc?.righe || []).map((r) => Number(r.quantita)));
   // riga manuale: importo parziale e colonna del rimborso (default: quella dello scontrino)
@@ -61,6 +63,7 @@ function Corpo({ oggetto, onClose, onFatto }: { oggetto: OggettoStorno; onClose:
 
   async function conferma() {
     if (busy) return;
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     if (motivo.trim().length < 3) { toast.error("Scrivi il motivo"); return; }
     if (tipo === "parziale" && !(daRendere > 0)) { toast.error(sc ? "Scegli cosa rende il cliente" : "Scrivi l'importo da stornare (es. 25 o 12,50)"); return; }
     if (daRendere > totOrig + 0.01) { toast.error(`Non si può stornare più dello scontrino (${eur(totOrig)})`); return; }
@@ -73,10 +76,10 @@ function Corpo({ oggetto, onClose, onFatto }: { oggetto: OggettoStorno; onClose:
           toast.error("Scrivi il numero dello scontrino originale come sullo scontrino (es. 2312-0004)"); return;
         }
         await cassaStornoScontrino(sc.id, { tipo: tipo === "annullo" ? "annullo" : "reso", righe, modalita, motivo: motivo.trim(),
-          numero_rt: numero.trim() || undefined, numero_originale: originale.trim() || undefined });
+          numero_rt: numero.trim() || undefined, numero_originale: originale.trim() || undefined, operatore });
       } else if (rg) {
         await cassaGiornataStorno(rg.id, { tipo: tipo === "annullo" ? "annullo" : "storno", numero: numero.trim(), motivo: motivo.trim(),
-          importo: tipo === "parziale" ? daRendere : undefined, modalita: tipo === "parziale" ? modalita : undefined });
+          importo: tipo === "parziale" ? daRendere : undefined, modalita: tipo === "parziale" ? modalita : undefined, operatore });
       }
       toast.success(`${tipo === "annullo" ? "Annullo" : "Storno"} di ${eur(daRendere)} registrato nella cassa di oggi`);
       onFatto();
@@ -146,6 +149,7 @@ function Corpo({ oggetto, onClose, onFatto }: { oggetto: OggettoStorno; onClose:
         <label className="block space-y-1"><span className="text-muted-foreground">Motivo *</span>
           <Input value={motivo} maxLength={300} onChange={(e) => setMotivo(e.target.value)} placeholder="es. prodotto difettoso restituito" /></label>
 
+        <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
         <div className="flex items-baseline justify-between rounded-md bg-red-50 px-3 py-2 dark:bg-red-950/30">
           <span>Esce dalla cassa</span><span className="text-lg font-bold tabular-nums text-red-700 dark:text-red-300">− {eur(daRendere)}</span>
         </div>
@@ -153,7 +157,7 @@ function Corpo({ oggetto, onClose, onFatto }: { oggetto: OggettoStorno; onClose:
 
       <DialogFooter>
         <Button variant="outline" onClick={onClose} disabled={busy}>Chiudi</Button>
-        <Button className="bg-red-600 hover:bg-red-700" onClick={conferma} disabled={busy}>
+        <Button className="bg-red-600 hover:bg-red-700" onClick={conferma} disabled={busy || !operatore}>
           {busy ? <Loader2 className="animate-spin" /> : <Undo2 />} {tipo === "annullo" ? "Annulla scontrino" : "Registra storno"}
         </Button>
       </DialogFooter>
