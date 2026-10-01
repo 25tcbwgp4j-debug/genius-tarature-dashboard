@@ -327,6 +327,35 @@ export async function notifyReady(
   });
 }
 
+// === PRONTO PROGRAMMATO (01/10/2026): il pronto al cliente parte da solo al giorno/ora scelti ===
+export type CanalePronto = 'email' | 'whatsapp';
+export interface EsitoCanalePronto { ok: boolean; il?: string; destinatario?: string | null; errore?: string | null; modo?: string; saltato?: boolean; nota?: string }
+export interface ProgrammazionePronto {
+  stato: 'programmato' | 'in_corso' | 'eseguito' | 'errore' | 'annullato' | null;
+  quando: string | null;
+  canali: CanalePronto[];
+  esito: (Partial<Record<CanalePronto, EsitoCanalePronto>> & { errore?: string; rimanda?: boolean }) | null;
+  da: string | null;
+  creato_il: string | null;
+  eseguito_il: string | null;
+}
+export interface StatoPronto {
+  programmazione: ProgrammazionePronto;
+  destinatari: { email: string | null; whatsapp: string | null; motivo_no_whatsapp: string | null; do_not_contact: boolean; cliente?: string; contatto?: string | null };
+  suggerito: string;
+  gia_inviato: Record<CanalePronto, boolean>;
+}
+export async function getProntoProgrammato(sessionId: string): Promise<StatoPronto> {
+  return fetchAPI(`/api/sessions/${sessionId}/pronto-programmato`);
+}
+/** quando: {data:"AAAA-MM-GG", ora:"HH:MM"} in ora di Roma, oppure {quando: ISO}. */
+export async function programmaPronto(sessionId: string, body: { canali: CanalePronto[]; data?: string; ora?: string; quando?: string; rimanda?: boolean }) {
+  return fetchAPI(`/api/sessions/${sessionId}/pronto-programmato`, { method: 'POST', body: JSON.stringify(body) });
+}
+export async function annullaProntoProgrammato(sessionId: string) {
+  return fetchAPI(`/api/sessions/${sessionId}/pronto-programmato`, { method: 'DELETE' });
+}
+
 export async function sendProforma(
   sessionId: string,
   proformaSuffix = "",

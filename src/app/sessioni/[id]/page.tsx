@@ -69,6 +69,7 @@ import { EditCustomerDialog } from "./EditCustomerDialog";
 import { ShipmentsPanel } from "./ShipmentsPanel";
 import { FatturaPanel, ProformaDialog } from "./FatturaPanel";
 import { SpedizioneSessione } from "./SpedizioneSessione";
+import { ProntoProgrammato } from "./ProntoProgrammato";
 
 interface InstrumentType {
   id: string;
@@ -1183,6 +1184,15 @@ export default function SessionDetail() {
         </div>
       </Card>
 
+      {/* Pronto al cliente: banner «Quando invio il pronto?» dopo i rapporti, programmazione ed esito (01/10/2026) */}
+      <ProntoProgrammato
+        sessionId={sessionId}
+        haRapporti={(instruments || []).some((i: { rdt_number?: string | null }) => !!i.rdt_number)}
+        versione={[session.pronto_prog_stato, session.pronto_prog_at, session.ready_email_at, session.ready_whatsapp_at,
+          (instruments || []).filter((i: { rdt_number?: string | null }) => !!i.rdt_number).length].join("|")}
+        onAggiornato={loadSession}
+      />
+
       {/* 5 PULSANTI AZIONE */}
       <Card className="p-6">
         <h3 className="font-semibold text-lg mb-4">Azioni</h3>
@@ -1460,6 +1470,11 @@ export default function SessionDetail() {
             {session.ready_at
               ? `Pronto: ${new Date(session.ready_at).toLocaleString("it-IT")}`
               : "Non notificato"}
+            {session.pronto_prog_stato === "programmato" && session.pronto_prog_at && (
+              <span className="block text-blue-600">⏰ programmato {new Date(session.pronto_prog_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+            )}
+            {session.pronto_prog_stato === "eseguito" && <span className="block">⏰ inviato in automatico</span>}
+            {session.pronto_prog_stato === "errore" && <span className="block text-red-600">⏰ invio automatico in errore</span>}
           </div>
           <div className={currentStep >= 3 ? "text-orange-600 font-medium" : ""}>
             {session.proforma_sent_at
