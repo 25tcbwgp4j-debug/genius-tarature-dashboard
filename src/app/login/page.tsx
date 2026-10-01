@@ -8,7 +8,7 @@ interface LoginPageProps {
 
 function errorMessage(code?: string): string | null {
   if (!code) return null;
-  if (code === "invalid") return "Email o password non valide. Riprova.";
+  if (code === "invalid") return "Nome utente/email o password non validi. Riprova.";
   if (code === "backend_unreachable")
     return "Backend non raggiungibile. Riprova fra qualche istante.";
   if (code === "not_configured")
@@ -49,17 +49,18 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <input type="hidden" name="from" value={from} />
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email
+              Email o nome utente
             </label>
             <input
               id="email"
               name="email"
-              type="email"
+              type="text"
               required
               autoFocus
-              autoComplete="email"
+              autoCapitalize="characters"
+              autoComplete="username"
               className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="nome@esempio.it"
+              placeholder="nome@esempio.it oppure IMAC SX"
             />
           </div>
           <div>
