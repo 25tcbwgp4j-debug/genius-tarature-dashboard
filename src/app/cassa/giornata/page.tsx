@@ -5,7 +5,7 @@
 // fatture e scontrini della dashboard entrano da soli, gli scontrini battuti alla cassa si aggiungono a mano.
 // In fondo i CONTEGGI (apertura del mattino, contanti della sera, reintegro serale): ogni blocco si conferma e
 // resta bloccato (01/10/2026), lo sblocca solo l'amministratore (autorizzazione «sblocca_conteggio»).
-// Se i conti tornano si chiude la giornata e l'Excel finisce nella cartella DA FIRMARE.
+// Se i conti tornano si chiude la giornata (l'Excel resta scaricabile dal pulsante, non serve firmarlo).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
@@ -319,7 +319,7 @@ export default function CassaGiornataPage() {
       const fresco = await cassaGiornata(giorno);   // quadratura sui numeri appena salvati
       applica(fresco);
       if (!fresco.conti_tornano) { setConvalida({ aperta: true, motivo: "" }); return; }   // differenze: si convalida col motivo
-      if (!confirm(`Chiudere la cassa del ${dataIt(giorno)}? L'Excel andrà nella cartella DA FIRMARE.`)) return;
+      if (!confirm(`Chiudere la cassa del ${dataIt(giorno)}?`)) return;
       applica(await cassaGiornataChiudi(giorno, false, ""));
       toast.success("Giornata chiusa");
     });
@@ -392,7 +392,7 @@ export default function CassaGiornataPage() {
         {giorno !== oggiRoma() && <Button size="sm" variant="ghost" onClick={() => vaiA(oggiRoma())}>Oggi</Button>}
         {f && !f.giornata.futura && (
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chiusa ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"}`}>
-            {chiusa ? `CHIUSA${f.giornata.chiusa_da ? ` da ${f.giornata.chiusa_da}` : ""}${f.giornata.file_scaricato_il ? " · in DA FIRMARE" : " · Excel in arrivo in DA FIRMARE"}` : "APERTA"}
+            {chiusa ? `CHIUSA${f.giornata.chiusa_da ? ` da ${f.giornata.chiusa_da}` : ""}` : "APERTA"}
           </span>
         )}
         <div className="ml-auto flex gap-2">
