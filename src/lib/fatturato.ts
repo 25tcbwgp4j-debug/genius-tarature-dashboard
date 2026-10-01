@@ -3,22 +3,27 @@
 
 export type Metodo = "contanti" | "pos" | "bonifico" | "paypal" | "stripe";
 export type ImportiMetodo = Record<Metodo, number>;
+/** Divisione per attività: tarature (laboratorio F-GAS) / Apple (riparazioni, vendite, accessori) / da classificare */
+export type Categoria = "tarature" | "apple" | "da_classificare";
+export type ImportiCategoria = Record<Categoria, number>;
+interface ConCategorie { cat: ImportiCategoria; cat_scontrini: ImportiCategoria; cat_fatture: ImportiCategoria }
+export interface DaClassificare { giorno: string; documento: string; numero: string; cliente: string; descrizione: string; importo: number }
 
-export interface FattGiorno {
+export interface FattGiorno extends ConCategorie {
   giorno: string;
   scontrini: number; fatture: number; totale: number; imponibile: number; iva: number;
   n_scontrini: number; n_annulli: number; n_fatture: number; n_note_credito: number; note_credito: number;
   pagamenti: ImportiMetodo; pag_scontrini: ImportiMetodo; pag_fatture: ImportiMetodo;
   rt: number | null; differenza_rt: number | null;
 }
-export interface FattMese {
+export interface FattMese extends ConCategorie {
   mese: string;
   scontrini: number; fatture: number; totale: number; imponibile: number; iva: number;
   n_scontrini: number; n_fatture: number; n_note_credito: number; note_credito: number;
   pagamenti: ImportiMetodo; pag_scontrini: ImportiMetodo; pag_fatture: ImportiMetodo;
   giorni_attivi: number; media_giorno: number; anno_prima?: number | null;
 }
-export interface FattTotali {
+export interface FattTotali extends ConCategorie {
   scontrini: number; fatture: number; totale: number; imponibile: number; iva: number; note_credito: number;
   n_scontrini: number; n_annulli: number; n_fatture: number; n_note_credito: number;
   giorni_attivi: number; media_giorno: number; scontrino_medio: number; fattura_media: number;
@@ -31,6 +36,7 @@ export interface FattStatistiche {
   confronto: null | { dal: string; al: string; scontrini: number; fatture: number; totale: number;
     var_totale_pct: number | null; var_scontrini_pct: number | null; var_fatture_pct: number | null };
   primo_dato: string | null; rt_totale: number; giorni_con_rt: number;
+  da_classificare: DaClassificare[];
 }
 export interface ReportRiepilogo {
   mese: string; etichetta: string; totali: FattTotali; rt_totale: number; differenza_rt: number;
@@ -66,4 +72,6 @@ export function reportCommercialistaLink(mese: string, email = false, societa = 
 export const NOMI_METODI: Record<Metodo, string> = {
   contanti: "Contanti", pos: "POS", bonifico: "Bonifico", paypal: "PayPal", stripe: "Stripe",
 };
+export const CATEGORIE: Categoria[] = ["tarature", "apple", "da_classificare"];
+export const NOMI_CATEGORIE: Record<Categoria, string> = { tarature: "Tarature", apple: "Apple (non tarature)", da_classificare: "Da classificare" };
 export const METODI: Metodo[] = ["contanti", "pos", "bonifico", "paypal", "stripe"];
