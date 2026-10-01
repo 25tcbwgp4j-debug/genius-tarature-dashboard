@@ -45,6 +45,7 @@ function Corpo({ oggetto, onClose, onFatto }: { oggetto: OggettoStorno; onClose:
   const [tipo, setTipo] = useState<"parziale" | "totale" | "annullo">("totale");
   const [motivo, setMotivo] = useState("");
   const [numero, setNumero] = useState("");
+  const [originale, setOriginale] = useState("");
   const [busy, setBusy] = useState(false);
   // scontrino dashboard: quantità da rendere per riga (default: tutto)
   const [qta, setQta] = useState<number[]>(() => (sc?.righe || []).map((r) => Number(r.quantita)));
@@ -68,7 +69,11 @@ function Corpo({ oggetto, onClose, onFatto }: { oggetto: OggettoStorno; onClose:
     try {
       if (sc) {
         const righe = tipo === "parziale" ? sc.righe.map((_, i) => ({ indice: i, quantita: qta[i] || 0 })).filter((r) => r.quantita > 0) : undefined;
-        await cassaStornoScontrino(sc.id, { tipo: tipo === "annullo" ? "annullo" : "reso", righe, modalita, motivo: motivo.trim(), numero_rt: numero.trim() || undefined });
+        if (!sc.numero_rt && !numero.trim() && !/^\d{4}-\d{4}$/.test(originale.trim())) {
+          toast.error("Scrivi il numero dello scontrino originale come sullo scontrino (es. 2312-0004)"); return;
+        }
+        await cassaStornoScontrino(sc.id, { tipo: tipo === "annullo" ? "annullo" : "reso", righe, modalita, motivo: motivo.trim(),
+          numero_rt: numero.trim() || undefined, numero_originale: originale.trim() || undefined });
       } else if (rg) {
         await cassaGiornataStorno(rg.id, { tipo: tipo === "annullo" ? "annullo" : "storno", numero: numero.trim(), motivo: motivo.trim(),
           importo: tipo === "parziale" ? daRendere : undefined, modalita: tipo === "parziale" ? modalita : undefined });
@@ -131,9 +136,13 @@ function Corpo({ oggetto, onClose, onFatto }: { oggetto: OggettoStorno; onClose:
               {(sc ? MOD_SCONTRINO : COLONNE).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select></label>
         )}
+        {sc && !sc.numero_rt && (
+          <label className="flex items-center gap-2"><span className="w-40 text-muted-foreground">N. scontrino originale *</span>
+            <Input className="h-9 w-40" value={originale} onChange={(e) => setOriginale(e.target.value)} placeholder="es. 2312-0004" /></label>
+        )}
         <label className="flex items-center gap-2"><span className="w-40 text-muted-foreground">N. documento {tipo === "annullo" ? "di annullo" : "di reso"}{rg ? " *" : ""}</span>
           <Input className="h-9 w-40" value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="dal registratore" /></label>
-        {sc && <div className="-mt-2 pl-[10.5rem] text-xs text-muted-foreground">Se l&apos;hai già battuto sul registratore scrivi il numero; altrimenti resta «da stampare».</div>}
+        {sc && <div className="-mt-2 pl-[10.5rem] text-xs text-muted-foreground">Lascialo vuoto: il documento lo batte da solo il registratore. Scrivilo solo se l&apos;hai già fatto a mano.</div>}
         <label className="block space-y-1"><span className="text-muted-foreground">Motivo *</span>
           <Input value={motivo} maxLength={300} onChange={(e) => setMotivo(e.target.value)} placeholder="es. prodotto difettoso restituito" /></label>
 
