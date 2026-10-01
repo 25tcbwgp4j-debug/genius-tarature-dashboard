@@ -18,6 +18,7 @@ import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
+import { ChiusuraFiscale } from "./ChiusuraFiscale";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma, spostaGiorno } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
@@ -486,6 +487,7 @@ export default function CassaGiornataPage() {
             sotto={<>{rp.scontrini_n} scontrini nel foglio {eur(rp.scontrini_totale)}{rp.storni_totale ? ` (storni ${eur(rp.storni_totale)})` : ""}</>}>
             <DecInput className="mt-1 h-8 bg-background" disabled={chiusa} placeholder="totale dalla chiusura fiscale" value={g.rt_scontrini}
               onValue={(v) => modifica({ rt_scontrini: v })} />
+            <ChiusuraFiscale giorno={giorno} oggi={giorno === oggiRoma() && !chiusa} operatore={operatore} onFatta={ricarica} />
           </Riquadro>
           <Riquadro titolo="Fatture del giorno" stato="info" valore={eur(rp.fatture_totale)}
             sotto={<>{rp.fatture_n} fatture{rp.fatture_prec_totale ? ` · + fatture precedenti incassate oggi ${eur(rp.fatture_prec_totale)}` : ""}</>} />

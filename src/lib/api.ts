@@ -1193,3 +1193,14 @@ export async function magCaricoLotto(body: { modo: 'carico' | 'inventario'; caus
   Promise<{ esiti: { barcode: string; ok: boolean; errore?: string; creato?: boolean; descrizione?: string; giacenza?: number }[]; ok: number; errori: number }> {
   return fetchAPI('/api/magazzino/carico-lotto', { method: 'POST', body: JSON.stringify(body) });
 }
+
+// === CHIUSURA FISCALE dal pulsante della cassa del giorno (01/10/2026) ===
+export interface ChiusuraRt { z: number; data: string; ora: string; totale: number; contanti: number; elettronico: number; annulli: number; resi: number; documenti: number; id_operazione?: string | null; nota?: string }
+export interface RichiestaChiusura { id: string; stato: string; errore?: string | null; risposta_rt?: string | null; created_at: string; updated_at?: string; operatore?: string | null }
+/** Mette in coda la chiusura fiscale (Z01): la esegue l'agente di cassa sul server del negozio. */
+export async function cassaChiusuraFiscale(operatore: string): Promise<{ ok: boolean; id: string }> {
+  return fetchAPI('/api/cassa/chiusura-fiscale', { method: 'POST', body: JSON.stringify({ operatore }) });
+}
+export async function cassaChiusureFiscali(giorno: string): Promise<{ richieste: RichiestaChiusura[]; chiusure: ChiusuraRt[]; rt_scontrini: number | null }> {
+  return fetchAPI(`/api/cassa/chiusure-fiscali?giorno=${encodeURIComponent(giorno)}`);
+}
