@@ -1122,7 +1122,11 @@ export interface RigaDoc { descrizione: string; quantita: number; prezzo_ivato: 
 export interface PagamentoDoc {
   id: string; data: string; tipo: 'acconto' | 'saldo'; importo: number; modalita: string; certificato: 'scontrino' | 'fattura';
   scontrino_numero: string | null; fattura_id: string | null;
+  /** scontrino battuto dal registratore: da_stampare · in_stampa · emesso · simulato · errore */
+  scontrino_id?: string | null; scontrino_stato?: string; scontrino_errore?: string | null; riferimento?: string | null; operatore?: string | null;
 }
+export type FaseOrdine = 'da_ordinare' | 'ordinato' | 'arrivato' | 'ritirato';
+export interface AvvisoOrdine { canale: 'email' | 'whatsapp'; il: string; destinatario: string; operatore?: string; da?: string }
 export interface DocumentoCliente {
   id: string; tipo: TipoDocumento; anno: number; numero: number; sigla: string; data: string;
   stato: 'aperto' | 'convertito' | 'saldato' | 'annullato'; anagrafica_id: string | null; controparte: FattControparte;
@@ -1131,10 +1135,29 @@ export interface DocumentoCliente {
   pagamenti?: PagamentoDoc[]; pagato: number; residuo: number; created_at: string; session_id?: string | null;
   /** CHR · VALE · DUMY · ALTRO */
   operatore?: string | null;
+  // percorso dell'ordine a cliente (01/10/2026)
+  fase?: FaseOrdine; ordinato_il?: string | null; arrivato_il?: string | null; ritirato_il?: string | null;
+  avvisi?: AvvisoOrdine[]; messaggio_arrivo?: string; whatsapp_link?: string | null;
 }
 export type TipoDocumento = 'preventivo' | 'ordine' | 'proforma' | 'ddt';
-export async function docElenco(tipo: TipoDocumento, stato = '', q = ''): Promise<DocumentoCliente[]> {
-  return fetchAPI(`/api/documenti?tipo=${tipo}&stato=${stato}&q=${encodeURIComponent(q)}`);
+export type VistaOrdini = 'aperti' | 'arrivati' | 'completati' | 'annullati' | 'tutti';
+export async function docElenco(tipo: TipoDocumento, stato = '', q = '', vista = ''): Promise<DocumentoCliente[]> {
+  return fetchAPI(`/api/documenti?tipo=${tipo}&stato=${stato}&q=${encodeURIComponent(q)}&vista=${vista}`);
+}
+export type EsitoIncassoOrdine = DocumentoCliente & { fattura?: { id: string; tipo_documento: string }; scontrino?: { id: string; stato: string } };
+/** Incasso sull'ordine: acconto (importo) o intero/saldo; certificazione obbligatoria scontrino (registratore) o fattura. */
+export async function docIncassa(id: string, body: { importo?: number; intero?: boolean; modalita: 'contanti' | 'pos_sumup' | 'paypal' | 'bonifico';
+  certificato: 'scontrino' | 'fattura'; pos_incasso_id?: string; riferimento?: string; operatore: string }): Promise<EsitoIncassoOrdine> {
+  return fetchAPI(`/api/documenti/${id}/incassa`, { method: 'POST', body: JSON.stringify(body) });
+}
+export async function docFase(id: string, fase: 'da_ordinare' | 'ordinato' | 'arrivato', operatore: string): Promise<DocumentoCliente> {
+  return fetchAPI(`/api/documenti/${id}/fase`, { method: 'POST', body: JSON.stringify({ fase, operatore }) });
+}
+export async function docAvvisa(id: string, canale: 'email' | 'whatsapp', operatore: string): Promise<DocumentoCliente> {
+  return fetchAPI(`/api/documenti/${id}/avvisa`, { method: 'POST', body: JSON.stringify({ canale, operatore }) });
+}
+export async function docRitira(id: string, operatore: string): Promise<DocumentoCliente> {
+  return fetchAPI(`/api/documenti/${id}/ritira`, { method: 'POST', body: JSON.stringify({ operatore }) });
 }
 export async function docDettaglio(id: string): Promise<DocumentoCliente> { return fetchAPI(`/api/documenti/${id}`); }
 export async function docCrea(body: Partial<DocumentoCliente>): Promise<DocumentoCliente> {

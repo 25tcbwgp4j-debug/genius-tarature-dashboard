@@ -10,7 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowRightLeft, Ban, FileText, Loader2, Pencil, Plus, Receipt, Save, Search, Trash2, Wallet, X } from "lucide-react";
+import { ArrowRightLeft, Ban, CheckCircle2, FileText, Loader2, Mail, MessageCircle, PackageCheck, Pencil, Plus, Receipt, Save, Search, Trash2, Truck, Undo2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { PagaPos } from "@/components/PagaPos";
@@ -19,10 +19,12 @@ import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 import {
-  cassaGiornata, getDocumentoPdfUrl, docAcconto, docAnnulla, docConverti, docCrea, docDettaglio, docElenco, docModifica, fattAnagrafiche, fattCatalogo,
-  type DocumentoCliente, type FattAnagrafica, type FattVoceCatalogo, type RigaDoc,
-  type TipoDocumento,
+  cassaGiornata, getDocumentoPdfUrl, docAcconto, docAnnulla, docAvvisa, docConverti, docCrea, docDettaglio, docElenco, docFase, docModifica, docRitira,
+  fattAnagrafiche, fattCatalogo,
+  type DocumentoCliente, type EsitoIncassoOrdine, type FaseOrdine, type FattAnagrafica, type FattVoceCatalogo, type RigaDoc,
+  type TipoDocumento, type VistaOrdini,
 } from "@/lib/api";
+import { IncassoOrdine } from "./IncassoOrdine";
 
 const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
 const MOD: [string, string][] = [["contanti", "Contanti"], ["pos_sumup", "POS SumUp"], ["bonifico", "Bonifico"], ["paypal", "PayPal"], ["carta_stripe", "Carta online (Stripe)"]];
@@ -30,6 +32,28 @@ const MOD_L = Object.fromEntries(MOD);
 const STATO: Record<string, string> = {
   aperto: "bg-amber-100 text-amber-800", in_lavorazione: "bg-sky-100 text-sky-800", saldato: "bg-emerald-100 text-emerald-800", convertito: "bg-sky-100 text-sky-800", annullato: "bg-muted text-muted-foreground",
 };
+// ordini cliente: fasi del percorso (da ordinare → ordinato → arrivato → ritirato)
+const FASI: { k: FaseOrdine; l: string; quando: "created_at" | "ordinato_il" | "arrivato_il" | "ritirato_il" }[] = [
+  { k: "da_ordinare", l: "Da ordinare", quando: "created_at" }, { k: "ordinato", l: "Ordinato", quando: "ordinato_il" },
+  { k: "arrivato", l: "Arrivato", quando: "arrivato_il" }, { k: "ritirato", l: "Ritirato", quando: "ritirato_il" },
+];
+const FASE_STILE: Record<string, string> = {
+  da_ordinare: "bg-amber-100 text-amber-800", ordinato: "bg-sky-100 text-sky-800", arrivato: "bg-violet-100 text-violet-800 ring-1 ring-violet-400",
+  ritirato: "bg-emerald-100 text-emerald-800",
+};
+/** etichetta dell'ordine nell'elenco: completato / annullato / fase */
+function statoOrdine(d: DocumentoCliente): { l: string; c: string } {
+  if (d.stato === "annullato") return { l: "annullato", c: STATO.annullato };
+  if (d.stato === "saldato" || d.stato === "convertito") return { l: "completato", c: "bg-emerald-100 text-emerald-800" };
+  const f = FASI.find((x) => x.k === (d.fase || "da_ordinare"));
+  return { l: (f?.l || "da ordinare").toLowerCase(), c: FASE_STILE[d.fase || "da_ordinare"] };
+}
+function statoPagamento(d: DocumentoCliente): { l: string; c: string } {
+  if (d.residuo <= 0.005) return { l: "pagato", c: "bg-emerald-100 text-emerald-800" };
+  if (d.pagato > 0) return { l: "acconto", c: "bg-sky-100 text-sky-800" };
+  return { l: "da pagare", c: "bg-red-100 text-red-800" };
+}
+const oraIt = (s?: string | null) => s ? new Date(s).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
 const dataIt = (d: string) => new Date(`${d.slice(0, 10)}T12:00:00Z`).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" });
 // chiave stabile per ogni riga dell'editor (con l'indice, togliendo una riga i campi «slittavano»)
 let seqRiga = 0;
@@ -107,7 +131,8 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
             <Input placeholder="Telefono" value={b.telefono} onChange={(e) => setB({ ...b, telefono: e.target.value })} />
             <Input placeholder="Email" value={b.email} onChange={(e) => setB({ ...b, email: e.target.value })} />
           </div>
-          {b.anagrafica_id && <div className="text-xs text-emerald-700">✓ collegato all&apos;anagrafica (dati pronti per la fattura)</div>}
+          {b.anagrafica_id ? <div className="text-xs text-emerald-700">✓ collegato all&apos;anagrafica (dati pronti per la fattura)</div>
+            : (b.tipo === "ordine" || b.tipo === "preventivo") && <div className="text-xs text-muted-foreground">Al salvataggio il cliente va in rubrica: se c&apos;è già (stesso telefono, email o nome) si collega la sua scheda, senza doppioni.</div>}
         </Card>
         <Card className="space-y-2 p-3">
           <div className="text-sm font-medium">Articoli</div>
@@ -140,14 +165,16 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
         <SceltaOperatore value={operatore} onChange={setOperatore} />
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={chiudi}>Annulla</Button>
-          <Button onClick={salva} disabled={busy || !operatore}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Save className="mr-1 size-4" />}Salva</Button>
+          <Button onClick={salva} disabled={busy || !operatore}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Save className="mr-1 size-4" />}{!b.id && b.tipo === "ordine" ? "Salva e vai al pagamento" : "Salva"}</Button>
         </div>
       </div>
     </div>
   );
 }
 
-function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChiudi: () => void; onCambiato: () => void; onModifica: (d: DocumentoCliente) => void }) {
+function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModifica }: {
+  id: string; proponiIncasso?: boolean; onChiudi: () => void; onCambiato: () => void; onModifica: (d: DocumentoCliente) => void;
+}) {
   const router = useRouter();
   const [d, setD] = useState<DocumentoCliente | null>(null);
   const [errore, setErrore] = useState("");
@@ -156,6 +183,9 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
   const [busy, setBusy] = useState(false);
   const [operatore, setOperatore] = useOperatore();
   const [cassaOggiChiusa, setCassaOggiChiusa] = useState(false);
+  // ordine cliente: pannello di incasso (acconto / intero / saldo al ritiro) e proposta subito dopo il salvataggio
+  const [incasso, setIncasso] = useState<{ modo: "acconto" | "intero"; titolo?: string; poiRitira?: boolean } | null>(null);
+  const [proposta, setProposta] = useState(proponiIncasso);
   const carica = useCallback(() => {
     docDettaglio(id).then((r) => { setD(r); setErrore(""); }).catch((e: Error) => setErrore(e.message || "Errore"));
   }, [id]);
@@ -180,6 +210,42 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
       toast.success(ok); setAzione(""); carica(); onCambiato();
       if (r.fattura?.id) { toast.info("Apro la fattura: controlla i dati del cliente e inviala allo SdI"); router.push(`/fatturazione?id=${r.fattura.id}`); }
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
+  }
+
+  /** azione semplice sull'ordine (fase, avviso, ritiro) con operatore obbligatorio */
+  async function sullOrdine(fn: (op: string) => Promise<DocumentoCliente>, ok: string) {
+    if (busy) return;
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    setBusy(true);
+    try { setD(await fn(operatore)); toast.success(ok); onCambiato(); } catch (e) { toastErrore(e); } finally { setBusy(false); }
+  }
+
+  async function dopoIncasso(r: EsitoIncassoOrdine, poiRitira?: boolean) {
+    setIncasso(null); setProposta(false); onCambiato();
+    if (poiRitira && r.residuo <= 0.005 && operatore) {
+      try { setD(await docRitira(r.id, operatore)); toast.success("Ordine ritirato e COMPLETATO"); onCambiato(); } catch (e) { toastErrore(e); carica(); }
+    } else carica();
+    if (r.fattura?.id) { toast.info("Apro la fattura: controlla i dati del cliente e inviala allo SdI"); router.push(`/fatturazione?id=${r.fattura.id}`); }
+  }
+
+  function ritiro() {
+    if (!d) return;
+    if (d.residuo > 0.005) {
+      setProposta(false);
+      setIncasso({ modo: "intero", titolo: `Ritiro: prima il saldo di ${eur(d.residuo)}`, poiRitira: true });
+      return;
+    }
+    if (confirm(`Il cliente ritira ${d.sigla}? L'ordine va tra i COMPLETATI e gli articoli di magazzino escono dalla giacenza.`))
+      sullOrdine((op) => docRitira(d.id, op), "Ordine ritirato e COMPLETATO");
+  }
+
+  function whatsapp() {
+    if (!d) return;
+    if (!d.whatsapp_link) { toast.error("Manca un cellulare valido del cliente: aggiungilo con «Modifica»"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    // si apre WhatsApp col messaggio già scritto: lo invia il negozio; qui si registra l'avviso
+    window.open(d.whatsapp_link, "_blank", "noopener");
+    sullOrdine((op) => docAvvisa(d.id, "whatsapp", op), "Avviso WhatsApp registrato (premi Invia in WhatsApp)");
   }
 
   /** modForzata = «pos_sumup» quando il cliente ha appena pagato sul POS SumUp (la fattura nasce già pagata). */
@@ -234,7 +300,9 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
             <div className="text-sm text-muted-foreground">{dataIt(d.data)}{d.operatore ? <> · fatto da <BadgeOperatore op={d.operatore} /></> : ""} · {d.cliente_nome || d.controparte?.denominazione}{d.telefono ? ` · ${d.telefono}` : ""}{d.rif ? ` · ${d.rif}` : ""}</div>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATO[d.stato]}`}>{d.stato.toUpperCase()}</span>
+            {d.tipo === "ordine"
+              ? <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statoOrdine(d).c}`}>{statoOrdine(d).l.toUpperCase()}</span>
+              : <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATO[d.stato]}`}>{d.stato.toUpperCase()}</span>}
             <Button size="icon" variant="ghost" onClick={onChiudi}><X className="size-4" /></Button>
           </div>
         </div>
@@ -261,7 +329,10 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
             {d.pagamenti.map((p) => (
               <div key={p.id} className="flex flex-wrap justify-between gap-2">
                 <span>{dataIt(p.data)} · {p.tipo === "acconto" ? "Acconto" : "Saldo"} · {MOD_L[p.modalita] || p.modalita}</span>
-                <span>{p.certificato === "scontrino" ? `scontrino n. ${p.scontrino_numero}` : <a className="text-primary underline" href={`/fatturazione?id=${p.fattura_id}`}>fattura</a>} · <b>{eur(p.importo)}</b></span>
+                <span>{p.certificato === "scontrino"
+                  ? (p.scontrino_numero ? `scontrino n. ${p.scontrino_numero}` : <span className={p.scontrino_stato === "errore" ? "text-red-600" : "text-muted-foreground"}>
+                    scontrino al registratore{p.scontrino_stato ? ` (${p.scontrino_stato.replace("_", " ")})` : ""}{p.scontrino_errore ? `: ${p.scontrino_errore}` : ""}</span>)
+                  : <a className="text-primary underline" href={`/fatturazione?id=${p.fattura_id}`}>fattura</a>}{p.operatore ? <BadgeOperatore op={p.operatore} className="ml-1" /> : null} · <b>{eur(p.importo)}</b></span>
               </div>
             ))}
           </Card>
@@ -284,12 +355,92 @@ function Dettaglio({ id, onChiudi, onCambiato, onModifica }: { id: string; onChi
           <iframe key={`${d.id}-${d.totale}`} src={`${getDocumentoPdfUrl(d.id).split("?")[0]}?v=${d.totale}`} title={`Pro forma ${d.sigla || ""}`} className="h-[70vh] w-full rounded border bg-white" />
         )}
 
+        {d.tipo === "ordine" && (() => {
+          const fase = d.fase || (d.stato === "saldato" ? "ritirato" : "da_ordinare");
+          const iFase = FASI.findIndex((x) => x.k === fase);
+          const sp = statoPagamento(d);
+          return (
+            <Card className="space-y-3 p-3">
+              {/* fasi dell'ordine con data e ora */}
+              <div className="flex flex-wrap items-center gap-1 text-xs">
+                {FASI.map((x, i) => (
+                  <div key={x.k} className="flex items-center gap-1">
+                    {i > 0 && <span className={i <= iFase ? "text-primary" : "text-muted-foreground"}>→</span>}
+                    <span className={`rounded-full px-2 py-1 ${i <= iFase && d.stato !== "annullato" ? FASE_STILE[x.k] + " font-semibold" : "bg-muted text-muted-foreground"}`}>
+                      {x.l}{i <= iFase && d[x.quando] ? ` · ${oraIt(d[x.quando] as string)}` : ""}</span>
+                  </div>
+                ))}
+                {d.stato === "annullato" && <span className="ml-2 rounded-full bg-muted px-2 py-1 font-semibold">ANNULLATO</span>}
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${sp.c}`}>{sp.l}</span>
+                <span>Totale <b>{eur(d.totale)}</b></span><span>Pagato <b>{eur(d.pagato)}</b></span>
+                <span className={d.residuo > 0.005 ? "text-red-700 dark:text-red-300" : ""}>Resta <b>{eur(d.residuo)}</b></span>
+              </div>
+              {!!d.avvisi?.length && (
+                <div className="text-xs text-muted-foreground">
+                  {d.avvisi.map((a, i) => <div key={i}>📣 Cliente avvisato via {a.canale === "email" ? "email" : "WhatsApp"} il {oraIt(a.il)} ({a.destinatario}){a.operatore ? ` · ${a.operatore}` : ""}</div>)}
+                </div>
+              )}
+            </Card>
+          );
+        })()}
+
         {aperto && <SceltaOperatore value={operatore} onChange={setOperatore} compatto />}
-        {aperto && (
+
+        {aperto && d.tipo === "ordine" && proposta && !incasso && d.residuo > 0.005 && (
+          <Card className="space-y-2 border-2 border-emerald-400 bg-emerald-50/60 p-3 dark:bg-emerald-950/20">
+            <div className="font-semibold">✅ {d.sigla} salvato. Il cliente paga adesso?</div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => { setProposta(false); setIncasso({ modo: "acconto" }); }}><Wallet className="mr-1 size-4" />Acconto</Button>
+              <Button onClick={() => { setProposta(false); setIncasso({ modo: "intero" }); }}><Wallet className="mr-1 size-4" />Intero importo {eur(d.residuo)}</Button>
+              <Button variant="outline" onClick={() => setProposta(false)}>Più tardi (resta da pagare)</Button>
+            </div>
+          </Card>
+        )}
+
+        {aperto && d.tipo === "ordine" && incasso && (
+          <IncassoOrdine key={`${incasso.modo}-${incasso.poiRitira ? 1 : 0}`} d={d} operatore={operatore} modo={incasso.modo} titolo={incasso.titolo}
+            onChiudi={() => setIncasso(null)} onFatto={(r) => dopoIncasso(r, incasso.poiRitira)} />
+        )}
+
+        {aperto && d.tipo === "ordine" && !incasso && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {d.residuo > 0.005 && <Button variant="outline" onClick={() => { setProposta(false); setIncasso({ modo: d.pagato ? "intero" : "acconto" }); }}>
+                <Wallet className="mr-1 size-4" />Registra pagamento</Button>}
+              {(d.fase || "da_ordinare") === "da_ordinare" && <Button variant="outline" disabled={busy} onClick={() => sullOrdine((op) => docFase(d.id, "ordinato", op), "Segnato come ordinato al fornitore")}>
+                <Truck className="mr-1 size-4" />Ordinato al fornitore</Button>}
+              {d.fase !== "arrivato" && <Button className="bg-violet-600 text-white hover:bg-violet-700" disabled={busy}
+                onClick={() => sullOrdine((op) => docFase(d.id, "arrivato", op), "Prodotto arrivato: ora avvisa il cliente")}><PackageCheck className="mr-1 size-4" />Prodotto arrivato</Button>}
+              {d.fase === "arrivato" && <Button className="bg-emerald-600 text-white hover:bg-emerald-700" disabled={busy} onClick={ritiro}>
+                <CheckCircle2 className="mr-1 size-4" />Ritirato{d.residuo > 0.005 ? ` (saldo ${eur(d.residuo)})` : ""}</Button>}
+            </div>
+            {d.fase === "arrivato" && (
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-violet-300 bg-violet-50/60 p-2 dark:bg-violet-950/20">
+                <span className="text-sm font-medium">Avvisa il cliente:</span>
+                <Button size="sm" variant="outline" disabled={busy || !d.email} title={d.email ? `Invia a ${d.email}` : "Manca l'email del cliente"}
+                  onClick={() => confirm(`Inviare l'email di avviso a ${d.email}?`) && sullOrdine((op) => docAvvisa(d.id, "email", op), `Email inviata a ${d.email}`)}>
+                  <Mail className="mr-1 size-4" />Email</Button>
+                <Button size="sm" variant="outline" className="border-green-500 text-green-800 dark:text-green-300" disabled={busy || !d.whatsapp_link}
+                  title={d.whatsapp_link ? "Apre WhatsApp col messaggio già scritto" : "Manca un cellulare valido"} onClick={whatsapp}>
+                  <MessageCircle className="mr-1 size-4" />WhatsApp</Button>
+                <Button size="xs" variant="ghost" className="ml-auto" disabled={busy} title="Era un errore: torna a «ordinato»"
+                  onClick={() => sullOrdine((op) => docFase(d.id, "ordinato", op), "Tornato a «ordinato»")}><Undo2 className="mr-1 size-3" />Non è arrivato</Button>
+                {d.messaggio_arrivo && <div className="w-full text-xs text-muted-foreground">Messaggio: «{d.messaggio_arrivo}»</div>}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={() => onModifica(d)}><Pencil className="mr-1 size-4" />Modifica</Button>
+              {!d.pagato && <Button variant="ghost" className="text-red-600" disabled={busy} onClick={() => confirm(`Annullare ${d.sigla}?`) && esegui(() => docAnnulla(d.id), "Annullato")}><Ban className="mr-1 size-4" />Annulla ordine</Button>}
+            </div>
+          </div>
+        )}
+
+        {aperto && d.tipo !== "ordine" && (
           <div className="flex flex-wrap gap-2">
-            {d.tipo === "ordine" && <Button onClick={() => apri("acconto")}><Wallet className="mr-1 size-4" />Registra acconto</Button>}
-            <Button variant="outline" onClick={() => apri("scontrino")}><Receipt className="mr-1 size-4" />{d.tipo === "ordine" && d.pagato ? "Saldo:" : ""} Converti in scontrino</Button>
-            <Button variant="outline" onClick={() => apri("fattura")}><FileText className="mr-1 size-4" />{d.tipo === "ordine" && d.pagato ? "Saldo:" : ""} Converti in fattura</Button>
+            <Button variant="outline" onClick={() => apri("scontrino")}><Receipt className="mr-1 size-4" />Converti in scontrino</Button>
+            <Button variant="outline" onClick={() => apri("fattura")}><FileText className="mr-1 size-4" />Converti in fattura</Button>
             {(d.tipo === "preventivo" || d.tipo === "proforma") && <Button variant="outline" disabled={busy || !operatore} onClick={() => esegui(async () => {
               const r = await docConverti(d.id, { a: "ordine", operatore }); if (r.ordine) toast.success(`Creato ${r.ordine.sigla}`); return r;
             }, "Preventivo convertito in ordine cliente")}><ArrowRightLeft className="mr-1 size-4" />Converti in ordine</Button>}
@@ -357,6 +508,10 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
   const base = soloTipo === "proforma" ? "/proforma" : "/ordini";
   const [tipo, setTipo] = useState<TipoDocumento>(soloTipo || "ordine");
   const [stato, setStato] = useState("aperto");
+  // ordini cliente: schede Aperti · Arrivati da ritirare · Completati · Annullati · Tutti
+  const [vista, setVista] = useState<VistaOrdini>("aperti");
+  const [nArrivati, setNArrivati] = useState<number | null>(null);
+  const [nuovoId, setNuovoId] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [lista, setLista] = useState<DocumentoCliente[] | null>(null);
   const [errore, setErrore] = useState("");
@@ -369,8 +524,11 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
   const chiudiDettaglio = () => { setAperto(null); if (idLink) router.replace(base); };
 
   const carica = useCallback(() => {
-    docElenco(tipo, stato, q).then((r) => { setLista(r); setErrore(""); }).catch((e: Error) => { setErrore(e.message); setLista([]); });
-  }, [tipo, stato, q]);
+    const ordini = tipo === "ordine";
+    docElenco(tipo, ordini ? "" : stato, q, ordini && vista !== "tutti" ? vista : "").then((r) => { setLista(r); setErrore(""); })
+      .catch((e: Error) => { setErrore(e.message); setLista([]); });
+    if (ordini) docElenco("ordine", "", "", "arrivati").then((r) => setNArrivati(r.length)).catch(() => undefined);
+  }, [tipo, stato, q, vista]);
   useEffect(() => { const t = setTimeout(carica, 200); return () => clearTimeout(t); }, [carica]);
   useEffect(() => { fattCatalogo("genius").then((r) => setListino(r.voci || [])).catch(() => undefined); }, []);
 
@@ -385,16 +543,26 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
           <button key={k} onClick={() => { setTipo(k); setLista(null); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${tipo === k ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}>{l}</button>
         ))}
-        <select className={`${campo} ml-auto h-8`} value={stato} onChange={(e) => setStato(e.target.value)}>
+        {tipo !== "ordine" && <select className={`${campo} ml-auto h-8`} value={stato} onChange={(e) => setStato(e.target.value)}>
           <option value="aperto">Aperti</option><option value="saldato">Saldati</option><option value="convertito">Convertiti</option><option value="annullato">Annullati</option><option value="">Tutti</option>
-        </select>
+        </select>}
+        {tipo === "ordine" && <span className="ml-auto" />}
         <Input className="h-8 w-56" placeholder="Cerca cliente, scheda, telefono…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
+      {tipo === "ordine" && (
+        <div className="flex flex-wrap gap-2">
+          {([["aperti", "Aperti (da ordinare / ordinati)"], ["arrivati", "Arrivati da ritirare"], ["completati", "Completati"], ["annullati", "Annullati"], ["tutti", "Tutti"]] as const).map(([k, l]) => (
+            <button key={k} onClick={() => { setVista(k); setLista(null); }}
+              className={`rounded-full border px-3 py-1 text-sm ${vista === k ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+              {l}{k === "arrivati" && nArrivati ? <span className="ml-1 rounded-full bg-violet-600 px-1.5 text-xs text-white">{nArrivati}</span> : null}</button>
+          ))}
+        </div>
+      )}
       <Card className="overflow-x-auto p-0">
         <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
             <tr><th className="px-3 py-2 text-left">Numero</th><th className="text-left">Data</th><th className="text-left">Cliente</th><th className="text-left">Rif.</th>
-              <th className="text-right">Totale</th>{tipo === "ordine" && <><th className="text-right">Acconti</th><th className="px-3 text-right">Resta</th></>}<th className="px-3 text-left">Stato</th><th className="px-3 text-left" title="Operatore">Op.</th></tr>
+              <th className="text-right">Totale</th>{tipo === "ordine" && <><th className="text-right">Pagato</th><th className="px-3 text-right">Resta</th></>}<th className="px-3 text-left">Stato</th><th className="px-3 text-left" title="Operatore">Op.</th></tr>
           </thead>
           <tbody>
             {lista === null && <tr><td colSpan={9} className="p-4 text-center"><Loader2 className="inline size-4 animate-spin" /></td></tr>}
@@ -406,7 +574,10 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
                 <td className="px-3 py-2 font-medium">{d.sigla}</td><td>{dataIt(d.data)}</td><td>{d.cliente}</td><td className="text-muted-foreground">{d.rif}</td>
                 <td className="text-right tabular-nums">{eur(d.totale)}</td>
                 {tipo === "ordine" && <><td className="text-right tabular-nums">{d.pagato ? eur(d.pagato) : "—"}</td><td className="px-3 text-right font-semibold tabular-nums">{eur(d.residuo)}</td></>}
-                <td className="px-3"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATO[d.stato]}`}>{d.stato}</span></td>
+                <td className="px-3">{tipo === "ordine" ? <span className="flex flex-wrap gap-1">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statoOrdine(d).c}`}>{statoOrdine(d).l}</span>
+                  {d.stato !== "annullato" && <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statoPagamento(d).c}`}>{statoPagamento(d).l}</span>}</span>
+                  : <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATO[d.stato]}`}>{d.stato}</span>}</td>
                 <td className="px-3"><BadgeOperatore op={d.operatore} /></td>
               </tr>
             ))}
@@ -414,8 +585,13 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
         </table>
       </Card>
       {editor && <Editor iniziale={editor} listino={listino} onChiudi={() => setEditor(null)}
-        onSalvato={(d) => { setEditor(null); carica(); setAperto(d.id); toast.success(`${d.sigla} salvato`); }} />}
-      {aperto && <Dettaglio key={aperto} id={aperto} onChiudi={chiudiDettaglio} onCambiato={carica}
+        onSalvato={(d) => {
+          // ordine nuovo: appena salvato si propone subito il pagamento (acconto / intero / più tardi)
+          const nuovo = !editor.id && d.tipo === "ordine";
+          setEditor(null); carica(); setNuovoId(nuovo ? d.id : null); setAperto(d.id); toast.success(`${d.sigla} salvato`);
+          if (d.anagrafica_id && !editor.anagrafica_id) toast.info("Cliente collegato alla rubrica");
+        }} />}
+      {aperto && <Dettaglio key={aperto} id={aperto} proponiIncasso={aperto === nuovoId} onChiudi={() => { setNuovoId(null); chiudiDettaglio(); }} onCambiato={carica}
         onModifica={(d) => { chiudiDettaglio(); setEditor({ id: d.id, tipo: d.tipo, cliente_nome: d.cliente_nome || "", telefono: d.telefono || "", email: d.email || "",
           anagrafica_id: d.anagrafica_id, controparte: d.controparte || {}, rif: d.rif || "", note: d.note || "", righe: d.righe }); }} />}
     </div>
