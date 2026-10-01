@@ -271,6 +271,38 @@ export function getFatturaXmlUrl(sessionId: string): string {
   return `${API_PROXY}/api/sessions/${sessionId}/fattura-xml`;
 }
 
+// PDF di un documento pro forma (PF n/AAAA)
+export function getDocumentoPdfUrl(documentoId: string): string {
+  return `${API_PROXY}/api/documenti/${documentoId}/pdf?t=${Date.now()}`;
+}
+
+// === PRO FORMA DELLA SESSIONE (documento PF) ===
+export interface ProformaRigaCalcolata { descrizione: string; quantita: number; prezzo_unitario: number; aliquota: number; prezzo_totale: number; lordo: number | null }
+export interface ProformaSessioneStato {
+  documento: (DocumentoCliente & { righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number }) | null;
+  anteprima: { righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number; totale: number; causale: string; shipping_by_customer?: boolean } | null;
+}
+export async function proformaSessioneStato(sessionId: string): Promise<ProformaSessioneStato> {
+  return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`);
+}
+export async function proformaSessioneCrea(sessionId: string): Promise<{ gia_presente: boolean; documento: DocumentoCliente }> {
+  return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`, { method: 'POST', body: '{}' });
+}
+
+// === STAMPA DIRETTA (coda + agente sul Mac del banco) ===
+export async function stampaSessione(sessionId: string, tipo: 'etichette' | 'ricevuta'): Promise<{ ok: boolean; id: string; agente_attivo: boolean; copie: number }> {
+  return fetchAPI(`/api/stampa/sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ tipo }) });
+}
+export async function stampaStato(): Promise<{ agente_attivo: boolean }> {
+  return fetchAPI(`/api/stampa/stato`, {}, false);
+}
+export async function stampaLavoro(id: string): Promise<{ stato: string; errore: string | null }> {
+  return fetchAPI(`/api/stampa/lavori/${id}`, {}, false);
+}
+export async function stampaAnnulla(id: string) {
+  return fetchAPI(`/api/stampa/lavori/${id}/annulla`, { method: 'POST', body: '{}' }, false);
+}
+
 // === 4 PULSANTI AZIONE ===
 export async function registerComplete(
   sessionId: string,
@@ -1083,7 +1115,7 @@ export interface DocumentoCliente {
   stato: 'aperto' | 'convertito' | 'saldato' | 'annullato'; anagrafica_id: string | null; controparte: FattControparte;
   cliente_nome: string | null; cliente?: string; telefono: string | null; email: string | null; righe: RigaDoc[]; totale: number;
   rif: string | null; note: string | null; convertito_in: { tipo: string; id?: string; sigla?: string; numero?: string } | null;
-  pagamenti?: PagamentoDoc[]; pagato: number; residuo: number; created_at: string;
+  pagamenti?: PagamentoDoc[]; pagato: number; residuo: number; created_at: string; session_id?: string | null;
 }
 export type TipoDocumento = 'preventivo' | 'ordine' | 'proforma' | 'ddt';
 export async function docElenco(tipo: TipoDocumento, stato = '', q = ''): Promise<DocumentoCliente[]> {

@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ExternalLink, FileText, Loader2, Package, Printer, Truck, X } from "lucide-react";
 import { toast } from "sonner";
+import { COSTO_AR, COSTO_SOLA, CostoSpedizione, ETICHETTA_AR, ETICHETTA_SOLA, costoDaSessione, eur, type Costo, type SessioneSpedizione } from "./SpedizioneSessione";
 import {
+  updateSession,
   cancelShipment,
   createShipment,
   getShipmentLabelUrl,
@@ -98,8 +100,13 @@ async function stampaEtichetta(shipmentId: string) {
   }
 }
 
-export function ShipmentsPanel({ sessionId }: { sessionId: string }) {
+export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
+  sessionId: string; session?: SessioneSpedizione; onSessioneAggiornata?: () => void;
+}) {
   const [rows, setRows] = useState<ShipmentRow[]>([]);
+  // costo della spedizione da addebitare al cliente (va in fattura/pro forma): modificabile qui
+  const [costo, setCosto] = useState<Costo | null>(null);
+  const aCaricoCliente = !!session?.shipping_by_customer;
   const [direction, setDirection] = useState<ShipmentDirection | null>(null);
   const [form, setForm] = useState<ShipmentRequest | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -131,6 +138,11 @@ export function ShipmentsPanel({ sessionId }: { sessionId: string }) {
     };
     setDirection(dir);
     setForm(base);
+    // proposta: quello già scritto in sessione, altrimenti A/R (ritiro) o sola riconsegna (metà)
+    const salvato = session ? costoDaSessione(session) : null;
+    setCosto(salvato?.incluso ? salvato : dir === "ritiro"
+      ? { incluso: true, importo: COSTO_AR, etichetta: ETICHETTA_AR }
+      : { incluso: true, importo: COSTO_SOLA, etichetta: ETICHETTA_SOLA });
     await aggiornaAnteprima(base);
   };
 
@@ -156,6 +168,24 @@ export function ShipmentsPanel({ sessionId }: { sessionId: string }) {
     setDirection(null);
     setForm(null);
     setPreview(null);
+    setCosto(null);
+  };
+
+  // salva in sessione il costo scelto (se diverso da quello già salvato)
+  const salvaCosto = async () => {
+    if (!costo || aCaricoCliente || !session) return;
+    const s = costoDaSessione(session);
+    if (s.incluso === costo.incluso && Math.abs(s.importo - costo.importo) < 0.005 && (!costo.incluso || s.etichetta === costo.etichetta)) return;
+    try {
+      await updateSession(sessionId, {
+        shipping_included: costo.incluso, shipping_amount_gross: costo.incluso ? costo.importo : 0, shipping_label: costo.etichetta,
+        ...(form?.direction === "riconsegna" ? { return_by_courier: true } : { arrived_by_courier: true, return_by_courier: true }),
+      });
+      toast.success(costo.incluso ? `Spedizione in fattura: ${eur(costo.importo)}` : "Nessun costo di spedizione in fattura");
+      onSessioneAggiornata?.();
+    } catch (e: unknown) {
+      toast.error(`Costo spedizione non salvato: ${(e as Error).message}`);
+    }
   };
 
   const conferma = async () => {
@@ -179,6 +209,7 @@ export function ShipmentsPanel({ sessionId }: { sessionId: string }) {
         { duration: 10000 },
       );
       if (r.pickup_error) toast.error(`Etichetta creata ma ritiro NON prenotato: ${r.pickup_error}`, { duration: 15000 });
+      if (!form.test) await salvaCosto();
       chiudi();
       await load();
       // Niente stampa automatica (dava due fogli bianchi): si usa «Stampa etichetta» o «Apri PDF»
@@ -214,6 +245,11 @@ export function ShipmentsPanel({ sessionId }: { sessionId: string }) {
         <div className="flex items-center gap-2">
           <Truck className="w-5 h-5 text-amber-800" />
           <h3 className="font-semibold text-base">Spedizioni UPS</h3>
+          {session && (
+            <span className="text-xs text-muted-foreground">
+              · in fattura: {aCaricoCliente ? "a carico del cliente (0 €)" : costoDaSessione(session).incluso ? eur(costoDaSessione(session).importo) : "nessun costo"}
+            </span>
+          )}
         </div>
         {!direction && (
           <div className="flex gap-2 flex-wrap">
@@ -307,6 +343,23 @@ export function ShipmentsPanel({ sessionId }: { sessionId: string }) {
               <p className="mt-2 font-medium">WhatsApp</p>
               <pre className="whitespace-pre-wrap bg-muted/40 p-2 rounded mt-1">{preview.texts.wa}</pre>
             </details>
+          )}
+
+          {session && (
+            <div className="space-y-1 rounded-md border border-amber-300 bg-amber-50/60 p-2 text-sm dark:bg-amber-950/20">
+              <div className="font-medium">Costo della spedizione da addebitare al cliente (in fattura / pro forma)</div>
+              {aCaricoCliente ? (
+                <p className="text-muted-foreground">La sessione è segnata «spedizione a carico del cliente»: nessun costo in fattura.</p>
+              ) : costo && (
+                <>
+                  <CostoSpedizione valore={costo} onChange={setCosto} />
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    Solo riconsegna = metà dell&apos;andata e ritorno. Si salva in sessione alla conferma, oppure ora:
+                    <Button size="sm" variant="outline" className="h-7" onClick={salvaCosto}>Salva costo</Button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           <div className="flex items-center justify-between flex-wrap gap-2">

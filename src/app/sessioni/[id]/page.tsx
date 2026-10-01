@@ -25,8 +25,10 @@ import {
   getCustomerPastInstruments,
   getReceiptPdfUrl,
   getLabelsPdfUrl,
-  getFatturaXmlUrl,
+  stampaSessione,
+  stampaStato,
   getSessionReportsZipUrl,
+  getDocumentoPdfUrl,
   getReviewStatus,
   sendReviewRequest,
   markReviewReceived,
@@ -58,13 +60,15 @@ import {
   Send,
   CheckCircle2,
   AlertCircle,
+  Truck,
 } from "lucide-react";
 import { STATUS_CONFIG, getStatusConfig, getPaymentConfig } from "@/lib/constants";
 import { RecipientPanel } from "./RecipientPanel";
 import { ChangeCustomerDialog } from "./ChangeCustomerDialog";
 import { EditCustomerDialog } from "./EditCustomerDialog";
 import { ShipmentsPanel } from "./ShipmentsPanel";
-import { FatturaPanel } from "./FatturaPanel";
+import { FatturaPanel, ProformaDialog } from "./FatturaPanel";
+import { SpedizioneSessione } from "./SpedizioneSessione";
 
 interface InstrumentType {
   id: string;
@@ -239,11 +243,13 @@ export default function SessionDetail() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  // Suffix proforma SimplyFatt (1-2 cifre): completa la causale come 'PF-AAAA-00XX'
-  const [proformaSuffix, setProformaSuffix] = useState<string>("");
-  // Spese di spedizione (porto IVA), default 36.60 EUR lordo, modificabile
-  const [shippingIncluded, setShippingIncluded] = useState<boolean>(false);
-  const [shippingAmount, setShippingAmount] = useState<string>("36.60");
+  // Pro forma (documento PF n/AAAA): dialog di preparazione; se aperto da PROFORMA EMAIL/WHATSAPP
+  // dopo la creazione si riapre l'anteprima di invio su quel canale
+  const [dialogPf, setDialogPf] = useState(false);
+  const [pfDopo, setPfDopo] = useState<'email' | 'whatsapp' | null>(null);
+  const [fatturaAggiorna, setFatturaAggiorna] = useState(0);
+  // Stampa diretta: agente di stampa sul Mac del banco acceso?
+  const [agenteStampa, setAgenteStampa] = useState<boolean | null>(null);
   // Preview proforma modal — mostra anteprima totali (con/senza spedizione) PRIMA dell'invio
   const [proformaPreview, setProformaPreview] = useState<null | {
     channel: 'email' | 'whatsapp';
@@ -264,6 +270,8 @@ export default function SessionDetail() {
     proforma_number_next?: string;
     proforma_number_existing?: string;
     resent?: boolean;
+    documento?: boolean;
+    documento_id?: string;
   }>(null);
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
   const [editingInstrument, setEditingInstrument] = useState<string | null>(null);
@@ -292,42 +300,10 @@ export default function SessionDetail() {
     try {
       const data = await getSession(sessionId);
       setSession(data);
-      // Pre-popola toggle/input spedizione dai valori persistiti su DB,
-      // cosi' la scelta dell'operatore resta visibile dopo refresh / ritorno
-      // sulla pagina (fix UX: prima il flag era client-only).
-      if (typeof data?.shipping_included === "boolean") {
-        setShippingIncluded(!!data.shipping_included);
-      }
-      const amt = data?.shipping_amount_gross;
-      if (typeof amt === "number" && amt > 0) {
-        setShippingAmount(amt.toFixed(2));
-      }
     } catch {
       toast.error("Errore nel caricamento della sessione");
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Persiste i campi shipping_included / shipping_amount_gross su DB:
-  // la sessione resta marcata "con spedizione" anche dopo refresh, il
-  // badge mostra "Pronto alla spedizione", e PDF/ricevuta/fattura
-  // continuano a includere la voce spedizione.
-  const handleSaveShipping = async () => {
-    const amt = parseFloat(shippingAmount.replace(",", ".")) || 0;
-    try {
-      await updateSession(sessionId, {
-        shipping_included: shippingIncluded,
-        shipping_amount_gross: shippingIncluded ? amt : 0,
-      });
-      toast.success(
-        shippingIncluded
-          ? `Spedizione salvata: ${amt.toFixed(2)} EUR`
-          : "Spedizione disattivata",
-      );
-      await loadSession();
-    } catch (e) {
-      toast.error("Errore salvataggio spedizione: " + (e as Error).message);
     }
   };
 
@@ -384,14 +360,66 @@ export default function SessionDetail() {
     }
   };
 
-  // Apre il PDF etichette (50x30mm per strumento) in una nuova tab per stampa
+  // Apre il PDF etichette (50x22mm per strumento) in una nuova tab per stampa (ripiego)
   const openLabelsPdf = () => {
     window.open(getLabelsPdfUrl(sessionId), "_blank");
   };
 
-  // Scarica il file XML FatturaPA pre-compilato per l'import in SimplyFatt
-  const downloadFatturaXml = () => {
-    window.location.href = getFatturaXmlUrl(sessionId);
+  // Stato dell'agente di stampa (Mac del banco): controllato all'apertura e ogni minuto
+  useEffect(() => {
+    let vivo = true;
+    const leggi = () => stampaStato().then((r) => vivo && setAgenteStampa(!!r.agente_attivo)).catch(() => vivo && setAgenteStampa(null));
+    leggi();
+    const t = setInterval(leggi, 60000);
+    return () => { vivo = false; clearInterval(t); };
+  }, []);
+
+  // STAMPA DIRETTA: un clic → il lavoro va in coda e l'agente sul Mac del banco lo stampa
+  // (etichette 50x22 sulla Brother QL-700, ricevuta 2 copie sulla stampante A4).
+  // Agente spento → si apre il PDF come prima (finestra di stampa del browser).
+  const stampaDiretta = async (tipo: "etichette" | "ricevuta") => {
+    setActionLoading("stampa_" + tipo);
+    try {
+      const r = await stampaSessione(sessionId, tipo);
+      setAgenteStampa(r.agente_attivo);
+      if (r.agente_attivo) {
+        toast.success(tipo === "etichette" ? "Etichette mandate alla stampante Brother" : `Ricevuta mandata in stampa (${r.copie} copie)`);
+      } else {
+        toast.warning("Agente di stampa del banco spento: apro il PDF da stampare a mano. Il lavoro resta in coda 15 minuti.", { duration: 8000 });
+        if (tipo === "etichette") openLabelsPdf(); else openReceiptPdf();
+      }
+    } catch (e) {
+      toast.error("Stampa non riuscita: " + (e as Error).message + " — apro il PDF");
+      if (tipo === "etichette") openLabelsPdf(); else openReceiptPdf();
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // PROFORMA EMAIL / WHATSAPP: anteprima del documento PF; se non c'è ancora si propone di prepararlo
+  const apriAnteprimaProforma = async (ch: "email" | "whatsapp") => {
+    const shipIncl = !!session?.shipping_included && !session?.shipping_by_customer;
+    const shipAmt = Number(session?.shipping_amount_gross || 0);
+    setPreviewLoading(true);
+    try {
+      const r = await sendProforma(sessionId, "", { included: shipIncl, amount: shipIncl ? shipAmt : undefined }, ch, true) as { preview?: Record<string, unknown> };
+      const p = r?.preview || {};
+      if (p.needs_document) {
+        if (confirm("Questa sessione non ha ancora il pro forma (PF n/anno).\n\nPrepararlo adesso? Vedrai l'anteprima prima di crearlo.")) {
+          setPfDopo(ch);
+          setDialogPf(true);
+        }
+        return;
+      }
+      setProformaPreview({
+        channel: ch, suffix: "", shippingIncluded: shipIncl, shippingAmount: shipAmt,
+        ...(p as Record<string, unknown>),
+      } as NonNullable<typeof proformaPreview>);
+    } catch (e) {
+      toast.error("Errore anteprima: " + (e as Error).message);
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const handleAddInstrument = async () => {
@@ -618,35 +646,52 @@ export default function SessionDetail() {
               </Button>
             </>
           )}
+          <div className="flex items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => stampaDiretta("ricevuta")}
+              disabled={actionLoading === "stampa_ricevuta"}
+              className="rounded-r-none bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+              title="Stampa subito la ricevuta in 2 copie sulla stampante A4 del banco (agente di stampa)"
+            >
+              {actionLoading === "stampa_ricevuta" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Printer className="w-4 h-4 mr-1" />}
+              Stampa ricevuta
+            </Button>
+            <Button variant="outline" size="sm" onClick={openReceiptPdf} disabled={loadingPdf}
+              className="rounded-l-none border-l-0 px-2 text-xs bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+              title="Apri il PDF della ricevuta (stampa dal browser)">PDF</Button>
+          </div>
+          <div className="flex items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => stampaDiretta("etichette")}
+              disabled={actionLoading === "stampa_etichette"}
+              className="rounded-r-none bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
+              title="Stampa subito le etichette 50x22mm sulla Brother QL-700 (agente di stampa del banco)"
+            >
+              {actionLoading === "stampa_etichette" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Tag className="w-4 h-4 mr-1" />}
+              Stampa etichette
+            </Button>
+            <Button variant="outline" size="sm" onClick={openLabelsPdf}
+              className="rounded-l-none border-l-0 px-2 text-xs bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
+              title="Apri il PDF delle etichette (stampa dal browser con il formato Genius Lab 50x22)">PDF</Button>
+          </div>
+          <span className={`text-[11px] ${agenteStampa ? "text-emerald-700" : "text-muted-foreground"}`}
+            title="Agente di stampa sul Mac del banco: stampa da solo etichette e ricevute">
+            {agenteStampa === null ? "" : agenteStampa ? "● stampante pronta" : "○ agente di stampa spento"}
+          </span>
           <Button
             variant="outline"
             size="sm"
-            onClick={openReceiptPdf}
-            disabled={loadingPdf}
-            className="bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+            onClick={() => document.getElementById("spedizioni")?.scrollIntoView({ behavior: "smooth" })}
+            className="bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+            title="Corriere: flag spedizione, costo in fattura, ritiro e riconsegna UPS"
           >
-            {loadingPdf ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Printer className="w-4 h-4 mr-1" />}
-            Stampa ricevuta
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={openLabelsPdf}
-            className="bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
-            title="Genera PDF etichette di taratura 50x22mm per ogni strumento"
-          >
-            <Tag className="w-4 h-4 mr-1" />
-            Stampa etichette
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={downloadFatturaXml}
-            className="bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-            title="Scarica XML FatturaPA da importare in SimplyFatt"
-          >
-            <FileDown className="w-4 h-4 mr-1" />
-            Fattura XML
+            <Truck className="w-4 h-4 mr-1" />
+            Spedizione
+            {session.shipping_by_customer ? " (cliente)" : session.shipping_included && Number(session.shipping_amount_gross) > 0 ? ` ${Number(session.shipping_amount_gross).toFixed(2).replace(".", ",")} €` : ""}
           </Button>
           {/* Rapporti generati: si scaricano da qui, senza passare dalla sezione Rapporti */}
           <Button
@@ -1215,158 +1260,38 @@ export default function SessionDetail() {
             </div>
           </div>
 
-          {/* PULSANTE 3: Invia proforma — apre modal preview con totale, poi conferma → invio reale */}
+          {/* PULSANTE 3: Pro forma (documento PF n/AAAA) via email / WhatsApp — anteprima, poi conferma → invio.
+               Se il pro forma non c'è ancora si propone di prepararlo (stesse righe della fattura). */}
           <div className="flex flex-col gap-1">
             <div className="grid grid-cols-2 gap-1.5">
-              <div className="flex flex-col gap-0.5">
-                <Button
-                  size="lg"
-                  className="h-16 flex flex-col gap-0.5 bg-orange-600 hover:bg-orange-700"
-                  disabled={actionLoading !== null || previewLoading}
-                  title="Mostra anteprima totale proforma prima dell'invio email"
-                  onClick={async () => {
-                    const suffix = proformaSuffix.trim();
-                    const shipAmt = parseFloat(shippingAmount.replace(",", ".")) || 0;
-                    setPreviewLoading(true);
-                    try {
-                      const r = await sendProforma(
-                        sessionId,
-                        suffix,
-                        { included: shippingIncluded, amount: shippingIncluded ? shipAmt : undefined },
-                        "email",
-                        true, // dry_run
-                      ) as { preview?: Record<string, unknown> };
-                      const p = r?.preview || {};
-                      setProformaPreview({
-                        channel: 'email',
-                        suffix,
-                        shippingIncluded,
-                        shippingAmount: shipAmt,
-                        ...(p as Record<string, unknown>),
-                      } as typeof proformaPreview extends null ? never : NonNullable<typeof proformaPreview>);
-                    } catch (e) {
-                      toast.error("Errore anteprima: " + (e as Error).message);
-                    } finally {
-                      setPreviewLoading(false);
-                    }
-                  }}
-                >
-                  {previewLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
-                  <span className="text-xs leading-tight">PROFORMA<br/>EMAIL</span>
-                </Button>
-                <ActionTimestamp ts={session.proforma_email_at} prefix="📧" />
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <Button
-                  size="lg"
-                  className="h-16 flex flex-col gap-0.5 bg-orange-700 hover:bg-orange-800"
-                  disabled={actionLoading !== null || previewLoading}
-                  title="Mostra anteprima totale proforma prima dell'invio WhatsApp"
-                  onClick={async () => {
-                    const suffix = proformaSuffix.trim();
-                    const shipAmt = parseFloat(shippingAmount.replace(",", ".")) || 0;
-                    setPreviewLoading(true);
-                    try {
-                      const r = await sendProforma(
-                        sessionId,
-                        suffix,
-                        { included: shippingIncluded, amount: shippingIncluded ? shipAmt : undefined },
-                        "whatsapp",
-                        true, // dry_run
-                      ) as { preview?: Record<string, unknown> };
-                      const p = r?.preview || {};
-                      setProformaPreview({
-                        channel: 'whatsapp',
-                        suffix,
-                        shippingIncluded,
-                        shippingAmount: shipAmt,
-                        ...(p as Record<string, unknown>),
-                      } as typeof proformaPreview extends null ? never : NonNullable<typeof proformaPreview>);
-                    } catch (e) {
-                      toast.error("Errore anteprima: " + (e as Error).message);
-                    } finally {
-                      setPreviewLoading(false);
-                    }
-                  }}
-                >
-                  {previewLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageCircle className="w-5 h-5" />}
-                  <span className="text-xs leading-tight">PROFORMA<br/>WHATSAPP</span>
-                </Button>
-                <ActionTimestamp ts={session.proforma_whatsapp_at} prefix="💬" />
-              </div>
+              {(["email", "whatsapp"] as const).map((ch) => (
+                <div key={ch} className="flex flex-col gap-0.5">
+                  <Button
+                    size="lg"
+                    className={"h-16 flex flex-col gap-0.5 " + (ch === "email" ? "bg-orange-600 hover:bg-orange-700" : "bg-orange-700 hover:bg-orange-800")}
+                    disabled={actionLoading !== null || previewLoading}
+                    title={`Anteprima del pro forma prima dell'invio ${ch === "email" ? "email (PDF allegato)" : "WhatsApp (link al PDF)"}`}
+                    onClick={() => apriAnteprimaProforma(ch)}
+                  >
+                    {previewLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : ch === "email" ? <Mail className="w-5 h-5" /> : <MessageCircle className="w-5 h-5" />}
+                    <span className="text-xs leading-tight">PROFORMA<br/>{ch === "email" ? "EMAIL" : "WHATSAPP"}</span>
+                  </Button>
+                  <ActionTimestamp ts={ch === "email" ? session.proforma_email_at : session.proforma_whatsapp_at} prefix={ch === "email" ? "📧" : "💬"} />
+                </div>
+              ))}
             </div>
-            <div className="flex items-center gap-1 mt-1">
-              <label className="text-[10px] text-gray-500 whitespace-nowrap">N° SimplyFatt:</label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                maxLength={2}
-                placeholder="es. 03"
-                value={proformaSuffix}
-                onChange={(e) => setProformaSuffix(e.target.value.replace(/\D/g, "").slice(0, 2))}
-                className="h-7 text-xs text-center font-mono"
-              />
-            </div>
-            {/* Spedizione opzionale: checkbox + importo modificabile (default 36.60 lordo) */}
-            <label className="flex items-center gap-1 mt-1 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={shippingIncluded}
-                onChange={(e) => setShippingIncluded(e.target.checked)}
-                className="h-3 w-3"
-              />
-              <span className="text-[10px] text-gray-700 leading-tight">
-                + Spedizione (porto IVA)
-              </span>
-            </label>
-            <div className="flex items-center gap-1">
-              <Input
-                type="text"
-                inputMode="decimal"
-                placeholder="36.60"
-                value={shippingAmount}
-                onChange={(e) => setShippingAmount(e.target.value.replace(/[^\d,.]/g, ""))}
-                disabled={!shippingIncluded}
-                className="h-7 text-xs text-right font-mono disabled:bg-gray-100 disabled:text-gray-400"
-                title="Importo lordo spedizione (IVA inclusa). Default 36,60 EUR."
-              />
-              <span className="text-[10px] text-gray-500">EUR</span>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-[10px]"
-                disabled={actionLoading !== null}
-                onClick={handleSaveShipping}
-                title="Persiste la scelta spedizione sulla sessione (badge 'Pronto alla spedizione' + voce in PDF/email)"
-              >
-                💾 Salva
-              </Button>
-            </div>
-            {/* Stato persistenza: indica se i valori correnti combaciano con quanto salvato sul DB */}
-            {(() => {
-              const savedIncluded = !!session?.shipping_included;
-              const savedAmt = Number(session?.shipping_amount_gross || 0);
-              const currentAmt = parseFloat(shippingAmount.replace(",", ".")) || 0;
-              const dirty =
-                savedIncluded !== shippingIncluded ||
-                (shippingIncluded && Math.abs(savedAmt - currentAmt) > 0.005);
-              if (dirty) {
-                return (
-                  <p className="text-[10px] text-orange-600">
-                    ⚠️ Modifiche non salvate — clicca 💾 Salva
-                  </p>
-                );
-              }
-              if (savedIncluded) {
-                return (
-                  <p className="text-[10px] text-emerald-700">
-                    ✅ Salvato: spedizione {savedAmt.toFixed(2)} EUR
-                  </p>
-                );
-              }
-              return null;
-            })()}
+            <p className="text-[10px] text-gray-600 leading-tight mt-1">
+              Spedizione:{" "}
+              {session.shipping_by_customer
+                ? "a carico del cliente (0 €)"
+                : session.shipping_included && Number(session.shipping_amount_gross) > 0
+                  ? `${Number(session.shipping_amount_gross).toFixed(2).replace(".", ",")} €`
+                  : "nessuna"}
+              {" · "}
+              <button type="button" className="underline" onClick={() => document.getElementById("spedizioni")?.scrollIntoView({ behavior: "smooth" })}>modifica</button>
+              {" · "}
+              <button type="button" className="underline" onClick={() => { setPfDopo(null); setDialogPf(true); }}>pro forma</button>
+            </p>
           </div>
 
           {/* PULSANTE 4: Genera rapporti RDT */}
@@ -1542,10 +1467,29 @@ export default function SessionDetail() {
       </Card>
 
       {/* === SPEDIZIONI UPS: ritiro dal cliente e riconsegna === */}
-      <div id="spedizioni" className="scroll-mt-4"><ShipmentsPanel sessionId={sessionId} /></div>
+      <div id="spedizioni" className="scroll-mt-4 space-y-4">
+        <SpedizioneSessione
+          key={[session.arrived_by_courier, session.return_by_courier, session.shipping_by_customer, session.shipping_included, session.shipping_amount_gross, session.shipping_label].join("|")}
+          sessionId={sessionId} session={session} onSalvato={() => { loadSession(); setFatturaAggiorna((n) => n + 1); }} />
+        <ShipmentsPanel sessionId={sessionId} session={session} onSessioneAggiornata={() => { loadSession(); setFatturaAggiorna((n) => n + 1); }} />
+      </div>
 
       {/* === FATTURA ELETTRONICA (Openapi SDI) === */}
-      <FatturaPanel sessionId={sessionId} />
+      <FatturaPanel sessionId={sessionId} aggiorna={fatturaAggiorna} />
+
+      {dialogPf && (
+        <ProformaDialog
+          sessionId={sessionId}
+          onChiudi={() => { setDialogPf(false); setPfDopo(null); }}
+          onCreato={() => {
+            setDialogPf(false);
+            setFatturaAggiorna((n) => n + 1);
+            const ch = pfDopo;
+            setPfDopo(null);
+            if (ch) apriAnteprimaProforma(ch);
+          }}
+        />
+      )}
 
       {/* === SEZIONE RICHIESTA RECENSIONE ===
            Visibile per sessioni completate o con review già inviata. */}
@@ -1601,7 +1545,12 @@ export default function SessionDetail() {
               </p>
             </div>
             <div className="px-5 py-4 space-y-2 text-sm">
-              {proformaPreview.proforma_number_existing && (
+              {proformaPreview.documento && proformaPreview.documento_id ? (
+                <div className="text-xs px-2 py-1.5 bg-orange-50 border border-orange-200 rounded flex items-center gap-2">
+                  <span>Pro forma <b>{proformaPreview.proforma_number_existing}</b> — {proformaPreview.channel === "email" ? "PDF allegato alla mail" : "link al PDF nel messaggio"}</span>
+                  <a className="ml-auto underline" href={getDocumentoPdfUrl(proformaPreview.documento_id)} target="_blank" rel="noreferrer">Apri PDF</a>
+                </div>
+              ) : proformaPreview.proforma_number_existing && (
                 <div className="text-xs px-2 py-1.5 bg-yellow-50 border border-yellow-200 rounded">
                   ⚠️ Proforma già esistente <b>{proformaPreview.proforma_number_existing}</b> — verrà <b>solo rinviata</b> (no nuova proforma)
                 </div>
