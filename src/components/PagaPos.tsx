@@ -61,6 +61,9 @@ export function PagaPos({ importo, descrizione, rifTipo, rifId, disabled, onPaga
   const { admin } = usePermessi();
   const [lista, setLista] = useState<LettorePos[] | null>(null);
   const [attesa, setAttesa] = useState<Attesa | null>(null);
+  // esito ben visibile (01/10/2026: il Solo in modalità API non mostra più «pagamento riuscito»)
+  const [esito, setEsito] = useState<{ ok: boolean; importo: number; nome: string; codice?: string | null; carta?: string; motivo?: string; ora: string } | null>(null);
+  useEffect(() => { if (esito?.ok) { const t = setTimeout(() => setEsito(null), 12_000); return () => clearTimeout(t); } }, [esito]);
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState("");
   const [codiceManuale, setCodiceManuale] = useState("");
@@ -92,14 +95,20 @@ export function PagaPos({ importo, descrizione, rifTipo, rifId, disabled, onPaga
         if (!vivo || fatto.current) return;
         if (s.stato === "pagato") {
           fatto.current = true;
-          toast.success(`Pagamento di ${eur(attesa.importo)} verificato${s.transaction_code ? ` (transazione ${s.transaction_code})` : ""}`);
+          const det = (s.dettaglio || {}) as Record<string, unknown>;
+          const tx = (det.transazione || {}) as Record<string, unknown>;
+          const carta = [det.card_type || tx.card_type, det.entry_mode || tx.entry_mode].filter(Boolean).join(" · ");
+          setEsito({ ok: true, importo: attesa.importo, nome: attesa.nome, codice: s.transaction_code, carta: carta ? String(carta) : undefined,
+            ora: new Date().toLocaleTimeString("it-IT") });
           setAttesa(null);
           await consegna(s);
           return;
         }
         if (s.stato !== "in_attesa") {
           fatto.current = true;
-          toast.error(s.stato === "annullato" ? "Pagamento annullato" : "Pagamento NON riuscito");
+          const det = (s.dettaglio || {}) as Record<string, unknown>;
+          setEsito({ ok: false, importo: attesa.importo, nome: attesa.nome, ora: new Date().toLocaleTimeString("it-IT"),
+            motivo: s.stato === "annullato" ? "Pagamento annullato" : String(det.payment_failure_reason || det.errore || "Pagamento non riuscito sul terminale") });
           setAttesa(null);
           return;
         }
@@ -202,6 +211,31 @@ export function PagaPos({ importo, descrizione, rifTipo, rifId, disabled, onPaga
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+      {/* ESITO: grande e chiaro, verde se il pagamento è verificato su SumUp, rosso se non è riuscito */}
+      <Dialog open={!!esito} onOpenChange={(o) => { if (!o) setEsito(null); }}>
+        <DialogContent className={`max-w-md border-4 ${esito?.ok ? "border-green-500" : "border-red-500"}`}>
+          <DialogHeader>
+            <DialogTitle className={`text-center text-2xl ${esito?.ok ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
+              {esito?.ok ? "✅ PAGAMENTO RIUSCITO" : "❌ PAGAMENTO NON RIUSCITO"}
+            </DialogTitle>
+            <DialogDescription className="text-center">
+              {esito?.ok ? <>Verificato su SumUp alle {esito.ora} · {esito.nome}</> : <>{esito?.motivo} · {esito?.nome} · {esito?.ora}</>}
+            </DialogDescription>
+          </DialogHeader>
+          <div className={`py-2 text-center text-5xl font-bold tabular-nums ${esito?.ok ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
+            {eur(esito?.importo || 0)}
+          </div>
+          {esito?.ok && (
+            <div className="space-y-1 text-center text-sm text-muted-foreground">
+              {esito.carta && <div>Carta: <b>{esito.carta}</b></div>}
+              {esito.codice && <div>Transazione SumUp: <b className="font-mono">{esito.codice}</b></div>}
+              <div>Il documento è stato registrato come pagato con POS.</div>
+            </div>
+          )}
+          {!esito?.ok && <div className="text-center text-sm">Il documento NON è stato emesso: riprova il pagamento o scegli un altro metodo.</div>}
+          <Button className={esito?.ok ? "bg-green-600 hover:bg-green-700" : ""} variant={esito?.ok ? "default" : "outline"} onClick={() => setEsito(null)}>OK</Button>
         </DialogContent>
       </Dialog>
     </>
