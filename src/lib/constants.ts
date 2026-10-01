@@ -2,6 +2,8 @@
 // NOTA: payment_status è INDIPENDENTE dallo status sessione.
 // "attesa_pagamento" indica che è stata inviata la proforma — NON che non è stato pagato.
 export const STATUS_CONFIG: Record<string, { label: string; color: string; step: number }> = {
+  // 01/10/2026: sessione aperta ma il cliente deve ancora portare gli strumenti — arancione ben visibile
+  attesa_strumenti: { label: "ATTESA STRUMENTI", color: "bg-orange-500 text-white font-bold border border-orange-600 hover:bg-orange-500", step: 0 },
   registrazione:    { label: "Registrazione",    color: "bg-yellow-100 text-yellow-800", step: 0 },
   in_lavorazione:   { label: "In lavorazione",   color: "bg-blue-100 text-blue-800",    step: 1 },
   pronto_ritiro:    { label: "Pronto al ritiro",  color: "bg-green-100 text-green-800",  step: 2 },

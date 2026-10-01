@@ -32,6 +32,8 @@ import {
   getReviewStatus,
   sendReviewRequest,
   markReviewReceived,
+  strumentiArrivati,
+  mettiInAttesaStrumenti,
 } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -630,6 +632,40 @@ export default function SessionDetail() {
             {agenteStampa === null ? "" : agenteStampa ? "● stampante pronta" : "○ agente di stampa spento"}
           </span>
         </div>
+        {/* ATTESA STRUMENTI (01/10/2026): la sessione esiste già, il cliente deve ancora portare gli strumenti.
+            Nessuna notifica al cliente finché non si preme «Strumenti arrivati». */}
+        {session.status === "attesa_strumenti" && (
+          <div className="flex flex-col gap-3 rounded-lg border-2 border-orange-500 bg-orange-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-lg font-extrabold tracking-wide text-orange-700">ATTESA STRUMENTI</p>
+              <p className="text-sm text-orange-900">
+                La sessione è già aperta: il cliente deve ancora portare gli strumenti
+                {session.session_date ? ` (arrivo previsto ${new Date(session.session_date).toLocaleDateString("it-IT")})` : ""}.
+                Non va rifatta. Nessuna notifica parte al cliente finché è in attesa.
+              </p>
+            </div>
+            <Button
+              className="shrink-0 bg-orange-500 text-white hover:bg-orange-600"
+              disabled={actionLoading !== null}
+              onClick={() => handleAction("strumenti_arrivati", () => strumentiArrivati(sessionId),
+                "Strumenti arrivati: sessione in registrazione")}
+            >
+              {actionLoading === "strumenti_arrivati" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <PackageCheck className="w-4 h-4 mr-1" />}
+              Strumenti arrivati
+            </Button>
+          </div>
+        )}
+        {session.status === "registrazione" && instruments.length === 0 && !session.receipt_email_at && !session.receipt_whatsapp_at && (
+          <button
+            type="button"
+            className="text-xs text-orange-700 underline underline-offset-2 hover:text-orange-900"
+            disabled={actionLoading !== null}
+            onClick={() => handleAction("metti_attesa", () => mettiInAttesaStrumenti(sessionId),
+              "Sessione messa in ATTESA STRUMENTI")}
+          >
+            Il cliente deve ancora portare gli strumenti? Metti la sessione in ATTESA STRUMENTI
+          </button>
+        )}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 [&_button]:h-9">
           {!editingSession ? (
             <Button

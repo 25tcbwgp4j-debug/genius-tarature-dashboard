@@ -154,7 +154,8 @@ export default function Home() {
               <Link
                 key={session.id}
                 href={`/sessioni/${session.id}`}
-                className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                className={`flex items-center justify-between p-4 transition-colors cursor-pointer ${
+                  session.status === "attesa_strumenti" ? "bg-orange-50 border-l-4 border-orange-500 hover:bg-orange-100" : "hover:bg-gray-50"}`}
               >
                 <div>
                   <p className="font-medium text-gray-900">

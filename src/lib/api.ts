@@ -128,11 +128,32 @@ export async function deleteCustomer(id: string) {
 }
 
 // === SESSIONI ===
-export async function createSession(customerId: string, operator?: string) {
+export async function createSession(
+  customerId: string,
+  operator?: string,
+  opts?: { attesaStrumenti?: boolean; confermaDuplicato?: boolean },
+) {
+  // 409 con detail.code === 'sessione_in_attesa_strumenti' se il cliente ha gia' una sessione
+  // in ATTESA STRUMENTI: la UI chiede se aprire quella o creare comunque (confermaDuplicato).
   return fetchAPI('/api/sessions', {
     method: 'POST',
-    body: JSON.stringify({ customer_id: customerId, operator }),
+    body: JSON.stringify({
+      customer_id: customerId,
+      operator,
+      attesa_strumenti: !!opts?.attesaStrumenti,
+      conferma_duplicato: !!opts?.confermaDuplicato,
+    }),
   });
+}
+
+/** Gli strumenti sono arrivati: attesa_strumenti -> registrazione (nessuna notifica al cliente). */
+export async function strumentiArrivati(sessionId: string) {
+  return fetchAPI(`/api/sessions/${sessionId}/strumenti-arrivati`, { method: 'POST' });
+}
+
+/** Riporta in ATTESA STRUMENTI una sessione in registrazione senza ricevuta inviata. */
+export async function mettiInAttesaStrumenti(sessionId: string) {
+  return fetchAPI(`/api/sessions/${sessionId}/attesa-strumenti`, { method: 'POST' });
 }
 
 export async function listSessions(params?: {

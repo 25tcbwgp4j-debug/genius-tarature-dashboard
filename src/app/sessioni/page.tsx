@@ -138,12 +138,35 @@ export default function SessionsPage() {
 
   // Cliente nuovo creato dal dialog (incolla dati / foto biglietto): la sessione parte subito
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
+  // 01/10/2026 — «Il cliente deve ancora portare gli strumenti»: la sessione nasce in ATTESA STRUMENTI
+  const [attesaStrumenti, setAttesaStrumenti] = useState(false);
+  // Avviso anti-clone: il cliente ha gia' una sessione in attesa strumenti (409 dal backend)
+  const [avvisoClone, setAvvisoClone] = useState<{ customerId: string; message: string; sessionId: string } | null>(null);
+  const [forzando, setForzando] = useState(false);
+
+  // Crea la sessione; se il backend segnala una sessione gia' in attesa strumenti apre il dialogo
+  // di avviso e ritorna null (la creazione NON avviene finche' l'operatore non conferma).
+  const creaSessione = async (customerId: string, conferma = false) => {
+    try {
+      return await createSession(customerId, undefined, { attesaStrumenti, confermaDuplicato: conferma });
+    } catch (err: unknown) {
+      const e = err as { status?: number; detail?: { code?: string; message?: string; session?: { id?: string } } };
+      if (e?.status === 409 && e.detail?.code === "sessione_in_attesa_strumenti" && e.detail.session?.id) {
+        setAvvisoClone({ customerId, message: e.detail.message || "C'è già una sessione in attesa strumenti", sessionId: e.detail.session.id });
+        setDialogOpen(false);
+        return null;
+      }
+      throw err;
+    }
+  };
+
   const avviaSessionePer = async (customerId: string) => {
     if (creatingFor) return;
     setCreatingFor(customerId);
     setNewCustomerOpen(false);
     try {
-      const session = await createSession(customerId);
+      const session = await creaSessione(customerId);
+      if (!session) { setCreatingFor(null); return; }
       toast.success("Cliente pronto, sessione creata!");
       setDialogOpen(false);
       window.location.assign(`/sessioni/${session.id}`);
@@ -190,8 +213,9 @@ export default function SessionsPage() {
         toast.success(`${lead.company_name} promosso a cliente`);
       }
       if (!customerId) throw new Error("customer_id mancante");
-      const session = await createSession(customerId);
-      toast.success("Sessione creata!");
+      const session = await creaSessione(customerId);
+      if (!session) { setCreatingFor(null); return; }
+      toast.success(attesaStrumenti ? "Sessione creata in ATTESA STRUMENTI" : "Sessione creata!");
       setDialogOpen(false);
       window.location.assign(`/sessioni/${session.id}`);
     } catch (err: unknown) {
@@ -214,6 +238,16 @@ export default function SessionsPage() {
               <DialogTitle>Nuova sessione di taratura</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+              <label className={`flex items-center gap-2 rounded-md border p-2 text-sm cursor-pointer ${
+                attesaStrumenti ? "border-orange-500 bg-orange-50 font-semibold text-orange-800" : "border-gray-200"}`}>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-orange-500"
+                  checked={attesaStrumenti}
+                  onChange={(e) => setAttesaStrumenti(e.target.checked)}
+                />
+                Il cliente deve ancora portare gli strumenti (sessione in ATTESA STRUMENTI)
+              </label>
               <div className="flex gap-2">
                 <Input
                   placeholder="Cerca cliente per nome..."
@@ -295,6 +329,50 @@ export default function SessionsPage() {
             </div>
           </DialogContent>
         </Dialog>
+        {/* Avviso anti-clone: sessione gia' in attesa strumenti per questo cliente */}
+        <Dialog open={!!avvisoClone} onOpenChange={(o) => { if (!o && !forzando) setAvvisoClone(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="text-orange-700">Sessione già in attesa strumenti</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="rounded-md border-2 border-orange-500 bg-orange-50 p-3 text-sm font-medium text-orange-900">
+                {avvisoClone?.message}
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                  disabled={forzando}
+                  onClick={() => avvisoClone && window.location.assign(`/sessioni/${avvisoClone.sessionId}`)}
+                >
+                  Apri la sessione esistente
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  disabled={forzando}
+                  onClick={async () => {
+                    if (!avvisoClone) return;
+                    setForzando(true);
+                    try {
+                      const session = await creaSessione(avvisoClone.customerId, true);
+                      if (session) {
+                        toast.success("Nuova sessione creata");
+                        window.location.assign(`/sessioni/${session.id}`);
+                      }
+                    } catch (err: unknown) {
+                      toast.error(err instanceof Error ? err.message : "Errore creazione sessione");
+                      setForzando(false);
+                    }
+                  }}
+                >
+                  {forzando ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                  Crea comunque una nuova sessione
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
         <ParseCustomerModal
           open={newCustomerOpen}
           onClose={() => setNewCustomerOpen(false)}
@@ -310,6 +388,7 @@ export default function SessionsPage() {
           <div className="flex flex-wrap gap-1">
             {[
               { key: "", label: "Tutte" },
+              { key: "attesa_strumenti", label: "Attesa strum." },
               { key: "registrazione", label: "Registr." },
               { key: "in_lavorazione", label: "In lavoraz." },
               { key: "pronto_ritiro", label: "Pronto" },
@@ -516,7 +595,10 @@ export default function SessionsPage() {
             sessions.map((s) => (
               <div
                 key={s.id}
-                className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors"
+                className={`flex items-center gap-3 p-4 transition-colors ${
+                  s.status === "attesa_strumenti"
+                    ? "bg-orange-50 border-l-4 border-orange-500 hover:bg-orange-100"
+                    : "hover:bg-gray-50"}`}
               >
                 {/* Bulk select checkbox FUORI dal Link (P2.8) */}
                 <input

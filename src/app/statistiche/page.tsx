@@ -47,6 +47,7 @@ interface Stats {
 }
 
 const STATUS_LABELS: Record<string, string> = {
+  attesa_strumenti: "Attesa strumenti",
   registrazione: "Registrazione",
   in_lavorazione: "In lavorazione",
   pronto_ritiro: "Pronto ritiro",
