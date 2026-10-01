@@ -19,6 +19,7 @@ import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Oper
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { ChiusuraFiscale } from "./ChiusuraFiscale";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma, spostaGiorno } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
@@ -119,6 +120,7 @@ export default function CassaGiornataPage() {
   const chiusa = f?.giornata.stato === "chiusa";
   const [storno, setStorno] = useState<OggettoStorno | null>(null);
   const [operatore, setOperatore] = useOperatore();
+  const [convalida, setConvalida] = useState<{ aperta: boolean; motivo: string }>({ aperta: false, motivo: "" });
 
   // Salvataggi con attesa di 700 ms: prima di ogni azione (chiusura, conferma, righe, prelievi, cambio giorno)
   // si «svuotano» con flush(), così il backend lavora sempre sugli ultimi numeri scritti.
@@ -316,14 +318,21 @@ export default function CassaGiornataPage() {
     return azione("chiudi", async () => {
       const fresco = await cassaGiornata(giorno);   // quadratura sui numeri appena salvati
       applica(fresco);
-      let forza = false, nota = "";
-      if (!fresco.conti_tornano) {
-        const m = prompt("I conti NON tornano. Per chiudere comunque scrivi il motivo della differenza (almeno 5 lettere):");
-        if (!m || m.trim().length < 5) return;
-        forza = true; nota = m.trim();
-      } else if (!confirm(`Chiudere la cassa del ${dataIt(giorno)}? L'Excel andrà nella cartella DA FIRMARE.`)) return;
-      applica(await cassaGiornataChiudi(giorno, forza, nota));
+      if (!fresco.conti_tornano) { setConvalida({ aperta: true, motivo: "" }); return; }   // differenze: si convalida col motivo
+      if (!confirm(`Chiudere la cassa del ${dataIt(giorno)}? L'Excel andrà nella cartella DA FIRMARE.`)) return;
+      applica(await cassaGiornataChiudi(giorno, false, ""));
       toast.success("Giornata chiusa");
+    });
+  }
+
+  /** Conti che non tornano (centesimi delle fatture, resto sbagliato…): si convalida la differenza e si chiude. */
+  function convalidaEChiudi() {
+    const m = convalida.motivo.trim();
+    if (m.length < 5) { toast.error("Scegli o scrivi il motivo della differenza"); return; }
+    return azione("chiudi", async () => {
+      applica(await cassaGiornataChiudi(giorno, true, m));
+      setConvalida({ aperta: false, motivo: "" });
+      toast.success("Differenza convalidata, giornata chiusa");
     });
   }
 
@@ -344,6 +353,35 @@ export default function CassaGiornataPage() {
 
   return (
     <div className="space-y-4 p-1 md:p-2">
+      <Dialog open={convalida.aperta} onOpenChange={(o) => !o && setConvalida({ aperta: false, motivo: "" })}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Convalida le differenze e chiudi</DialogTitle>
+            <DialogDescription>I conti non tornano al centesimo. Controlla le differenze: se sono giuste, scegli il motivo e chiudi la giornata. Il motivo resta scritto nelle note.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            {(f?.controlli || []).filter((c) => !c.ok).map((c) => (
+              <div key={c.chiave} className="flex items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:bg-amber-950/30">
+                <span className="font-medium">{c.nome}</span>
+                <span className="tabular-nums">{c.mancante ? "dato mancante" : <>differenza <b>{(c.differenza ?? 0) > 0 ? "+" : ""}{eur(c.differenza)}</b></>}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {["Arrotondamento centesimi (fatture/POS)", "Resto dato sbagliato", "Errore di conteggio dei contanti", "Dato del terminale non disponibile"].map((m) => (
+              <Button key={m} size="sm" variant={convalida.motivo === m ? "default" : "outline"} onClick={() => setConvalida({ aperta: true, motivo: m })}>{m}</Button>
+            ))}
+          </div>
+          <Input placeholder="oppure scrivi il motivo…" value={convalida.motivo} onChange={(e) => setConvalida({ aperta: true, motivo: e.target.value })}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); convalidaEChiudi(); } }} />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setConvalida({ aperta: false, motivo: "" })}>Annulla</Button>
+            <Button className="bg-amber-600 hover:bg-amber-700" disabled={!!busy || convalida.motivo.trim().length < 5} onClick={convalidaEChiudi}>
+              {busy === "chiudi" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <CheckCircle2 className="mr-1 size-4" />}Convalida e chiudi
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-2 text-2xl font-semibold">Cassa del giorno</h1>
         <Button size="icon" variant="outline" className="size-8" onClick={() => vaiA(spostaGiorno(giorno, -1))}><ChevronLeft className="size-4" /></Button>
@@ -361,8 +399,8 @@ export default function CassaGiornataPage() {
           {!f?.giornata.futura && <Button size="sm" variant="outline" onClick={() => { window.location.href = cassaGiornataUrlExcel(giorno); }}><FileSpreadsheet className="mr-1 size-4" />Excel</Button>}
           {f?.giornata.futura ? null : chiusa
             ? <Button size="sm" variant="outline" onClick={riapri} disabled={!!busy}>{busy === "riapri" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Unlock className="mr-1 size-4" />}Riapri</Button>
-            : <Button size="sm" onClick={chiudi} disabled={!f || !!busy} className={f?.conti_tornano ? "bg-emerald-600 hover:bg-emerald-700" : ""}>
-                {busy === "chiudi" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Lock className="mr-1 size-4" />}Chiudi giornata
+            : <Button size="sm" onClick={chiudi} disabled={!f || !!busy} className={f?.conti_tornano ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"}>
+                {busy === "chiudi" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Lock className="mr-1 size-4" />}{f?.conti_tornano ? "Chiudi giornata" : "Convalida e chiudi"}
               </Button>}
         </div>
       </div>
