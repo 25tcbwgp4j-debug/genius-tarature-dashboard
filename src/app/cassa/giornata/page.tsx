@@ -19,6 +19,7 @@ import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Oper
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { ChiusuraFiscale } from "./ChiusuraFiscale";
+import { ReportCommercialista } from "./ReportCommercialista";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma, spostaGiorno } from "@/lib/date";
@@ -396,6 +397,7 @@ export default function CassaGiornataPage() {
           </span>
         )}
         <div className="ml-auto flex gap-2">
+          {admin && <ReportCommercialista giorno={giorno} />}
           {!f?.giornata.futura && <Button size="sm" variant="outline" onClick={() => { window.location.href = cassaGiornataUrlExcel(giorno); }}><FileSpreadsheet className="mr-1 size-4" />Excel</Button>}
           {f?.giornata.futura ? null : chiusa
             ? <Button size="sm" variant="outline" onClick={riapri} disabled={!!busy}>{busy === "riapri" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Unlock className="mr-1 size-4" />}Riapri</Button>

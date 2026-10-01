@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getStatistics } from "@/lib/api";
+import { TabStatistiche } from "@/components/TabStatistiche";
 
 interface MonthRow {
   mese: string;
@@ -295,13 +296,16 @@ export default function StatistichePage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <BarChart3 className="w-6 h-6 text-blue-600" /> Statistiche
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Fatturato registrato a sistema (IVA inclusa) · periodo {periodo} · {stats.sessioni.totali} sessioni
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-blue-600" /> Statistiche · Tarature
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Fatturato registrato a sistema (IVA inclusa) · periodo {periodo} · {stats.sessioni.totali} sessioni
+          </p>
+        </div>
+        <TabStatistiche attivo="tarature" />
       </div>
 
       {/* KPI principali */}
