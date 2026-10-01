@@ -22,9 +22,13 @@ import { posAnnulla, posConfermaManuale, posIncassa, posLettori, posStato, type 
 import { toastErrore } from "@/lib/errori";
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+// 01/10/2026 (Christian): due soli pulsanti chiari.
+// - «Paga con POS piccolo»: l'importo parte DIRETTO sul SumUp Solo abbinato via Cloud API (il cliente avvicina la carta);
+// - «Incassato con POS P8»: il P8 non supporta la Cloud API → l'importo si batte a mano sul P8 e la dashboard
+//   conferma da sola leggendo le transazioni SumUp.
 const POS = [
-  { chiave: "piccolo", etichetta: "POS piccolo (Solo)" },
-  { chiave: "grande", etichetta: "POS grande (P8)" },
+  { chiave: "piccolo", etichetta: "Paga con POS piccolo", nomeLettore: "POS piccolo (Solo)", api: true },
+  { chiave: "grande", etichetta: "Incassato con POS P8", nomeLettore: "POS P8", api: false },
 ] as const;
 const OGNI_MS = 3000;
 
@@ -145,18 +149,18 @@ export function PagaPos({ importo, descrizione, rifTipo, rifId, disabled, onPaga
   return (
     <>
       {soloLettori && POS.map((p) => {
-        const l = lista ? trova(lista, p.chiave) : undefined;
+        const l = lista && p.api ? trova(lista, p.chiave) : undefined;
         const viaApi = !!l && l.online !== false;
-        const titolo = !lista ? "Carico i POS…" : viaApi ? `Invia ${eur(importo)} al ${p.etichetta}`
-          : `Batti ${eur(importo)} sul ${p.etichetta}: la dashboard riconosce da sola il pagamento su SumUp`;
+        const titolo = !lista ? "Carico i POS…" : viaApi ? `Invia ${eur(importo)} direttamente al POS piccolo: il cliente avvicina la carta`
+          : `Batti ${eur(importo)} sul ${p.nomeLettore}: la dashboard riconosce da sola il pagamento su SumUp`;
         return (
           <Button key={p.chiave} type="button" size={size} variant="outline" title={titolo} className={stile}
-            disabled={blocca || !lista} onClick={() => apri(p.etichetta, { lettore: viaApi ? l : undefined })}>
+            disabled={blocca || !lista} onClick={() => apri(p.nomeLettore, { lettore: viaApi ? l : undefined })}>
             {busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <CreditCard className="mr-1 size-4" />}{p.etichetta}
           </Button>
         );
       })}
-      {generico && (
+      {generico && !soloLettori && (
         <Button type="button" size={size} variant="outline" className={stile} disabled={blocca}
           title="Batti l'importo su un POS SumUp: la dashboard riconosce da sola il pagamento" onClick={() => apri("POS SumUp", {})}>
           {busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <CreditCard className="mr-1 size-4" />}POS SumUp
