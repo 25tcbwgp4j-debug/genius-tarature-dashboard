@@ -1022,7 +1022,8 @@ export async function magModifica(id: string, body: Partial<Prodotto>): Promise<
 export async function magMovimento(id: string, body: { tipo: string; quantita: number; causale?: string; costo?: number }) {
   return fetchAPI(`/api/magazzino/prodotti/${id}/movimento`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string; pos_incasso_id?: string; operatore: string; session_id?: string }): Promise<Scontrino> {
+export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string; pos_incasso_id?: string; operatore: string; session_id?: string;
+  /** incasso di un ordine cliente (/cassa?ordine=…): lo scontrino diventa acconto/saldo dell'ordine */ documento_id?: string }): Promise<Scontrino & { ordine?: { id: string; sigla: string } }> {
   return fetchAPI('/api/cassa/scontrini', { method: 'POST', body: JSON.stringify(body) });
 }
 export async function cassaScontrini(giorno = '') { return fetchAPI(`/api/cassa/scontrini?giorno=${giorno}`); }
@@ -1124,6 +1125,8 @@ export interface PagamentoDoc {
   scontrino_numero: string | null; fattura_id: string | null;
   /** scontrino battuto dal registratore: da_stampare · in_stampa · emesso · simulato · errore */
   scontrino_id?: string | null; scontrino_stato?: string; scontrino_errore?: string | null; riferimento?: string | null; operatore?: string | null;
+  /** fattura collegata ma non ancora pagata: non conta nel pagato dell'ordine */
+  in_attesa?: boolean; fattura_numero?: string | null; fattura_stato?: string | null; fattura_tipo?: string | null;
 }
 export type FaseOrdine = 'da_ordinare' | 'ordinato' | 'arrivato' | 'ritirato';
 export interface AvvisoOrdine { canale: 'email' | 'whatsapp'; il: string; destinatario: string; operatore?: string; da?: string }
@@ -1138,6 +1141,10 @@ export interface DocumentoCliente {
   // percorso dell'ordine a cliente (01/10/2026)
   fase?: FaseOrdine; ordinato_il?: string | null; arrivato_il?: string | null; ritirato_il?: string | null;
   avvisi?: AvvisoOrdine[]; messaggio_arrivo?: string; whatsapp_link?: string | null;
+  /** fatture emesse sull'ordine e non ancora pagate · quanto resta da certificare (residuo − in_attesa) */
+  in_attesa?: number; da_certificare?: number;
+  /** fornitore da cui è stato ordinato (rubrica fornitori o testo libero) */
+  fornitore_id?: string | null; fornitore_nome?: string | null;
 }
 export type TipoDocumento = 'preventivo' | 'ordine' | 'proforma' | 'ddt';
 export type VistaOrdini = 'aperti' | 'arrivati' | 'completati' | 'annullati' | 'tutti';
@@ -1145,13 +1152,14 @@ export async function docElenco(tipo: TipoDocumento, stato = '', q = '', vista =
   return fetchAPI(`/api/documenti?tipo=${tipo}&stato=${stato}&q=${encodeURIComponent(q)}&vista=${vista}`);
 }
 export type EsitoIncassoOrdine = DocumentoCliente & { fattura?: { id: string; tipo_documento: string }; scontrino?: { id: string; stato: string } };
-/** Incasso sull'ordine: acconto (importo) o intero/saldo; certificazione obbligatoria scontrino (registratore) o fattura. */
-export async function docIncassa(id: string, body: { importo?: number; intero?: boolean; modalita: 'contanti' | 'pos_sumup' | 'paypal' | 'bonifico';
-  certificato: 'scontrino' | 'fattura'; pos_incasso_id?: string; riferimento?: string; operatore: string }): Promise<EsitoIncassoOrdine> {
+/** Acconto (importo) o intero/saldo dell'ordine con FATTURA: bozza TD02/TD01 da pagare in Fatturazione.
+ *  Con lo scontrino si va invece alla Cassa: /cassa?ordine=<id>&importo=<x>&tipo=acconto|saldo */
+export async function docIncassa(id: string, body: { importo?: number; intero?: boolean; certificato: 'fattura'; operatore: string }): Promise<EsitoIncassoOrdine> {
   return fetchAPI(`/api/documenti/${id}/incassa`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function docFase(id: string, fase: 'da_ordinare' | 'ordinato' | 'arrivato', operatore: string): Promise<DocumentoCliente> {
-  return fetchAPI(`/api/documenti/${id}/fase`, { method: 'POST', body: JSON.stringify({ fase, operatore }) });
+export async function docFase(id: string, fase: 'da_ordinare' | 'ordinato' | 'arrivato', operatore: string,
+  fornitore?: { fornitore_id?: string | null; fornitore_nome?: string }): Promise<DocumentoCliente> {
+  return fetchAPI(`/api/documenti/${id}/fase`, { method: 'POST', body: JSON.stringify({ fase, operatore, ...(fornitore || {}) }) });
 }
 export async function docAvvisa(id: string, canale: 'email' | 'whatsapp', operatore: string): Promise<DocumentoCliente> {
   return fetchAPI(`/api/documenti/${id}/avvisa`, { method: 'POST', body: JSON.stringify({ canale, operatore }) });
