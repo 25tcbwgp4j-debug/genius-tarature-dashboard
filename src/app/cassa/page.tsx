@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Banknote, CreditCard, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, Wallet, X } from "lucide-react";
 import { StornoDialog } from "@/components/StornoDialog";
+import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
 import { DecInput, parseDec } from "@/components/DecInput";
@@ -162,6 +163,9 @@ export default function CassaPage() {
             <Button disabled={!carrello.length || !!busy} onClick={() => scontrino("pos_sumup")}>{busy === "pos_sumup" ? <Loader2 className="animate-spin" /> : <CreditCard />} POS SumUp</Button>
             <Button variant="outline" disabled={!carrello.length || !!busy} onClick={() => scontrino("paypal")}><Wallet /> PayPal</Button>
             <Button variant="outline" disabled={!carrello.length || !!busy} onClick={() => scontrino("non_riscosso")}>Non riscosso</Button>
+            {/* bonifico istantaneo: lo scontrino parte solo dopo aver visto l'accredito sul conto SumUp */}
+            <VerificaBonifico className="col-span-2" importo={tot} etichettaConferma="Emetti scontrino" disabled={!carrello.length || !!busy}
+              onConfermato={() => scontrino("bonifico")} />
           </div>
           <Button variant="secondary" className="w-full" disabled={!carrello.length || !!busy} onClick={fattura}>
             {busy === "fattura" ? <Loader2 className="animate-spin" /> : <Receipt />} Fai fattura invece dello scontrino</Button>

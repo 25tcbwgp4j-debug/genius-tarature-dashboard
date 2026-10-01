@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { docDaFattura } from "@/lib/api";
+import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { toastErrore } from "@/lib/errori";
 import {
   fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattInvia, fattLinkStripe, fattNotaCredito,
@@ -313,6 +314,12 @@ export function Dettaglio({
                         <m.icon /> {m.label}
                       </Button>
                     ))}
+                    {emessa && Number(f.totale) > 0 && (
+                      // bonifico istantaneo: si segna pagata solo dopo aver visto l'accredito sul conto SumUp (l'admin può forzare)
+                      <VerificaBonifico importo={Number(f.totale)} testo={f.controparte_nome || ""} etichettaConferma="Segna pagata" disabled={!!busy}
+                        onConfermato={(r, forzato) => azione("pag", () => fattPagamento(f.id, { modalita: "bonifico", riferimento: (rif ? `${rif} · ${r}` : r).slice(0, 200) }),
+                          () => toast.success(forzato ? "Segnata incassata (bonifico forzato)" : "Incassata: bonifico verificato sul conto SumUp"))} />
+                    )}
                     {emessa && f.stato !== "bozza" && (
                       <Button size="sm" variant="secondary" disabled={!!busy}
                         onClick={() => {

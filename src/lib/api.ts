@@ -919,6 +919,24 @@ export async function incAzione(id: string, body: { azione: string; fattura_ids?
 export async function incSessione(sessionId: string): Promise<{ incassi: { id: string; fonte: IncFonte; data: string; importo: number; ordinante: string | null; stato: string; esito: string | null }[]; da_spedire: DaSpedire | null }> {
   return fetchAPI(`/api/incassi/sessione/${sessionId}`);
 }
+// Bonifico istantaneo: verifica in diretta sul conto SumUp (01/10/2026)
+export interface MovimentoBonifico {
+  data: string; importo: number; ordinante: string; causale: string; stato_banca: string;
+  nome_corrisponde: boolean; parole_comuni: string[]; gia_usato: boolean;
+}
+export interface EsitoVerificaBonifico {
+  trovato: boolean; live: boolean; fonte: 'open_banking' | 'archivio'; nota: string; controllato_il: string; dal: string;
+  importo: number; movimenti_nel_periodo: number; movimenti_candidati: MovimentoBonifico[];
+}
+export async function incVerificaBonifico(body: { importo: number; dal?: string; testo?: string }): Promise<EsitoVerificaBonifico> {
+  return fetchAPI('/api/incassi/verifica-bonifico', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function incBancaStato(): Promise<{ open_banking_configurato: boolean; collegato: boolean; valid_until: string | null; iban: string | null; nota: string }> {
+  return fetchAPI('/api/incassi/banca/stato');
+}
+export async function incBancaCollega(): Promise<{ url: string; valid_until: string }> {
+  return fetchAPI('/api/incassi/banca/collega', { method: 'POST' });
+}
 export async function fattPagamentoMultiplo(body: { ids: string[]; modalita: FattModalita; data?: string; riferimento?: string }) {
   return fetchAPI('/api/fatturazione/pagamento-multiplo', { method: 'POST', body: JSON.stringify(body) });
 }

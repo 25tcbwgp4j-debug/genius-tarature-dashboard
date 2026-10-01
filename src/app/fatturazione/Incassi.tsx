@@ -13,10 +13,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  incAzione, incElenco, incImportaCsv, incVerifica,
+  incAzione, incBancaCollega, incElenco, incImportaCsv, incVerifica,
   type ApiError, type DaSpedire, type IncFonte, type IncFontiStato, type IncProposta, type Incasso,
 } from "@/lib/api";
 import { dataIt, eur } from "./util";
+import { usePermessi } from "@/components/permessi";
 import { toastErrore } from "@/lib/errori";
 
 const FONTI: { k: IncFonte; label: string; icon: typeof Banknote }[] = [
@@ -33,6 +34,7 @@ export function Incassi({ onClose, onApriFattura, onCambiato }: {
   const [lista, setLista] = useState<Incasso[]>([]);
   const [sped, setSped] = useState<DaSpedire[]>([]);
   const [fonti, setFonti] = useState<IncFontiStato>({});
+  const { admin } = usePermessi();
   const [esito, setEsito] = useState<Record<string, { ok: boolean; nuovi?: number; nota?: string }> | null>(null);
   const [busy, setBusy] = useState("");
   const [loading, setLoading] = useState(true);
@@ -222,6 +224,14 @@ export function Incassi({ onClose, onApriFattura, onCambiato }: {
               <> Fonti senza collegamento diretto: {Object.entries(fonti).filter(([, v]) => !v.api).map(([k, v]) => `${NOME_FONTE[k]} (${v.nota})`).join(" · ")}.</>
             )}
           </p>
+          {admin && (
+            // consenso Open Banking al conto SumUp (dura 180 giorni): serve alla verifica in diretta dei bonifici istantanei
+            <Button size="xs" variant="outline" onClick={async () => {
+              const w = window.open("about:blank", "_blank");
+              try { const r = await incBancaCollega(); if (w) w.location.href = r.url; else window.location.href = r.url; }
+              catch (e) { w?.close(); toastErrore(e); }
+            }}>{fonti.banca?.api ? "Rinnova collegamento conto SumUp" : "Collega conto SumUp (Open Banking)"}</Button>
+          )}
         </div>
       </div>
     </div>
