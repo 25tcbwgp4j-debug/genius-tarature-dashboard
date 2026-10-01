@@ -9,11 +9,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronRight, FileDown, Loader2, RotateCcw, Search, Send, Wallet } from "lucide-react";
+import { CalendarClock, ChevronDown, ChevronRight, Eye, FileDown, Loader2, RotateCcw, Search, Send, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
-  fattCrediti, fattEstrattoInvia, fattPagamentoMultiplo, fattUrlEstrattoPdf,
-  type FattCredito, type FattModalita,
+  fattCrediti, fattEstrattoAnteprimaTesto, fattEstrattoInvia, fattPagamentoMultiplo, fattResocontiDaInviare,
+  fattResocontoSalta, fattUrlEstrattoPdf,
+  type FattCredito, type FattModalita, type FattResocontoDaInviare,
 } from "@/lib/api";
 import { MODALITA_LABEL, STATI, dataIt, eur } from "./util";
 import { oggiRoma } from "@/lib/date";
@@ -128,6 +129,7 @@ export function DaIncassare({
 
   return (
     <div className="space-y-3">
+      {emessa && <ResocontiMensili societa={societa || "genius"} onInviato={carica} />}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
@@ -230,6 +232,87 @@ export function DaIncassare({
           {!clienti.length && <div className="p-8 text-center text-muted-foreground">Niente {emessa ? "da incassare" : "da pagare"} con questi filtri</div>}
         </Card>
       )}
+    </div>
+  );
+}
+
+/** Banner «Da inviare: resoconto di <mese> a <cliente>» per i clienti con «Resoconto mensile» attivo in anagrafica.
+ *  Anteprima (testo della mail + PDF estratto) e invio con /estratto/invia; l'invio (o «Già inviato») lo registra
+ *  e il banner sparisce fino al mese dopo. */
+function ResocontiMensili({ societa, onInviato }: { societa: string; onInviato: () => void }) {
+  const [lista, setLista] = useState<FattResocontoDaInviare[]>([]);
+  const [anteprima, setAnteprima] = useState<Record<string, Awaited<ReturnType<typeof fattEstrattoAnteprimaTesto>>>>({});
+  const [busy, setBusy] = useState("");
+  const carica = useCallback(async () => {
+    try { setLista((await fattResocontiDaInviare(societa)).resoconti); } catch { setLista([]); }
+  }, [societa]);
+  useEffect(() => { carica(); }, [carica]);
+  if (!lista.length) return null;
+
+  const corpo = (r: FattResocontoDaInviare) => ({ societa, chiave: r.chiave, email: r.email, dal: r.dal, al: r.al, allega_fatture: true });
+  async function vedi(r: FattResocontoDaInviare) {
+    if (anteprima[r.anagrafica_id]) { setAnteprima((p) => { const c = { ...p }; delete c[r.anagrafica_id]; return c; }); return; }
+    setBusy(`a${r.anagrafica_id}`);
+    try {
+      const t = await fattEstrattoAnteprimaTesto({ ...corpo(r), resoconto: true });
+      setAnteprima((p) => ({ ...p, [r.anagrafica_id]: t }));
+    } catch (e) { toastErrore(e); } finally { setBusy(""); }
+  }
+  async function invia(r: FattResocontoDaInviare) {
+    if (!confirm(`Inviare a ${r.email} il resoconto di ${r.label}: ${r.n} fatture, ${eur(r.totale)}, con estratto conto e copie PDF delle fatture?`)) return;
+    setBusy(`i${r.anagrafica_id}`);
+    try {
+      const x = await fattEstrattoInvia({ ...corpo(r), resoconto: { anagrafica_id: r.anagrafica_id, periodo: r.periodo } });
+      toast.success(`Resoconto di ${r.label} inviato a ${x.email}: ${x.fatture} fatture, ${eur(x.totale)} (${x.allegati} PDF)`);
+      carica(); onInviato();
+    } catch (e) { toastErrore(e); } finally { setBusy(""); }
+  }
+  async function salta(r: FattResocontoDaInviare) {
+    if (!confirm(`Segnare il resoconto di ${r.label} a ${r.nome} come già inviato / da non inviare? Il promemoria sparisce.`)) return;
+    try { await fattResocontoSalta({ societa, anagrafica_id: r.anagrafica_id, periodo: r.periodo, nota: "segnato a mano dalla dashboard" }); carica(); }
+    catch (e) { toastErrore(e); }
+  }
+
+  return (
+    <div className="space-y-2">
+      {lista.map((r) => {
+        const t = anteprima[r.anagrafica_id];
+        return (
+          <Card key={r.anagrafica_id} className="space-y-2 border-amber-400 bg-amber-50 p-3 dark:bg-amber-950/30">
+            <div className="flex flex-wrap items-center gap-2">
+              <CalendarClock className="size-4 text-amber-700" />
+              <div className="flex-1 text-sm">
+                <b>Da inviare: resoconto di {r.label} a {r.nome}</b> ({r.n} {r.n === 1 ? "fattura" : "fatture"}, {eur(r.totale)})
+                <div className="text-xs text-muted-foreground">
+                  a {r.email || "— manca l'email in anagrafica —"} · fatture del mese: {r.n_mese} per {eur(r.totale_mese)}
+                </div>
+              </div>
+              <Button size="sm" variant="outline" disabled={!!busy} onClick={() => vedi(r)}>
+                {busy === `a${r.anagrafica_id}` ? <Loader2 className="animate-spin" /> : <Eye />} Anteprima
+              </Button>
+              {r.chiave && (
+                <a href={fattUrlEstrattoPdf(societa, r.chiave, [], "", r.dal, r.al)} target="_blank" rel="noreferrer">
+                  <Button size="sm" variant="outline"><FileDown /> PDF estratto</Button>
+                </a>
+              )}
+              <Button size="sm" disabled={!!busy || !r.n || !r.email} onClick={() => invia(r)}>
+                {busy === `i${r.anagrafica_id}` ? <Loader2 className="animate-spin" /> : <Send />} Invia
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => salta(r)}>Già inviato</Button>
+            </div>
+            {r.avvisi.map((a) => <div key={a} className="text-xs text-amber-800">⚠ {a}</div>)}
+            {!r.n && <div className="text-xs text-amber-800">Nessuna fattura del mese ancora da incassare: niente da chiedere.</div>}
+            {t && (
+              <div className="space-y-1 rounded-md border bg-background p-2 text-xs">
+                <div><b>Da:</b> {t.da} · <b>A:</b> {t.a}{t.ccn ? <> · <b>Ccn:</b> {t.ccn}</> : null}</div>
+                <div><b>Oggetto:</b> {t.oggetto}</div>
+                <div><b>Allegati:</b> {t.allegati.join("; ")}</div>
+                <pre className="whitespace-pre-wrap font-sans text-sm">{t.testo}</pre>
+              </div>
+            )}
+          </Card>
+        );
+      })}
     </div>
   );
 }

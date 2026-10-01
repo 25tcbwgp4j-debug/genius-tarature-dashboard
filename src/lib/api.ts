@@ -942,6 +942,7 @@ export interface FattAnagrafica {
   denominazione: string | null; piva: string | null; cf: string | null; sdi: string | null; pec: string | null;
   indirizzo: string | null; cap: string | null; comune: string | null; provincia: string | null; paese: string | null;
   email: string | null; telefono: string | null; referente?: string | null; attivo?: boolean;
+  resoconto?: FattResocontoCfg | null;
   fatture?: { id: string; direzione: string; tipo_documento: string; numero: string | null; data: string | null;
     totale: number; stato: string; pagamento_stato: string; origine: string }[];
   totale_fatturato?: number;
@@ -972,8 +973,26 @@ export function fattUrlEstratto(societa: string, chiave: string, ids: string[] =
 export function fattUrlEstrattoPdf(societa: string, chiave: string, ids: string[] = [], messaggio = '', dal = '', al = '') {
   return `${API_PROXY}/api/fatturazione/estratto.pdf?societa=${societa}&chiave=${encodeURIComponent(chiave)}&ids=${ids.join(',')}&messaggio=${encodeURIComponent(messaggio)}&dal=${dal}&al=${al}`;
 }
-export async function fattEstrattoInvia(body: { societa: string; chiave: string; email: string; ids?: string[]; messaggio?: string; mittente?: string; dal?: string; al?: string; allega_fatture?: boolean }) {
+export async function fattEstrattoInvia(body: { societa: string; chiave: string; email: string; ids?: string[]; messaggio?: string; mittente?: string; dal?: string; al?: string; allega_fatture?: boolean; resoconto?: { anagrafica_id: string; periodo: string } }) {
   return fetchAPI('/api/fatturazione/estratto/invia', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function fattEstrattoAnteprimaTesto(body: { societa: string; chiave: string; email: string; dal?: string; al?: string; allega_fatture?: boolean; resoconto?: boolean; messaggio?: string }):
+  Promise<{ da: string; a: string; ccn: string | null; oggetto: string; testo: string; allegati: string[]; totale: number; fatture: number }> {
+  return fetchAPI('/api/fatturazione/estratto/anteprima-testo', { method: 'POST', body: JSON.stringify(body) });
+}
+
+// Resoconto mensile (clienti a fatturazione cumulativa: Bagnetti, Flaminia Computer) — 01/10/2026
+export interface FattResocontoCfg { attivo: boolean; email: string; giorno: number }
+export interface FattResocontoDaInviare {
+  anagrafica_id: string; nome: string; email: string; giorno: number; periodo: string; label: string; dal: string; al: string;
+  chiave: string; n: number; totale: number; n_mese: number; totale_mese: number; avvisi: string[];
+  fatture: { id: string; numero: string | null; data: string | null; totale: number; pagamento_stato: string; tipo_documento: string }[];
+}
+export async function fattResocontiDaInviare(societa: string): Promise<{ periodo: string; label: string; resoconti: FattResocontoDaInviare[] }> {
+  return fetchAPI(`/api/fatturazione/resoconti/da-inviare?societa=${societa}`);
+}
+export async function fattResocontoSalta(body: { societa: string; anagrafica_id: string; periodo: string; nota?: string }) {
+  return fetchAPI('/api/fatturazione/resoconti/salta', { method: 'POST', body: JSON.stringify(body) });
 }
 export function fattUrlPdf(id: string, download = false) { return `${API_PROXY}/api/fatturazione/fatture/${id}/pdf${download ? '?download=true' : ''}`; }
 export async function fattInvia(id: string, body: { canale: 'email' | 'whatsapp'; email?: string; telefono?: string; messaggio?: string }) {

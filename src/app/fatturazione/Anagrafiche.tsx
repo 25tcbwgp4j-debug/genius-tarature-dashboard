@@ -155,6 +155,7 @@ function Scheda({
     setBusy(true);
     try {
       const body = Object.fromEntries(CAMPI.map(([k]) => [k, (f[k] as string) ?? null])) as Partial<FattAnagrafica>;
+      if (tipo === "cliente") body.resoconto = f.resoconto?.attivo || f.resoconto?.email ? f.resoconto : null;
       const r = a ? await fattAnagraficaModifica(a.id, body) : await fattAnagraficaCrea({ ...body, societa: societa as FattAnagrafica["societa"], tipo });
       toast.success("Anagrafica salvata");
       onSaved(r);
@@ -181,6 +182,31 @@ function Scheda({
               </label>
             ))}
           </div>
+          {tipo === "cliente" && (
+            // Resoconto mensile: per i clienti a cui le fatture non si pagano una per una (Bagnetti, Flaminia Computer)
+            // dal giorno scelto compare in «Da incassare» il resoconto del mese precedente da inviare.
+            <div className="space-y-2 rounded-md border p-2">
+              <label className="flex items-center gap-1.5 text-sm font-medium">
+                <input type="checkbox" checked={!!f.resoconto?.attivo}
+                  onChange={(e) => setF((p) => ({ ...p, resoconto: { email: p.resoconto?.email || p.email || "", giorno: p.resoconto?.giorno || 1, attivo: e.target.checked } }))} />
+                Resoconto mensile (estratto conto + copia fatture del mese precedente)
+              </label>
+              {f.resoconto?.attivo && (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <label className="space-y-1 sm:col-span-3">
+                    <div className="text-xs text-muted-foreground">Destinatari email (separati da ;)</div>
+                    <input className={campo} value={f.resoconto?.email || ""}
+                      onChange={(e) => setF((p) => ({ ...p, resoconto: { attivo: true, giorno: p.resoconto?.giorno || 1, email: e.target.value } }))} />
+                  </label>
+                  <label className="space-y-1">
+                    <div className="text-xs text-muted-foreground">Giorno di invio</div>
+                    <input type="number" min={1} max={28} className={campo} value={f.resoconto?.giorno || 1}
+                      onChange={(e) => setF((p) => ({ ...p, resoconto: { attivo: true, email: p.resoconto?.email || "", giorno: Math.min(28, Math.max(1, Number(e.target.value) || 1)) } }))} />
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={salva} disabled={busy}>{busy ? <Loader2 className="animate-spin" /> : <Save />} Salva</Button>
             {a && tipo === "cliente" && <Button size="sm" variant="outline" onClick={() => onNuovaFattura(a)}><Receipt /> Nuova fattura</Button>}
