@@ -34,8 +34,8 @@ const OGNI_MS = 3000;
 
 // elenco lettori in memoria per 60 s (la pagina non deve chiederlo a SumUp a ogni pulsante)
 let cache: { t: number; p: Promise<LettorePos[]> } | null = null;
-function lettori(): Promise<LettorePos[]> {
-  if (!cache || Date.now() - cache.t > 60_000) {
+function lettori(fresco = false): Promise<LettorePos[]> {
+  if (fresco || !cache || Date.now() - cache.t > 60_000) {
     cache = { t: Date.now(), p: posLettori().then((r) => r.lettori || []).catch(() => { cache = null; return []; }) };
   }
   return cache.p;
@@ -130,6 +130,21 @@ export function PagaPos({ importo, descrizione, rifTipo, rifId, disabled, onPaga
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
 
+  /** POS piccolo (Solo): l'importo va SEMPRE sul POS via Cloud API. Il Solo non si usa a mano, quindi se è spento
+   *  o senza Wi-Fi non si ripiega sull'attesa di una transazione (la rotellina girerebbe all'infinito): si avvisa. */
+  async function apriPiccolo(nome: string) {
+    setBusy(true);
+    let l: LettorePos | undefined;
+    try { const fresca = await lettori(true); setLista(fresca); l = trova(fresca, "piccolo"); } finally { setBusy(false); }
+    if (!l) { toast.error("Il POS piccolo non risulta abbinato alla dashboard (Impostazioni → POS SumUp)"); return; }
+    if (l.online === false) {
+      toast.error(`Il POS piccolo è SPENTO o senza Wi-Fi${l.batteria != null ? ` (batteria ${Math.round(l.batteria)}%)` : ""}: accendilo con il tasto laterale, `
+        + "aspetta la schermata iniziale e riprova. Se è scarico mettilo in carica.", { duration: 12000 });
+      return;
+    }
+    await apri(nome, { lettore: l });
+  }
+
   async function annulla() {
     if (!attesa) return;
     try {
@@ -162,10 +177,12 @@ export function PagaPos({ importo, descrizione, rifTipo, rifId, disabled, onPaga
         const viaApi = !!l && l.online !== false;
         const titolo = !lista ? "Carico i POS…" : viaApi ? `Invia ${eur(importo)} direttamente al POS piccolo: il cliente avvicina la carta`
           : `Batti ${eur(importo)} sul ${p.nomeLettore}: la dashboard riconosce da sola il pagamento su SumUp`;
+        const spento = p.api && !!lista && !!l && l.online === false;
         return (
-          <Button key={p.chiave} type="button" size={size} variant="outline" title={titolo} className={stile}
-            disabled={blocca || !lista} onClick={() => apri(p.nomeLettore, { lettore: viaApi ? l : undefined })}>
-            {busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <CreditCard className="mr-1 size-4" />}{p.etichetta}
+          <Button key={p.chiave} type="button" size={size} variant="outline" title={spento ? "Il POS piccolo risulta spento o senza Wi-Fi" : titolo}
+            className={`${stile} ${spento ? "border-red-400 text-red-700" : ""}`}
+            disabled={blocca || !lista} onClick={() => (p.api ? apriPiccolo(p.nomeLettore) : apri(p.nomeLettore, {}))}>
+            {busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <CreditCard className="mr-1 size-4" />}{p.etichetta}{spento ? " (spento)" : ""}
           </Button>
         );
       })}
