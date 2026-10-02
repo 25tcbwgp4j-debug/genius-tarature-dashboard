@@ -314,7 +314,7 @@ export async function proformaSessioneCrea(sessionId: string, operatore: string)
 }
 
 // === STAMPA DIRETTA (coda + agente sul Mac del banco) ===
-export async function stampaSessione(sessionId: string, tipo: 'etichette' | 'ricevuta'): Promise<{ ok: boolean; id: string; agente_attivo: boolean; copie: number }> {
+export async function stampaSessione(sessionId: string, tipo: 'etichette' | 'ricevuta' | 'rapporti'): Promise<{ ok: boolean; id: string; agente_attivo: boolean; copie: number }> {
   return fetchAPI(`/api/stampa/sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ tipo }) });
 }
 export async function stampaStato(): Promise<{ agente_attivo: boolean }> {

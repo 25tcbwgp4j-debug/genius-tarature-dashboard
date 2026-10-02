@@ -380,18 +380,24 @@ export default function SessionDetail() {
   // STAMPA DIRETTA: un clic → il lavoro va in coda e l'agente sul Mac del banco lo stampa
   // (etichette 50x22 sulla Brother QL-700, ricevuta 2 copie sulla stampante A4).
   // Agente spento → si apre il PDF come prima (finestra di stampa del browser).
-  const stampaDiretta = async (tipo: "etichette" | "ricevuta") => {
+  const stampaDiretta = async (tipo: "etichette" | "ricevuta" | "rapporti") => {
     setActionLoading("stampa_" + tipo);
     try {
       const r = await stampaSessione(sessionId, tipo);
       setAgenteStampa(r.agente_attivo);
       if (r.agente_attivo) {
-        toast.success(tipo === "etichette" ? "Etichette mandate alla stampante Brother" : `Ricevuta mandata in stampa (${r.copie} copie)`);
+        toast.success(tipo === "etichette" ? "Etichette mandate alla stampante Brother"
+          : tipo === "rapporti" ? "Rapporti mandati in stampa sulla stampante A4 del banco (uno per strumento)"
+          : `Ricevuta mandata in stampa (${r.copie} copie)`);
+      } else if (tipo === "rapporti") {
+        toast.warning("Agente di stampa del banco spento: scarico i rapporti da stampare a mano. Il lavoro resta in coda 15 minuti.", { duration: 8000 });
+        window.location.href = getSessionReportsZipUrl(sessionId);
       } else {
         toast.warning("Agente di stampa del banco spento: apro il PDF da stampare a mano. Il lavoro resta in coda 15 minuti.", { duration: 8000 });
         if (tipo === "etichette") openLabelsPdf(); else openReceiptPdf();
       }
     } catch (e) {
+      if (tipo === "rapporti") { toast.error("Stampa dei rapporti non riuscita: " + (e as Error).message); return; }
       toast.error("Stampa non riuscita: " + (e as Error).message + " — apro il PDF");
       if (tipo === "etichette") openLabelsPdf(); else openReceiptPdf();
     } finally {
@@ -748,6 +754,17 @@ export default function SessionDetail() {
           >
             <FileDown className="w-4 h-4 mr-1" />
             Scarica rapporti
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={actionLoading === "stampa_rapporti" || !(session.instruments || []).some((i: { rdt_number?: string | null }) => !!i.rdt_number)}
+            onClick={() => stampaDiretta("rapporti")}
+            className="w-full bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+            title="Stampa subito tutti i rapporti di taratura della sessione sulla stampante A4 del banco"
+          >
+            {actionLoading === "stampa_rapporti" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Printer className="w-4 h-4 mr-1" />}
+            Stampa rapporti
           </Button>
           <Button
             variant="outline"
