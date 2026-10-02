@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
+import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
@@ -68,7 +69,8 @@ const campo = "h-9 rounded-md border border-input bg-background px-2 text-sm";
 const NOME: Record<TipoDocumento, string> = { ordine: "ordine cliente", preventivo: "preventivo", proforma: "fattura pro forma", ddt: "documento di trasporto" };
 const TITOLO: Record<TipoDocumento, string> = { ordine: "Ordine cliente", preventivo: "Preventivo", proforma: "Fattura pro forma", ddt: "Documento di trasporto" };
 type Bozza = { id?: string; tipo: TipoDocumento; cliente_nome: string; telefono: string; email: string; anagrafica_id: string | null;
-  controparte: DocumentoCliente["controparte"]; rif: string; note: string; righe: (RigaDoc & { _k?: string })[] };
+  controparte: DocumentoCliente["controparte"]; rif: string; note: string; righe: (RigaDoc & { _k?: string })[];
+  attivita?: Attivita | null };
 const bozzaVuota = (tipo: TipoDocumento): Bozza => ({ tipo, cliente_nome: "", telefono: "", email: "", anagrafica_id: null, controparte: {}, rif: "", note: "", righe: [] });
 
 function Editor({ iniziale, listino, onChiudi, onSalvato }: {
@@ -82,6 +84,8 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
   const [trovati, setTrovati] = useState<FattAnagrafica[]>([]);
   const [busy, setBusy] = useState(false);
   const [operatore, setOperatore] = useOperatore();
+  const { attivita: attSelettore } = useAttivita();
+  const [att, setAtt] = useState<Attivita>(iniziale.attivita || attSelettore);
   useEffect(() => {
     if (q.trim().length < 2) return;
     const t = setTimeout(() => fattAnagrafiche("genius", "cliente", q.trim(), 8).then((r) => setTrovati(r.anagrafiche || [])).catch(() => setTrovati([])), 250);
@@ -100,7 +104,7 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
     setBusy(true);
     try {
       const corpo = { tipo: b.tipo, cliente_nome: b.cliente_nome.trim(), telefono: b.telefono, email: b.email, anagrafica_id: b.anagrafica_id,
-        controparte: b.controparte, rif: b.rif, note: b.note, righe, operatore };
+        controparte: b.controparte, rif: b.rif, note: b.note, righe, operatore, attivita: att };
       onSalvato(b.id ? await docModifica(b.id, corpo) : await docCrea(corpo));
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
@@ -166,6 +170,8 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
           <Input placeholder="Riferimento (es. SCHEDA 63020)" value={b.rif} onChange={(e) => setB({ ...b, rif: e.target.value })} />
           <Input placeholder="Note (tempi di consegna, fornitore…)" value={b.note} onChange={(e) => setB({ ...b, note: e.target.value })} />
         </Card>
+        <div className="flex items-center gap-2 text-sm"><span className="text-muted-foreground">Attività</span>
+          <SceltaAttivita value={att} onChange={(a) => { setAtt(a); setSporco(true); }} /></div>
         <SceltaOperatore value={operatore} onChange={setOperatore} />
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={chiudi}>Annulla</Button>
@@ -418,7 +424,7 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
       <div className="h-full w-full max-w-2xl space-y-3 overflow-y-auto bg-background p-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h2 className="text-lg font-semibold">{TITOLO[d.tipo]} {d.sigla}</h2>
+            <h2 className="text-lg font-semibold">{TITOLO[d.tipo]} {d.sigla} <BadgeAttivita a={d.attivita} className="align-middle" /></h2>
             <div className="text-sm text-muted-foreground">{dataIt(d.data)}{d.operatore ? <> · fatto da <BadgeOperatore op={d.operatore} /></> : ""} · {d.cliente_nome || d.controparte?.denominazione}{d.telefono ? ` · ${d.telefono}` : ""}{d.rif ? ` · ${d.rif}` : ""}</div>
           </div>
           <div className="flex items-center gap-2">
@@ -621,6 +627,7 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
   const [nArrivati, setNArrivati] = useState<number | null>(null);
   const [nuovoId, setNuovoId] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [attivitaF, setAttivitaF] = useState("");
   const [lista, setLista] = useState<DocumentoCliente[] | null>(null);
   const [errore, setErrore] = useState("");
   const [listino, setListino] = useState<FattVoceCatalogo[]>([]);
@@ -640,10 +647,10 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
 
   const carica = useCallback(() => {
     const ordini = tipo === "ordine";
-    docElenco(tipo, ordini ? "" : stato, q, ordini && vista !== "tutti" ? vista : "").then((r) => { setLista(r); setErrore(""); })
+    docElenco(tipo, ordini ? "" : stato, q, ordini && vista !== "tutti" ? vista : "", attivitaF).then((r) => { setLista(r); setErrore(""); })
       .catch((e: Error) => { setErrore(e.message); setLista([]); });
     if (ordini) docElenco("ordine", "", "", "arrivati").then((r) => setNArrivati(r.length)).catch(() => undefined);
-  }, [tipo, stato, q, vista]);
+  }, [tipo, stato, q, vista, attivitaF]);
   useEffect(() => { const t = setTimeout(carica, 200); return () => clearTimeout(t); }, [carica]);
   useEffect(() => { fattCatalogo("genius").then((r) => setListino(r.voci || [])).catch(() => undefined); }, []);
 
@@ -662,6 +669,7 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
           <option value="aperto">Aperti</option><option value="saldato">Saldati</option><option value="convertito">Convertiti</option><option value="annullato">Annullati</option><option value="">Tutti</option>
         </select>}
         {tipo === "ordine" && <span className="ml-auto" />}
+        <FiltroAttivita className="h-8" value={attivitaF} onChange={(v) => { setAttivitaF(v); setLista(null); }} />
         <Input className="h-8 w-56" placeholder="Cerca cliente, scheda, telefono…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       {tipo === "ordine" && (
@@ -686,7 +694,7 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
             {!errore && lista?.length === 0 && <tr><td colSpan={10} className="p-4 text-center text-muted-foreground">Nessun documento: {NOME[tipo]}</td></tr>}
             {lista?.map((d) => (
               <tr key={d.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => setAperto(d.id)}>
-                <td className="px-3 py-2 font-medium">{d.sigla}</td><td>{dataIt(d.data)}</td><td>{d.cliente}</td><td className="text-muted-foreground">{d.rif}</td>
+                <td className="px-3 py-2 font-medium">{d.sigla} <BadgeAttivita a={d.attivita} /></td><td>{dataIt(d.data)}</td><td>{d.cliente}</td><td className="text-muted-foreground">{d.rif}</td>
                 {tipo === "ordine" && <td className="text-muted-foreground">{d.fornitore_nome || ""}</td>}
                 <td className="text-right tabular-nums">{eur(d.totale)}</td>
                 {tipo === "ordine" && <><td className="text-right tabular-nums">{d.pagato ? eur(d.pagato) : "—"}</td><td className="px-3 text-right font-semibold tabular-nums">{eur(d.residuo)}</td></>}
@@ -719,7 +727,8 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
         }} />}
       {aperto && <Dettaglio key={aperto} id={aperto} proponiIncasso={aperto === nuovoId} onChiudi={() => { setNuovoId(null); chiudiDettaglio(); }} onCambiato={carica}
         onModifica={(d) => { chiudiDettaglio(); setEditor({ id: d.id, tipo: d.tipo, cliente_nome: d.cliente_nome || "", telefono: d.telefono || "", email: d.email || "",
-          anagrafica_id: d.anagrafica_id, controparte: d.controparte || {}, rif: d.rif || "", note: d.note || "", righe: d.righe }); }} />}
+          anagrafica_id: d.anagrafica_id, controparte: d.controparte || {}, rif: d.rif || "", note: d.note || "", righe: d.righe,
+          attivita: d.attivita }); }} />}
     </div>
   );
 }

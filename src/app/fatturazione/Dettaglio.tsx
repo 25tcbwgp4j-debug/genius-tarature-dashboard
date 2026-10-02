@@ -12,6 +12,9 @@ import { toast } from "sonner";
 import { docDaFattura } from "@/lib/api";
 import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
+import { SceltaAttivita } from "@/components/attivita";
+import { usePermessi as usePermessiAtt } from "@/components/permessi";
+import { cambiaAttivita } from "@/lib/api";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { toastErrore } from "@/lib/errori";
 import {
@@ -40,6 +43,7 @@ export function Dettaglio({
   const [msgInvio, setMsgInvio] = useState("");
   const [errore, setErrore] = useState("");
   const [conv, setConv] = useState<{ numero: string; modalita: string } | null>(null);   // conversione in scontrino
+  const { admin: titolare } = usePermessiAtt();
 
   const carica = useCallback(() => {
     fattDettaglio(id).then((r) => { setF(r); setErrore(""); })
@@ -125,6 +129,18 @@ export function Dettaglio({
               {f.operatore && <span className="flex items-center gap-1 text-xs text-muted-foreground">fatta da <BadgeOperatore op={f.operatore} /></span>}
               {f.ambiente === "sandbox" && <span className="rounded bg-orange-500/15 px-1.5 py-0.5 text-xs text-orange-700 dark:text-orange-300">PROVA</span>}
             </div>
+            {emessa && f.societa === "genius" && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground" title={f.attivita_nota || undefined}>
+                Attività
+                <SceltaAttivita value={f.attivita} disabled={!!busy || !(["bozza", "errore", "scartata"].includes(f.stato) || titolare)}
+                  onChange={(a) => {
+                    if (a === f.attivita) return;
+                    setBusy("attivita");
+                    cambiaAttivita("fatture", f.id, a).then(() => { carica(); onChanged(); })
+                      .catch((e) => toast.error((e as Error).message)).finally(() => setBusy(""));
+                  }} />
+              </div>
+            )}
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Chiudi"><X /></Button>
         </div>

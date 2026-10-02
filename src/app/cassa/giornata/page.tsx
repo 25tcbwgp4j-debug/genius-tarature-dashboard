@@ -16,6 +16,7 @@ import { StornoDialog, type OggettoStorno } from "@/components/StornoDialog";
 import { usePermessi } from "@/components/permessi";
 import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
+import { BadgeAttivita, FiltroAttivita } from "@/components/attivita";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { ChiusuraFiscale } from "./ChiusuraFiscale";
@@ -121,6 +122,7 @@ export default function CassaGiornataPage() {
   const chiusa = f?.giornata.stato === "chiusa";
   const [storno, setStorno] = useState<OggettoStorno | null>(null);
   const [operatore, setOperatore] = useOperatore();
+  const [filtroAtt, setFiltroAtt] = useState("");   // Genius Lab Gestionale: righe Tarature / Apple
   const [convalida, setConvalida] = useState<{ aperta: boolean; motivo: string }>({ aperta: false, motivo: "" });
 
   // Salvataggi con attesa di 700 ms: prima di ogni azione (chiusura, conferma, righe, prelievi, cambio giorno)
@@ -475,6 +477,10 @@ export default function CassaGiornataPage() {
               <div className="text-xs text-muted-foreground">Finché la cassa non è collegata alla dashboard, gli scontrini battuti sul registratore si registrano qui con il loro numero.</div>
             </div>
           )}
+          <div className="flex flex-wrap items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
+            <FiltroAttivita className="h-8 text-xs" value={filtroAtt} onChange={setFiltroAtt} />
+            {filtroAtt && <span>Mostro solo le righe {filtroAtt === "apple" ? "Apple" : "Tarature"}: totali e quadratura restano quelli della giornata intera.</span>}
+          </div>
           <table className="w-full min-w-[960px] text-sm">
             <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
               <tr><th className="px-2 py-2 text-left">Orario</th><th className="px-2 text-left">Documento</th><th className="px-2 text-left">Num.</th>
@@ -484,7 +490,7 @@ export default function CassaGiornataPage() {
             </thead>
             <tbody>
               <tr className="border-t bg-muted/20"><td /><td className="px-2 py-1 font-medium">APERTURA</td><td>cassa</td><td /><td className="px-2 text-right tabular-nums">{eur(rp.apertura)}</td><td colSpan={7} /></tr>
-              {f.righe.map((r) => {
+              {f.righe.filter((r) => !filtroAtt || r.attivita === filtroAtt).map((r) => {
                 const negativo = ["STORNO", "ANNULLO"].includes(r.tipo);
                 const stornabile = r.tipo === "SCONTRINO" && (r.fonte === "manuale" || r.fonte === "scontrino") && r.totale > 0;
                 return (
@@ -492,7 +498,7 @@ export default function CassaGiornataPage() {
                   <td className="px-2 py-1 tabular-nums text-muted-foreground" title={r.orario ? undefined : "senza orario: in coda alla giornata"}>{r.orario || "—"}</td>
                   <td className="px-2 py-1">{negativo
                     ? <span className="rounded bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">{r.tipo}</span>
-                    : r.tipo}<span className="ml-1 text-[10px] text-muted-foreground">{FONTE[r.fonte]}</span></td>
+                    : r.tipo}<span className="ml-1 text-[10px] text-muted-foreground">{FONTE[r.fonte]}</span> <BadgeAttivita a={r.attivita} /></td>
                   <td className="px-2">{r.numero}</td>
                   <td className="px-2"><BadgeOperatore op={r.operatore} /></td>
                   {COL.map(([k]) => <td key={k} className={`px-2 text-right tabular-nums ${r[k] ? (r[k] < 0 ? "text-red-600" : "") : "text-muted-foreground/40"}`}>{r[k] ? eur(r[k]) : "0"}</td>)}

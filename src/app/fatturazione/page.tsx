@@ -23,6 +23,7 @@ import { DaIncassare, calcolaPeriodo } from "./DaIncassare";
 import { Chiusure } from "./Chiusure";
 import { Commercialista } from "./Commercialista";
 import { usePermessi } from "@/components/permessi";
+import { BadgeAttivita, FiltroAttivita } from "@/components/attivita";
 import type { FattAnagrafica } from "@/lib/api";
 import { Dettaglio } from "./Dettaglio";
 import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
@@ -46,6 +47,7 @@ function Pagina() {
   const [tab, setTab] = useState<Tab>("emessa");
   const { admin } = usePermessi();
   const [societa, setSocieta] = useState<string>("");
+  const [attivitaF, setAttivitaF] = useState("");
   const [stato, setStato] = useState("");
   const [pagamento, setPagamento] = useState("");
   const [q, setQ] = useState("");
@@ -100,7 +102,7 @@ function Pagina() {
       } else if (tab === "emessa" || tab === "ricevuta") {
         const ultimo = mese ? new Date(anno || annoRoma(), mese, 0).getDate() : 0;
         const conPeriodo = periodo !== "tutto";
-        const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q, anno: anno && !conPeriodo ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
+        const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q, attivita: attivitaF, anno: anno && !conPeriodo ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
           da: conPeriodo ? per.dal : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-01` : "",
           a: conPeriodo ? per.al : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimo}` : "" });
         const oggiIso = oggiRoma();
@@ -118,7 +120,7 @@ function Pagina() {
     } finally {
       setLoading(false);
     }
-  }, [tab, societa, stato, pagamento, q, anno, prove, mese, periodo, per.dal, per.al, soloScadute, caricaRicStato]);
+  }, [tab, societa, stato, pagamento, q, attivitaF, anno, prove, mese, periodo, per.dal, per.al, soloScadute, caricaRicStato]);
 
   useEffect(() => {
     const t = setTimeout(carica, q ? 300 : 0);
@@ -147,10 +149,10 @@ function Pagina() {
   function azzera() {
     setTab("emessa"); setStato(""); setPagamento(""); setQ(""); setMese(0); setProve(false); setSel({});
     setPeriodo("tutto"); setPGiorno(""); setPDal(""); setPAl(""); setSoloScadute(false); setCercaCrediti("");
-    setAnno(annoRoma()); setSocieta("");
+    setAnno(annoRoma()); setSocieta(""); setAttivitaF("");
     if (sp.toString()) router.replace("/fatturazione");
   }
-  const filtriAttivi = !!(stato || pagamento || q || mese || prove || periodo !== "tutto" || soloScadute || societa || anno !== annoRoma() || tab !== "emessa");
+  const filtriAttivi = !!(stato || pagamento || q || mese || prove || periodo !== "tutto" || soloScadute || societa || attivitaF || anno !== annoRoma() || tab !== "emessa");
 
   function chiudiDettaglio() {
     setAperta(null);
@@ -204,6 +206,7 @@ function Pagina() {
             <option value="">Tutte le società</option>
             {Object.entries(SOCIETA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+          <FiltroAttivita value={attivitaF} onChange={setAttivitaF} />
           {filtriAttivi && <Button variant="ghost" onClick={azzera} title="Torna alla pagina base della fatturazione"><RotateCcw /> Azzera</Button>}
           <Button variant="outline" onClick={() => setIncassiAperti(true)} title="Bonifici, POS, PayPal, Stripe arrivati">
             <Banknote /> Verifica pagamenti
@@ -393,6 +396,7 @@ function Pagina() {
                       {f.ambiente === "sandbox" && <span className="ml-1 rounded bg-orange-500/15 px-1 text-[10px] text-orange-700 dark:text-orange-300">PROVA</span>}
                       {tab === "ricevuta" && !f.vista_il && <span className="ml-1 rounded bg-red-600 px-1 text-[10px] font-semibold text-white" title="Arrivata dallo SdI, non ancora vista">NUOVA</span>}
                       {f.origine === "simplyfatt" && <span className="ml-1 rounded bg-muted px-1 text-[10px] text-muted-foreground" title="Importata dallo storico SimplyFatt">SF</span>}
+                      <div><BadgeAttivita a={f.attivita} /></div>
                     </td>
                     <td className="p-2 whitespace-nowrap">{dataIt(f.data)}</td>
                     <td className="p-2">

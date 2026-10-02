@@ -18,6 +18,7 @@ import { StornoDialog } from "@/components/StornoDialog";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
+import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
 import { DecInput, parseDec } from "@/components/DecInput";
@@ -42,6 +43,11 @@ export default function CassaPage() {
   const [q, setQ] = useState("");
   const [trovati, setTrovati] = useState<Prodotto[]>([]);
   const [operatore, setOperatore] = useOperatore();
+  // attività dello scontrino: quella del selettore in alto, cambiabile qui (sessione = tarature, ordine = quella dell'ordine)
+  const { attivita: attSelettore } = useAttivita();
+  const [attScelta, setAttScelta] = useState<Attivita | null>(null);
+  const att: Attivita = attScelta || attSelettore;
+  const [filtroAtt, setFiltroAtt] = useState("");
   const [busy, setBusy] = useState("");
   const [oggi, setOggi] = useState<{ scontrini: Scontrino[]; totale: number; per_modalita: Record<string, number> } | null>(null);
   const [libera, setLibera] = useState({ descrizione: "", prezzo: "" });
@@ -110,10 +116,10 @@ export default function CassaPage() {
   }, []);
 
   const ricarica = useCallback(() => {
-    cassaScontrini(giornoLista).then(setOggi).catch(() => undefined);
+    cassaScontrini(giornoLista, filtroAtt).then(setOggi).catch(() => undefined);
     // gli scontrini finiscono nella cassa del giorno: se è già chiusa lo dico subito
     cassaGiornata(oggiRoma()).then((r) => setCassaChiusa(r.giornata.stato === "chiusa")).catch(() => undefined);
-  }, [giornoLista]);
+  }, [giornoLista, filtroAtt]);
   useEffect(() => { ricarica(); const t = setInterval(ricarica, 10000); return () => clearInterval(t); }, [ricarica]);
   useEffect(() => {
     if (q.trim().length < 2) { setTrovati([]); return; }
@@ -151,7 +157,8 @@ export default function CassaPage() {
     let esito: { id: string; descrizione: string } | null = null;
     try {
       const sc = await cassaScontrino({ righe: carrello, pagamenti: [{ modalita, importo: tot }], pos_incasso_id: posIncassoId, operatore,
-                             ...(sessione ? { session_id: sessione.id } : {}), ...(ordine ? { documento_id: ordine.id } : {}) });
+                             ...(sessione ? { session_id: sessione.id } : {}), ...(ordine ? { documento_id: ordine.id } : {}),
+                             ...(!sessione && !ordine ? { attivita: att } : {}) });
       esito = { id: sc.id, descrizione: `Scontrino ${eur(tot)}${ordine ? ` (ordine ${ordine.sigla})` : ""} — ${carrello.map((r) => r.descrizione).join(", ")}`.slice(0, 280) };
       toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${MOD[modalita]} · ${operatore})`);
       setCarrello([]); ricarica();
@@ -171,7 +178,7 @@ export default function CassaPage() {
     if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     setBusy("fattura");
     try {
-      const f = await cassaFattura({ righe: carrello, operatore });
+      const f = await cassaFattura({ righe: carrello, operatore, attivita: att });
       toast.success("Bozza di fattura creata: completa il cliente e inviala allo SdI");
       setCarrello([]);
       router.push(`/fatturazione?id=${f.id}`);
@@ -301,6 +308,10 @@ export default function CassaPage() {
       <div className="space-y-4">
         <Card className="space-y-3 p-4">
           <div className="flex items-baseline justify-between"><span className="text-sm text-muted-foreground">Totale</span><span className="text-3xl font-bold tabular-nums">{eur(tot)}</span></div>
+          {!sessione && !ordine && (
+            <div className="flex items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">Attività</span>
+              <SceltaAttivita value={att} onChange={setAttScelta} /></div>
+          )}
           <SceltaOperatore value={operatore} onChange={setOperatore} />
           <div className="grid grid-cols-2 gap-2">
             <Button disabled={!carrello.length || !!busy || !operatore || oltreOrdine} onClick={() => scontrino("contanti")}>{busy === "contanti" ? <Loader2 className="animate-spin" /> : <Banknote />} Contanti</Button>
@@ -329,6 +340,7 @@ export default function CassaPage() {
             <span className="flex items-center gap-1 text-sm font-medium">Scontrini {giornoLista === oggiRoma() ? "di oggi" : "del"}
               <input type="date" className="h-7 rounded-md border border-input bg-background px-1 text-xs" value={giornoLista} max={oggiRoma()}
                 onChange={(e) => { if (e.target.value) { setOggi(null); setGiornoLista(e.target.value); } }} /></span>
+            <FiltroAttivita className="h-7 text-xs" value={filtroAtt} onChange={(v) => { setOggi(null); setFiltroAtt(v); }} />
             <span className="font-semibold tabular-nums">{eur(oggi?.totale || 0)}</span></div>
           <div className="mb-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
             {Object.entries(oggi?.per_modalita || {}).map(([k, v]) => <span key={k}>{MOD[k] || k}: {eur(v)}</span>)}
@@ -344,7 +356,7 @@ export default function CassaPage() {
                   <span className={s.stato === "annullato" ? "line-through opacity-60" : ""}>
                     {negativo && <span className="mr-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{doc === "annullo" ? "ANNULLO" : "RESO"}</span>}
                     {new Date(s.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} · {s.numero_rt ? `n. ${s.numero_rt}` : ""}
-                    <BadgeOperatore op={s.operatore} className="ml-1" /></span>
+                    <BadgeOperatore op={s.operatore} className="ml-1" /> <BadgeAttivita a={s.attivita} /></span>
                   <span className={`tabular-nums ${negativo ? "font-semibold text-red-700 dark:text-red-300" : s.stato === "annullato" ? "line-through opacity-60" : ""}`}>{negativo ? "− " : ""}{eur(Number(s.totale))}</span>
                 </div>
                 {negativo && s.motivo && <div className="text-xs text-muted-foreground">Motivo: {s.motivo}</div>}

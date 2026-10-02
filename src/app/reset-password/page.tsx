@@ -41,7 +41,7 @@ export default async function ResetPasswordPage({ searchParams }: Props) {
             <ShieldCheck className="w-7 h-7 text-blue-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Nuova password</h1>
-          <p className="text-sm text-gray-500 mt-1">AvaTech Tarature</p>
+          <p className="text-sm text-gray-500 mt-1">Genius Lab Gestionale</p>
         </div>
 
         {error && (

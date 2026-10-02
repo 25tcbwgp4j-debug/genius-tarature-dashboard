@@ -5,6 +5,8 @@
 // Per gli endpoint interattivi passiamo dal proxy /api/backend/*
 // (route handler Next.js) che inoltra al backend Railway aggiungendo
 // l'header X-API-Key lato server. L'API_KEY non e' mai esposta al client.
+import { attivitaSalvata } from '@/lib/attivita';
+
 const API_PROXY = '/api/backend';
 
 
@@ -40,6 +42,8 @@ export async function fetchAPI(path: string, options: RequestInit = {}, conDialo
   const url = `${API_PROXY}${path}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    // attività del selettore in alto (Tarature / Apple): i nuovi documenti nascono con questa (02/10/2026)
+    'X-Attivita': attivitaSalvata(),
     ...(options.headers as Record<string, string> | undefined),
   };
   const res = await fetch(url, {
@@ -894,6 +898,8 @@ export interface Fattura {
   /** estremi della dichiarazione/attestazione del cliente (es. modulo dell'ambasciata, art. 72): stampati in fattura */
   estremi_esenzione?: string | null;
   origine?: string; anagrafica_id?: string | null; operatore?: string | null; vista_il?: string | null;
+  /** Genius Lab Gestionale: tarature | apple (solo indicazione, numerazione unica) */
+  attivita?: 'tarature' | 'apple' | null; attivita_nota?: string | null;
   esiti?: { id: string; tipo: string; descrizione: string; data: string }[];
   controlli?: string[];
   collegata?: { id: string; numero: string; data: string; totale: number } | null;
@@ -1093,6 +1099,8 @@ export interface Scontrino {
   tipo_documento?: 'vendita' | 'reso' | 'annullo' | null; rif_scontrino_id?: string | null; motivo?: string | null; creato_da?: string | null;
   /** CHR · VALE · DUMY · ALTRO: chi l'ha battuto */
   operatore?: string | null; data_rt?: string | null;
+  /** Genius Lab Gestionale: tarature | apple */
+  attivita?: 'tarature' | 'apple' | null;
 }
 export async function magProdotti(q = '', sottoScorta = false, limit = 300): Promise<{ prodotti: Prodotto[]; totale_righe: number | null; valore_magazzino: number }> {
   return fetchAPI(`/api/magazzino/prodotti?q=${encodeURIComponent(q)}&sotto_scorta=${sottoScorta}&limit=${limit}`);
@@ -1108,18 +1116,18 @@ export async function magModifica(id: string, body: Partial<Prodotto>): Promise<
 export async function magMovimento(id: string, body: { tipo: string; quantita: number; causale?: string; costo?: number }) {
   return fetchAPI(`/api/magazzino/prodotti/${id}/movimento`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string; pos_incasso_id?: string; operatore: string; session_id?: string;
+export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string; pos_incasso_id?: string; operatore: string; session_id?: string; attivita?: string;
   /** incasso di un ordine cliente (/cassa?ordine=…): lo scontrino diventa acconto/saldo dell'ordine */ documento_id?: string }): Promise<Scontrino & { ordine?: { id: string; sigla: string } }> {
   return fetchAPI('/api/cassa/scontrini', { method: 'POST', body: JSON.stringify(body) });
 }
-export async function cassaScontrini(giorno = '') { return fetchAPI(`/api/cassa/scontrini?giorno=${giorno}`); }
+export async function cassaScontrini(giorno = '', attivita = '') { return fetchAPI(`/api/cassa/scontrini?giorno=${giorno}&attivita=${attivita}`); }
 export async function cassaAnnulla(id: string) { return fetchAPI(`/api/cassa/scontrini/${id}/annulla`, { method: 'POST' }); }
 /** Reso (anche parziale) o annullo di uno scontrino GIÀ EMESSO: nasce un documento negativo nella cassa di oggi. */
 export async function cassaStornoScontrino(id: string, body: { tipo: 'reso' | 'annullo'; righe?: { indice: number; quantita: number }[]; modalita?: string; motivo: string; numero_rt?: string; numero_originale?: string; operatore: string }): Promise<Scontrino> {
   return fetchAPI(`/api/cassa/scontrini/${id}/storno`, { method: 'POST', body: JSON.stringify(body) });
 }
 export async function cassaRiprova(id: string) { return fetchAPI(`/api/cassa/scontrini/${id}/riprova`, { method: 'POST' }); }
-export async function cassaFattura(body: { righe: RigaCassa[]; pagamenti?: { modalita: string }[]; pagata?: boolean; operatore: string }): Promise<Fattura> {
+export async function cassaFattura(body: { righe: RigaCassa[]; pagamenti?: { modalita: string }[]; pagata?: boolean; operatore: string; attivita?: string }): Promise<Fattura> {
   return fetchAPI('/api/cassa/fattura', { method: 'POST', body: JSON.stringify(body) });
 }
 
@@ -1130,6 +1138,8 @@ export interface RigaGiornata {
   contanti: number; pos: number; stripe: number; bonifico: number; paypal: number; totale: number;
   /** orario HH:MM della registrazione ("" = senza orario, in coda alla giornata) e operatore */
   orario?: string; ts?: string | null; operatore?: string;
+  /** Genius Lab Gestionale: tarature | apple */
+  attivita?: 'tarature' | 'apple' | null;
 }
 export interface ControlloCassa { chiave: string; nome: string; atteso: number | null; trovato: number; differenza: number | null; ok: boolean; mancante: boolean; nota: string }
 export interface FoglioCassa {
@@ -1231,11 +1241,13 @@ export interface DocumentoCliente {
   in_attesa?: number; da_certificare?: number;
   /** fornitore da cui è stato ordinato (rubrica fornitori o testo libero) */
   fornitore_id?: string | null; fornitore_nome?: string | null;
+  /** Genius Lab Gestionale: tarature | apple */
+  attivita?: 'tarature' | 'apple' | null;
 }
 export type TipoDocumento = 'preventivo' | 'ordine' | 'proforma' | 'ddt';
 export type VistaOrdini = 'aperti' | 'arrivati' | 'completati' | 'annullati' | 'tutti';
-export async function docElenco(tipo: TipoDocumento, stato = '', q = '', vista = ''): Promise<DocumentoCliente[]> {
-  return fetchAPI(`/api/documenti?tipo=${tipo}&stato=${stato}&q=${encodeURIComponent(q)}&vista=${vista}`);
+export async function docElenco(tipo: TipoDocumento, stato = '', q = '', vista = '', attivita = ''): Promise<DocumentoCliente[]> {
+  return fetchAPI(`/api/documenti?tipo=${tipo}&stato=${stato}&q=${encodeURIComponent(q)}&vista=${vista}&attivita=${attivita}`);
 }
 export type EsitoIncassoOrdine = DocumentoCliente & { fattura?: { id: string; tipo_documento: string }; scontrino?: { id: string; stato: string } };
 /** Acconto (importo) o intero/saldo dell'ordine con FATTURA: bozza TD02/TD01 da pagare in Fatturazione.
@@ -1297,4 +1309,11 @@ export async function cassaChiusuraFiscale(operatore: string): Promise<{ ok: boo
 }
 export async function cassaChiusureFiscali(giorno: string): Promise<{ richieste: RichiestaChiusura[]; chiusure: ChiusuraRt[]; rt_scontrini: number | null }> {
   return fetchAPI(`/api/cassa/chiusure-fiscali?giorno=${encodeURIComponent(giorno)}`);
+}
+
+
+// === GENIUS LAB GESTIONALE: attività Tarature / Apple (02/10/2026) ===
+/** Cambia l'attività di un documento (in bozza: tutti; emesso: solo il titolare). */
+export async function cambiaAttivita(tabella: 'fatture' | 'documenti' | 'scontrini' | 'cassa_movimenti' | 'prodotti' | 'incassi', id: string, attivita: 'tarature' | 'apple') {
+  return fetchAPI(`/api/attivita/${tabella}/${id}`, { method: 'PATCH', body: JSON.stringify({ attivita }) });
 }

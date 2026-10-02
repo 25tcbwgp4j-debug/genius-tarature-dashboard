@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { DecInput } from "@/components/DecInput";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
+import { SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
 import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 import {
@@ -55,6 +56,9 @@ export function Editor({
 }) {
   const [operatore, setOperatore] = useOperatore();
   const [societa, setSocieta] = useState<FattSocieta>(iniziale?.societa || anagrafica?.societa || societaDefault);
+  // attività (Genius Lab): quella della bozza, o tarature se viene da una sessione, altrimenti il selettore in alto
+  const { attivita: attSelettore } = useAttivita();
+  const [attivita, setAttivita] = useState<Attivita>(iniziale?.attivita || (iniziale?.session_id ? "tarature" : attSelettore));
   const [tipoDoc, setTipoDoc] = useState(iniziale?.tipo_documento || "TD01");
   const [data, setData] = useState(iniziale?.data || oggiRoma());
   const c0: FattControparte = iniziale?.controparte || (anagrafica ? {
@@ -210,6 +214,7 @@ export function Editor({
       anagrafica_id: anagraficaId || undefined,
       salva_anagrafica: !anagraficaId && salvaAnag,
       pagata, operatore,
+      ...(societa === "genius" ? { attivita } : {}),
     };
   }
 
@@ -446,7 +451,13 @@ export function Editor({
           </div>
         </div>
 
-        <div className="border-t px-4 pt-3"><SceltaOperatore className="ml-auto max-w-md" value={operatore} onChange={setOperatore} compatto /></div>
+        <div className="flex flex-wrap items-center gap-3 border-t px-4 pt-3">
+          {societa === "genius" && (
+            <div className="flex items-center gap-2 text-sm"><span className="text-muted-foreground">Attività</span>
+              <SceltaAttivita value={attivita} onChange={(a) => { setAttivita(a); setSporco(true); }} /></div>
+          )}
+          <SceltaOperatore className="ml-auto max-w-md" value={operatore} onChange={setOperatore} compatto />
+        </div>
         <div className="flex flex-wrap justify-end gap-2 px-4 py-3">
           <Button variant="ghost" onClick={chiudi}>Annulla</Button>
           <Button variant="outline" disabled={!!salvando || !operatore} onClick={() => salva(false)}>

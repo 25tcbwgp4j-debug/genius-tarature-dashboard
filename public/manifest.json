@@ -1,7 +1,7 @@
 {
-  "name": "AvaTech Tarature",
-  "short_name": "Tarature",
-  "description": "Dashboard gestione tarature strumenti — AvaTech Certificazioni",
+  "name": "Genius Lab Gestionale",
+  "short_name": "Genius Lab",
+  "description": "Gestionale Genius Lab: tarature F-GAS e assistenza Mac e iPhone",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

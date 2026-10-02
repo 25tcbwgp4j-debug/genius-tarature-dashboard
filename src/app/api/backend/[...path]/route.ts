@@ -32,6 +32,8 @@ const FORWARDED_REQ_HEADERS = new Set([
   "x-admin-email",
   "x-admin-password",
   "x-motivo",
+  // Genius Lab Gestionale: attività scelta nel selettore (tarature | apple)
+  "x-attivita",
 ]);
 
 // Headers della risposta backend che restituiamo al client

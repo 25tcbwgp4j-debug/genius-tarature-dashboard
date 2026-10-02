@@ -29,8 +29,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <div className="bg-blue-100 p-3 rounded-full mb-3">
             <LogIn className="w-7 h-7 text-blue-600" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">AvaTech Tarature</h1>
-          <p className="text-sm text-gray-500 mt-1">Dashboard di gestione</p>
+          <h1 className="text-2xl font-bold text-gray-900">Genius Lab Gestionale</h1>
+          <p className="text-sm text-gray-500 mt-1">Tarature · Assistenza Mac e iPhone</p>
         </div>
 
         {resetSuccess && (

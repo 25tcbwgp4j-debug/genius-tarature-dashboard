@@ -10,6 +10,7 @@ import { PermessiProvider } from "@/components/permessi";
 import { AutorizzazioneDialog } from "@/components/AutorizzazioneDialog";
 import { GuardiaTitolare } from "@/components/RiservatoTitolare";
 import { BonificiAvviso } from "@/components/BonificiAvviso";
+import { AttivitaProvider } from "@/components/attivita";
 
 const geist = Geist({
   variable: "--font-geist",
@@ -17,13 +18,13 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "AvaTech Tarature - Dashboard",
-  description: "Sistema gestione tarature strumenti - AvaTech Tarature Certificazioni",
+  title: "Genius Lab Gestionale",
+  description: "Gestionale Genius Lab: laboratorio tarature F-GAS e assistenza Mac e iPhone",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Tarature",
+    title: "Genius Lab",
   },
   icons: {
     icon: [
@@ -66,6 +67,7 @@ export default function RootLayout({
       <body className="min-h-full flex bg-gray-50 dark:bg-gray-950">
         <ThemeProvider>
           <PermessiProvider>
+           <AttivitaProvider>
             <Sidebar />
             <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 p-3 sm:p-6 pt-14 sm:pt-14 lg:pt-6 print:p-0">
               <GuardiaTitolare>{children}</GuardiaTitolare>
@@ -75,6 +77,7 @@ export default function RootLayout({
             <AutorizzazioneDialog />
             {/* bonifici arrivati sul conto SumUp: pulsante rosso su ogni pagina (02/10/2026) */}
             <BonificiAvviso />
+           </AttivitaProvider>
           </PermessiProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>

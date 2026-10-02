@@ -42,6 +42,12 @@ import { useTheme } from "@/components/theme-provider";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { usePermessi } from "@/components/permessi";
 import { paginaDelTitolare } from "@/lib/riservate";
+import { SelettoreAttivita, useAttivita } from "@/components/attivita";
+import { fetchAPI } from "@/lib/api";
+
+// Voci solo del laboratorio tarature: con il selettore su «Apple» non si vedono (Genius Lab Gestionale, 02/10/2026).
+// Tutto ciò che è negozio (cassa, fatture, ordini, magazzino, bonifici) resta sempre.
+const SOLO_TARATURE = new Set(["/sessioni", "/rapporti", "/scadenzario"]);
 
 // Voci nascoste all'operatore: quelle delle sezioni del titolare (lib/riservate.ts, 02/10/2026)
 type Voce = { href: string; label: string; icon: typeof ClipboardList };
@@ -83,7 +89,18 @@ export function Sidebar() {
   const push = usePushNotifications();
   const { admin, nInAttesa } = usePermessi();
   // finché i permessi non arrivano si mostrano solo le voci del banco (niente lampo delle voci del titolare)
-  const voci = navItems.filter((v) => admin || !paginaDelTitolare(v.href));
+  const { attivita } = useAttivita();
+  const voci = navItems.filter((v) => (admin || !paginaDelTitolare(v.href)) && !(attivita === "apple" && SOLO_TARATURE.has(v.href)));
+  // messaggi WhatsApp fermi perché la linea dell'attività non è ancora abbinata (es. staff Genius 334 986 7400)
+  const [avvisiWa, setAvvisiWa] = useState<string[]>([]);
+  useEffect(() => {
+    if (pathname === "/login" || pathname.startsWith("/login/")) return;
+    let annullato = false;
+    fetchAPI("/api/attivita/avvisi")
+      .then((r: { avvisi?: { messaggio: string }[] }) => { if (!annullato) setAvvisiWa((r.avvisi || []).map((a) => a.messaggio)); })
+      .catch(() => undefined);
+    return () => { annullato = true; };
+  }, [pathname]);
 
   useEffect(() => {
     // messaggi non letti della chat: la chat è del titolare (l'operatore riceverebbe 403)
@@ -140,8 +157,8 @@ export function Sidebar() {
       >
         <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">AvaTech Tarature</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tarature Certificazioni</p>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Genius Lab Gestionale</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tarature · Assistenza Mac e iPhone</p>
           </div>
           <button
             type="button"
@@ -151,6 +168,14 @@ export function Sidebar() {
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+        <div className="px-4 pt-4 space-y-2">
+          <SelettoreAttivita />
+          {avvisiWa.map((m) => (
+            <p key={m} className="text-[11px] leading-snug text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
+              {m}
+            </p>
+          ))}
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {voci.map((item) => {
@@ -228,8 +253,8 @@ export function Sidebar() {
             </button>
           </form>
           <div>
-            <p className="text-xs text-gray-400 dark:text-gray-500">AvaTech Tarature Certificazioni</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500">Viale Somalia, 246 — Roma</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">Genius Lab s.r.l.s.</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">Viale Somalia, 244/246/248 — Roma</p>
           </div>
         </div>
       </aside>
