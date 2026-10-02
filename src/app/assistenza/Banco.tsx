@@ -168,7 +168,7 @@ export function Banco() {
         <div>
           {aperta ? <SchedaView key={aperta} id={aperta} operatore={operatore} setOperatore={setOperatore} admin={!!cfg?.admin}
             onApri={apri} onCambiata={carica} />
-            : <Card className="p-8 text-center text-muted-foreground">Scegli una scheda dall&apos;elenco, scrivi il numero, oppure <b>NUOVO</b> (F2).</Card>}
+            : <div className="rounded-xl border bg-card p-8 text-center text-muted-foreground">Scegli una scheda dall&apos;elenco, scrivi il numero, oppure <b>NUOVO</b> (F2).</div>}
         </div>
       </div>
       {nuova && <NuovaScheda operatore={operatore} setOperatore={setOperatore} onClose={() => setNuova(false)}
@@ -245,7 +245,8 @@ function NuovaScheda({ operatore, setOperatore, onClose, onCreata }: {
   );
   return (
     <Modale titolo="Nuova scheda di assistenza" onClose={onClose} largo>
-      <div className="grid gap-4 md:grid-cols-2" onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") crea(); }}>
+      <div onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") crea(); }}>
+      <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <div className="text-sm font-semibold">Cliente</div>
           <CercaCliente onScelto={(a) => { setAnag(a); setF((x) => ({ ...x, azienda: a.denominazione, telefono: a.telefono || x.telefono || "", email: a.email || x.email || "",
@@ -289,6 +290,7 @@ function NuovaScheda({ operatore, setOperatore, onClose, onCreata }: {
           <Button variant="outline" onClick={onClose}>Annulla</Button>
           <Button disabled={busy || !operatore} onClick={crea} title="Ctrl/Cmd+Invio">{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}Crea scheda</Button>
         </div>
+      </div>
       </div>
     </Modale>
   );
@@ -391,7 +393,7 @@ function SchedaView({ id, operatore, setOperatore, admin, onApri, onCambiata }: 
   return (
     <div className="space-y-2">
       {/* testata */}
-      <Card className="flex flex-wrap items-center gap-2 p-2">
+      <div className="rounded-xl border bg-card flex flex-wrap items-center gap-2 p-2">
         <Button size="icon-xs" variant="outline" disabled={!s.precedente} onClick={() => s.precedente && onApri(s.precedente.id)} title="Precedente (Alt+←)"><ArrowLeft /></Button>
         <span className="text-2xl font-bold tabular-nums">{s.sigla}</span>
         <Button size="icon-xs" variant="outline" disabled={!s.successiva} onClick={() => s.successiva && onApri(s.successiva.id)} title="Successiva (Alt+→)"><ArrowRight /></Button>
@@ -405,11 +407,11 @@ function SchedaView({ id, operatore, setOperatore, admin, onApri, onCambiata }: 
           {!ro && <Button size="sm" disabled={!sporca} onClick={() => salva()} title="Ctrl/Cmd+S"><Save className="mr-1" />Salva{sporca ? " *" : ""}</Button>}
         </div>
         <div className="w-full"><SceltaOperatore value={operatore as "CHR"} onChange={setOperatore} compatto /></div>
-      </Card>
+      </div>
 
       {/* pulsantiera FileMaker */}
       {!ro && (
-        <Card className="flex flex-wrap gap-1.5 p-2">
+        <div className="rounded-xl border bg-card flex flex-wrap gap-1.5 p-2">
           {st === "in_arrivo" && <Button size="sm" disabled={!!busy} onClick={() => azione("arrivato", {}, "Dispositivo arrivato")}><Package className="mr-1" />ARRIVATO</Button>}
           <Button size="sm" variant="outline" disabled={!!busy} onClick={() => { setMailTipo("ricevuta"); setDialogo("mail"); }}><Mail className="mr-1" />RICEVUTA</Button>
           <Button size="sm" variant={st === "da_preventivare" ? "default" : "outline"} disabled={!!busy || st === "in_arrivo"} onClick={() => { setMailTipo("preventivo"); setDialogo("mail"); }}><Send className="mr-1" />PREVENTIVO</Button>
@@ -423,9 +425,9 @@ function SchedaView({ id, operatore, setOperatore, admin, onApri, onCambiata }: 
           <Button size="sm" variant="outline" onClick={() => vendi("scontrino")} title="Apre la cassa con le righe della scheda"><ShoppingCart className="mr-1" />Scontrino</Button>
           <Button size="sm" variant="outline" disabled={!!s.fattura_id || !!busy} onClick={() => vendi("fattura")}><FileText className="mr-1" />Fattura</Button>
           <Button size="sm" variant="outline" disabled={!!s.documento_id || !!busy} onClick={() => vendi("ordine")}>Ordine</Button>
-        </Card>
+        </div>
       )}
-      <Card className="flex flex-wrap items-center gap-1.5 p-2 text-sm">
+      <div className="rounded-xl border bg-card flex flex-wrap items-center gap-1.5 p-2 text-sm">
         <Printer className="size-4" />
         <Button size="xs" variant="outline" onClick={() => stampa("accettazione")}>Stampa A4</Button>
         <Button size="xs" variant="outline" onClick={() => stampa("interna")}>Stampa interna</Button>
@@ -445,7 +447,7 @@ function SchedaView({ id, operatore, setOperatore, admin, onApri, onCambiata }: 
           const m = prompt("Motivo dell'annullamento della scheda?");
           if (m !== null) azione("annulla", { motivo: m }, "Scheda annullata");
         }}><Trash2 />Annulla</Button>}
-      </Card>
+      </div>
 
       <div className="grid gap-2 xl:grid-cols-2">
         {/* dispositivo */}
@@ -490,7 +492,7 @@ function SchedaView({ id, operatore, setOperatore, admin, onApri, onCambiata }: 
 
         {/* preventivo */}
         <Card className="space-y-2 p-3 xl:col-span-2">
-          <EditorPreventivo righe={righe} ro={ro} onChange={(r) => set("preventivo_righe", r)} testoStorico={s.preventivo_righe?.length ? null : s.preventivo_testo}
+          <EditorPreventivo righe={righe} ro={ro} onChange={(r) => set("preventivo_righe", r)} testoStorico={s.preventivo_righe?.length ? null : s.preventivo_testo} totaleStorico={s.preventivo_totale}
             dataPreventivo={fasi.preventivo?.il} esito={s.preventivo_esito} acconto={v("acconto") as number | null}
             onAcconto={(x) => set("acconto", x)} />
         </Card>
@@ -580,8 +582,8 @@ function SchedaView({ id, operatore, setOperatore, admin, onApri, onCambiata }: 
 // ---------------------------------------------------------------------------
 // PREVENTIVO A IPOTESI
 
-function EditorPreventivo({ righe, ro, onChange, testoStorico, dataPreventivo, esito, acconto, onAcconto }: {
-  righe: EstimateLine[]; ro: boolean; onChange: (r: EstimateLine[]) => void; testoStorico: string | null; dataPreventivo?: string; esito: string;
+function EditorPreventivo({ righe, ro, onChange, testoStorico, totaleStorico, dataPreventivo, esito, acconto, onAcconto }: {
+  righe: EstimateLine[]; totaleStorico?: number | null; ro: boolean; onChange: (r: EstimateLine[]) => void; testoStorico: string | null; dataPreventivo?: string; esito: string;
   acconto: number | null; onAcconto: (v: string) => void;
 }) {
   const [listino, setListino] = useState<{ voci: VoceListino[]; coppie: Coppia[] } | null>(null);
@@ -605,7 +607,7 @@ function EditorPreventivo({ righe, ro, onChange, testoStorico, dataPreventivo, e
         <span className="text-xs text-muted-foreground">Data/Ora: {dataOra(dataPreventivo) || "—"} · esito {esito === "accettato" ? "ACCETTATO" : esito === "rifiutato" ? "RIFIUTATO" : "in attesa"}</span>
         <label className="ml-auto flex items-center gap-1 text-xs">Acconto €
           <input className="h-7 w-20 rounded border px-1 text-right" inputMode="decimal" disabled={ro} value={acconto ?? ""} onChange={(e) => onAcconto(e.target.value.replace(",", "."))} /></label>
-        <span>Importo preventivo <b>{eur(tot)}</b></span>
+        <span>Importo preventivo <b>{eur(righe.length ? tot : totaleStorico)}</b></span>
       </div>
       {testoStorico && righe.length === 0 && (
         <div className="rounded border bg-muted/30 p-2 text-sm">
@@ -615,7 +617,7 @@ function EditorPreventivo({ righe, ro, onChange, testoStorico, dataPreventivo, e
       )}
       <div className="space-y-1">
         {righe.map((r, i) => (
-          <div key={i} className={`grid items-center gap-1 rounded border p-1 text-sm md:grid-cols-[auto_1fr_90px_auto] ${r.opt != null && !r.on ? "opacity-60" : ""}`}>
+          <div key={i} className={`grid grid-cols-[96px_1fr_90px] items-center gap-1 rounded border p-1 text-sm ${r.opt != null && !r.on ? "opacity-60" : ""}`}>
             <span className="w-24 text-xs">
               {r.opt != null
                 ? <label className="flex items-center gap-1"><input type="radio" disabled={ro} checked={!!r.on} onChange={() => scegli(r.opt as number)} />{righe.filter((x) => x.opt != null).indexOf(r) + 1}° IPOTESI</label>
@@ -623,7 +625,7 @@ function EditorPreventivo({ righe, ro, onChange, testoStorico, dataPreventivo, e
             </span>
             <input className={campo} disabled={ro} value={r.t} onChange={(e) => upd(i, "t", e.target.value)} />
             <input className={`${campo} text-right`} disabled={ro} inputMode="decimal" placeholder="€" value={r.p ?? ""} onChange={(e) => upd(i, "p", e.target.value.replace(",", "."))} />
-            <div className="flex flex-wrap items-center gap-1 text-xs">
+            <div className="col-span-3 flex flex-wrap items-center justify-end gap-1 text-xs">
               <label className="flex items-center gap-0.5"><input type="checkbox" disabled={ro} checked={!!r.iva} onChange={(e) => upd(i, "iva", e.target.checked)} />+IVA</label>
               <select className="h-7 rounded border px-1" disabled={ro} value={r.nota || ""} onChange={(e) => upd(i, "nota", e.target.value || null)}>
                 <option value="">recupero dati…</option><option>compreso recupero dati</option><option>senza recupero dati</option><option>solo recupero dati</option></select>
