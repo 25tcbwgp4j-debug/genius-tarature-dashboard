@@ -380,6 +380,12 @@ export default function SessionDetail() {
   // STAMPA DIRETTA: un clic → il lavoro va in coda e l'agente sul Mac del banco lo stampa
   // (etichette 50x22 sulla Brother QL-700, ricevuta 2 copie sulla stampante A4).
   // Agente spento → si apre il PDF come prima (finestra di stampa del browser).
+  // ETICHETTE solo dopo i rapporti (Christian 02/10/2026): tutti gli strumenti da tarare (esclusi «NON lo tariamo noi»)
+  // devono avere il numero di rapporto, che è scritto sull'etichetta.
+  const daTarare = ((session?.instruments || []) as { rdt_number?: string | null; external_processing?: boolean | null }[])
+    .filter((i) => !i.external_processing);
+  const rapportiPronti = daTarare.length > 0 && daTarare.every((i) => !!i.rdt_number);
+
   const stampaDiretta = async (tipo: "etichette" | "ricevuta" | "rapporti") => {
     setActionLoading("stampa_" + tipo);
     try {
@@ -721,16 +727,18 @@ export default function SessionDetail() {
               variant="outline"
               size="sm"
               onClick={() => stampaDiretta("etichette")}
-              disabled={actionLoading === "stampa_etichette"}
+              disabled={actionLoading === "stampa_etichette" || !rapportiPronti}
               className="min-w-0 flex-1 rounded-r-none bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
-              title="Stampa subito le etichette 50x22mm sulla Brother QL-700 (agente di stampa del banco)"
+              title={rapportiPronti ? "Stampa subito le etichette 50x22mm sulla Brother QL-700 (agente di stampa del banco)"
+                : "Le etichette si stampano solo dopo aver generato i rapporti di tutti gli strumenti"}
             >
               {actionLoading === "stampa_etichette" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Tag className="w-4 h-4 mr-1" />}
               Stampa etichette
             </Button>
-            <Button variant="outline" size="sm" onClick={openLabelsPdf}
+            <Button variant="outline" size="sm" onClick={openLabelsPdf} disabled={!rapportiPronti}
               className="rounded-l-none border-l-0 px-2 text-xs bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
-              title="Apri il PDF delle etichette (stampa dal browser con il formato Genius Lab 50x22)">PDF</Button>
+              title={rapportiPronti ? "Apri il PDF delle etichette (stampa dal browser con il formato Genius Lab 50x22)"
+                : "Le etichette si stampano solo dopo aver generato i rapporti di tutti gli strumenti"}>PDF</Button>
           </div>
           <Button
             variant="outline"
