@@ -820,6 +820,9 @@ export interface ShipmentAddress {
 
 export interface ShipmentRequest {
   direction: ShipmentDirection;
+  /** UPS (default) o DHL: una società, due divisioni, stessi corrieri (02/10/2026) */
+  carrier?: 'UPS' | 'DHL';
+  operator?: string;
   pickup_date?: string | null;
   book_pickup?: boolean;
   packages?: number;
@@ -856,6 +859,47 @@ export function getShipmentLabelUrl(shipmentId: string): string {
 export async function cancelShipment(shipmentId: string) {
   return fetchAPI(`/api/shipments/${shipmentId}/cancel`, { method: 'POST', body: '{}' });
 }
+
+// === SEZIONE SPEDIZIONI (UPS + DHL, Tarature + Apple) — 02/10/2026 ===
+export type SpedTipo = 'ritiro_prenotato' | 'ritiro_senza' | 'spedizione' | 'spedizione_ritiro';
+export type SpedIndirizzo = ShipmentAddress;
+export interface SpedStato {
+  dhl_configurato: boolean; dhl_produzione: boolean; ups_configurato: boolean; vede_assistenza: boolean; email_test: string; operatori: string[];
+}
+export interface SpedPratica { id: string; tipo: 'sessione' | 'scheda'; titolo: string; cliente: string; dettaglio: string; data: string | null }
+export interface SpedRubrica { fonte: 'clienti' | 'anagrafiche'; customer_id?: string; anagrafica_id?: string; email: string; indirizzo: SpedIndirizzo }
+export interface SpedRiga {
+  id: string; session_id: string | null; scheda_id: string | null; attivita: string | null; carrier: 'UPS' | 'DHL';
+  direction: ShipmentDirection; tipo: SpedTipo | null; riferimento: string | null; contenuto: string | null; note: string | null;
+  test_mode: boolean; tracking: string | null; pickup_prn: string | null; pickup_date: string | null; pickup_location: string | null;
+  pickup_error: string | null; packages: number; cost: number | null; currency: string | null; address: Partial<ShipmentAddress> | null;
+  email_to: string | null; email_sent_at: string | null; email_error: string | null; status: string; created_by: string | null; created_at: string;
+  pratica: { tipo: 'sessione' | 'scheda' | 'libera'; id: string | null; titolo: string }; controparte: string; tracking_url: string | null; label_url: string;
+}
+const postJ = (b: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(b) });
+export const spedStato = (): Promise<SpedStato> => fetchAPI('/api/spedizioni/stato');
+export const spedRubrica = (q: string): Promise<{ risultati: SpedRubrica[] }> => fetchAPI(`/api/spedizioni/rubrica?q=${encodeURIComponent(q)}`);
+export const spedPratiche = (tipo: 'sessione' | 'scheda', q: string): Promise<{ risultati: SpedPratica[] }> =>
+  fetchAPI(`/api/spedizioni/pratiche?tipo=${tipo}&q=${encodeURIComponent(q)}`);
+export const spedElenco = (f: { attivita?: string; pratica?: string; corriere?: string; prove?: boolean; q?: string }): Promise<{ spedizioni: SpedRiga[] }> => {
+  const p = new URLSearchParams();
+  if (f.attivita) p.set('attivita', f.attivita);
+  if (f.pratica) p.set('pratica', f.pratica);
+  if (f.corriere) p.set('corriere', f.corriere);
+  if (f.prove === false) p.set('prove', 'false');
+  if (f.q?.trim()) p.set('q', f.q.trim());
+  return fetchAPI(`/api/spedizioni?${p.toString()}`);
+};
+export const spedAnteprimaLibera = (b: Record<string, unknown>): Promise<{
+  indirizzo: SpedIndirizzo; mancanti: string[]; oggetto: string; corpo: string; email: string | null; mittente_lab: SpedIndirizzo;
+  dhl_configurato: boolean; dhl_produzione: boolean;
+}> => fetchAPI('/api/spedizioni/libera/anteprima', postJ(b));
+export const spedCreaLibera = (b: Record<string, unknown>): Promise<{
+  id: string; corriere: string; tracking: string; prn: string | null; test: boolean; pickup_error: string | null; mail: string;
+  stampa: { agente_attivo: boolean; copie: number } | null; label_url: string; tracking_url: string;
+}> => fetchAPI('/api/spedizioni/libera', postJ(b));
+export const spedStampaBanco = (id: string): Promise<{ id: string; copie: number; agente_attivo: boolean }> =>
+  fetchAPI(`/api/spedizioni/${id}/stampa`, postJ({}));
 
 // === FATTURAZIONE (Openapi SDI) — 30/09/2026 ===
 export type FattSocieta = 'genius' | 'gingy' | 'avantifiori';

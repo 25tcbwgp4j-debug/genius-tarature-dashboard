@@ -36,6 +36,7 @@ import {
   UserCog,
   History,
   Smartphone,
+  Truck,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -65,6 +66,7 @@ const navItems: Voce[] = [
   { href: "/cassa", label: "Scontrino (registratore)", icon: ShoppingCart },
   { href: "/cassa/giornata", label: "Cassa del giorno", icon: Calculator },
   { href: "/assistenza", label: "Schede assistenza", icon: Smartphone },
+  { href: "/spedizioni", label: "Spedizioni", icon: Truck },
   { href: "/ordini", label: "Ordini e preventivi", icon: NotebookPen },
   { href: "/proforma", label: "Pro forma", icon: FileSpreadsheet },
   { href: "/magazzino", label: "Magazzino", icon: Boxes },

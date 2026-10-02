@@ -1,6 +1,6 @@
 "use client";
 
-// Spedizioni UPS della sessione: ritiro dal cliente (etichetta + corriere prenotato)
+// Spedizioni UPS o DHL della sessione (02/10/2026: una società, due divisioni, stessi corrieri): ritiro dal cliente (etichetta + corriere prenotato)
 // e riconsegna degli strumenti tarati. Mail al cliente e WhatsApp dalla linea staff
 // partono in automatico dopo la conferma (il WhatsApp lo manda il worker sul VPS).
 
@@ -27,6 +27,8 @@ import {
 interface ShipmentRow {
   id: string;
   direction: ShipmentDirection;
+  carrier: "UPS" | "DHL" | null;
+  pickup_location: string | null;
   test_mode: boolean;
   tracking: string | null;
   tracking_packages: string[] | null;
@@ -128,6 +130,7 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
   const apri = async (dir: ShipmentDirection) => {
     const base: ShipmentRequest = {
       direction: dir,
+      carrier: "UPS",
       pickup_date: dir === "ritiro" ? prossimoGiornoLavorativo() : null,
       book_pickup: dir === "ritiro",
       packages: 1,
@@ -190,11 +193,12 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
 
   const conferma = async () => {
     if (!form) return;
+    const cor = form.carrier || "UPS";
     const cosa = form.direction === "ritiro"
-      ? `RITIRO dal cliente${form.book_pickup ? ` con corriere il ${form.pickup_date}` : " senza prenotazione"}`
-      : "RICONSEGNA al cliente";
+      ? `RITIRO ${cor} dal cliente${form.book_pickup ? ` con corriere il ${form.pickup_date}` : " senza prenotazione"}`
+      : `RICONSEGNA ${cor} al cliente${form.book_pickup ? ` con ritiro da noi il ${form.pickup_date}` : ""}`;
     const avvisi = [
-      form.test ? "PROVA: ambiente di test UPS, nessun costo, niente mail né WhatsApp." : "Etichetta VERA a pagamento sul conto UPS.",
+      form.test ? `PROVA: ambiente di test ${cor}, nessun costo, niente mail né WhatsApp.` : `Etichetta VERA a pagamento sul conto ${cor}.`,
       !form.test && form.send_email ? `Mail a ${form.email || "(manca l'email)"}` : null,
       !form.test && form.send_whatsapp ? `WhatsApp a ${form.whatsapp_phone || "(manca il numero)"}` : null,
     ].filter(Boolean).join("\n");
@@ -221,13 +225,14 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
   };
 
   const annulla = async (r: ShipmentRow) => {
-    if (!confirm(`Annullare con UPS la spedizione ${r.tracking}?\n\n` +
+    const cor = r.carrier || "UPS";
+    if (!confirm(`Annullare con ${cor} la spedizione ${r.tracking}?\n\n` +
       (r.pickup_prn ? "Viene annullato anche il ritiro prenotato: il corriere non passa.\n" : "") +
       "L'etichetta non sarà addebitata. Mail e WhatsApp già inviati NON si possono ritirare.")) return;
     setBusy(true);
     try {
       await cancelShipment(r.id);
-      toast.success("Spedizione annullata con UPS");
+      toast.success(`Spedizione annullata con ${cor}`);
       await load();
     } catch (e: unknown) {
       toast.error((e as Error).message || "Annullamento non riuscito", { duration: 12000 });
@@ -244,7 +249,7 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <Truck className="w-5 h-5 text-amber-800" />
-          <h3 className="font-semibold text-base">Spedizioni UPS</h3>
+          <h3 className="font-semibold text-base">Spedizioni UPS / DHL</h3>
           {session && (
             <span className="text-xs text-muted-foreground">
               · in fattura: {aCaricoCliente ? "a carico del cliente (0 €)" : costoDaSessione(session).incluso ? eur(costoDaSessione(session).importo) : "nessun costo"}
@@ -272,6 +277,18 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
             <Button size="sm" variant="ghost" onClick={chiudi}><X className="w-4 h-4" /></Button>
           </div>
 
+          <div className="flex items-center gap-1 text-sm">
+            <span className="text-muted-foreground mr-1">Corriere</span>
+            {(["UPS", "DHL"] as const).map((c) => (
+              <Button key={c} size="sm" variant={(form.carrier || "UPS") === c ? "default" : "outline"} className="h-7"
+                onClick={() => setForm({
+                  ...form, carrier: c,
+                  // riconsegna: con DHL il ritiro da noi va prenotato, con UPS no (passa ogni pomeriggio)
+                  ...(direction === "riconsegna" ? { book_pickup: c === "DHL", pickup_date: c === "DHL" ? (form.pickup_date || prossimoGiornoLavorativo()) : null } : {}),
+                })}>{c}</Button>
+            ))}
+          </div>
+
           {direction === "ritiro" && (
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <label className="flex items-center gap-1">
@@ -290,7 +307,21 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
             </div>
           )}
           {direction === "riconsegna" && (
-            <p className="text-sm text-muted-foreground">UPS passa da noi ogni pomeriggio alle 16:30: nessuna prenotazione.</p>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <label className="flex items-center gap-1">
+                <input type="checkbox" checked={!!form.book_pickup}
+                  onChange={(e) => setForm({ ...form, book_pickup: e.target.checked, pickup_date: e.target.checked ? (form.pickup_date || prossimoGiornoLavorativo()) : null })} />
+                Prenota il ritiro del corriere da noi (Viale Somalia)
+              </label>
+              {form.book_pickup && (
+                <label className="flex items-center gap-1">
+                  Giorno
+                  <Input type="date" className="h-8 w-40" value={form.pickup_date || ""}
+                    onChange={(e) => setForm({ ...form, pickup_date: e.target.value })} />
+                </label>
+              )}
+              {(form.carrier || "UPS") === "UPS" && !form.book_pickup && <span className="text-muted-foreground">UPS passa da noi ogni pomeriggio alle 16:30.</span>}
+            </div>
           )}
 
           <div className="flex flex-wrap gap-3 text-sm">
@@ -365,7 +396,7 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <label className="flex items-center gap-1 text-sm">
               <input type="checkbox" checked={!!form.test} onChange={(e) => setForm({ ...form, test: e.target.checked })} />
-              Prova (ambiente di test UPS, gratis)
+              Prova (ambiente di test {form.carrier || "UPS"}, gratis)
             </label>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" disabled={busy} onClick={() => aggiornaAnteprima(form)}>
@@ -385,6 +416,7 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
         <div className="space-y-2">
           {rows.map((r) => (
             <div key={r.id} className="rounded border bg-white p-2 text-sm flex flex-wrap items-center gap-x-3 gap-y-1">
+              <b>{r.carrier || "UPS"}</b>
               <Badge className={r.direction === "ritiro" ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"}>
                 {r.direction === "ritiro" ? "Ritiro" : "Riconsegna"}
               </Badge>
@@ -396,6 +428,9 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
                 </a>
               ) : <span className="font-mono">{r.tracking}</span>}
               {r.packages > 1 && <span>{r.packages} colli</span>}
+              {r.direction === "riconsegna" && r.pickup_prn && (
+                <span>ritiro da noi {r.pickup_date ? new Date(r.pickup_date).toLocaleDateString("it-IT") : ""} ({r.pickup_prn})</span>
+              )}
               {r.direction === "ritiro" && (
                 r.pickup_prn
                   ? <span>ritiro {r.pickup_date ? new Date(r.pickup_date).toLocaleDateString("it-IT") : ""} (PRN {r.pickup_prn})</span>
