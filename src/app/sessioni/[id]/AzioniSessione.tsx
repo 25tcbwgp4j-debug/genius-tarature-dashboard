@@ -141,7 +141,7 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
         </Gruppo>
 
         <Gruppo titolo="Pagamento" sotto={!isPaid && (
-          <button type="button" className="text-purple-700 underline" disabled={occupato}
+          <button type="button" className="mt-0.5 flex h-10 w-full items-center justify-center rounded-md border border-purple-300 px-2 text-[11px] text-purple-700 hover:bg-purple-50 disabled:opacity-50" disabled={occupato}
             title="Genera link Stripe Checkout — il cliente paga in 1 clic con la carta"
             onClick={async () => {
               if (!confirm("Generare un link Stripe Checkout? Il cliente potrà pagare con carta in 1 click. Riceverai notifica Telegram al pagamento.")) return;
