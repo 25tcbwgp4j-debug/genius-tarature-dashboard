@@ -36,7 +36,7 @@ function latin1(v: string) { return v.replace(/[^\x20-\x7E\xA0-\xFF]/g, '?'); }
 /** Testo libero negli header (motivo, email): accenti tolti (così → cosi), resto in ASCII. */
 function ascii(v: string) { return v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '?'); }
 
-async function fetchAPI(path: string, options: RequestInit = {}, conDialog = true): Promise<any> {  // eslint-disable-line @typescript-eslint/no-explicit-any
+export async function fetchAPI(path: string, options: RequestInit = {}, conDialog = true): Promise<any> {  // eslint-disable-line @typescript-eslint/no-explicit-any
   const url = `${API_PROXY}${path}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

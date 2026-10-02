@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { PermessiProvider } from "@/components/permessi";
 import { AutorizzazioneDialog } from "@/components/AutorizzazioneDialog";
 import { GuardiaTitolare } from "@/components/RiservatoTitolare";
+import { BonificiAvviso } from "@/components/BonificiAvviso";
 
 const geist = Geist({
   variable: "--font-geist",
@@ -72,6 +73,8 @@ export default function RootLayout({
             </main>
             {/* operazioni protette dell'operatore: password dell'admin sul posto o richiesta in attesa */}
             <AutorizzazioneDialog />
+            {/* bonifici arrivati sul conto SumUp: pulsante rosso su ogni pagina (02/10/2026) */}
+            <BonificiAvviso />
           </PermessiProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>
