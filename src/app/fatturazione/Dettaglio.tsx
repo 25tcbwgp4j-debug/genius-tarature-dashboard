@@ -6,13 +6,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   AlertTriangle, Banknote, Copy, CreditCard, FileCode2, FileDown, Link2, Loader2, Mail, MessageCircle, Pencil, Printer,
-  Receipt, RotateCcw, Send, Smartphone, Trash2, Undo2, Wallet, X,
+  PackagePlus, Receipt, RotateCcw, Send, Smartphone, Trash2, Undo2, Wallet, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { docDaFattura } from "@/lib/api";
 import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { SceltaAttivita } from "@/components/attivita";
+import { CaricoMagazzino } from "./CaricoMagazzino";
 import { usePermessi as usePermessiAtt } from "@/components/permessi";
 import { cambiaAttivita } from "@/lib/api";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
@@ -44,6 +45,7 @@ export function Dettaglio({
   const [errore, setErrore] = useState("");
   const [conv, setConv] = useState<{ numero: string; modalita: string } | null>(null);   // conversione in scontrino
   const { admin: titolare } = usePermessiAtt();
+  const [carico, setCarico] = useState(false);   // fattura ricevuta → «Carica in magazzino»
 
   const carica = useCallback(() => {
     fattDettaglio(id).then((r) => { setF(r); setErrore(""); })
@@ -278,6 +280,13 @@ export function Dettaglio({
               </div>
             )}
           </div>
+
+          {!emessa && f.societa === "genius" && (f.righe || []).length > 0 && (
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={() => setCarico(true)}><PackagePlus /> Carica in magazzino</Button>
+            </div>
+          )}
+          {carico && <CaricoMagazzino fatturaId={f.id} onClose={() => setCarico(false)} />}
 
           {/* Righe */}
           <div className="rounded-lg border">

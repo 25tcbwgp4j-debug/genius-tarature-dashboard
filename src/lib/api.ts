@@ -1088,8 +1088,14 @@ export interface Prodotto {
   /** ordinario = aliquota · margine = usato / conto vendita (regime del margine) · esente = esente/non imponibile */
   regime_iva?: 'ordinario' | 'margine' | 'esente';
   movimenti?: { id: string; tipo: string; quantita: number; causale: string | null; created_at: string; creato_da: string | null }[];
+  /** Genius Lab Gestionale (02/10/2026): attività e magazzino Apple */
+  attivita?: 'tarature' | 'apple' | null;
+  categoria_merce?: CategoriaMerce | null; modello?: string | null; fornitore_id?: string | null; fornitore_nome?: string | null;
+  serializzato?: boolean; sottocategoria?: string | null;
+  /** letto con lo scanner un seriale/IMEI: il pezzo già scelto */
+  pezzo?: Pezzo;
 }
-export interface RigaCassa { prodotto_id?: string | null; descrizione: string; quantita: number; prezzo: number; aliquota: number; sconto?: number;
+export interface RigaCassa { prodotto_id?: string | null; /** pezzo serializzato venduto (iPhone, Mac…) */ pezzo_id?: string | null; descrizione: string; quantita: number; prezzo: number; aliquota: number; sconto?: number;
   /** regime IVA della riga: margine (N5) o esente (N4/N3.x); senza = aliquota */
   regime?: 'margine' | 'esente' | null; natura?: string | null; costo_acquisto?: number | null }
 export interface Scontrino {
@@ -1102,8 +1108,8 @@ export interface Scontrino {
   /** Genius Lab Gestionale: tarature | apple */
   attivita?: 'tarature' | 'apple' | null;
 }
-export async function magProdotti(q = '', sottoScorta = false, limit = 300): Promise<{ prodotti: Prodotto[]; totale_righe: number | null; valore_magazzino: number }> {
-  return fetchAPI(`/api/magazzino/prodotti?q=${encodeURIComponent(q)}&sotto_scorta=${sottoScorta}&limit=${limit}`);
+export async function magProdotti(q = '', sottoScorta = false, limit = 300, attivita = '', categoriaMerce = ''): Promise<{ prodotti: Prodotto[]; totale_righe: number | null; valore_magazzino: number }> {
+  return fetchAPI(`/api/magazzino/prodotti?q=${encodeURIComponent(q)}&sotto_scorta=${sottoScorta}&limit=${limit}&attivita=${attivita}&categoria_merce=${categoriaMerce}`);
 }
 export async function magPerCodice(codice: string): Promise<Prodotto> { return fetchAPI(`/api/magazzino/codice/${encodeURIComponent(codice)}`); }
 export async function magProdotto(id: string): Promise<Prodotto> { return fetchAPI(`/api/magazzino/prodotti/${id}`); }
@@ -1316,4 +1322,41 @@ export async function cassaChiusureFiscali(giorno: string): Promise<{ richieste:
 /** Cambia l'attività di un documento (in bozza: tutti; emesso: solo il titolare). */
 export async function cambiaAttivita(tabella: 'fatture' | 'documenti' | 'scontrini' | 'cassa_movimenti' | 'prodotti' | 'incassi', id: string, attivita: 'tarature' | 'apple') {
   return fetchAPI(`/api/attivita/${tabella}/${id}`, { method: 'PATCH', body: JSON.stringify({ attivita }) });
+}
+
+// === MAGAZZINO APPLE: pezzi serializzati e carico dalle fatture ricevute (02/10/2026) ===
+export type CategoriaMerce = 'nuovo' | 'ricondizionato' | 'usato_margine' | 'accessorio' | 'ricambio' | 'servizio';
+export const CATEGORIE_MERCE: Record<CategoriaMerce, string> = {
+  nuovo: 'Nuovo', ricondizionato: 'Ricondizionato', usato_margine: 'Usato (margine)', accessorio: 'Accessorio', ricambio: 'Ricambio', servizio: 'Servizio',
+};
+export type StatoPezzo = 'in_stock' | 'venduto' | 'reso' | 'in_conto_vendita';
+export const STATI_PEZZO: Record<StatoPezzo, string> = { in_stock: 'Disponibile', venduto: 'Venduto', reso: 'Reso al fornitore', in_conto_vendita: 'In conto vendita' };
+export interface Pezzo {
+  id: string; prodotto_id: string; seriale: string | null; imei: string | null; condizione: string | null; costo: number | null;
+  fornitore_id: string | null; fornitore_nome: string | null; fattura_acquisto_id: string | null; data_carico: string;
+  stato: StatoPezzo; venduto_scontrino_id: string | null; venduto_fattura_id: string | null; venduto_il: string | null;
+  cliente_nome: string | null; note: string | null;
+  prodotti?: { descrizione: string; codice: string | null; categoria_merce: CategoriaMerce | null; regime_iva: string | null; prezzo: number } | null;
+}
+export async function magPezzi(params: { prodotto_id?: string; stato?: string; q?: string; disponibili?: boolean }): Promise<{ pezzi: Pezzo[] }> {
+  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== false).map(([k, v]) => [k, String(v)])).toString();
+  return fetchAPI(`/api/magazzino/pezzi?${q}`);
+}
+export async function magCaricaPezzo(body: Partial<Pezzo> & { prodotto_id: string }): Promise<Pezzo> {
+  return fetchAPI('/api/magazzino/pezzi', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function magModificaPezzo(id: string, body: Partial<Pezzo>): Promise<Pezzo> {
+  return fetchAPI(`/api/magazzino/pezzi/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+export interface RigaCaricoFattura {
+  indice: number; descrizione: string; descrizione_articolo: string; quantita: number; costo: number; aliquota: number | null; codice: string | null;
+  serializzato: boolean; seriale: string | null; imei: string | null; categoria_merce: CategoriaMerce;
+  prodotto: { id: string; descrizione: string; codice: string | null; serializzato: boolean; categoria_merce: CategoriaMerce | null } | null;
+  gia_caricata: boolean; proposta: 'carica' | 'salta';
+}
+export async function magPropostaCaricoFattura(fid: string): Promise<{ fattura: { id: string; numero: string; data: string; controparte_nome: string }; righe: RigaCaricoFattura[] }> {
+  return fetchAPI(`/api/magazzino/carico-fattura/${fid}`);
+}
+export async function magCaricoFattura(fid: string, righe: Record<string, unknown>[]): Promise<{ ok: boolean; esiti: { indice: number; ok: boolean; errore?: string; pezzi?: number; quantita?: number }[] }> {
+  return fetchAPI(`/api/magazzino/carico-fattura/${fid}`, { method: 'POST', body: JSON.stringify({ righe }) });
 }

@@ -21,6 +21,7 @@ import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
+import { SceltaPezzo, rigaDaPezzo } from "@/components/SceltaPezzo";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
 import { DecInput, parseDec } from "@/components/DecInput";
@@ -146,7 +147,17 @@ export default function CassaPage() {
     return () => clearTimeout(t);
   }, [q]);
 
+  // articolo serializzato (iPhone, Mac…): si sceglie il pezzo; letto il suo IMEI/seriale con lo scanner, è già scelto
+  const [sceltaPezzo, setSceltaPezzo] = useState<Prodotto | null>(null);
   const aggiungi = useCallback((p: Prodotto) => {
+    if (p.serializzato) {
+      if (p.pezzo) {
+        const pz = p.pezzo;
+        setCarrello((c) => (c.some((r) => r.pezzo_id === pz.id) ? c : [...c, rigaDaPezzo(p, pz)]));
+      } else setSceltaPezzo(p);
+      setQ(""); setTrovati([]);
+      return;
+    }
     setCarrello((c) => {
       const i = c.findIndex((r) => r.prodotto_id === p.id);
       if (i >= 0) return c.map((r, j) => (j === i ? { ...r, quantita: r.quantita + 1 } : r));
@@ -303,7 +314,8 @@ export default function CassaPage() {
                   <td className="p-2"><div className="flex items-center justify-center gap-1">
                     <Button size="icon-xs" variant="outline" onClick={() => setR(i, "quantita", Math.max(1, r.quantita - 1))}><Minus /></Button>
                     <span className="w-6 text-center">{r.quantita}</span>
-                    <Button size="icon-xs" variant="outline" onClick={() => setR(i, "quantita", r.quantita + 1)}><Plus /></Button></div></td>
+                    <Button size="icon-xs" variant="outline" disabled={!!r.pezzo_id} title={r.pezzo_id ? "Un pezzo per riga: aggiungi l'altro pezzo dall'articolo" : undefined}
+                      onClick={() => setR(i, "quantita", r.quantita + 1)}><Plus /></Button></div></td>
                   <td className="p-2 text-right"><DecInput className="ml-auto h-7 w-24 px-1 text-right" value={r.prezzo}
                     onValue={(v) => setR(i, "prezzo", v ?? 0)} /></td>
                   <td className="p-2 text-right"><select className="h-7 rounded-md border border-input bg-background px-1 text-xs" title="IVA della riga (decide il reparto del registratore)"
@@ -405,6 +417,8 @@ export default function CassaPage() {
         </Card>
       </div>
       <StornoDialog oggetto={storno ? { fonte: "scontrino", scontrino: storno } : null} onClose={() => setStorno(null)} onFatto={ricarica} />
+      {sceltaPezzo && <SceltaPezzo prodotto={sceltaPezzo} esclusi={carrello.map((r) => r.pezzo_id || "").filter(Boolean)} onClose={() => setSceltaPezzo(null)}
+        onScelto={(pz) => { const p = sceltaPezzo; setSceltaPezzo(null); setCarrello((c) => [...c, rigaDaPezzo(p, pz)]); }} />}
     </div>
   );
 }

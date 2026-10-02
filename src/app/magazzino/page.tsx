@@ -15,7 +15,10 @@ import { ScannerInput } from "@/components/ScannerInput";
 import { dec0 } from "@/components/DecInput";
 import { toastErrore } from "@/lib/errori";
 import { usePermessi } from "@/components/permessi";
-import { type ApiError, magCrea, magModifica, magMovimento, magPerCodice, magProdotti, magProdotto, type Prodotto } from "@/lib/api";
+import { type ApiError, magCrea, magModifica, magMovimento, magPerCodice, magProdotti, magProdotto, type Prodotto,
+  CATEGORIE_MERCE, type CategoriaMerce } from "@/lib/api";
+import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita } from "@/components/attivita";
+import { PezziArticolo } from "./PezziArticolo";
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
 
@@ -28,6 +31,9 @@ function Barcode({ value }: { value: string }) {
 export default function MagazzinoPage() {
   const [q, setQ] = useState("");
   const [sotto, setSotto] = useState(false);
+  const [filtroAtt, setFiltroAtt] = useState("");
+  const [filtroCat, setFiltroCat] = useState("");
+  const { attivita: attSelettore } = useAttivita();
   const [righe, setRighe] = useState<Prodotto[]>([]);
   const [valore, setValore] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -42,9 +48,9 @@ export default function MagazzinoPage() {
 
   const carica = useCallback(async () => {
     setLoading(true);
-    try { const r = await magProdotti(q, sotto, 500); setRighe(r.prodotti || []); setValore(r.valore_magazzino || 0); }
+    try { const r = await magProdotti(q, sotto, 500, filtroAtt, filtroCat); setRighe(r.prodotti || []); setValore(r.valore_magazzino || 0); }
     catch (e) { toast.error((e as Error).message); } finally { setLoading(false); }
-  }, [q, sotto]);
+  }, [q, sotto, filtroAtt, filtroCat]);
   useEffect(() => { const t = setTimeout(carica, q ? 300 : 0); return () => clearTimeout(t); }, [carica, q]);
 
   // Carico rapido con lo scanner: se l'articolo esiste aggiunge la quantità, altrimenti apre «nuovo articolo» col codice
@@ -54,7 +60,7 @@ export default function MagazzinoPage() {
       p = await magPerCodice(codice);
     } catch (e) {
       // SOLO «non trovato» apre il nuovo articolo; rete/server/sessione → errore (niente articoli doppi)
-      if ((e as ApiError).status === 404) setNuovo({ barcode: codice, descrizione: "", prezzo: 0, aliquota: 22, giacenza_iniziale: caricoQta });
+      if ((e as ApiError).status === 404) setNuovo({ barcode: codice, descrizione: "", prezzo: 0, aliquota: 22, giacenza_iniziale: caricoQta, attivita: attSelettore });
       else toastErrore(e);
       return;
     }
@@ -63,7 +69,7 @@ export default function MagazzinoPage() {
       toast.success(`${p.descrizione}: +${caricoQta} → giacenza ${r.giacenza}`);
       carica();
     } catch (e) { toastErrore(e); }
-  }, [caricoQta, carica]);
+  }, [caricoQta, carica, attSelettore]);
 
   const [creando, setCreando] = useState(false);
   async function salvaNuovo() {
@@ -85,7 +91,7 @@ export default function MagazzinoPage() {
         <div className="ml-auto flex gap-2 print:hidden">
           {puoModificare && <Link href="/magazzino/carico"><Button variant="outline"><PackagePlus /> Carico e inventario</Button></Link>}
           {etichette.length > 0 && <Button variant="outline" onClick={() => window.print()}><Printer /> Stampa {etichette.length} etichette</Button>}
-          {puoModificare && <Button onClick={() => setNuovo({ descrizione: "", prezzo: 0, aliquota: 22, giacenza_iniziale: 0 })}><Plus /> Nuovo articolo</Button>}
+          {puoModificare && <Button onClick={() => setNuovo({ descrizione: "", prezzo: 0, aliquota: 22, giacenza_iniziale: 0, attivita: attSelettore })}><Plus /> Nuovo articolo</Button>}
         </div>
       </div>
 
@@ -106,6 +112,11 @@ export default function MagazzinoPage() {
         <div className="relative"><Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
           <Input className="h-8 w-72 pl-8" placeholder="Descrizione, codice, marca…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={sotto} onChange={(e) => setSotto(e.target.checked)} /> solo sotto scorta</label>
+        <FiltroAttivita className="h-8" value={filtroAtt} onChange={setFiltroAtt} />
+        <select className="h-8 rounded-md border border-input bg-background px-2 text-sm" value={filtroCat} onChange={(e) => setFiltroCat(e.target.value)} aria-label="Categoria merce">
+          <option value="">Tutte le categorie</option>
+          {Object.entries(CATEGORIE_MERCE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
       </div>
 
       {loading ? <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div> : (
@@ -120,7 +131,9 @@ export default function MagazzinoPage() {
                   <td className="p-2" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" title="Etichetta da stampare" checked={etichette.some((x) => x.id === p.id)}
                       onChange={(e) => setEtichette((l) => e.target.checked ? [...l, p] : l.filter((x) => x.id !== p.id))} /></td>
-                  <td className="p-2"><div className="font-medium">{p.descrizione}</div><div className="text-xs text-muted-foreground">{[p.marca, p.categoria, p.codice].filter(Boolean).join(" · ")}</div></td>
+                  <td className="p-2"><div className="font-medium">{p.descrizione} <BadgeAttivita a={p.attivita} />
+                    {p.serializzato && <span className="ml-1 rounded bg-sky-100 px-1 text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-200" title="Si vende per pezzo (seriale/IMEI)">S/N</span>}</div>
+                    <div className="text-xs text-muted-foreground">{[p.categoria_merce ? CATEGORIE_MERCE[p.categoria_merce] : null, p.marca, p.modello ? p.modello.slice(0, 60) : null, p.categoria, p.codice].filter(Boolean).join(" · ")}</div></td>
                   <td className="p-2 text-xs">{p.barcode || "—"}</td>
                   <td className="p-2 text-right tabular-nums">{eur(Number(p.prezzo))}</td>
                   <td className="p-2 text-right tabular-nums text-muted-foreground">{eur(Number(p.costo))}</td>
@@ -164,9 +177,10 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, 
   const NUMERICI = new Set<string>(["prezzo", "aliquota", "costo", "scorta_minima"]);
   const [testi, setTesti] = useState<Record<string, string>>({});
   const dati = nuovo || f;
-  const set = (k: keyof Prodotto | "giacenza_iniziale", v: string | number) => nuovo ? setNuovo({ ...nuovo, [k]: v }) : setF((x) => ({ ...x, [k]: v }));
+  const set = (k: keyof Prodotto | "giacenza_iniziale", v: string | number | boolean | null) => nuovo ? setNuovo({ ...nuovo, [k]: v }) : setF((x) => ({ ...x, [k]: v }));
   const CAMPI: [keyof Prodotto, string, string][] = [["descrizione", "Descrizione", "text"], ["barcode", "Codice a barre (vuoto = interno)", "text"],
-    ["codice", "Codice articolo", "text"], ["marca", "Marca", "text"], ["categoria", "Categoria", "text"], ["ubicazione", "Ubicazione", "text"],
+    ["codice", "Codice articolo", "text"], ["marca", "Marca", "text"], ["modello", "Modello / compatibilità", "text"], ["categoria", "Categoria", "text"],
+    ["ubicazione", "Ubicazione", "text"], ["fornitore_nome", "Fornitore predefinito", "text"],
     ["prezzo", "Prezzo di vendita IVA incl.", "number"], ["aliquota", "IVA %", "number"], ["costo", "Costo d'acquisto", "number"], ["scorta_minima", "Scorta minima", "number"]];
 
   async function salva() {
@@ -200,14 +214,30 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, 
               <option value="margine">Regime del margine — usato / conto vendita (costo = prezzo di acquisto o da girare al cliente)</option>
               <option value="esente">Esente / non imponibile</option>
             </select></label>
-          {nuovo && <label className="space-y-1"><div className="text-xs text-muted-foreground">Giacenza iniziale</div>
+          <label className="space-y-1"><div className="text-xs text-muted-foreground">Categoria merce</div>
+            <select className={campo} disabled={solaLettura} value={dati.categoria_merce || ""} onChange={(e) => {
+              const v = e.target.value as CategoriaMerce | "";
+              set("categoria_merce", v);
+              if (v === "usato_margine") set("regime_iva", "margine");
+            }}>
+              <option value="">—</option>
+              {Object.entries(CATEGORIE_MERCE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select></label>
+          <div className="space-y-1"><div className="text-xs text-muted-foreground">Attività</div>
+            <SceltaAttivita value={dati.attivita} disabled={solaLettura} onChange={(a) => set("attivita", a)} /></div>
+          <label className="col-span-2 flex items-center gap-2 text-sm">
+            <input type="checkbox" disabled={solaLettura || (!!p?.serializzato && Number(p?.giacenza) > 0)} checked={!!dati.serializzato}
+              onChange={(e) => set("serializzato", e.target.checked)} />
+            Si vende per pezzo con seriale / IMEI (iPhone, Mac, iPad…)</label>
+          {nuovo && !nuovo.serializzato && <label className="space-y-1"><div className="text-xs text-muted-foreground">Giacenza iniziale</div>
             <input type="number" className={campo} value={nuovo.giacenza_iniziale ?? 0} onChange={(e) => set("giacenza_iniziale", Number(e.target.value))} /></label>}
         </div>
         {nuovo ? <Button onClick={onSalvaNuovo} disabled={creando}>{creando ? <Loader2 className="animate-spin" /> : <Save />} Crea articolo</Button> : (
           <>
             <div className="flex gap-2">{!solaLettura && <Button onClick={salva} disabled={!!busy}>{busy === "salva" ? <Loader2 className="animate-spin" /> : <Save />} Salva</Button>}
               {p?.barcode && <div className="rounded border p-2"><Barcode value={p.barcode} /></div>}</div>
-            {solaLettura ? <div className="text-sm">Giacenza attuale <b>{Number(p?.giacenza)}</b></div> : <Card className="space-y-2 p-3">
+            {p?.serializzato && <PezziArticolo prodotto={p} solaLettura={solaLettura} onCambiato={() => onCambiato(p)} />}
+            {solaLettura ? <div className="text-sm">Giacenza attuale <b>{Number(p?.giacenza)}</b></div> : p?.serializzato ? null : <Card className="space-y-2 p-3">
               <div className="flex items-center gap-2 text-sm font-medium"><Tag className="size-4" /> Movimento · giacenza attuale <b>{Number(p?.giacenza)}</b></div>
               <div className="flex flex-wrap gap-2">
                 <select className="h-8 rounded-md border border-input bg-background px-2 text-sm" value={mov.tipo} onChange={(e) => setMov({ ...mov, tipo: e.target.value })}>
