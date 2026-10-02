@@ -16,7 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useOperatore } from "@/components/Operatore";
+import { ControllaSumUp } from "@/components/ControllaSumUp";
 import { fetchAPI } from "@/lib/api";
+import type { BonRichiesta } from "@/lib/bonifici";
 import { toastErrore } from "@/lib/errori";
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
@@ -60,6 +62,7 @@ export function VerificaBonifico({ importo, testo: testoIniziale = "", etichetta
   const [busy, setBusy] = useState(false);
   const [lista, setLista] = useState<BonificoArrivato[] | null>(null);
   const [ultimo, setUltimo] = useState<string>("");
+  const [aperta, setAperta] = useState<BonRichiesta | null>(null);
   const [scelto, setScelto] = useState<string>("");
   const [dich, setDich] = useState({ data: oggiIso(), ordinante: testoIniziale, causale: "" });
 
@@ -68,6 +71,7 @@ export function VerificaBonifico({ importo, testo: testoIniziale = "", etichetta
     try {
       const r = await fetchAPI("/api/bonifici/al-banco/cerca", { method: "POST", body: JSON.stringify({ importo, testo: t.trim(), dal: d || undefined }) });
       setLista(r.bonifici);
+      setAperta(r.richiesta_aperta || null);
       const u = r.ultimo_controllo;
       setUltimo(u ? `Ultimo controllo del conto: ${quando(u.eseguito_il)}${u.esito !== "ok" ? ` (${u.esito})` : ""}` : "");
       const primo = (r.bonifici as BonificoArrivato[]).find((b) => b.stesso_importo);
@@ -171,6 +175,7 @@ export function VerificaBonifico({ importo, testo: testoIniziale = "", etichetta
                   ))}
                 </div>
               )}
+              <ControllaSumUp origine={documentoTipo === "scontrino" ? "cassa" : documentoTipo} aperta={aperta} onFinito={() => cerca()} />
               <div className="text-[11px] text-muted-foreground">{ultimo}{lista && !stessi && lista.length ? " · nessuno con lo stesso importo" : ""}</div>
               <Button className="w-full" disabled={busy || !scelto} onClick={confermaScelto}>{etichettaConferma} con questo bonifico</Button>
             </div>

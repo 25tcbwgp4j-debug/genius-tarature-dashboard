@@ -10,15 +10,16 @@ import { Suspense, useCallback, useEffect, useState, useSyncExternalStore } from
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { AlertTriangle, Banknote, Check, ExternalLink, Loader2, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, Banknote, Check, ExternalLink, Loader2, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ControllaSumUp } from "@/components/ControllaSumUp";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { usePermessi } from "@/components/permessi";
 import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 import {
-  NOME_TIPO, bonAccetta, bonAnnullaAccettazione, bonConferma, bonControlla, bonDettaglio, bonElenco, bonIgnora, bonStato,
+  NOME_TIPO, bonAccetta, bonAnnullaAccettazione, bonConferma, bonDettaglio, bonElenco, bonIgnora, bonStato,
   type BonControllo, type BonProposta, type BonStato, type Bonifico,
 } from "@/lib/bonifici";
 
@@ -207,24 +208,13 @@ function Pannello({ onClose }: { onClose: () => void }) {
       </div>
     );
   }
-  async function controlla() {
-    setBusy("controlla");
-    try { const r = await bonControlla(); toast.info(r.live ? `Conto letto: ${r.nuovi || 0} nuovi` : r.nota || "Fatto"); carica(); aggiorna(); }
-    catch (e) { toastErrore(e); } finally { setBusy(""); }
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40 print:hidden" onClick={onClose}>
       <div className="h-full w-full max-w-2xl overflow-y-auto bg-background shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 z-10 space-y-1 border-b bg-background px-4 py-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-lg font-semibold"><Banknote className="size-5 text-red-600" /> Bonifici arrivati da gestire</h2>
-            <div className="flex items-center gap-1">
-              <Button size="sm" variant="outline" disabled={!!busy} onClick={controlla}>
-                {busy === "controlla" ? <Loader2 className="animate-spin" /> : <RefreshCw />} Controlla
-              </Button>
-              <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Chiudi"><X /></Button>
-            </div>
+            <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Chiudi"><X /></Button>
           </div>
           {dati && (
             <div className="text-xs text-muted-foreground">
@@ -234,6 +224,7 @@ function Pannello({ onClose }: { onClose: () => void }) {
               <div>Orari: {dati.orari}. Conto SumUp letto dal Mac del negozio.</div>
             </div>
           )}
+          <ControllaSumUp origine="pannello" aperta={dati?.richiesta_aperta} onFinito={carica} />
           <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
           {sel.length > 1 && dati && (
             <div className="space-y-1 rounded-md border border-sky-400 bg-sky-50 p-2 text-sm dark:bg-sky-950/30">
@@ -273,11 +264,12 @@ function Pannello({ onClose }: { onClose: () => void }) {
               ) : (
                 <>
                   {b.proposte?.length ? b.proposte.map((p, i) => (
-                    <div key={i} className={`flex flex-wrap items-center gap-2 rounded-md p-2 text-sm ${i === 0 && (p.punti || 0) >= 90 ? "bg-emerald-500/10" : "bg-muted/40"}`}>
+                    <div key={i} className={`flex flex-wrap items-center gap-2 rounded-md p-2 text-sm ${p.avviso ? "border border-amber-300 bg-amber-500/5" : i === 0 && (p.punti || 0) >= 90 ? "bg-emerald-500/10" : "bg-muted/40"}`}>
                       <div className="min-w-0 flex-1">
                         <b>{NOME_TIPO[p.tipo]} {p.numero}</b> · {p.nome} · {eur(p.importo)}
                         <span className={`ml-2 rounded px-1 text-[10px] font-semibold ${(p.punti || 0) >= 90 ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100"}`}>{p.punti}</span>
                         <div className="text-xs text-muted-foreground">{p.perche}</div>
+                        {p.avviso && <div className="flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300"><AlertTriangle className="size-3.5" /> {p.avviso}</div>}
                       </div>
                       <Button size="xs" disabled={busy === b.id} onClick={() => accetta(b, p)}><Check /> Accetta il match</Button>
                     </div>

@@ -15,6 +15,8 @@ export interface BonProposta {
   punti?: number;
   perche?: string;
   manuale?: boolean;
+  /** «cliente diverso» · «ordinante diverso dal cliente: verifica» */
+  avviso?: string;
 }
 
 export interface Bonifico {
@@ -51,6 +53,23 @@ export interface BonStato {
   prossimo_controllo: string | null;
   orari: string;
   dichiarati_da_riscontrare?: number;
+  richiesta_aperta?: BonRichiesta | null;
+}
+
+/** «Controlla adesso il conto SumUp» (02/10/2026): richiesta per l'iMac del negozio */
+export interface BonRichiesta {
+  id: string;
+  richiesto_il: string;
+  richiesto_da: string | null;
+  operatore: string | null;
+  origine: string | null;
+  stato: "in_attesa" | "in_corso" | "evasa" | "errore" | "scaduta";
+  preso_il: string | null;
+  evaso_il: string | null;
+  esito: string | null;
+  letti: number | null;
+  nuovi: number | null;
+  gia_in_corso?: boolean;
 }
 
 export const NOME_TIPO: Record<BonTipo, string> = {
@@ -72,3 +91,6 @@ export const bonConferma = (id: string, body: { operatore: string; emetti?: bool
   fetchAPI(`/api/bonifici/${id}/conferma`, { method: "POST", body: JSON.stringify(body) });
 export const bonControlla = (): Promise<BonStato & { live: boolean; nota?: string; nuovi?: number }> =>
   fetchAPI("/api/bonifici/controlla", { method: "POST", body: "{}" });
+export const bonRichiedi = (origine: string, operatore?: string): Promise<{ richiesta: BonRichiesta }> =>
+  fetchAPI("/api/bonifici/richiesta", { method: "POST", body: JSON.stringify({ origine, operatore }) });
+export const bonRichiesta = (id: string): Promise<{ richiesta: BonRichiesta }> => fetchAPI(`/api/bonifici/richiesta/${id}`);
