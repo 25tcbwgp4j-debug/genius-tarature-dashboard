@@ -22,6 +22,7 @@ import { Anagrafiche } from "./Anagrafiche";
 import { DaIncassare, calcolaPeriodo } from "./DaIncassare";
 import { Chiusure } from "./Chiusure";
 import { Commercialista } from "./Commercialista";
+import { Coerenza } from "./Coerenza";
 import { usePermessi } from "@/components/permessi";
 import { BadgeAttivita, FiltroAttivita } from "@/components/attivita";
 import type { FattAnagrafica } from "@/lib/api";
@@ -30,7 +31,7 @@ import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from ".
 import { annoRoma, oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 
-type Tab = "emessa" | "ricevuta" | "incassare" | "pagare" | "clienti" | "fornitori" | "chiusure" | "esiti" | "commercialista";
+type Tab = "emessa" | "ricevuta" | "incassare" | "pagare" | "clienti" | "fornitori" | "chiusure" | "esiti" | "commercialista" | "sessioni";
 interface Esito { id: string; tipo: string; descrizione: string; data: string;
   fatture?: { id: string; numero: string | null; societa: string; controparte_nome: string | null } | null }
 // per l'operatore (livelli di accesso 01/10/2026) i totali riservati arrivano null e riservato=true
@@ -91,6 +92,7 @@ function Pagina() {
     if (sp.get("incassi")) setIncassiAperti(true);
     if (sp.get("tab") === "ricevuta") setTab("ricevuta");   // link del riepilogo Telegram
     if (sp.get("tab") === "commercialista") setTab("commercialista");   // link del Telegram «contabilità allo studio»
+    if (sp.get("tab") === "sessioni") setTab("sessioni");   // audit sessioni ↔ fatture
   }, [sp]);
 
   const carica = useCallback(async () => {
@@ -275,7 +277,7 @@ function Pagina() {
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-b">
-        {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["incassare", "Da incassare"], ["pagare", "Da pagare"], ["clienti", "Clienti"], ["fornitori", "Fornitori"], ["chiusure", "Chiusure"], ["esiti", "Esiti SdI"], ...(admin ? [["commercialista", "Commercialista"]] : [])] as [Tab, string][]).map(([k, l]) => (
+        {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["incassare", "Da incassare"], ["pagare", "Da pagare"], ["clienti", "Clienti"], ["fornitori", "Fornitori"], ["chiusure", "Chiusure"], ["sessioni", "Sessioni ↔ fatture"], ["esiti", "Esiti SdI"], ...(admin ? [["commercialista", "Commercialista"]] : [])] as [Tab, string][]).map(([k, l]) => (
           <button key={k} onClick={() => { if (k === "incassare" || k === "pagare") setCercaCrediti(q); setTab(k); setStato(""); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === k ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}>
             {l}
@@ -336,6 +338,7 @@ function Pagina() {
       )}
 
       {tab === "chiusure" && <Chiusure societa={societa} />}
+      {tab === "sessioni" && <Coerenza anno={anno || annoRoma()} />}
 
       {tab === "commercialista" && admin && <Commercialista periodoIniziale={sp.get("periodo") || undefined} />}
 
@@ -396,6 +399,7 @@ function Pagina() {
                       {f.ambiente === "sandbox" && <span className="ml-1 rounded bg-orange-500/15 px-1 text-[10px] text-orange-700 dark:text-orange-300">PROVA</span>}
                       {tab === "ricevuta" && !f.vista_il && <span className="ml-1 rounded bg-red-600 px-1 text-[10px] font-semibold text-white" title="Arrivata dallo SdI, non ancora vista">NUOVA</span>}
                       {f.origine === "simplyfatt" && <span className="ml-1 rounded bg-muted px-1 text-[10px] text-muted-foreground" title="Importata dallo storico SimplyFatt">SF</span>}
+                      {f.session_number != null && <span className="ml-1 rounded bg-sky-500/15 px-1 text-[10px] text-sky-800 dark:text-sky-200" title="Sessione di taratura collegata">Sess. {f.session_number}</span>}
                       <div><BadgeAttivita a={f.attivita} /></div>
                     </td>
                     <td className="p-2 whitespace-nowrap">{dataIt(f.data)}</td>

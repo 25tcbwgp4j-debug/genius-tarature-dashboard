@@ -25,6 +25,8 @@ interface Props {
     whatsapp_phone?: string | null;
     email?: string | null;
     contact_person?: string | null;
+    payment_terms?: string | null;
+    discount_percent?: number | string | null;
   };
   onSaved: () => void | Promise<void>;
 }
@@ -44,6 +46,9 @@ const FIELDS: Array<{ key: string; label: string; colSpan?: number }> = [
   { key: "mobile", label: "Cellulare" },
   { key: "whatsapp_phone", label: "WhatsApp" },
   { key: "contact_person", label: "Referente" },
+  // termini concordati: «Bonifico Bancario» = immediato · «Bonifico 30 gg FM» = differito (scadenza in fattura)
+  { key: "payment_terms", label: "Termini di pagamento (es. Bonifico 30 gg FM)", colSpan: 2 },
+  { key: "discount_percent", label: "Sconto %" },
 ];
 
 export function EditCustomerDialog({ customer, onSaved }: Props) {
@@ -55,7 +60,8 @@ export function EditCustomerDialog({ customer, onSaved }: Props) {
     // Inizializza il form con i valori attuali del cliente
     const init: Record<string, string> = {};
     for (const f of FIELDS) {
-      init[f.key] = (customer as Record<string, unknown>)[f.key] as string || "";
+      const v = (customer as Record<string, unknown>)[f.key];
+      init[f.key] = v === null || v === undefined ? "" : String(v);
     }
     setForm(init);
     setOpen(true);
@@ -71,8 +77,14 @@ export function EditCustomerDialog({ customer, onSaved }: Props) {
       // Invia solo i campi modificati
       const updates: Record<string, unknown> = {};
       for (const f of FIELDS) {
-        const newVal = (form[f.key] || "").trim();
-        const oldVal = ((customer as Record<string, unknown>)[f.key] as string || "").trim();
+        const newVal = String(form[f.key] ?? "").trim();
+        const oldVal = String((customer as Record<string, unknown>)[f.key] ?? "").trim();
+        if (f.key === "discount_percent") {
+          const n = Number(newVal.replace(",", ".") || 0);
+          if (Number.isNaN(n) || n < 0 || n > 100) { toast.error("Sconto: un numero da 0 a 100"); setSaving(false); return; }
+          if (n !== Number(oldVal || 0)) updates[f.key] = n;
+          continue;
+        }
         if (newVal !== oldVal) {
           updates[f.key] = newVal || null;
         }

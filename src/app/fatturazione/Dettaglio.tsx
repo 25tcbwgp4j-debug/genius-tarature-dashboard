@@ -320,6 +320,24 @@ export function Dettaglio({
             <div className="text-sm">Storna la fattura{" "}
               <button className="underline" onClick={() => onOpen(f.collegata!.id)}>n. {f.collegata.numero} del {dataIt(f.collegata.data)}</button></div>
           )}
+          {/* sessione di taratura e pro forma da cui nasce (03/10/2026): la sessione segue il pagamento di questa fattura */}
+          {(f.sessione || f.da_proforma) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-sky-300/60 bg-sky-50 p-2 text-sm dark:bg-sky-950/30">
+              {f.sessione && (
+                <a className="font-medium underline" href={`/sessioni/${f.sessione.id}`}>Sessione di taratura n. {f.sessione.session_number ?? "—"}</a>
+              )}
+              {f.sessione && (
+                <span className="text-xs text-muted-foreground">
+                  {f.sessione.status === "completata" ? `strumenti riconsegnati${f.sessione.delivered_at ? ` il ${dataIt(f.sessione.delivered_at)}` : ""}` : f.sessione.status.replace("_", " ")}
+                  {" · "}pagamento sessione: {f.sessione.payment_status === "pagato" ? "pagata" : f.sessione.payment_status === "non_richiesto" ? "non richiesto" : "in attesa"}
+                  {" · "}termini cliente: {f.sessione.termini?.testo || "—"} ({f.sessione.termini?.descrizione || "immediato"})
+                </span>
+              )}
+              {f.da_proforma && (
+                <a className="text-xs underline" href={`/proforma?id=${f.da_proforma.id}`}>dal pro forma PF {f.da_proforma.numero}/{f.da_proforma.anno}</a>
+              )}
+            </div>
+          )}
           {!!f.note_credito?.length && (
             <div className="text-sm">Note di credito collegate:{" "}
               {f.note_credito.map((n) => <button key={n.id} className="mr-2 underline" onClick={() => onOpen(n.id)}>n. {n.numero || "bozza"} ({eur(n.totale)})</button>)}</div>

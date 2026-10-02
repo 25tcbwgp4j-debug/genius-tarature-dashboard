@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Euro, FileOutput, Loader2, Mail, MessageCircle, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
-import { generateRdts, markDelivered, markSessionPaid, notifyReady, registerComplete } from "@/lib/api";
+import { generateRdts, markDelivered, markSessionPaid, notifyReady, registerComplete, type StatoPagamentoSessione } from "@/lib/api";
+import { testoPagamento } from "./PagamentoStato";
 
 type Sess = Record<string, any>;  // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -24,6 +25,8 @@ interface Props {
   apriAnteprimaProforma: (ch: "email" | "whatsapp") => void;
   apriDialogProforma: () => void;
   currentStep: number;
+  /** stato del pagamento dalla fattura collegata (fonte di verità, 03/10/2026) */
+  statoPag?: StatoPagamentoSessione | null;
 }
 
 function breve(iso: string | null | undefined) {
@@ -74,10 +77,14 @@ function Canali({ email, whatsapp, disabled, busy }: {
 }
 
 export function AzioniSessione({ sessionId, session, instruments, actionLoading, setActionLoading, handleAction,
-  previewLoading, apriAnteprimaProforma, apriDialogProforma, currentStep }: Props) {
+  previewLoading, apriAnteprimaProforma, apriDialogProforma, currentStep, statoPag }: Props) {
   const occupato = actionLoading !== null;
   const ultimoRdt = instruments.map((i) => i.rdt_generated_at || "").filter(Boolean).sort().pop();
-  const isPaid = session.payment_status === "pagato";
+  // con la fattura vale la fattura: è lei che dice se è pagata (la sessione si allinea da sola)
+  const fattura = statoPag?.fattura || null;
+  const isPaid = statoPag?.pagamento ? statoPag.pagamento.pagata : session.payment_status === "pagato";
+  const tp = testoPagamento(statoPag || null);
+  const differito = statoPag?.pagamento?.termine === "differito";
   const spedizione = session.shipping_by_customer
     ? "a carico del cliente (0 €)"
     : session.shipping_included && Number(session.shipping_amount_gross) > 0
@@ -140,8 +147,11 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
           <Quando ts={ultimoRdt} />
         </Gruppo>
 
-        <Gruppo titolo="Pagamento" sotto={!isPaid && (
-          <button type="button" className="mt-0.5 flex h-10 w-full items-center justify-center rounded-md border border-purple-300 px-2 text-[11px] text-purple-700 hover:bg-purple-50 disabled:opacity-50" disabled={occupato}
+        <Gruppo titolo="Pagamento" sotto={<>
+          {/* stato unico (fattura → sessione): pagata il / con cosa, oppure modalità + termine + scadenza */}
+          {tp && <p className={`rounded border px-1.5 py-1 text-[11px] font-medium leading-snug ${tp.colore}`}>{tp.lungo}</p>}
+          {!isPaid && (
+          <button type="button" className="mt-1 flex h-10 w-full items-center justify-center rounded-md border border-purple-300 px-2 text-[11px] text-purple-700 hover:bg-purple-50 disabled:opacity-50" disabled={occupato}
             title="Genera link Stripe Checkout — il cliente paga in 1 clic con la carta"
             onClick={async () => {
               if (!confirm("Generare un link Stripe Checkout? Il cliente potrà pagare con carta in 1 click. Riceverai notifica Telegram al pagamento.")) return;
@@ -161,7 +171,17 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
             }}>
             {actionLoading === "stripe_link" ? "Genero il link Stripe…" : "💳 Link Stripe (paga online con carta)"}
           </button>
-        )}>
+          )}
+        </>}>
+          {isPaid && fattura ? (
+            // pagata su fattura: il metodo si cambia (o il pagamento si annulla) dalla fattura, non da qui
+            <a href={`/fatturazione?id=${fattura.id}`}
+              className="flex h-11 items-center justify-center rounded-md border border-emerald-300 bg-emerald-50 px-2 text-center text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100">
+              ✓ Incassata su fattura {fattura.numero || "bozza"} — modifica in Fatturazione
+            </a>
+          ) : (
+          <>
+          <p className="text-[10px] leading-tight text-gray-500">Premi solo quando i soldi sono <b>già arrivati</b>{fattura ? <> — si registra sulla fattura {fattura.numero || "(bozza)"}</> : null}:</p>
           <div className="grid grid-cols-3 gap-1.5">
             {([["bonifico", "BONIFICO"], ["contanti", "CONTANTI"], ["pos", "POS"]] as const).map(([method, label]) => {
               const isActive = isPaid && session.payment_method === method;
@@ -169,13 +189,14 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
               return (
                 <Button key={method} disabled={occupato || isActive}
                   className={`h-11 px-1 text-[11px] font-bold text-white ${isActive ? "bg-emerald-700 ring-2 ring-emerald-900 ring-offset-1" : isPaid ? "bg-emerald-400 opacity-70 hover:bg-emerald-500" : "bg-emerald-600 hover:bg-emerald-700"}`}
-                  title={isActive ? `Pagato via ${label} (attuale)` : isPaid ? `Modificare il metodo a ${label}` : `Marca come pagato — ${label}`}
+                  title={isActive ? `Incassato con ${label} (attuale)` : isPaid ? `Modificare il metodo a ${label}` : `Incassato con ${label}: il pagamento è già arrivato`}
                   onClick={() => {
                     const msg = isPaid
                       ? `Modificare il metodo di pagamento da "${session.payment_method?.toUpperCase() || "—"}" a "${label}"?`
-                      : `Confermare pagamento ricevuto via ${label}?`;
+                      : `Il pagamento con ${label} è GIÀ ARRIVATO?\n\nSe il cliente pagherà più avanti (anche a bonifico) NON confermare: la modalità e la scadenza stanno nella fattura.`
+                        + (fattura ? `\n\nOK = segno incassata la fattura ${fattura.numero || "(bozza)"} e la sessione si allinea.` : "");
                     if (!confirm(msg)) return;
-                    handleAction(key, () => markSessionPaid(sessionId, { payment_method: method }), isPaid ? `Metodo aggiornato a ${label}!` : `Pagamento registrato (${label})!`);
+                    handleAction(key, () => markSessionPaid(sessionId, { payment_method: method }), isPaid ? `Metodo aggiornato a ${label}!` : `Incasso registrato (${label})!`);
                   }}>
                   {actionLoading === key ? <Loader2 className="size-4 animate-spin" /> : <Euro className="size-3.5" />}
                   {isActive ? `✓ ${label}` : label}
@@ -183,12 +204,17 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
               );
             })}
           </div>
-          <Quando ts={session.payment_date} />
+          </>
+          )}
+          <Quando ts={isPaid ? (statoPag?.pagamento?.pagato_il || session.payment_date) : null} />
         </Gruppo>
 
         <Gruppo titolo="Chiusura" sotto="Operazione interna: nessun messaggio al cliente, scadenzario +365 gg">
           <Button className="h-11 w-full bg-gray-700 text-xs font-bold text-white hover:bg-gray-800" disabled={occupato}
             onClick={() => {
+              // riconsegna senza pagamento (immediato): di solito pagano e poi ritirano (03/10/2026)
+              if (!isPaid && !differito && session.payment_status !== "non_richiesto"
+                && !confirm(`⚠️ Il pagamento non risulta arrivato${fattura?.numero ? ` (fattura ${fattura.numero} da pagare)` : ""}.\nDi solito pagano e poi ritirano.\n\nOK = riconsegno lo stesso`)) return;
               if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati? (operazione interna, nessuna comunicazione al cliente)")) return;
               handleAction("delivered", () => markDelivered(sessionId), "Sessione completata! Strumenti riconsegnati.");
             }}>

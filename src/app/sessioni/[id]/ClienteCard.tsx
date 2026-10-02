@@ -9,10 +9,13 @@ import { Card } from "@/components/ui/card";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { EditCustomerDialog } from "./EditCustomerDialog";
 import { ChangeCustomerDialog } from "./ChangeCustomerDialog";
+import type { TerminiCliente } from "@/lib/api";
 
 type Customer = { id: string; company_name?: string } & Record<string, any>;  // eslint-disable-line @typescript-eslint/no-explicit-any
 
-export function ClienteCard({ sessionId, customer, onChanged }: { sessionId: string; customer: Customer; onChanged: () => void | Promise<void> }) {
+export function ClienteCard({ sessionId, customer, onChanged, termini }: {
+  sessionId: string; customer: Customer; onChanged: () => void | Promise<void>; termini?: TerminiCliente | null;
+}) {
   const [aperto, setAperto] = useState(false);
   const indirizzo = [customer.address, [customer.zip_code, customer.city].filter(Boolean).join(" "), customer.province ? `(${customer.province})` : ""]
     .filter(Boolean).join(", ");
@@ -33,6 +36,12 @@ export function ClienteCard({ sessionId, customer, onChanged }: { sessionId: str
         {customer.vat_number && <span className="text-xs text-gray-600">P.IVA {customer.vat_number}</span>}
         {customer.email && <span className="hidden truncate text-xs text-gray-600 sm:inline">{customer.email}</span>}
         {customer.mobile && <span className="hidden text-xs text-gray-600 sm:inline">{customer.mobile}</span>}
+        {/* termini di pagamento concordati e sconto (03/10/2026): danno modalità e scadenza della fattura */}
+        <span className={`rounded px-1.5 py-0.5 text-[11px] ${termini?.differito ? "bg-sky-100 text-sky-800" : "bg-gray-100 text-gray-700"}`}
+          title="Termini di pagamento del cliente (Modifica cliente per cambiarli)">
+          Pagamento: {customer.payment_terms || "non indicato"} · {termini?.descrizione || "immediato"}
+          {Number(customer.discount_percent) > 0 ? ` · sconto ${Number(customer.discount_percent).toLocaleString("it-IT")}%` : ""}
+        </span>
         <div className="grid w-full grid-cols-3 gap-1.5 sm:ml-auto sm:flex sm:w-auto sm:items-center [&>button]:min-w-0 [&>button]:px-2 [&>button]:text-xs">
           <EditCustomerDialog customer={customer} onSaved={onChanged} />
           <ChangeCustomerDialog sessionId={sessionId} currentCustomerId={customer.id} currentCustomerName={customer.company_name || ""} onChanged={onChanged} />

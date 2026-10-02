@@ -866,10 +866,21 @@ export async function previewShipment(sessionId: string, body: ShipmentRequest) 
   });
 }
 
-export async function createShipment(sessionId: string, body: ShipmentRequest) {
-  return fetchAPI(`/api/sessions/${sessionId}/shipments`, {
-    method: 'POST', body: JSON.stringify(body),
-  });
+export async function createShipment(sessionId: string, body: ShipmentRequest & { forza_pagamento?: boolean }): Promise<any> {  // eslint-disable-line @typescript-eslint/no-explicit-any
+  try {
+    return await fetchAPI(`/api/sessions/${sessionId}/shipments`, {
+      method: 'POST', body: JSON.stringify(body),
+    });
+  } catch (e) {
+    // Riconsegna senza pagamento (03/10/2026): il backend blocca, qui si può forzare con una conferma esplicita
+    const err = e as ApiError;
+    if (err.status === 409 && err.detail?.codice === 'pagamento_mancante' && typeof window !== 'undefined' && !body.forza_pagamento) {
+      if (window.confirm(`⚠️ ${err.message}\n\nOK = spedisci lo stesso (pagamento concordato dopo)\nAnnulla = non spedire`)) {
+        return createShipment(sessionId, { ...body, forza_pagamento: true });
+      }
+    }
+    throw e;
+  }
 }
 
 export async function listShipments(sessionId: string) {
@@ -972,6 +983,11 @@ export interface Fattura {
   controlli?: string[];
   collegata?: { id: string; numero: string; data: string; totale: number } | null;
   note_credito?: { id: string; numero: string; data: string; totale: number; stato: string }[];
+  /** sessione di taratura collegata (03/10/2026): stesso stato di pagamento ovunque */
+  session_number?: number | null;
+  sessione?: { id: string; session_number: number | null; status: string; payment_status: string; payment_method: string | null;
+    payment_date: string | null; delivered_at: string | null; termini: TerminiCliente } | null;
+  da_proforma?: { id: string; numero: number; anno: number; tipo: string; stato: string } | null;
 }
 export async function fattConfig() { return fetchAPI('/api/fatturazione/config'); }
 export async function fattElenco(params: Record<string, string>) {
@@ -1000,7 +1016,30 @@ export async function fattDuplica(id: string, operatore: string): Promise<Fattur
 // dalla sessione si prepara SOLO la bozza (anche dal pro forma): pagamento ed emissione si fanno in Fatturazione
 export async function fattDaSessione(sessionId: string, forza = false, operatore = '') { return fetchAPI(`/api/fatturazione/fatture/da-sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ forza, operatore }) }); }
 export async function fattCollegaSessione(sessionId: string, fatturaId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}/collega`, { method: 'POST', body: JSON.stringify({ fattura_id: fatturaId }) }); }
-export async function fattStatoSessione(sessionId: string) { return fetchAPI(`/api/fatturazione/sessione/${sessionId}`, { cache: 'no-store' }); }
+// Pagamento della sessione = pagamento della FATTURA collegata (03/10/2026, pagamento_sessione.py)
+export interface PagamentoSessione {
+  fonte: 'fattura' | 'sessione'; pagata: boolean; modalita: string | null; modalita_label: string | null;
+  pagato_il: string | null; riferimento: string | null; termine: 'immediato' | 'differito'; scadenza: string | null; scaduta: boolean;
+}
+export interface TerminiCliente { testo: string | null; differito: boolean; giorni: number; fine_mese: boolean; sconto: number; descrizione: string }
+export interface AvvisoPagamento { livello: 'errore' | 'avviso'; codice: string; testo: string }
+export interface StatoPagamentoSessione {
+  fattura: { id: string; numero: string | null; data: string; stato: string; totale: number; pagamento_stato: string; pagamento_modalita: string | null;
+    pagato_il: string | null; pagamento_rif: string | null; scadenza: string | null; origine: string | null; numero_altre: number } | null;
+  sessione: { status?: string; payment_status?: string; payment_method?: string; payment_date?: string | null; total_amount?: number; proforma_sent_at?: string | null };
+  pagamento: PagamentoSessione;
+  termini: TerminiCliente;
+  proforma_doc: { id: string; sigla: string; stato: string; totale: number; convertito_in: { tipo: string; id?: string; numero?: string; pagata?: boolean } | null } | null;
+  proforma: { proforma_number: string; total: number; payment_status: string } | null;
+  avvisi: AvvisoPagamento[];
+}
+export async function fattStatoSessione(sessionId: string): Promise<StatoPagamentoSessione> { return fetchAPI(`/api/fatturazione/sessione/${sessionId}`, { cache: 'no-store' }); }
+export interface CoerenzaVoce { session_id: string; session_number: number | null; cliente: string | null; status: string; payment_status: string;
+  codice: string; testo: string; certo: boolean; fattura: { id: string; numero: string; data: string; totale: number; pagamento_stato: string } | null }
+export async function fattCoerenzaSessioni(anno = 0): Promise<{ anno: number; sessioni: number; voci: CoerenzaVoce[]; per_codice: Record<string, number> }> {
+  return fetchAPI(`/api/fatturazione/coerenza-sessioni${anno ? `?anno=${anno}` : ''}`, { cache: 'no-store' });
+}
+export async function fattCoerenzaCorreggi(anno = 0) { return fetchAPI('/api/fatturazione/coerenza-sessioni/correggi', { method: 'POST', body: JSON.stringify({ anno }) }); }
 export async function fattSincronizza() { return fetchAPI('/api/fatturazione/sincronizza', { method: 'POST' }); }
 // Fatture ricevute dallo SdI (01/10/2026): ultimo controllo (fonte, esito) e badge «nuove»
 export interface FattSyncLog { quando: string; fonte: string; trigger: string; ok: boolean; controllate: number; nuove: number; messaggio: string }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,8 @@ import {
   markReviewReceived,
   strumentiArrivati,
   mettiInAttesaStrumenti,
+  fattStatoSessione,
+  type StatoPagamentoSessione,
 } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -61,6 +63,7 @@ import {
 import { STATUS_CONFIG, getStatusConfig, getPaymentConfig } from "@/lib/constants";
 import { RecipientPanel } from "./RecipientPanel";
 import { ClienteCard } from "./ClienteCard";
+import { AvvisiPagamento, testoPagamento } from "./PagamentoStato";
 import { AzioniSessione } from "./AzioniSessione";
 import { AcquisisciFoto } from "./AcquisisciFoto";
 import { ShipmentsPanel } from "./ShipmentsPanel";
@@ -275,6 +278,12 @@ export default function SessionDetail() {
   const [loadingPdf, setLoadingPdf] = useState(false);
 
   const sessionId = params.id as string;
+  // Stato del pagamento = quello della FATTURA collegata (03/10/2026): testata, Azioni e Fattura dicono la stessa cosa
+  const [statoPag, setStatoPag] = useState<StatoPagamentoSessione | null>(null);
+  const caricaStatoPag = useCallback(() => {
+    fattStatoSessione(sessionId).then(setStatoPag).catch(() => undefined);
+  }, [sessionId]);
+  useEffect(() => { caricaStatoPag(); }, [caricaStatoPag, fatturaAggiorna]);
 
   useEffect(() => {
     let vivo = true;
@@ -286,6 +295,7 @@ export default function SessionDetail() {
     try {
       const data = await getSession(sessionId);
       setSession(data);
+      caricaStatoPag();
     } catch {
       toast.error("Errore nel caricamento della sessione");
     } finally {
@@ -626,8 +636,17 @@ export default function SessionDetail() {
               </Badge>
             );
           })()}
-          {/* Badge pagamento — SEMPRE visibile, indipendente dallo stato sessione */}
+          {/* Badge pagamento — SEMPRE visibile. Con la fattura vale la fattura (03/10/2026) */}
           {(() => {
+            const tp = testoPagamento(statoPag);
+            if (tp) {
+              const f = statoPag?.fattura;
+              return (
+                <Badge className={`${tp.colore} border`} title={tp.lungo}>
+                  {tp.breve}{f?.numero ? ` · fatt. ${f.numero}` : ""}
+                </Badge>
+              );
+            }
             const pcfg = getPaymentConfig(session.payment_status, session.payment_method);
             return (
               <Badge className={`${pcfg.color} border`}>
@@ -640,6 +659,8 @@ export default function SessionDetail() {
             {agenteStampa === null ? "" : agenteStampa ? "● stampante pronta" : "○ agente di stampa spento"}
           </span>
         </div>
+        {/* Avvisi di coerenza pagamento/fattura (03/10/2026): pronto senza fattura né pro forma, consegnata non pagata… */}
+        <AvvisiPagamento st={statoPag} />
         {/* ATTESA STRUMENTI (01/10/2026): la sessione esiste già, il cliente deve ancora portare gli strumenti.
             Nessuna notifica al cliente finché non si preme «Strumenti arrivati». */}
         {session.status === "attesa_strumenti" && (
@@ -867,10 +888,11 @@ export default function SessionDetail() {
         apriAnteprimaProforma={apriAnteprimaProforma}
         apriDialogProforma={() => { setPfDopo(null); setDialogPf(true); }}
         currentStep={currentStep}
+        statoPag={statoPag}
       />
 
       {/* Cliente (chi paga): una riga, dettagli a richiesta */}
-      <ClienteCard sessionId={sessionId} customer={customer} onChanged={loadSession} />
+      <ClienteCard sessionId={sessionId} customer={customer} onChanged={loadSession} termini={statoPag?.termini} />
 
       {/* Destinatario diverso (proprietario strumento) */}
       <RecipientPanel

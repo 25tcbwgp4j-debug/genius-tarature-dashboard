@@ -50,6 +50,8 @@ interface ShipmentRow {
 interface Preview {
   address: ShipmentAddress;
   missing: string[];
+  /** riconsegna senza pagamento (e senza differito concordato): avviso, si può forzare alla conferma */
+  payment_block?: string | null;
   email: string;
   whatsapp_phone: string;
   texts: { oggetto: string; mail: string; wa: string };
@@ -346,6 +348,10 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
           </div>
           {preview?.missing?.length ? (
             <p className="text-sm text-red-600">Mancano: {preview.missing.join(", ")}. Completa i campi prima di confermare.</p>
+          ) : null}
+          {preview?.payment_block && !form.test ? (
+            <p className="rounded-md border border-red-500/50 bg-red-500/10 p-2 text-sm font-medium text-red-700">
+              ⚠️ {preview.payment_block}</p>
           ) : null}
 
           <div className="grid md:grid-cols-2 gap-2 text-sm">

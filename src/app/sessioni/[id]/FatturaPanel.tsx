@@ -17,16 +17,18 @@ import { toast } from "sonner";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import {
   fattCollegaSessione, fattDaSessione, fattStatoSessione, getDocumentoPdfUrl, getProformaAnteprimaPdfUrl, incSessione, proformaSessioneCrea, proformaSessioneStato,
-  type ApiError, type DaSpedire, type ProformaSessioneStato,
+  type ApiError, type DaSpedire, type ProformaSessioneStato, type StatoPagamentoSessione,
 } from "@/lib/api";
+import { dataIt, testoPagamento } from "./PagamentoStato";
 
 const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(v || 0));
 
-interface Stato {
-  fattura: { id: string; numero: string | null; stato: string; totale: number; pagamento_stato: string; data: string } | null;
-  sessione: { payment_status?: string; payment_method?: string; total_amount?: number; proforma_sent_at?: string | null };
-  proforma: { proforma_number: string; total: number; payment_status: string } | null;
-}
+type Stato = StatoPagamentoSessione;
+
+const STATO_SDI: Record<string, string> = {
+  bozza: "bozza (non inviata)", inviata: "inviata allo SdI", consegnata: "consegnata dallo SdI", non_consegnata: "non consegnata (in cassetto fiscale)",
+  scartata: "SCARTATA dallo SdI", errore: "errore di invio", accettata: "accettata", rifiutata: "rifiutata",
+};
 
 // Anteprima del pro forma: le STESSE righe e gli STESSI totali della fattura che esce dalla sessione.
 export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: string; onChiudi: () => void; onCreato: (sigla: string) => void }) {
@@ -151,8 +153,8 @@ export function FatturaPanel({ sessionId, aggiorna = 0, onCambio }: { sessionId:
     } finally { inCorso.current = false; setBusy(""); }
   }
 
-  const pagata = st?.sessione?.payment_status === "pagato";
   const f = st?.fattura;
+  const tp = testoPagamento(st);
   const pfAperto = pf && pf.stato === "aperto" ? pf : null;
 
   return (
@@ -165,8 +167,7 @@ export function FatturaPanel({ sessionId, aggiorna = 0, onCambio }: { sessionId:
             <button className="rounded bg-orange-500/15 px-1.5 py-0.5 text-orange-800 underline-offset-2 hover:underline dark:text-orange-200" onClick={() => setDialogPf(true)}>
               Pro forma {pf.sigla} · {eur(pf.totale)}{pf.stato === "convertito" ? ` · convertito${pf.convertito_in?.tipo === "scontrino" ? " in scontrino" : " in fattura"}` : ""}</button>
           ) : st?.proforma && <span className="rounded bg-muted px-1.5 py-0.5">Pro forma {st.proforma.proforma_number} · {eur(st.proforma.total)}</span>}
-          <span className={`rounded px-1.5 py-0.5 ${pagata ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
-            {pagata ? `Pagata (${st?.sessione?.payment_method || "—"})` : "Da pagare"}</span>
+          {tp && <span className={`rounded border px-1.5 py-0.5 ${tp.colore}`}>{tp.breve}</span>}
         </div>
       </div>
 
@@ -188,18 +189,39 @@ export function FatturaPanel({ sessionId, aggiorna = 0, onCambio }: { sessionId:
       )}
 
       {f ? (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span>Fattura <b>{f.numero || "bozza"}</b> · {eur(f.totale)} · {f.stato} · {f.pagamento_stato === "pagata" ? "incassata" : "da incassare"}</span>
-          <Button size="sm" variant="outline" className="ml-auto" onClick={() => router.push(`/fatturazione?id=${f.id}`)}>
-            <ExternalLink /> {f.stato === "bozza" ? "Apri la bozza in Fatturazione" : "Apri"}</Button>
+        <div className="space-y-1.5 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span>Fattura <b>{f.numero || "bozza"}</b>{f.numero ? ` del ${dataIt(f.data)}` : ""} · <b>{eur(f.totale)}</b>
+              {f.origine === "simplyfatt" ? <span className="text-xs text-muted-foreground"> · da SimplyFatt</span> : null}</span>
+            <Button size="sm" variant="outline" className="ml-auto" onClick={() => router.push(`/fatturazione?id=${f.id}`)}>
+              <ExternalLink /> {f.stato === "bozza" ? "Apri la bozza in Fatturazione" : "Apri la fattura"}</Button>
+          </div>
+          {/* una riga per cosa: SdI · modalità e termine · pagamento — gli stessi dati della scheda fattura */}
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-0.5 text-xs sm:grid-cols-3">
+            <div><dt className="inline text-muted-foreground">SdI: </dt><dd className={`inline ${["scartata", "errore"].includes(f.stato) ? "font-semibold text-red-600" : ""}`}>{STATO_SDI[f.stato] || f.stato}</dd></div>
+            <div><dt className="inline text-muted-foreground">Termine: </dt><dd className="inline">
+              {st?.pagamento.modalita_label || "—"} · {st?.pagamento.termine === "differito" ? "differito concordato" : "immediato"}
+              {st?.pagamento.scadenza ? ` · scadenza ${dataIt(st.pagamento.scadenza)}` : ""}</dd></div>
+            <div><dt className="inline text-muted-foreground">Pagamento: </dt><dd className={`inline font-medium ${st?.pagamento.pagata ? "text-emerald-700" : st?.pagamento.scaduta ? "text-red-600" : "text-amber-700"}`}>
+              {st?.pagamento.pagata ? `pagata il ${dataIt(st.pagamento.pagato_il)}${st.pagamento.modalita_label ? ` con ${st.pagamento.modalita_label}` : ""}`
+                : st?.pagamento.scaduta ? "da pagare — SCADUTA" : "da pagare"}</dd></div>
+          </dl>
+          {pf?.stato === "convertito" && pf.convertito_in?.tipo === "fattura" && (
+            <p className="text-xs text-muted-foreground">Nasce dal pro forma <b>{pf.sigla}</b>, convertito in questa fattura.</p>
+          )}
+          {!!f.numero_altre && <p className="text-xs text-amber-700">Ci sono altre {f.numero_altre} fatture collegate a questa sessione: vale l&apos;ultima emessa.</p>}
+          {!st?.pagamento.pagata && f.stato !== "bozza" && (
+            <p className="text-xs text-muted-foreground">Quando arriva il pagamento si registra sulla fattura (o con BONIFICO / CONTANTI / POS nelle Azioni, che lo scrivono sulla fattura).</p>
+          )}
         </div>
       ) : pf?.stato === "convertito" && pf.convertito_in?.tipo === "scontrino" ? (
         <p className="text-sm text-muted-foreground">Sessione chiusa con lo scontrino al registratore (il cliente non ha voluto la fattura).</p>
       ) : (
         <>
           <p className="text-sm text-muted-foreground">
-            Qui si prepara solo la <b>bozza</b>{pfAperto ? <> (nasce dal pro forma <b>{pfAperto.sigla}</b>)</> : null}: pagamento, operatore ed emissione allo SdI
-            si fanno in Fatturazione, dove ti porto da solo. Il pro forma si manda con PROFORMA EMAIL / WHATSAPP qui sopra.
+            <b>Nessuna fattura collegata.</b> «Prepara bozza» crea la fattura da controllare{pfAperto ? <> (dal pro forma <b>{pfAperto.sigla}</b>)</> : null}
+            e ti porta in Fatturazione per l&apos;emissione allo SdI. Se la fattura è già stata fatta (es. in SimplyFatt) te la propone da collegare.
+            {tp ? <> Pagamento: <b>{tp.lungo}</b>.</> : null}
           </p>
           {/* Il pulsante verde «Apri il pro forma e convertilo in fattura» sta in ALTO nella scheda sessione
               (sotto «Scarica rapporti», sopra le Azioni) dal 02/10/2026: qui resta solo il richiamo. */}
