@@ -35,6 +35,7 @@ import {
   ShieldCheck,
   UserCog,
   History,
+  Smartphone,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -63,6 +64,7 @@ const navItems: Voce[] = [
   { href: "/fatturazione", label: "Fatturazione", icon: Receipt },
   { href: "/cassa", label: "Scontrino (registratore)", icon: ShoppingCart },
   { href: "/cassa/giornata", label: "Cassa del giorno", icon: Calculator },
+  { href: "/assistenza", label: "Schede assistenza", icon: Smartphone },
   { href: "/ordini", label: "Ordini e preventivi", icon: NotebookPen },
   { href: "/proforma", label: "Pro forma", icon: FileSpreadsheet },
   { href: "/magazzino", label: "Magazzino", icon: Boxes },
@@ -90,7 +92,14 @@ export function Sidebar() {
   const { admin, nInAttesa } = usePermessi();
   // finché i permessi non arrivano si mostrano solo le voci del banco (niente lampo delle voci del titolare)
   const { attivita } = useAttivita();
-  const voci = navItems.filter((v) => (admin || !paginaDelTitolare(v.href)) && !(attivita === "apple" && SOLO_TARATURE.has(v.href)));
+  // schede di assistenza Apple (02/10/2026): in prova le vede solo il titolare, gli operatori dopo l'ok di Christian
+  const [assistenzaOperatori, setAssistenzaOperatori] = useState(false);
+  useEffect(() => {
+    if (admin || pathname === "/login" || pathname.startsWith("/login/")) return;
+    fetchAPI("/api/assistenza/config").then((c: { operatori_abilitati?: boolean }) => setAssistenzaOperatori(!!c.operatori_abilitati)).catch(() => undefined);
+  }, [admin, pathname]);
+  const voci = navItems.filter((v) => (admin || !paginaDelTitolare(v.href)) && !(attivita === "apple" && SOLO_TARATURE.has(v.href))
+    && (v.href !== "/assistenza" || admin || assistenzaOperatori));
   // messaggi WhatsApp fermi perché la linea dell'attività non è ancora abbinata (es. staff Genius 334 986 7400)
   const [avvisiWa, setAvvisiWa] = useState<string[]>([]);
   useEffect(() => {

@@ -7,6 +7,8 @@
 // /cassa?ordine=<id>&importo=<x>&tipo=acconto|saldo[&ritiro=1]: incasso di un ORDINE cliente. Carrello pronto (pagamento
 // totale al primo incasso: gli articoli dell'ordine; altrimenti una riga «Acconto/Saldo ordine n. X/AAAA: articoli»).
 // L'operatore incassa come sempre; lo scontrino si collega all'ordine e si torna all'ordine (con ritiro=1 lo segna ritirato).
+// /cassa?scheda=<id>: «Vendi / incassa» da una SCHEDA DI ASSISTENZA Apple: carrello con le righe della scheda; lo scontrino
+// (o la fattura) si collega alla scheda e si torna alla scheda (02/10/2026).
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -61,6 +63,23 @@ export default function CassaPage() {
   const [ordine, setOrdine] = useState<{ id: string; sigla: string; cliente: string; tipo: "acconto" | "saldo"; max: number; ritiro: boolean } | null>(null);
   // scontrino per uno o più bonifici già arrivati sul conto SumUp (dal pulsante rosso «Bonifici», 02/10/2026)
   const [daBonifici, setDaBonifici] = useState<{ ids: string[]; totale: number; ordinante: string; data: string; causale: string } | null>(null);
+  // vendita da una scheda di assistenza (/cassa?scheda=<id>)
+  const [scheda, setScheda] = useState<{ id: string; sigla: string; cliente: string } | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("scheda");
+    if (!id) return;
+    fetchAPI(`/api/assistenza/schede/${id}/righe-vendita`).then((r: { sigla: string; cliente: string; righe: RigaCassa[] }) => {
+      if (!r.righe?.length) { toast.error("La scheda non ha importi da incassare"); return; }
+      setCarrello(r.righe.map((x) => ({ descrizione: x.descrizione, quantita: Number(x.quantita) || 1, prezzo: Number((x as unknown as { prezzo_ivato: number }).prezzo_ivato) || 0, aliquota: Number(x.aliquota ?? 22) })));
+      setScheda({ id, sigla: r.sigla, cliente: r.cliente });
+      setAttScelta("apple");
+    }).catch((e: Error) => toast.error("Scheda non caricata: " + e.message));
+  }, []);
+  const collegaScheda = async (campi: Record<string, string>) => {
+    if (!scheda) return;
+    try { await fetchAPI(`/api/assistenza/schede/${scheda.id}/collega`, { method: "POST", body: JSON.stringify({ ...campi, operatore }) }); }
+    catch (e) { toast.error(`Documento emesso ma non collegato alla scheda ${scheda.sigla}: ${(e as Error).message}`); }
+  };
 
   useEffect(() => {
     const ids = (new URLSearchParams(window.location.search).get("bonifici") || "").split(",").filter(Boolean);
@@ -162,6 +181,7 @@ export default function CassaPage() {
       esito = { id: sc.id, descrizione: `Scontrino ${eur(tot)}${ordine ? ` (ordine ${ordine.sigla})` : ""} — ${carrello.map((r) => r.descrizione).join(", ")}`.slice(0, 280) };
       toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${MOD[modalita]} · ${operatore})`);
       setCarrello([]); ricarica();
+      if (scheda) { await collegaScheda({ scontrino_id: sc.id }); router.push(`/assistenza?id=${scheda.id}`); setScheda(null); }
       if (sessione) { router.push(`/sessioni/${sessione.id}`); setSessione(null); }
       if (ordine) {
         toast.success(`${ordine.tipo === "acconto" ? "Acconto" : "Saldo"} registrato sull'ordine ${ordine.sigla}`);
@@ -181,6 +201,7 @@ export default function CassaPage() {
       const f = await cassaFattura({ righe: carrello, operatore, attivita: att });
       toast.success("Bozza di fattura creata: completa il cliente e inviala allo SdI");
       setCarrello([]);
+      if (scheda) await collegaScheda({ fattura_id: f.id });
       router.push(`/fatturazione?id=${f.id}`);
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
@@ -229,6 +250,12 @@ export default function CassaPage() {
               } catch (e) { toast.warning(`Scontrino emesso, ma il bonifico non è stato abbinato: ${(e as Error).message}`); }
               setDaBonifici(null); router.replace("/cassa");
             }}><Landmark /> Emetti scontrino col bonifico</Button>
+          </div>
+        )}
+        {scheda && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border-2 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+            Vendita dalla scheda di assistenza <b>N. {scheda.sigla}</b>{scheda.cliente ? <> — <b>{scheda.cliente}</b></> : ""}: lo scontrino si collega alla scheda.
+            <Link className="ml-auto underline" href={`/assistenza?id=${scheda.id}`}>Torna alla scheda</Link>
           </div>
         )}
         {ordine && (
