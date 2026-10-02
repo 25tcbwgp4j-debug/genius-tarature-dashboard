@@ -14,6 +14,8 @@ import { AlertTriangle, Banknote, Check, ExternalLink, Loader2, RefreshCw, Searc
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
+import { usePermessi } from "@/components/permessi";
+import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 import {
   NOME_TIPO, bonAccetta, bonAnnullaAccettazione, bonCerca, bonConferma, bonControlla, bonDettaglio, bonElenco, bonIgnora, bonStato,
@@ -60,6 +62,7 @@ function Avviso() {
   const [st, setSt] = useState<BonStato | null>(null);
   const [aperto, setAperto] = useState(false);
   const [chiusi, setChiusi] = useState<string[]>([]);
+  const { admin } = usePermessi();
 
   const carica = useCallback(() => { bonStato().then(setSt).catch(() => undefined); }, []);
   useEffect(() => {
@@ -86,16 +89,18 @@ function Avviso() {
   if (SENZA.some((p) => pathname.startsWith(p))) return null;
   const n = st?.da_gestire || 0;
   const problema = st?.ultimo_controllo && st.ultimo_controllo.esito !== "ok";
+  const dich = admin ? st?.dichiarati_da_riscontrare || 0 : 0;
 
   return (
     <>
-      {(n > 0 || problema) && !aperto && (
+      {(n > 0 || problema || dich > 0) && !aperto && (
         <button type="button" onClick={() => setAperto(true)}
-          className={`fixed right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-lg print:hidden ${inVerifica ? "bottom-36 sm:bottom-24" : "bottom-4"} ${n > 0 ? "bg-red-600 hover:bg-red-700" : "bg-amber-500 hover:bg-amber-600"}`}
+          className={`fixed right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-lg print:hidden ${inVerifica ? "bottom-36 sm:bottom-24" : "bottom-4"} ${n > 0 ? "bg-red-600 hover:bg-red-700" : problema ? "bg-amber-500 hover:bg-amber-600" : "bg-slate-500 hover:bg-slate-600"}`}
           title={n > 0 ? "Bonifici arrivati sul conto SumUp da gestire" : `Ultimo controllo bonifici: ${testoControllo(st?.ultimo_controllo || null)}`}>
           {n > 0 && <span className="absolute -left-1 -top-1 size-3 animate-ping rounded-full bg-red-400" />}
           <Banknote className="size-4" />
-          {n > 0 ? <>{n} {n === 1 ? "bonifico nuovo" : "bonifici nuovi"} da gestire</> : <>Controllo bonifici non riuscito</>}
+          {n > 0 ? <>{n} {n === 1 ? "bonifico nuovo" : "bonifici nuovi"} da gestire</> : problema ? <>Controllo bonifici non riuscito</>
+            : <>{dich} bonifici dichiarati da riscontrare</>}
         </button>
       )}
       {aperto && <Pannello onClose={() => { setAperto(false); carica(); }} />}
@@ -105,8 +110,16 @@ function Avviso() {
 }
 
 // ---------------------------------------------------------------------------
+interface Dichiarato { id: string; data_bonifico: string; importo: number; ordinante: string | null; causale: string | null;
+  documento_tipo: string; documento_descrizione: string | null; dichiarato_da: string | null; operatore: string | null; created_at: string }
+
 function Pannello({ onClose }: { onClose: () => void }) {
   const router = useRouter();
+  const { admin } = usePermessi();
+  const [dichiarati, setDichiarati] = useState<Dichiarato[]>([]);
+  useEffect(() => {
+    if (admin) fetchAPI("/api/bonifici/al-banco/dichiarati").then((r) => setDichiarati(r.dichiarati)).catch(() => undefined);
+  }, [admin]);
   const [dati, setDati] = useState<Awaited<ReturnType<typeof bonElenco>> | null>(null);
   const [busy, setBusy] = useState("");
   const [cerca, setCerca] = useState<Record<string, string>>({});
@@ -231,6 +244,21 @@ function Pannello({ onClose }: { onClose: () => void }) {
               )}
             </div>
           ))}
+
+          {admin && dichiarati.length > 0 && (
+            <div className="rounded-lg border border-slate-300 p-3">
+              <div className="mb-1 text-sm font-medium">Bonifici dichiarati al banco non ancora riscontrati ({dichiarati.length})</div>
+              <ul className="space-y-1 text-xs">
+                {dichiarati.map((d) => (
+                  <li key={d.id}>
+                    <b className="tabular-nums">{eur(d.importo)}</b> · bonifico del {giorno(d.data_bonifico)}{d.ordinante ? ` · ${d.ordinante}` : ""}
+                    {d.causale ? ` · ${d.causale}` : ""} → {d.documento_descrizione || d.documento_tipo}
+                    <span className="text-muted-foreground"> · dichiarato il {dataOra(d.created_at)} da {d.dichiarato_da || "—"}{d.operatore ? ` (${d.operatore})` : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {dati?.controlli?.length ? (
             <details className="text-xs text-muted-foreground">

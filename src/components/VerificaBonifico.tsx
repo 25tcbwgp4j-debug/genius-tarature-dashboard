@@ -1,142 +1,196 @@
 "use client";
 
-// BONIFICO ISTANTANEO (01/10/2026): prima di emettere lo scontrino o segnare pagata la fattura si controlla
-// IN DIRETTA sul conto SumUp di GENIUS LAB (IBAN IE93 SUMU 9903 6512 5660 78) che il bonifico sia arrivato.
-// Backend: POST /api/incassi/verifica-bonifico (Open Banking; se il conto non è collegato guarda i movimenti
-// già importati). «Conferma» si abilita solo se c'è un movimento con lo stesso importo; l'admin può forzare.
+// BONIFICO al banco (01/10/2026, rifatto il 02/10/2026 su richiesta di Christian): si usa in cassa (scontrino) e nella
+// fattura. Due modi:
+// (a) «Cerca il bonifico»: i bonifici arrivati sul conto SumUp ancora da gestire (quelli del pulsante rosso), i più simili
+//     per importo e nome prima, dal giorno scelto (di default 30 giorni fa). Scelto ed emesso il documento, il bonifico
+//     risulta abbinato e sparisce dal pulsante rosso. Se il conto è collegato in diretta (Open Banking) si legge anche lì.
+// (b) «Già ricevuto: inserisco io i dati»: data del bonifico (obbligatoria), ordinante e causale/CRO (facoltativi).
+//     Il documento parte con modalità bonifico; il bonifico resta «da riscontrare» finché il controllo orario non trova
+//     il movimento (abbinamento automatico). Consentito anche agli operatori: resta scritto chi l'ha dichiarato.
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Landmark, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
+import { Landmark, Loader2, PenLine, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { usePermessi } from "@/components/permessi";
-import { incVerificaBonifico, type EsitoVerificaBonifico, type MovimentoBonifico } from "@/lib/api";
+import { useOperatore } from "@/components/Operatore";
+import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
-
-/** data/ora locale per <input type="datetime-local"> (ora di Roma del browser) */
-function locale(d: Date) {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-}
+const oggiIso = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" });
+const giorniFa = (n: number) => new Date(Date.now() - n * 86400_000).toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" });
 function quando(s: string) {
   if (!s) return "";
   if (s.length <= 10) return new Date(s + "T12:00:00").toLocaleDateString("it-IT");
-  return new Date(s).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return new Date(s).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-export function VerificaBonifico({ importo, testo: testoIniziale = "", etichettaConferma, disabled, onConfermato, size = "sm", className = "" }: {
+interface BonificoArrivato {
+  id: string; codice: string; data: string; data_valuta: string | null; importo: number; ordinante: string | null;
+  causale: string | null; iban: string | null; stesso_importo: boolean; nome_corrisponde: boolean; differenza: number;
+}
+/** Quello che il chiamante ha emesso: id e descrizione del documento (per l'abbinamento). null/undefined = non emesso. */
+export type EsitoDocumento = { id?: string | null; descrizione?: string } | null | undefined | void;
+
+export function VerificaBonifico({ importo, testo: testoIniziale = "", etichettaConferma, disabled, onConfermato, size = "sm", className = "",
+  documentoTipo = "documento", descrizione = "" }: {
   importo: number;
   /** nome del cliente / causale attesa: serve a riconoscere il bonifico giusto */
   testo?: string;
   /** es. «Emetti scontrino» / «Segna pagata» */
   etichettaConferma: string;
   disabled?: boolean;
-  /** riferimento da salvare (ordinante + data) e se l'admin ha forzato senza conferma della banca */
-  onConfermato: (riferimento: string, forzato: boolean) => void | Promise<void>;
+  /** riferimento da salvare, se è stato forzato (sempre false: c'è la dichiarazione) e la data del bonifico (data di incasso) */
+  onConfermato: (riferimento: string, forzato: boolean, info: { data: string; bonificoId?: string; dichiarato?: boolean }) => Promise<EsitoDocumento> | EsitoDocumento;
   size?: "sm" | "default";
   className?: string;
+  /** scontrino · fattura · ordine: dove finisce il bonifico */
+  documentoTipo?: string;
+  /** descrizione del documento per il registro (es. «Fattura 789 — Rossi») */
+  descrizione?: string;
 }) {
-  const { admin } = usePermessi();
+  const [operatore] = useOperatore();
   const [aperto, setAperto] = useState(false);
+  const [modo, setModo] = useState<"cerca" | "dichiara">("cerca");
   const [testo, setTesto] = useState(testoIniziale);
-  const [dal, setDal] = useState("");
+  const [dal, setDal] = useState(giorniFa(30));
   const [busy, setBusy] = useState(false);
-  const [esito, setEsito] = useState<EsitoVerificaBonifico | null>(null);
-  const [scelto, setScelto] = useState(0);
+  const [lista, setLista] = useState<BonificoArrivato[] | null>(null);
+  const [ultimo, setUltimo] = useState<string>("");
+  const [scelto, setScelto] = useState<string>("");
+  const [dich, setDich] = useState({ data: oggiIso(), ordinante: testoIniziale, causale: "" });
 
-  function apri() {
-    setTesto(testoIniziale); setEsito(null); setScelto(0);
-    setDal(locale(new Date(Date.now() - 2 * 3600_000)));
-    setAperto(true);
-  }
-  async function verifica() {
-    if (!(importo > 0)) { toast.error("Importo non valido"); return; }
+  async function cerca(t = testo, d = dal) {
     setBusy(true);
     try {
-      const r = await incVerificaBonifico({ importo, dal: dal ? new Date(dal).toISOString() : undefined, testo: testo.trim() || undefined });
-      setEsito(r);
-      const i = r.movimenti_candidati.findIndex((m) => !m.gia_usato);
-      setScelto(i >= 0 ? i : 0);
+      const r = await fetchAPI("/api/bonifici/al-banco/cerca", { method: "POST", body: JSON.stringify({ importo, testo: t.trim(), dal: d || undefined }) });
+      setLista(r.bonifici);
+      const u = r.ultimo_controllo;
+      setUltimo(u ? `Ultimo controllo del conto: ${quando(u.eseguito_il)}${u.esito !== "ok" ? ` (${u.esito})` : ""}` : "");
+      const primo = (r.bonifici as BonificoArrivato[]).find((b) => b.stesso_importo);
+      setScelto(primo ? primo.id : "");
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
-  async function conferma(forzato: boolean) {
-    const m: MovimentoBonifico | undefined = esito?.movimenti_candidati[scelto];
-    if (forzato && !confirm(`Il bonifico da ${eur(importo)} NON risulta sul conto SumUp. Procedere comunque (${etichettaConferma})?`)) return;
-    const rif = forzato || !m ? "Bonifico istantaneo — forzato dall'amministratore senza conferma del conto"
-      : `Bonifico ${m.ordinante || ""} ${quando(m.data)}`.replace(/\s+/g, " ").trim();
-    setBusy(true);
-    try { await onConfermato(rif.slice(0, 200), forzato); setAperto(false); } catch (e) { toastErrore(e); } finally { setBusy(false); }
+  function apri() {
+    setTesto(testoIniziale); setLista(null); setScelto(""); setModo("cerca");
+    const d = giorniFa(30); setDal(d);
+    setDich({ data: oggiIso(), ordinante: testoIniziale, causale: "" });
+    setAperto(true);
+    cerca(testoIniziale, d);
   }
 
-  const validi = (esito?.movimenti_candidati || []).filter((m) => !m.gia_usato);
-  const okScelto = !!esito?.trovato && !!esito.movimenti_candidati[scelto] && !esito.movimenti_candidati[scelto].gia_usato;
+  async function registra(body: Record<string, unknown>) {
+    try {
+      await fetchAPI("/api/bonifici/al-banco/usa", { method: "POST", body: JSON.stringify({ importo, documento_tipo: documentoTipo, operatore: operatore || undefined, ...body }) });
+      window.dispatchEvent(new Event("bonifici:aggiorna"));
+    } catch (e) {
+      // il documento è già emesso: si avvisa ma non si blocca
+      toast.warning(`Documento emesso, ma il bonifico non è stato registrato: ${(e as Error).message}`, { duration: 15000 });
+    }
+  }
+
+  async function confermaScelto() {
+    const b = lista?.find((x) => x.id === scelto);
+    if (!b) return;
+    if (!b.stesso_importo && !confirm(`Il bonifico è di ${eur(b.importo)}, il documento di ${eur(importo)}. Procedere comunque?`)) return;
+    const giorno = (b.data_valuta || b.data).slice(0, 10);
+    const rif = `Bonifico ${b.ordinante || ""} del ${quando(giorno)} (SumUp ${b.codice.split(":").pop()})`.replace(/\s+/g, " ").trim();
+    setBusy(true);
+    try {
+      const doc = await onConfermato(rif.slice(0, 200), false, { data: giorno, bonificoId: b.id });
+      if (doc) {
+        await registra({ bonifico_id: b.id, documento_id: doc.id || null, descrizione: doc.descrizione || descrizione || documentoTipo });
+        setAperto(false);
+      }
+    } catch (e) { toastErrore(e); } finally { setBusy(false); }
+  }
+
+  async function confermaDichiarato() {
+    if (!dich.data) { toast.error("Indica la data del bonifico"); return; }
+    if (dich.data > oggiIso()) { toast.error("La data del bonifico non può essere futura"); return; }
+    const rif = [`Bonifico del ${quando(dich.data)}`, dich.ordinante.trim() && `da ${dich.ordinante.trim()}`, dich.causale.trim() && `rif. ${dich.causale.trim()}`,
+      "(dichiarato, da riscontrare)"].filter(Boolean).join(" ");
+    setBusy(true);
+    try {
+      const doc = await onConfermato(rif.slice(0, 200), false, { data: dich.data, dichiarato: true });
+      if (doc) {
+        await registra({ dichiarato: { data: dich.data, ordinante: dich.ordinante.trim(), causale: dich.causale.trim() },
+                         documento_id: doc.id || null, descrizione: doc.descrizione || descrizione || documentoTipo });
+        toast.info("Bonifico dichiarato: verrà riscontrato da solo quando arriva sul conto SumUp");
+        setAperto(false);
+      }
+    } catch (e) { toastErrore(e); } finally { setBusy(false); }
+  }
+
+  const stessi = (lista || []).filter((b) => b.stesso_importo).length;
 
   return (
     <>
       <Button size={size} variant="outline" className={className} disabled={disabled || !(importo > 0)} onClick={apri}>
-        <Landmark /> Bonifico istantaneo
+        <Landmark /> Bonifico
       </Button>
       <Dialog open={aperto} onOpenChange={(v) => { if (!busy) setAperto(v); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Bonifico istantaneo · {eur(importo)}</DialogTitle>
-            <DialogDescription>
-              Prima di «{etichettaConferma}» controlla che il bonifico sia arrivato sul conto SumUp di GENIUS LAB
-              (IBAN IE93 SUMU 9903 6512 5660 78).
-            </DialogDescription>
+            <DialogTitle>Bonifico · {eur(importo)}</DialogTitle>
+            <DialogDescription>Scegli il bonifico arrivato sul conto SumUp di GENIUS LAB, oppure inserisci i dati di un bonifico già ricevuto.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Input className="h-8" placeholder="Nome di chi paga o causale (facoltativo, aiuta a riconoscerlo)"
-              value={testo} onChange={(e) => setTesto(e.target.value)} />
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">Arrivato dopo il
-              <input type="datetime-local" className="h-7 rounded-md border border-input bg-background px-1 text-xs" value={dal}
-                onChange={(e) => setDal(e.target.value)} /></label>
-            <Button className="w-full" disabled={busy} onClick={verifica}>
-              {busy ? <Loader2 className="animate-spin" /> : esito ? <RefreshCw /> : <Landmark />}
-              {esito ? " Verifica di nuovo" : " Verifica incasso sul conto SumUp"}
-            </Button>
-
-            {esito && (
-              <div className={`space-y-2 rounded-md border p-2 text-sm ${esito.trovato ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30" : "border-red-300 bg-red-50 dark:bg-red-950/30"}`}>
-                <div className="font-medium">
-                  {esito.trovato ? `✅ Bonifico da ${eur(esito.importo)} arrivato` : `❌ Nessun bonifico da ${eur(esito.importo)} sul conto`}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {esito.live ? "Letto in diretta dal conto SumUp" : "⚠️ Conto non letto in diretta: controllati solo i movimenti già importati"}
-                  {" · "}{esito.movimenti_nel_periodo} entrate nel periodo · {quando(esito.controllato_il)}
-                  {esito.nota ? <div>{esito.nota}</div> : null}
-                </div>
-                {esito.movimenti_candidati.length > 0 && (
-                  <div className="divide-y rounded border bg-background">
-                    {esito.movimenti_candidati.map((m, i) => (
-                      <label key={i} className={`flex cursor-pointer items-start gap-2 p-2 text-xs ${m.gia_usato ? "opacity-50" : ""}`}>
-                        <input type="radio" className="mt-0.5" name="bonifico" checked={scelto === i} disabled={m.gia_usato} onChange={() => setScelto(i)} />
-                        <span className="flex-1">
-                          <span className="font-medium">{m.ordinante || "ordinante non indicato"}</span> · {quando(m.data)} · {eur(m.importo)}
-                          {m.nome_corrisponde && <span className="ml-1 rounded bg-emerald-600 px-1 text-[10px] text-white">nome giusto</span>}
-                          {m.gia_usato && <span className="ml-1 rounded bg-muted px-1 text-[10px]">già abbinato</span>}
-                          {m.causale && <div className="text-muted-foreground">{m.causale}</div>}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {esito.trovato && testo.trim() && !validi.some((m) => m.nome_corrisponde) && (
-                  <div className="text-xs text-amber-700 dark:text-amber-300">L&apos;importo torna ma il nome non corrisponde: controlla l&apos;ordinante prima di confermare.</div>
-                )}
-              </div>
-            )}
-
-            <Button className="w-full" disabled={busy || !okScelto} onClick={() => conferma(false)}>{etichettaConferma}</Button>
-            {admin && esito && !esito.trovato && (
-              <Button variant="ghost" size="sm" className="w-full text-red-600" disabled={busy} onClick={() => conferma(true)}>
-                <ShieldAlert /> Forza senza conferma (amministratore)</Button>
-            )}
+          <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1 text-sm">
+            <button type="button" onClick={() => setModo("cerca")} className={`flex items-center justify-center gap-1 rounded px-2 py-1.5 ${modo === "cerca" ? "bg-background font-medium shadow" : ""}`}>
+              <Search className="size-4" /> Cerca il bonifico</button>
+            <button type="button" onClick={() => setModo("dichiara")} className={`flex items-center justify-center gap-1 rounded px-2 py-1.5 ${modo === "dichiara" ? "bg-background font-medium shadow" : ""}`}>
+              <PenLine className="size-4" /> Già ricevuto: inserisco io</button>
           </div>
+
+          {modo === "cerca" ? (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input className="h-8" placeholder="Nome di chi paga o causale (aiuta a riconoscerlo)" value={testo}
+                  onChange={(e) => setTesto(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") cerca(); }} />
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => cerca()}>{busy ? <Loader2 className="animate-spin" /> : <RefreshCw />}</Button>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">Arrivato dopo il
+                <input type="date" className="h-7 rounded-md border border-input bg-background px-1 text-xs" value={dal} max={oggiIso()}
+                  onChange={(e) => { setDal(e.target.value); cerca(testo, e.target.value); }} /></label>
+              {lista && (
+                <div className="max-h-72 divide-y overflow-y-auto rounded border bg-background">
+                  {!lista.length && <div className="p-3 text-xs text-muted-foreground">Nessun bonifico da abbinare in questo periodo. Se il cliente l&apos;ha già fatto, usa «Già ricevuto: inserisco io».</div>}
+                  {lista.map((b) => (
+                    <label key={b.id} className={`flex cursor-pointer items-start gap-2 p-2 text-xs ${scelto === b.id ? "bg-emerald-50 dark:bg-emerald-950/30" : ""}`}>
+                      <input type="radio" className="mt-0.5" name="bonifico" checked={scelto === b.id} onChange={() => setScelto(b.id)} />
+                      <span className="flex-1">
+                        <span className="font-semibold tabular-nums">{eur(b.importo)}</span> · <span className="font-medium">{b.ordinante || "ordinante non indicato"}</span> · {quando(b.data)}
+                        {b.stesso_importo && <span className="ml-1 rounded bg-emerald-600 px-1 text-[10px] text-white">stesso importo</span>}
+                        {b.nome_corrisponde && <span className="ml-1 rounded bg-sky-600 px-1 text-[10px] text-white">nome giusto</span>}
+                        {b.causale && <div className="text-muted-foreground">{b.causale}</div>}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <div className="text-[11px] text-muted-foreground">{ultimo}{lista && !stessi && lista.length ? " · nessuno con lo stesso importo" : ""}</div>
+              <Button className="w-full" disabled={busy || !scelto} onClick={confermaScelto}>{etichettaConferma} con questo bonifico</Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <label className="block text-xs">Data del bonifico *
+                <input type="date" className="mt-0.5 block h-8 w-full rounded-md border border-input bg-background px-2 text-sm" value={dich.data} max={oggiIso()}
+                  onChange={(e) => setDich((d) => ({ ...d, data: e.target.value }))} /></label>
+              <label className="block text-xs">Ordinante (chi l&apos;ha fatto)
+                <Input className="mt-0.5 h-8" value={dich.ordinante} onChange={(e) => setDich((d) => ({ ...d, ordinante: e.target.value }))} /></label>
+              <label className="block text-xs">Causale o CRO / riferimento
+                <Input className="mt-0.5 h-8" value={dich.causale} onChange={(e) => setDich((d) => ({ ...d, causale: e.target.value }))} /></label>
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs dark:bg-amber-950/30">
+                Il documento si emette con modalità <b>bonifico</b> e data di incasso <b>{quando(dich.data)}</b>. Resta «da riscontrare»:
+                quando il bonifico compare sul conto SumUp viene abbinato da solo. Resta scritto chi l&apos;ha dichiarato{operatore ? ` (${operatore})` : ""}.
+              </div>
+              <Button className="w-full" disabled={busy || !dich.data} onClick={confermaDichiarato}>
+                {busy ? <Loader2 className="animate-spin" /> : null}{etichettaConferma} (bonifico già ricevuto)</Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>

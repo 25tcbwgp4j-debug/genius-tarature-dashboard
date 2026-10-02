@@ -50,6 +50,7 @@ export interface BonStato {
   ultimo_controllo: BonControllo | null;
   prossimo_controllo: string | null;
   orari: string;
+  dichiarati_da_riscontrare?: number;
 }
 
 export const NOME_TIPO: Record<BonTipo, string> = {

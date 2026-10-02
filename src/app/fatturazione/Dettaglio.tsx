@@ -60,16 +60,18 @@ export function Dettaglio({
     } catch (err) { toastErrore(err); } finally { setBusy(""); }
   }
 
-  async function azione<T>(nome: string, fn: () => Promise<T>, ok?: (r: T) => void) {
-    if (busy) return;
+  async function azione<T>(nome: string, fn: () => Promise<T>, ok?: (r: T) => void): Promise<T | null> {
+    if (busy) return null;
     setBusy(nome);
     try {
       const r = await fn();
       ok?.(r);
       carica();
       onChanged();
+      return r;
     } catch (e) {
       toastErrore(e);
+      return null;
     } finally {
       setBusy("");
     }
@@ -338,8 +340,13 @@ export function Dettaglio({
                     {emessa && Number(f.totale) > 0 && (
                       // bonifico istantaneo: si segna pagata solo dopo aver visto l'accredito sul conto SumUp (l'admin può forzare)
                       <VerificaBonifico importo={Number(f.totale)} testo={f.controparte_nome || ""} etichettaConferma="Segna pagata" disabled={!!busy}
-                        onConfermato={(r, forzato) => azione("pag", () => fattPagamento(f.id, { modalita: "bonifico", riferimento: (rif ? `${rif} · ${r}` : r).slice(0, 200) }),
-                          () => toast.success(forzato ? "Segnata incassata (bonifico forzato)" : "Incassata: bonifico verificato sul conto SumUp"))} />
+                        documentoTipo="fattura" descrizione={`Fattura ${f.numero || "(bozza)"} — ${f.controparte_nome || ""}`}
+                        onConfermato={async (r, _forzato, info) => {
+                          // data di incasso = data del bonifico (scelto dal conto o dichiarato al banco)
+                          const ok = await azione("pag", () => fattPagamento(f.id, { modalita: "bonifico", data: info.data, riferimento: (rif ? `${rif} · ${r}` : r).slice(0, 200) }),
+                            () => toast.success(info.dichiarato ? "Incassata con bonifico dichiarato (da riscontrare sul conto)" : "Incassata: bonifico abbinato"));
+                          return ok ? { id: f.id, descrizione: `Fattura ${f.numero || "(bozza)"} — ${f.controparte_nome || ""}` } : null;
+                        }} />
                     )}
                     {emessa && f.stato !== "bozza" && (
                       <Button size="sm" variant="secondary" disabled={!!busy}

@@ -129,16 +129,19 @@ export default function CassaPage() {
   // incasso di un ordine: il carrello non può superare quanto resta da pagare (prima che il cliente paghi col POS)
   const oltreOrdine = !!ordine && tot > ordine.max + 0.001;
 
-  async function scontrino(modalita: string, posIncassoId?: string) {
-    if (!carrello.length || busy) return;
-    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
-    if (carrello.some((r) => !(r.prezzo >= 0) || Number.isNaN(r.prezzo))) { toast.error("C'è un prezzo non valido nel carrello"); return; }
-    if (ordine && tot > ordine.max + 0.001) { toast.error(`Lo scontrino supera quanto resta da pagare sull'ordine (${eur(ordine.max)})`); return; }
-    if (modalita === "non_riscosso" && !confirm(`Emettere lo scontrino da ${eur(tot)} come NON RISCOSSO (il cliente non paga adesso)?`)) return;
+  /** Restituisce lo scontrino emesso (null se non è partito): il pulsante «Bonifico» lo usa per abbinare il bonifico. */
+  async function scontrino(modalita: string, posIncassoId?: string): Promise<{ id: string; descrizione: string } | null> {
+    if (!carrello.length || busy) return null;
+    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return null; }
+    if (carrello.some((r) => !(r.prezzo >= 0) || Number.isNaN(r.prezzo))) { toast.error("C'è un prezzo non valido nel carrello"); return null; }
+    if (ordine && tot > ordine.max + 0.001) { toast.error(`Lo scontrino supera quanto resta da pagare sull'ordine (${eur(ordine.max)})`); return null; }
+    if (modalita === "non_riscosso" && !confirm(`Emettere lo scontrino da ${eur(tot)} come NON RISCOSSO (il cliente non paga adesso)?`)) return null;
     setBusy(modalita);
+    let esito: { id: string; descrizione: string } | null = null;
     try {
-      await cassaScontrino({ righe: carrello, pagamenti: [{ modalita, importo: tot }], pos_incasso_id: posIncassoId, operatore,
+      const sc = await cassaScontrino({ righe: carrello, pagamenti: [{ modalita, importo: tot }], pos_incasso_id: posIncassoId, operatore,
                              ...(sessione ? { session_id: sessione.id } : {}), ...(ordine ? { documento_id: ordine.id } : {}) });
+      esito = { id: sc.id, descrizione: `Scontrino ${eur(tot)}${ordine ? ` (ordine ${ordine.sigla})` : ""} — ${carrello.map((r) => r.descrizione).join(", ")}`.slice(0, 280) };
       toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${MOD[modalita]} · ${operatore})`);
       setCarrello([]); ricarica();
       if (sessione) { router.push(`/sessioni/${sessione.id}`); setSessione(null); }
@@ -150,6 +153,7 @@ export default function CassaPage() {
         router.push(`/ordini?id=${ordine.id}`); setOrdine(null);
       }
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
+    return esito;
   }
   async function fattura() {
     if (!carrello.length || busy) return;
@@ -271,15 +275,16 @@ export default function CassaPage() {
             <Button disabled={!carrello.length || !!busy || !operatore || oltreOrdine} onClick={() => scontrino("contanti")}>{busy === "contanti" ? <Loader2 className="animate-spin" /> : <Banknote />} Contanti</Button>
             {/* un ordine si incassa davvero: niente «non riscosso» */}
             {!ordine && <Button variant="outline" disabled={!carrello.length || !!busy || !operatore || oltreOrdine} onClick={() => scontrino("non_riscosso")}>Non riscosso</Button>}
-            {/* bonifico istantaneo: lo scontrino parte solo dopo aver visto l'accredito sul conto SumUp */}
-            <VerificaBonifico className="col-span-2" importo={tot} etichettaConferma="Emetti scontrino" disabled={!carrello.length || !!busy || !operatore || oltreOrdine}
+            {/* bonifico: si sceglie quello arrivato sul conto SumUp o si dichiara già ricevuto (data, ordinante, CRO) */}
+            <VerificaBonifico className="col-span-2" importo={tot} etichettaConferma="Emetti scontrino" documentoTipo={ordine ? "ordine" : "scontrino"}
+              disabled={!carrello.length || !!busy || !operatore || oltreOrdine}
               onConfermato={() => scontrino("bonifico")} />
           </div>
           <div className="space-y-1 rounded-md border border-sky-200 bg-sky-50/50 p-2 dark:bg-sky-950/20">
             <div className="text-xs text-muted-foreground">POS e PayPal: lo scontrino parte da solo quando SumUp / PayPal registrano il pagamento</div>
             <div className="grid grid-cols-2 gap-2">
               <PagaPos importo={tot} descrizione={`GENIUS LAB scontrino ${eur(tot)}`} rifTipo="scontrino" disabled={!carrello.length || !!busy || !operatore || oltreOrdine}
-                generico paypal onPagato={(p) => scontrino(p.metodo === "paypal" ? "paypal" : "pos_sumup", p.id)} />
+                generico paypal onPagato={async (p) => { await scontrino(p.metodo === "paypal" ? "paypal" : "pos_sumup", p.id); }} />
             </div>
           </div>
           {/* dalla sessione la fattura si prepara con «Prepara bozza da controllare» (niente doppioni non collegati) */}
