@@ -2,7 +2,7 @@
 
 // Pronto al cliente subito o PROGRAMMATO (01/10/2026).
 // Dopo la generazione dei rapporti compare il banner «Quando invio il pronto al cliente?»:
-// Adesso · prossimo giorno lavorativo alle 9:30 · data e ora a scelta, su Email e/o WhatsApp.
+// Adesso · oggi all'ora scelta · domani all'ora scelta · prossimo giorno lavorativo alle 9:30 · data e ora a scelta, su Email e/o WhatsApp.
 // Il backend (job ogni minuto) invia con la stessa logica dei pulsanti «Pronti» e registra l'esito
 // per canale; qui si vede la programmazione (Modifica/Annulla) e poi l'esito («Rimanda pronto»).
 
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlarmClock, AlertCircle, CheckCircle2, Loader2, Mail, MessageCircle, Send, X } from "lucide-react";
 import { toast } from "sonner";
+import { oggiRoma, spostaGiorno } from "@/lib/date";
 import {
   getProntoProgrammato, programmaPronto, annullaProntoProgrammato, notifyReady,
   type StatoPronto, type CanalePronto,
@@ -43,7 +44,15 @@ function inOrarioNegozio(data: string, ora: string): boolean {
   return (t >= 570 && t <= 810) || (t >= 900 && t <= 1140);
 }
 
-type Scelta = "adesso" | "suggerito" | "libero";
+/** Prossima mezz'ora a Roma come «HH:MM» (default per «Oggi alle…»). */
+function prossimaMezzora(): string {
+  const p = new Date().toLocaleTimeString("it-IT", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
+  let t = p[0] * 60 + p[1] + 30;
+  t = Math.min(Math.ceil(t / 30) * 30, 23 * 60 + 30);
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
+type Scelta = "adesso" | "oggi" | "domani" | "suggerito" | "libero";
 
 interface Props {
   sessionId: string;
@@ -61,6 +70,8 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
   const [scelta, setScelta] = useState<Scelta>("suggerito");
   const [data, setData] = useState("");
   const [ora, setOra] = useState("09:30");
+  const [oraOggi, setOraOggi] = useState(prossimaMezzora());
+  const [oraDomani, setOraDomani] = useState("09:30");
   const [canali, setCanali] = useState<Record<CanalePronto, boolean>>({ email: true, whatsapp: true });
   const [lavoro, setLavoro] = useState(false);
   const [nonOra, setNonOra] = useState(false);
@@ -89,7 +100,13 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
   const mostraBanner = aperto || (haRapporti && !giaInviato && !attiva && !conEsito && !nonOra && !dest.do_not_contact);
 
   const scelti = (["email", "whatsapp"] as CanalePronto[]).filter((c) => canali[c]);
-  const fuoriOrario = scelta === "libero" && data && ora && !inOrarioNegozio(data, ora);
+  const oggi = oggiRoma(), domani = spostaGiorno(oggiRoma(), 1);
+  const quandoScelto = (): { data: string; ora: string } | null =>
+    scelta === "oggi" ? { data: oggi, ora: oraOggi } : scelta === "domani" ? { data: domani, ora: oraDomani }
+      : scelta === "libero" ? { data, ora } : scelta === "suggerito" ? partiRoma(st.suggerito) : null;
+  const qs = quandoScelto();
+  const fuoriOrario = !!qs && scelta !== "suggerito" && !!qs.data && !!qs.ora && !inOrarioNegozio(qs.data, qs.ora);
+  const giaPassato = scelta === "oggi" && oraOggi <= new Date().toLocaleTimeString("it-IT", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
 
   const apri = (perRimandare: boolean) => {
     setRimanda(perRimandare);
@@ -111,7 +128,8 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
         if (wa && typeof wa === "object" && wa.error) toast.error(`WhatsApp: ${String(wa.error).slice(0, 200)}`);
         if (!(em?.error || wa?.error)) toast.success("Pronto inviato al cliente");
       } else {
-        const quando = scelta === "suggerito" ? partiRoma(st.suggerito) : { data, ora };
+        if (giaPassato) { toast.error("L'orario di oggi è già passato: scegline uno più avanti"); return; }
+        const quando = quandoScelto() || { data, ora };
         const r = await programmaPronto(sessionId, { canali: scelti, ...quando, rimanda: rimanda || giaInviato });
         toast.success(`Pronto programmato: ${dataOraRoma(r?.programmazione?.quando)}`);
       }
@@ -216,6 +234,8 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
       <div className="flex flex-wrap gap-2 mb-3">
         {([
           ["adesso", "Adesso"],
+          ["oggi", "Oggi alle…"],
+          ["domani", "Domani alle…"],
           ["suggerito", `${dataOraRoma(st.suggerito).replace(/^./, (x) => x.toUpperCase())}`],
           ["libero", "Data e ora a scelta"],
         ] as [Scelta, string][]).map(([k, label]) => (
@@ -226,6 +246,16 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
         ))}
       </div>
 
+      {(scelta === "oggi" || scelta === "domani") && (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <span className="text-sm">{scelta === "oggi" ? "Oggi" : "Domani"} ({dataOraRoma(`${scelta === "oggi" ? oggi : domani}T12:00:00`).split(" alle ")[0]}) alle</span>
+          <Input type="time" value={scelta === "oggi" ? oraOggi : oraDomani}
+            onChange={(e) => (scelta === "oggi" ? setOraOggi : setOraDomani)(e.target.value)} className="w-28 bg-white" />
+          <span className="text-xs text-gray-500">ora di Roma</span>
+          {giaPassato && <span className="text-xs text-red-700">⚠️ orario già passato</span>}
+          {fuoriOrario && <span className="text-xs text-amber-700">⚠️ fuori dall&apos;orario del negozio (lun-ven 9:30-13:30, 15-19)</span>}
+        </div>
+      )}
       {scelta === "libero" && (
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <Input type="date" value={data} onChange={(e) => setData(e.target.value)} className="w-40 bg-white" />
