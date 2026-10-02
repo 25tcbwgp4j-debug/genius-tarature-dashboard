@@ -8,16 +8,25 @@ import { useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { magPerCodice, magProdotti, type Prodotto } from "@/lib/api";
+import { BadgeAttivita, useAttivita, type Attivita } from "@/components/attivita";
 
 export interface ArticoloScelto { descrizione: string; prezzo_ivato: number | null; aliquota: number; prodotto_id?: string | null; codice?: string | null }
-export interface VoceListino { codice?: string | null; descrizione: string; prezzo_ivato: number | null; aliquota: number; gruppo?: string }
+export interface VoceListino { codice?: string | null; descrizione: string; prezzo_ivato: number | null; aliquota: number; gruppo?: string; attivita?: string | null }
+
+// prima le voci della divisione scelta, poi quelle senza divisione, in fondo quelle dell'altra (con il badge):
+// es. «spedizione» → in Apple esce prima «Spese di spedizione A/R» a 28 €, in Tarature quella a 36,60 € (02/10/2026)
+const peso = (a: string | null | undefined, att: Attivita) => (a === att ? 0 : a ? 2 : 1);
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-export function CercaArticolo({ onScelto, listino = [], placeholder = "Cerca articolo: nome, codice o spara il codice a barre…", className = "" }: {
+export function CercaArticolo({ onScelto, listino = [], placeholder = "Cerca articolo: nome, codice o spara il codice a barre…", className = "", attivita }: {
   onScelto: (a: ArticoloScelto) => void; listino?: VoceListino[]; placeholder?: string; className?: string;
+  /** divisione del documento (fattura); se manca vale il selettore in alto */
+  attivita?: Attivita;
 }) {
+  const { attivita: attSelettore } = useAttivita();
+  const att = attivita || attSelettore;
   const [q, setQ] = useState("");
   const [prod, setProd] = useState<Prodotto[]>([]);
   const [qProd, setQProd] = useState("");   // la ricerca che ha prodotto «prod» (le risposte vecchie si scartano)
@@ -44,11 +53,13 @@ export function CercaArticolo({ onScelto, listino = [], placeholder = "Cerca art
 
   // ogni parola cercata deve comparire (es. «tar multi» trova «Taratura multimetro»)
   const parole = norm(q).split(/\s+/).filter(Boolean);
+  const dalMagazzino = q.trim().length < 2 ? [] : [...prod].sort((a, b) => peso(a.attivita, att) - peso(b.attivita, att));
+  const codiciMagazzino = new Set(dalMagazzino.map((p) => p.codice).filter(Boolean));
   const dalListino = q.trim().length < 2 ? [] : listino.filter((v) => {
+    if (v.codice && codiciMagazzino.has(v.codice)) return false;   // già nell'elenco del magazzino: niente doppioni
     const t = norm(`${v.descrizione} ${v.codice || ""} ${v.gruppo || ""}`);
     return parole.every((p) => t.includes(p));
-  }).slice(0, 12);
-  const dalMagazzino = q.trim().length < 2 ? [] : prod;
+  }).sort((a, b) => peso(a.attivita, att) - peso(b.attivita, att)).slice(0, 12);
   const aggiornati = qProd === q.trim();   // i risultati del magazzino corrispondono a quello che c'è scritto adesso
 
   function scegli(a: ArticoloScelto) { onScelto(a); setQ(""); setProd([]); setQProd(""); ultima.current = ""; setAperto(false); }
@@ -82,7 +93,8 @@ export function CercaArticolo({ onScelto, listino = [], placeholder = "Cerca art
           {dalMagazzino.map((p) => (
             <button key={p.id} type="button" className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left hover:bg-muted"
               onClick={() => scegli({ descrizione: p.descrizione, prezzo_ivato: Number(p.prezzo), aliquota: Number(p.aliquota), prodotto_id: p.id, codice: p.codice })}>
-              <span className="truncate">{p.descrizione}{p.barcode ? <span className="ml-1 text-xs text-muted-foreground">{p.barcode}</span> : null}</span>
+              <span className="truncate">{p.descrizione}{p.barcode ? <span className="ml-1 text-xs text-muted-foreground">{p.barcode}</span> : null}
+                {p.attivita && p.attivita !== att ? <BadgeAttivita a={p.attivita} className="ml-1" /> : null}</span>
               <span className="shrink-0 tabular-nums">{eur(Number(p.prezzo))}{p.gestisce_giacenza ? <span className="ml-1 text-xs text-muted-foreground">({Number(p.giacenza)} pz)</span> : null}</span>
             </button>
           ))}
@@ -90,7 +102,8 @@ export function CercaArticolo({ onScelto, listino = [], placeholder = "Cerca art
           {dalListino.map((v, i) => (
             <button key={`${v.codice}-${i}`} type="button" className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left hover:bg-muted"
               onClick={() => scegli({ descrizione: v.descrizione, prezzo_ivato: v.prezzo_ivato, aliquota: v.aliquota, codice: v.codice })}>
-              <span className="truncate">{v.descrizione.replace(/^Rapporto di Taratura per /, "Taratura ").replace(/ n\. RDT \d+-$/, "")}</span>
+              <span className="truncate">{v.descrizione.replace(/^Rapporto di Taratura per /, "Taratura ").replace(/ n\. RDT \d+-$/, "")}
+                {v.attivita && v.attivita !== att ? <BadgeAttivita a={v.attivita} className="ml-1" /> : null}</span>
               <span className="shrink-0 tabular-nums">{v.prezzo_ivato !== null ? eur(v.prezzo_ivato) : "prezzo libero"}</span>
             </button>
           ))}

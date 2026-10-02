@@ -342,7 +342,7 @@ export function Editor({
               </label>
               <Button size="xs" variant="outline" className="ml-auto" onClick={() => setRighe((p) => [...p, rigaVuota(societa === "gingy" ? 10 : 22)])}><Plus /> Riga</Button>
             </div>
-            <CercaArticolo listino={catalogo} className="w-full"
+            <CercaArticolo listino={catalogo} className="w-full" attivita={attivita}
               onScelto={(a) => aggiungiVoce({ gruppo: "", codice: a.codice || null, descrizione: a.descrizione, prezzo_ivato: a.prezzo_ivato, aliquota: a.aliquota })} />
             {catalogo.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 p-2">
