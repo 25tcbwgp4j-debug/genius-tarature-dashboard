@@ -68,7 +68,7 @@ export function ChangeCustomerDialog({ sessionId, currentCustomerId, currentCust
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="outline" className="h-11" onClick={() => setOpen(true)}>
         <UserCog className="w-4 h-4 mr-1" /> Cambia cliente
       </Button>
 

@@ -6,16 +6,12 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import {
   getSession,
-  registerComplete,
-  notifyReady,
   sendProforma,
-  markDelivered,
-  generateRdts,
-  markSessionPaid,
   sendLatCertificates,
+  proformaSessioneStato,
+  type ProformaSessioneStato,
   updateSession,
   deleteSession,
   updateInstrument,
@@ -37,8 +33,6 @@ import {
 } from "@/lib/api";
 import { toast } from "sonner";
 import {
-  Bell,
-  FileText,
   PackageCheck,
   ArrowLeft,
   Loader2,
@@ -46,12 +40,10 @@ import {
   Trash2,
   Save,
   X,
-  FileOutput,
   Plus,
   Printer,
   Tag,
   FileDown,
-  Euro,
   ShieldCheck,
   History,
   ChevronDown,
@@ -63,11 +55,14 @@ import {
   CheckCircle2,
   AlertCircle,
   Truck,
+  ExternalLink,
+  Lock,
 } from "lucide-react";
 import { STATUS_CONFIG, getStatusConfig, getPaymentConfig } from "@/lib/constants";
 import { RecipientPanel } from "./RecipientPanel";
-import { ChangeCustomerDialog } from "./ChangeCustomerDialog";
-import { EditCustomerDialog } from "./EditCustomerDialog";
+import { ClienteCard } from "./ClienteCard";
+import { AzioniSessione } from "./AzioniSessione";
+import { AcquisisciFoto } from "./AcquisisciFoto";
 import { ShipmentsPanel } from "./ShipmentsPanel";
 import { FatturaPanel, ProformaDialog } from "./FatturaPanel";
 import { SpedizioneSessione } from "./SpedizioneSessione";
@@ -91,28 +86,6 @@ interface PastInstrument {
   rdt_number?: string | null;
   calibration_date?: string | null;
   instrument_types?: { id: string; name: string; price: number } | null;
-}
-
-// Formatta ISO date string in "DD/MM/YYYY HH:MM" per timestamp UI
-function formatItDateTime(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  try {
-    return new Date(iso).toLocaleString("it-IT", {
-      day: "2-digit", month: "2-digit", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
-  } catch { return null; }
-}
-
-function ActionTimestamp({ ts, prefix }: { ts: string | null | undefined; prefix?: string }) {
-  const f = formatItDateTime(ts);
-  return (
-    <p className="text-[10px] text-center text-gray-500 h-3">
-      {f
-        ? <>{prefix ? `${prefix} ` : ""}Inviato: <span className="font-medium text-gray-700">{f}</span></>
-        : <span className="text-gray-300">{prefix ? `${prefix} —` : "—"}</span>}
-    </p>
-  );
 }
 
 // Regola del laboratorio (28/09/2026): un rapporto = un pezzo unico OPPURE
@@ -251,6 +224,10 @@ export default function SessionDetail() {
   const [dialogPf, setDialogPf] = useState(false);
   const [pfDopo, setPfDopo] = useState<'email' | 'whatsapp' | null>(null);
   const [fatturaAggiorna, setFatturaAggiorna] = useState(0);
+  // Pro forma (documento PF) della sessione: se è aperto, il pulsante verde «Apri e convertilo in fattura»
+  // sta in alto, sotto i pulsanti di stampa (Christian 02/10/2026)
+  const [pfDoc, setPfDoc] = useState<ProformaSessioneStato["documento"]>(null);
+  const pfAperto = pfDoc && pfDoc.stato === "aperto" ? pfDoc : null;
   // Stampa diretta: agente di stampa sul Mac del banco acceso?
   const [agenteStampa, setAgenteStampa] = useState<boolean | null>(null);
   // Preview proforma modal — mostra anteprima totali (con/senza spedizione) PRIMA dell'invio
@@ -298,6 +275,12 @@ export default function SessionDetail() {
   const [loadingPdf, setLoadingPdf] = useState(false);
 
   const sessionId = params.id as string;
+
+  useEffect(() => {
+    let vivo = true;
+    proformaSessioneStato(sessionId).then((r) => vivo && setPfDoc(r.documento)).catch(() => undefined);
+    return () => { vivo = false; };
+  }, [sessionId, fatturaAggiorna]);
 
   const loadSession = async () => {
     try {
@@ -385,8 +368,16 @@ export default function SessionDetail() {
   const daTarare = ((session?.instruments || []) as { rdt_number?: string | null; external_processing?: boolean | null }[])
     .filter((i) => !i.external_processing);
   const rapportiPronti = daTarare.length > 0 && daTarare.every((i) => !!i.rdt_number);
+  const MSG_ETICHETTE = "Prima genera i rapporti di taratura: senza il numero di rapporto (RDT) le etichette escono incomplete.";
+  // Il pulsante resta cliccabile anche senza rapporti: un pulsante spento non spiega niente, il messaggio sì.
+  const etichetteBloccate = () => {
+    if (rapportiPronti) return false;
+    toast.error(MSG_ETICHETTE, { duration: 6000 });
+    return true;
+  };
 
   const stampaDiretta = async (tipo: "etichette" | "ricevuta" | "rapporti") => {
+    if (tipo === "etichette" && etichetteBloccate()) return;
     setActionLoading("stampa_" + tipo);
     try {
       const r = await stampaSessione(sessionId, tipo);
@@ -404,6 +395,11 @@ export default function SessionDetail() {
       }
     } catch (e) {
       if (tipo === "rapporti") { toast.error("Stampa dei rapporti non riuscita: " + (e as Error).message); return; }
+      // 409 dal backend: etichette rifiutate perché mancano i rapporti (controllo anche lato server)
+      if (tipo === "etichette" && ((e as { status?: number }).status === 409 || /rapporti/i.test((e as Error).message))) {
+        toast.error(MSG_ETICHETTE + " " + (e as Error).message, { duration: 8000 });
+        return;
+      }
       toast.error("Stampa non riuscita: " + (e as Error).message + " — apro il PDF");
       if (tipo === "etichette") openLabelsPdf(); else openReceiptPdf();
     } finally {
@@ -654,6 +650,7 @@ export default function SessionDetail() {
                 La sessione è già aperta: il cliente deve ancora portare gli strumenti
                 {session.session_date ? ` (arrivo previsto ${new Date(session.session_date).toLocaleDateString("it-IT")})` : ""}.
                 Non va rifatta. Nessuna notifica parte al cliente finché è in attesa.
+                Quando arrivano: premi «Strumenti arrivati» oppure acquisisci il primo strumento con la fotocamera (passa da sola in registrazione).
               </p>
             </div>
             <Button
@@ -678,7 +675,7 @@ export default function SessionDetail() {
             Il cliente deve ancora portare gli strumenti? Metti la sessione in ATTESA STRUMENTI
           </button>
         )}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 [&_button]:h-9">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 [&_button]:h-11">
           {!editingSession ? (
             <Button
               variant="outline"
@@ -727,18 +724,20 @@ export default function SessionDetail() {
               variant="outline"
               size="sm"
               onClick={() => stampaDiretta("etichette")}
-              disabled={actionLoading === "stampa_etichette" || !rapportiPronti}
-              className="min-w-0 flex-1 rounded-r-none bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
-              title={rapportiPronti ? "Stampa subito le etichette 50x22mm sulla Brother QL-700 (agente di stampa del banco)"
-                : "Le etichette si stampano solo dopo aver generato i rapporti di tutti gli strumenti"}
+              disabled={actionLoading === "stampa_etichette"}
+              className={`min-w-0 flex-1 rounded-r-none ${rapportiPronti
+                ? "bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
+                : "bg-gray-50 text-gray-500 border-dashed border-gray-300 hover:bg-gray-100"}`}
+              title={rapportiPronti ? "Stampa subito le etichette 50x22mm sulla Brother QL-700 (agente di stampa del banco)" : MSG_ETICHETTE}
             >
-              {actionLoading === "stampa_etichette" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Tag className="w-4 h-4 mr-1" />}
-              Stampa etichette
+              {actionLoading === "stampa_etichette" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : rapportiPronti ? <Tag className="w-4 h-4 mr-1" /> : <Lock className="w-4 h-4 mr-1" />}
+              <span className="truncate">{rapportiPronti ? "Stampa etichette" : "Etichette: prima i rapporti"}</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={openLabelsPdf} disabled={!rapportiPronti}
-              className="rounded-l-none border-l-0 px-2 text-xs bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
-              title={rapportiPronti ? "Apri il PDF delle etichette (stampa dal browser con il formato Genius Lab 50x22)"
-                : "Le etichette si stampano solo dopo aver generato i rapporti di tutti gli strumenti"}>PDF</Button>
+            <Button variant="outline" size="sm" onClick={() => { if (!etichetteBloccate()) openLabelsPdf(); }}
+              className={`rounded-l-none border-l-0 px-2 text-xs ${rapportiPronti
+                ? "bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
+                : "bg-gray-50 text-gray-500 border-dashed border-gray-300 hover:bg-gray-100"}`}
+              title={rapportiPronti ? "Apri il PDF delle etichette (stampa dal browser con il formato Genius Lab 50x22)" : MSG_ETICHETTE}>PDF</Button>
           </div>
           <Button
             variant="outline"
@@ -847,71 +846,31 @@ export default function SessionDetail() {
           </div>
         </Card>
       )}
+      {/* Pro forma già preparato (Christian 02/10/2026): il pulsante verde sta QUI, sotto «Scarica rapporti» e sopra
+          le Azioni, non in fondo alla pagina. Dalla scheda del pro forma si fa «Converti in fattura». */}
+      {pfAperto && (
+        <Button size="lg" className="h-auto min-h-12 w-full justify-center whitespace-normal bg-emerald-600 px-4 py-3 text-base font-semibold text-white hover:bg-emerald-700"
+          onClick={() => router.push(`/proforma?id=${pfAperto.id}`)}>
+          <ExternalLink className="mr-2 size-5 shrink-0" />Apri il pro forma {pfAperto.sigla} e convertilo in fattura
+        </Button>
+      )}
 
-      {/* Info cliente */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-lg">Cliente (chi paga)</h3>
-        </div>
-        <div className="flex justify-end mb-2 gap-2">
-          <EditCustomerDialog
-            customer={customer}
-            onSaved={loadSession}
-          />
-          <ChangeCustomerDialog
-            sessionId={sessionId}
-            currentCustomerId={customer.id}
-            currentCustomerName={customer.company_name}
-            onChanged={loadSession}
-          />
-        </div>
-        <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-sm">
-          <div>
-            <span className="text-gray-500">Ragione sociale:</span>
-            <p className="font-medium">{customer.company_name}</p>
-          </div>
-          <div>
-            <span className="text-gray-500">P.IVA:</span>
-            <p className="font-medium">{customer.vat_number || "N/D"}</p>
-          </div>
-          <div>
-            <span className="text-gray-500">Codice fiscale:</span>
-            <p>{customer.tax_id || "N/D"}</p>
-          </div>
-          <div>
-            <span className="text-gray-500">Codice SDI:</span>
-            <p>{customer.sdi_code || "N/D"}</p>
-          </div>
-          <div>
-            <span className="text-gray-500">PEC:</span>
-            <p>{customer.pec || "N/D"}</p>
-          </div>
-          <div>
-            <span className="text-gray-500">Email:</span>
-            <p>{customer.email || "N/D"}</p>
-          </div>
-          <div>
-            <span className="text-gray-500">Indirizzo:</span>
-            <p>{customer.address || "N/D"}{customer.zip_code ? `, ${customer.zip_code}` : ""} {customer.city || ""}{customer.province ? ` (${customer.province})` : ""}</p>
-          </div>
-          <div>
-            <span className="text-gray-500">Tel. fisso:</span>
-            <p>{customer.phone1 || "N/D"}</p>
-          </div>
-          <div>
-            <span className="text-gray-500">Cellulare:</span>
-            <p>{customer.mobile || "N/D"}</p>
-          </div>
-          <div>
-            <span className="text-gray-500">WhatsApp:</span>
-            <p>{customer.whatsapp_phone || "N/D"}</p>
-          </div>
-          <div>
-            <span className="text-gray-500">Referente:</span>
-            <p>{customer.contact_person || "N/D"}</p>
-          </div>
-        </div>
-      </Card>
+      {/* AZIONI (compatte, 02/10/2026): sopra al cliente e al destinatario del rapporto */}
+      <AzioniSessione
+        sessionId={sessionId}
+        session={session}
+        instruments={instruments}
+        actionLoading={actionLoading}
+        setActionLoading={setActionLoading}
+        handleAction={handleAction}
+        previewLoading={previewLoading}
+        apriAnteprimaProforma={apriAnteprimaProforma}
+        apriDialogProforma={() => { setPfDopo(null); setDialogPf(true); }}
+        currentStep={currentStep}
+      />
+
+      {/* Cliente (chi paga): una riga, dettagli a richiesta */}
+      <ClienteCard sessionId={sessionId} customer={customer} onChanged={loadSession} />
 
       {/* Destinatario diverso (proprietario strumento) */}
       <RecipientPanel
@@ -1003,26 +962,36 @@ export default function SessionDetail() {
       )}
 
       {/* Strumenti (con aggiunta/modifica/cancella) */}
-      <Card className="p-6">
-        <div className="flex justify-between items-center mb-3">
+      <Card className="gap-0 p-3 sm:p-4">
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
           <h3 className="font-semibold text-lg">
             Strumenti ({instruments.length})
           </h3>
-          <div className="flex items-center gap-3">
-            <span className="text-lg font-bold text-blue-600">
-              EUR {parseFloat(session.total_amount || 0).toFixed(2)}
-            </span>
-            {!addingInstrument && (
-              <Button
-                size="sm"
-                onClick={() => setAddingInstrument(true)}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <Plus className="w-4 h-4 mr-1" /> Aggiungi strumento
-              </Button>
-            )}
-          </div>
+          <span className="text-lg font-bold text-blue-600">
+            EUR {parseFloat(session.total_amount || 0).toFixed(2)}
+          </span>
+          {!addingInstrument && (
+            <Button
+              variant="outline"
+              onClick={() => setAddingInstrument(true)}
+              className="ml-auto h-11 border-green-300 bg-green-50 text-green-800 hover:bg-green-100"
+              title="Inserisci lo strumento scrivendo tipo, marca, modello e matricola"
+            >
+              <Plus className="w-4 h-4 mr-1" /> A mano
+            </Button>
+          )}
         </div>
+        {/* ACQUISISCI (02/10/2026): foto dello strumento → riga nella sessione, poi il 2°, il 3°… */}
+        {session.status !== "completata" && (
+          <div className="mb-3">
+            <AcquisisciFoto
+              sessionId={sessionId}
+              nStrumenti={instruments.length}
+              attesaStrumenti={session.status === "attesa_strumenti"}
+              onAggiornato={loadSession}
+            />
+          </div>
+        )}
 
         {/* Form aggiunta strumento */}
         {addingInstrument && (
@@ -1196,8 +1165,8 @@ export default function SessionDetail() {
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-right mr-2">
+                  <div className="flex items-center gap-1 [&>button]:size-11">
+                    <div className="text-right mr-1">
                       <p className="font-medium">EUR {parseFloat(inst.price || 0).toFixed(2)}</p>
                       {inst.rdt_number && (
                         <Badge variant="outline" className="text-xs">
@@ -1253,302 +1222,6 @@ export default function SessionDetail() {
           (instruments || []).filter((i: { rdt_number?: string | null }) => !!i.rdt_number).length].join("|")}
         onAggiornato={loadSession}
       />
-
-      {/* 5 PULSANTI AZIONE */}
-      <Card className="p-6">
-        <h3 className="font-semibold text-lg mb-4">Azioni</h3>
-        {/* Audit P1.13: responsive — 1 col su mobile, 2 su tablet, 3 su desktop */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* PULSANTE 1: Registrazione completata — split Email/WhatsApp + timestamp per canale */}
-          <div className="flex flex-col gap-1">
-            <div className="grid grid-cols-2 gap-1.5">
-              <div className="flex flex-col gap-0.5">
-                <Button
-                  size="lg"
-                  className="h-20 flex flex-col gap-1 bg-sky-600 hover:bg-sky-700"
-                  disabled={actionLoading !== null}
-                  title="Invia SOLO email registrazione (retry indipendente)"
-                  onClick={() => {
-                    if (!confirm("Inviare SOLO l'email di registrazione completata al cliente?")) return;
-                    handleAction("register_email", () => registerComplete(sessionId, "email"),
-                      "Email registrazione completata inviata");
-                  }}
-                >
-                  {actionLoading === "register_email" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Mail className="w-6 h-6" />}
-                  <span className="text-xs leading-tight">REGISTRAZ.<br/>EMAIL</span>
-                </Button>
-                <ActionTimestamp ts={session.receipt_email_at} prefix="📧" />
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <Button
-                  size="lg"
-                  className="h-20 flex flex-col gap-1 bg-emerald-600 hover:bg-emerald-700"
-                  disabled={actionLoading !== null}
-                  title="Invia SOLO template Meta WhatsApp (retry indipendente)"
-                  onClick={() => {
-                    if (!confirm("Inviare SOLO il template WhatsApp di registrazione completata al cliente?")) return;
-                    handleAction("register_wa", () => registerComplete(sessionId, "whatsapp"),
-                      "Template WhatsApp registrazione completata inviato");
-                  }}
-                >
-                  {actionLoading === "register_wa" ? <Loader2 className="w-6 h-6 animate-spin" /> : <MessageCircle className="w-6 h-6" />}
-                  <span className="text-xs leading-tight">REGISTRAZ.<br/>WHATSAPP</span>
-                </Button>
-                <ActionTimestamp ts={session.receipt_whatsapp_at} prefix="💬" />
-              </div>
-            </div>
-          </div>
-
-          {/* PULSANTE 2: Notifica pronti per ritiro — split Email/WhatsApp + timestamp per canale */}
-          <div className="flex flex-col gap-1">
-            <div className="grid grid-cols-2 gap-1.5">
-              <div className="flex flex-col gap-0.5">
-                <Button
-                  size="lg"
-                  className="h-20 flex flex-col gap-1 bg-green-600 hover:bg-green-700"
-                  disabled={actionLoading !== null}
-                  title="Invia SOLO email pronti al ritiro (retry indipendente)"
-                  onClick={() => {
-                    if (!confirm("Inviare SOLO l'email pronti al ritiro al cliente?")) return;
-                    handleAction("ready_email", () => notifyReady(sessionId, "email"),
-                      "Email pronti al ritiro inviata");
-                  }}
-                >
-                  {actionLoading === "ready_email" ? <Loader2 className="w-6 h-6 animate-spin" /> : <Mail className="w-6 h-6" />}
-                  <span className="text-xs leading-tight">PRONTI<br/>EMAIL</span>
-                </Button>
-                <ActionTimestamp ts={session.ready_email_at} prefix="📧" />
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <Button
-                  size="lg"
-                  className="h-20 flex flex-col gap-1 bg-green-700 hover:bg-green-800"
-                  disabled={actionLoading !== null}
-                  title="Invia SOLO template WhatsApp pronti al ritiro (retry indipendente)"
-                  onClick={() => {
-                    if (!confirm("Inviare SOLO il template WhatsApp pronti al ritiro al cliente?")) return;
-                    handleAction("ready_wa", () => notifyReady(sessionId, "whatsapp"),
-                      "Template WhatsApp pronti al ritiro inviato");
-                  }}
-                >
-                  {actionLoading === "ready_wa" ? <Loader2 className="w-6 h-6 animate-spin" /> : <MessageCircle className="w-6 h-6" />}
-                  <span className="text-xs leading-tight">PRONTI<br/>WHATSAPP</span>
-                </Button>
-                <ActionTimestamp ts={session.ready_whatsapp_at} prefix="💬" />
-              </div>
-            </div>
-          </div>
-
-          {/* PULSANTE 3: Pro forma (documento PF n/AAAA) via email / WhatsApp — anteprima, poi conferma → invio.
-               Se il pro forma non c'è ancora si propone di prepararlo (stesse righe della fattura). */}
-          <div className="flex flex-col gap-1">
-            <div className="grid grid-cols-2 gap-1.5">
-              {(["email", "whatsapp"] as const).map((ch) => (
-                <div key={ch} className="flex flex-col gap-0.5">
-                  <Button
-                    size="lg"
-                    className={"h-16 flex flex-col gap-0.5 " + (ch === "email" ? "bg-orange-600 hover:bg-orange-700" : "bg-orange-700 hover:bg-orange-800")}
-                    disabled={actionLoading !== null || previewLoading}
-                    title={`Anteprima del pro forma prima dell'invio ${ch === "email" ? "email (PDF allegato)" : "WhatsApp (link al PDF)"}`}
-                    onClick={() => apriAnteprimaProforma(ch)}
-                  >
-                    {previewLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : ch === "email" ? <Mail className="w-5 h-5" /> : <MessageCircle className="w-5 h-5" />}
-                    <span className="text-xs leading-tight">PROFORMA<br/>{ch === "email" ? "EMAIL" : "WHATSAPP"}</span>
-                  </Button>
-                  <ActionTimestamp ts={ch === "email" ? session.proforma_email_at : session.proforma_whatsapp_at} prefix={ch === "email" ? "📧" : "💬"} />
-                </div>
-              ))}
-            </div>
-            <p className="text-[10px] text-gray-600 leading-tight mt-1">
-              Spedizione:{" "}
-              {session.shipping_by_customer
-                ? "a carico del cliente (0 €)"
-                : session.shipping_included && Number(session.shipping_amount_gross) > 0
-                  ? `${Number(session.shipping_amount_gross).toFixed(2).replace(".", ",")} €`
-                  : "nessuna"}
-              {" · "}
-              <button type="button" className="underline" onClick={() => document.getElementById("spedizioni")?.scrollIntoView({ behavior: "smooth" })}>modifica</button>
-              {" · "}
-              <button type="button" className="underline" onClick={() => { setPfDopo(null); setDialogPf(true); }}>pro forma</button>
-            </p>
-          </div>
-
-          {/* PULSANTE 4: Genera rapporti RDT */}
-          <div className="flex flex-col gap-1">
-            <Button
-              size="lg"
-              className="h-20 flex flex-col gap-1 bg-purple-600 hover:bg-purple-700"
-              disabled={actionLoading !== null}
-              onClick={() =>
-                handleAction("rdts", () => generateRdts(sessionId),
-                  "Rapporti di taratura generati!")
-              }
-            >
-              {actionLoading === "rdts" ? <Loader2 className="w-6 h-6 animate-spin" /> : <FileOutput className="w-6 h-6" />}
-              <span className="text-xs">GENERA RAPPORTI</span>
-            </Button>
-            {/* Ultimo RDT generato: max rdt_generated_at fra gli strumenti della sessione */}
-            <ActionTimestamp ts={
-              (instruments || [])
-                .map((i: { rdt_generated_at?: string | null }) => i.rdt_generated_at || "")
-                .filter((v: string) => !!v)
-                .sort()
-                .pop()
-            } />
-          </div>
-
-          {/* PULSANTE 5: Strumenti riconsegnati — operazione INTERNA staff.
-               Christian 06/05: NESSUNA comunicazione al cliente (ne' WA ne' email).
-               Solo cambio status a 'completata' + creazione voci scadenzario
-               +365gg per ogni strumento. */}
-          <div className="flex flex-col gap-1">
-            <Button
-              size="lg"
-              className="h-20 flex flex-col gap-1 bg-gray-700 hover:bg-gray-800"
-              disabled={actionLoading !== null}
-              onClick={() => {
-                if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati? (operazione interna, nessuna comunicazione al cliente)")) return;
-                handleAction("delivered", () => markDelivered(sessionId),
-                  "Sessione completata! Strumenti riconsegnati.");
-              }}
-            >
-              {actionLoading === "delivered" ? <Loader2 className="w-6 h-6 animate-spin" /> : <PackageCheck className="w-6 h-6" />}
-              <span className="text-xs">STRUMENTI RICONSEGNATI</span>
-            </Button>
-            <ActionTimestamp ts={session.delivered_at} />
-          </div>
-
-          {/* PULSANTE 6: Pagamento — 3 mini-pulsanti SEMPRE visibili.
-               Il metodo attualmente registrato è evidenziato (bordo emerald-700
-               + check); cliccando su uno diverso si modifica la modalità. */}
-          <div className="flex flex-col gap-1">
-            <div className="grid grid-cols-3 gap-1">
-              {([
-                { method: "bonifico", label: "BONIFICO" },
-                { method: "contanti", label: "CONTANTI" },
-                { method: "pos", label: "POS" },
-              ] as const).map(({ method, label }) => {
-                const loadingKey = `mark_paid_${method}`;
-                const isActive = session.payment_status === "pagato" && session.payment_method === method;
-                const isPaid = session.payment_status === "pagato";
-                return (
-                  <Button
-                    key={method}
-                    size="lg"
-                    className={`h-20 flex flex-col gap-0.5 px-1 transition-all ${
-                      isActive
-                        ? "bg-emerald-700 hover:bg-emerald-800 ring-2 ring-emerald-900 ring-offset-1"
-                        : isPaid
-                        ? "bg-emerald-400 hover:bg-emerald-500 opacity-70"
-                        : "bg-emerald-600 hover:bg-emerald-700"
-                    }`}
-                    disabled={actionLoading !== null || isActive}
-                    title={
-                      isActive
-                        ? `Pagato via ${label} (attuale)`
-                        : isPaid
-                        ? `Modificare il metodo a ${label}`
-                        : `Marca come pagato — ${label}`
-                    }
-                    onClick={() => {
-                      const confirmMsg = isPaid
-                        ? `Modificare il metodo di pagamento da "${session.payment_method?.toUpperCase() || "—"}" a "${label}"?`
-                        : `Confermare pagamento ricevuto via ${label}?`;
-                      if (!confirm(confirmMsg)) return;
-                      handleAction(
-                        loadingKey,
-                        () => markSessionPaid(sessionId, { payment_method: method }),
-                        isPaid ? `Metodo aggiornato a ${label}!` : `Pagamento registrato (${label})!`,
-                      );
-                    }}
-                  >
-                    {actionLoading === loadingKey ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Euro className="w-5 h-5" />
-                    )}
-                    <span className="text-[10px] leading-tight font-bold">
-                      {isActive ? `✓ ${label}` : label}
-                    </span>
-                  </Button>
-                );
-              })}
-            </div>
-            <ActionTimestamp ts={session.payment_date} />
-            {/* Stripe Checkout link — round 5 max-power 10/05.
-                Se non ancora pagata, mostra bottone per generare link condivisibile. */}
-            {session.payment_status !== "pagato" && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-1 h-7 text-[11px] border-purple-300 text-purple-700 hover:bg-purple-50"
-                disabled={actionLoading !== null}
-                title="Genera link Stripe Checkout — il cliente paga in 1 click via carta"
-                onClick={async () => {
-                  if (!confirm("Generare un link Stripe Checkout? Il cliente potrà pagare con carta in 1 click. Riceverai notifica Telegram al pagamento.")) return;
-                  setActionLoading("stripe_link");
-                  try {
-                    const r = await fetch(
-                      `/api/backend/api/sessions/${sessionId}/checkout-link`,
-                      { method: "POST" }
-                    );
-                    if (!r.ok) throw new Error(`Backend ${r.status}`);
-                    const data = await r.json();
-                    // Copia URL in clipboard + apri nuova tab + toast persistente
-                    if (data.url) {
-                      try { await navigator.clipboard.writeText(data.url); } catch { /* noop */ }
-                      window.open(data.url, "_blank");
-                      toast.success("Link Stripe generato e copiato in clipboard", {
-                        description: `EUR ${data.amount_eur?.toFixed(2)} — Condividi via WhatsApp/email`,
-                        duration: 10000,
-                      });
-                    } else {
-                      toast.error("Errore: nessun URL ricevuto");
-                    }
-                  } catch (e: unknown) {
-                    toast.error(`Errore generazione link: ${(e as Error).message}`);
-                  } finally {
-                    setActionLoading(null);
-                  }
-                }}
-              >
-                {actionLoading === "stripe_link" ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
-                💳 Genera link Stripe (paga online)
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Timeline stato */}
-        <Separator className="my-4" />
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs text-gray-500">
-          <div className={currentStep >= 1 ? "text-blue-600 font-medium" : ""}>
-            {session.registered_at
-              ? `Registrato: ${new Date(session.registered_at).toLocaleString("it-IT")}`
-              : "Non registrato"}
-          </div>
-          <div className={currentStep >= 2 ? "text-green-600 font-medium" : ""}>
-            {session.ready_at
-              ? `Pronto: ${new Date(session.ready_at).toLocaleString("it-IT")}`
-              : "Non notificato"}
-            {session.pronto_prog_stato === "programmato" && session.pronto_prog_at && (
-              <span className="block text-blue-600">⏰ programmato {new Date(session.pronto_prog_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-            )}
-            {session.pronto_prog_stato === "eseguito" && <span className="block">⏰ inviato in automatico</span>}
-            {session.pronto_prog_stato === "errore" && <span className="block text-red-600">⏰ invio automatico in errore</span>}
-          </div>
-          <div className={currentStep >= 3 ? "text-orange-600 font-medium" : ""}>
-            {session.proforma_sent_at
-              ? `Proforma: ${new Date(session.proforma_sent_at).toLocaleString("it-IT")}`
-              : "Non inviata"}
-          </div>
-          <div className={currentStep >= 4 ? "text-gray-700 font-medium" : ""}>
-            {session.delivered_at
-              ? `Consegnato: ${new Date(session.delivered_at).toLocaleString("it-IT")}`
-              : "Non consegnato"}
-          </div>
-        </div>
-      </Card>
 
       {/* === SPEDIZIONI UPS: ritiro dal cliente e riconsegna === */}
       <div id="spedizioni" className="scroll-mt-4 space-y-4">

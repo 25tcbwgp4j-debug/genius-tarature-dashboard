@@ -95,7 +95,7 @@ export function EditCustomerDialog({ customer, onSaved }: Props) {
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={handleOpen}>
+      <Button variant="outline" className="h-11" onClick={handleOpen}>
         <Pencil className="w-4 h-4 mr-1" /> Modifica cliente
       </Button>
 

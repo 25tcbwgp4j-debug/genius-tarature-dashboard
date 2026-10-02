@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { listSessions, searchLeads, promoteLead, createSession } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Plus, Search, Loader2, ChevronLeft, ChevronRight, FileDown, UserPlus } from "lucide-react";
+import { Plus, Search, Loader2, ChevronLeft, ChevronRight, FileDown, UserPlus, Camera, ClipboardPaste, Images, PackageOpen, Play } from "lucide-react";
 import { ParseCustomerModal } from "../clienti/ParseCustomerModal";
 import {
   Dialog,
@@ -144,11 +144,35 @@ export default function SessionsPage() {
   const [avvisoClone, setAvvisoClone] = useState<{ customerId: string; message: string; sessionId: string } | null>(null);
   const [forzando, setForzando] = useState(false);
 
+  // 02/10/2026 — barra in alto pensata per iPad mini e iPhone: «Nuova sessione», «Ricerca cliente» (inline, con
+  // i risultati sotto al campo) e «Inquadra» / «Incolla immagine» (dalla foto o dall'immagine si trova o si crea
+  // il cliente e la sessione parte subito). Prima si passava da tre schermate.
+  const [q, setQ] = useState("");
+  const [qResults, setQResults] = useState<any[]>([]);
+  const [qSearching, setQSearching] = useState(false);
+  const [imgIniziale, setImgIniziale] = useState<File | null>(null);
+  const [modalMode, setModalMode] = useState<"text" | "image">("text");
+  const camRef = useRef<HTMLInputElement>(null);
+  const [touch, setTouch] = useState(true);
+  useEffect(() => { setTouch(typeof navigator !== "undefined" && navigator.maxTouchPoints > 0); }, []);
+  useEffect(() => {
+    if (q.trim().length < 2) { setQResults([]); return; }
+    let annullato = false;
+    const t = setTimeout(async () => {
+      setQSearching(true);
+      try {
+        const data = await searchLeads(q.trim(), 8);
+        if (!annullato) setQResults(data.results || []);
+      } catch { /* la barra resta vuota */ } finally { if (!annullato) setQSearching(false); }
+    }, 300);
+    return () => { annullato = true; clearTimeout(t); };
+  }, [q]);
+
   // Crea la sessione; se il backend segnala una sessione gia' in attesa strumenti apre il dialogo
   // di avviso e ritorna null (la creazione NON avviene finche' l'operatore non conferma).
-  const creaSessione = async (customerId: string, conferma = false) => {
+  const creaSessione = async (customerId: string, conferma = false, attesa = attesaStrumenti) => {
     try {
-      return await createSession(customerId, undefined, { attesaStrumenti, confermaDuplicato: conferma });
+      return await createSession(customerId, undefined, { attesaStrumenti: attesa, confermaDuplicato: conferma });
     } catch (err: unknown) {
       const e = err as { status?: number; detail?: { code?: string; message?: string; session?: { id?: string } } };
       if (e?.status === 409 && e.detail?.code === "sessione_in_attesa_strumenti" && e.detail.session?.id) {
@@ -196,7 +220,7 @@ export default function SessionsPage() {
     lead_id: string | number;
     source: 'customer' | 'fgas_prospect' | 'cold_lead';
     company_name: string;
-  }) => {
+  }, attesa: boolean = attesaStrumenti) => {
     // Anti-double-submit: se gia' in corso una creazione, ignora i click.
     const key = String(lead.id || lead.lead_id);
     if (creatingFor) return;
@@ -213,9 +237,9 @@ export default function SessionsPage() {
         toast.success(`${lead.company_name} promosso a cliente`);
       }
       if (!customerId) throw new Error("customer_id mancante");
-      const session = await creaSessione(customerId);
+      const session = await creaSessione(customerId, false, attesa);
       if (!session) { setCreatingFor(null); return; }
-      toast.success(attesaStrumenti ? "Sessione creata in ATTESA STRUMENTI" : "Sessione creata!");
+      toast.success(attesa ? "Sessione creata in ATTESA STRUMENTI: il cliente deve ancora portarli" : "Sessione creata!");
       setDialogOpen(false);
       window.location.assign(`/sessioni/${session.id}`);
     } catch (err: unknown) {
@@ -225,13 +249,77 @@ export default function SessionsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="space-y-3">
         <h2 className="text-2xl font-bold">Sessioni taratura</h2>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nuova sessione
-        </Button>
+        {/* Barra di partenza: tutto a portata di dito (≥44 px), niente scorrimento orizzontale */}
+        <Card className="gap-0 p-3">
+          <input ref={camRef} type="file" accept="image/*" capture="environment" hidden
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { setImgIniziale(f); setModalMode("image"); setDialogOpen(false); setNewCustomerOpen(true); } }} />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+            <Button onClick={() => setDialogOpen(true)} className="h-11 shrink-0 px-4 text-sm font-semibold">
+              <Plus className="size-5" /> Nuova sessione
+            </Button>
+            <div className="min-w-0 flex-1">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ricerca cliente: nome, P.IVA…"
+                  className="h-11 pl-9 text-base sm:text-sm" aria-label="Ricerca cliente"
+                  onKeyDown={(e) => { if (e.key === "Enter" && qResults[0]) handleCreateSession(qResults[0]); if (e.key === "Escape") setQ(""); }} />
+                {qSearching && <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-gray-400" />}
+              </div>
+              {q.trim().length >= 2 && !qSearching && (
+                <div className="mt-2 overflow-hidden rounded-lg border bg-white shadow-sm">
+                  {qResults.length === 0 ? (
+                    <div className="flex flex-col gap-2 p-3 text-sm text-gray-600 sm:flex-row sm:items-center">
+                      Nessun cliente trovato.
+                      <Button variant="outline" className="h-11 sm:ml-auto" onClick={() => { setModalMode("text"); setImgIniziale(null); setNewCustomerOpen(true); }}>
+                        <UserPlus className="size-4" /> Crea «{q.trim()}» come nuovo cliente
+                      </Button>
+                    </div>
+                  ) : qResults.map((c: any) => {
+                    const key = String(c.id || c.lead_id);
+                    const inCorso = creatingFor === key;
+                    return (
+                      <div key={`${c.source}-${key}`} className="flex flex-col gap-2 border-b p-2.5 last:border-b-0 sm:flex-row sm:items-center">
+                        <div className="min-w-0 flex-1">
+                          <p className="flex items-center gap-2 truncate font-medium">
+                            {c.company_name}
+                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${c.source === "customer" ? "bg-green-100 text-green-800" : c.source === "fgas_prospect" ? "bg-blue-100 text-blue-800" : "bg-fuchsia-100 text-fuchsia-800"}`}>
+                              {c.source === "customer" ? "In rubrica" : c.source === "fgas_prospect" ? "F-GAS" : "Places"}
+                            </span>
+                          </p>
+                          <p className="truncate text-xs text-gray-500">{c.vat_number ? `P.IVA ${c.vat_number} · ` : ""}{c.city || ""}{c.province ? ` (${c.province})` : ""}</p>
+                        </div>
+                        <div className="grid shrink-0 grid-cols-2 gap-1.5">
+                          <Button className="h-11 bg-emerald-600 text-white hover:bg-emerald-700" disabled={!!creatingFor} onClick={() => handleCreateSession(c, false)}
+                            title="Gli strumenti sono qui: apri la sessione e registrali">
+                            {inCorso ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />} Avvia
+                          </Button>
+                          <Button variant="outline" className="h-11 border-orange-300 text-orange-800 hover:bg-orange-50" disabled={!!creatingFor} onClick={() => handleCreateSession(c, true)}
+                            title="Il cliente deve ancora portare gli strumenti: la sessione nasce in ATTESA STRUMENTI">
+                            <PackageOpen className="size-4" /> In attesa
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="grid shrink-0 grid-cols-2 gap-2">
+              <Button variant="outline" className="h-11 border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100" onClick={() => camRef.current?.click()}
+                title="Fotografa il biglietto da visita, il timbro o la visura: il cliente viene trovato o creato e la sessione parte">
+                <Camera className="size-5" /> {touch ? "Inquadra" : "Foto / file"}
+              </Button>
+              <Button variant="outline" className="h-11 border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100"
+                onClick={() => { setImgIniziale(null); setModalMode("image"); setDialogOpen(false); setNewCustomerOpen(true); }}
+                title="Incolla un'immagine dagli appunti (⌘V) o scegline una dalla galleria">
+                {touch ? <Images className="size-5" /> : <ClipboardPaste className="size-5" />} {touch ? "Dalla galleria" : "Incolla immagine"}
+              </Button>
+            </div>
+          </div>
+        </Card>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -321,7 +409,7 @@ export default function SessionsPage() {
                 variant={customerResults.length === 0 && customerQuery.length >= 2 && !searching ? "default" : "outline"}
                 className="w-full"
                 disabled={!!creatingFor}
-                onClick={() => { setDialogOpen(false); setNewCustomerOpen(true); }}
+                onClick={() => { setDialogOpen(false); setImgIniziale(null); setModalMode("text"); setNewCustomerOpen(true); }}
               >
                 <UserPlus className="w-4 h-4 mr-2" />
                 Crea nuovo cliente (incolla i dati o la foto del biglietto)
@@ -375,9 +463,12 @@ export default function SessionsPage() {
         </Dialog>
         <ParseCustomerModal
           open={newCustomerOpen}
-          onClose={() => setNewCustomerOpen(false)}
+          onClose={() => { setNewCustomerOpen(false); setImgIniziale(null); }}
           onCreated={avviaSessionePer}
           onUpdated={avviaSessionePer}
+          onUseExisting={avviaSessionePer}
+          initialMode={modalMode}
+          initialImage={imgIniziale}
         />
       </div>
 
@@ -613,7 +704,7 @@ export default function SessionsPage() {
                   className="flex flex-1 flex-col gap-1 min-w-0"
                 >
                   {/* Riga 1: cliente + importo + badge stato + badge pagamento */}
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
                     <p className="font-medium truncate">
                       {s.session_number != null && (
                         <span className="mr-2 font-mono text-sm text-gray-500">N. {s.session_number}</span>

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save, Search, Users, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Save, Search, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { searchCustomers, updateSession } from "@/lib/api";
 
@@ -66,6 +66,11 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
     province: session.recipient_province || "",
   });
   const [saving, setSaving] = useState(false);
+  // 02/10/2026: di default una sola riga riassuntiva; il modulo si apre solo cliccando (Christian)
+  const [aperto, setAperto] = useState(false);
+  const riepilogo = session.recipient_different
+    ? `${session.recipient_company_name || "destinatario diverso"}${session.recipient_vat_number ? ` · P.IVA ${session.recipient_vat_number}` : ""}`
+    : `uguale al cliente: ${customer.company_name || "—"}`;
 
   useEffect(() => {
     if (!query || query.length < 2) { setResults([]); return; }
@@ -123,6 +128,7 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
         });
         toast.success("Destinatario riportato a uguale al cliente");
         await onSaved();
+        setAperto(false);
         return;
       }
 
@@ -168,6 +174,7 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
       }
       toast.success("Destinatario salvato. Rigenera gli RDT per applicare ai file Excel.");
       await onSaved();
+      setAperto(false);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Errore salvataggio destinatario";
       toast.error(msg);
@@ -177,23 +184,30 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
   };
 
   return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h3 className="font-semibold text-lg flex items-center gap-2">
-            <Users className="w-5 h-5 text-purple-600" />
-            Destinatario del rapporto di taratura
-          </h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Default: stesso cliente. Spunta se il proprietario degli strumenti e&apos; diverso da chi paga.
-          </p>
-        </div>
-        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+    <Card className="gap-0 p-3 sm:p-4">
+      {/* Riga riassuntiva: sempre visibile. Il modulo sotto si apre con il pulsante. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <Users className="size-4 shrink-0 text-purple-600" />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Destinatario del rapporto</span>
+        <span className={`text-sm ${session.recipient_different ? "font-semibold text-purple-900" : "text-gray-700"}`}>{riepilogo}</span>
+        <button type="button" onClick={() => setAperto((v) => !v)} aria-expanded={aperto}
+          className="ml-auto flex h-11 items-center gap-1 rounded-lg border border-gray-200 px-3 text-xs text-gray-700 hover:bg-gray-50">
+          {aperto ? <>Chiudi <ChevronUp className="size-3.5" /></> : <>{session.recipient_different ? "Modifica" : "Diverso da chi paga?"} <ChevronDown className="size-3.5" /></>}
+        </button>
+      </div>
+
+      {aperto && (
+      <div className="mt-3 space-y-3 border-t pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-gray-500">
+          Default: stesso cliente. Spunta se il proprietario degli strumenti e&apos; diverso da chi paga.
+        </p>
+        <label className="inline-flex h-9 cursor-pointer select-none items-center gap-2">
           <input
             type="checkbox"
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+            className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
           />
           <span className="text-sm font-medium text-gray-700">Destinatario diverso</span>
         </label>
@@ -362,12 +376,14 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
         </div>
       )}
 
-      <div className="flex justify-end mt-4">
-        <Button onClick={save} disabled={saving} size="sm">
+      <div className="flex justify-end">
+        <Button onClick={save} disabled={saving} className="h-11">
           {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
           Salva destinatario
         </Button>
       </div>
+      </div>
+      )}
     </Card>
   );
 }

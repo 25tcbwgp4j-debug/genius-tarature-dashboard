@@ -155,6 +155,24 @@ export async function strumentiArrivati(sessionId: string) {
   return fetchAPI(`/api/sessions/${sessionId}/strumenti-arrivati`, { method: 'POST' });
 }
 
+/** «Acquisisci» (02/10/2026): foto di uno strumento (fotocamera iPad/iPhone o immagine incollata) → riga nella
+ *  sessione, con lo stesso motore delle foto WhatsApp (fronte/retro uniti, niente doppioni sulla matricola).
+ *  esito: nuovo | unito | doppione | illeggibile. Se la sessione era in attesa strumenti passa in registrazione. */
+export interface EsitoAcquisizione {
+  esito: 'nuovo' | 'unito' | 'doppione' | 'illeggibile';
+  strumento: { id: string; instrument_name?: string; manufacturer?: string; model?: string; serial_number?: string | null;
+    probe_model?: string | null; price?: number } | null;
+  descrizione: string | null;
+  n_strumenti?: number;
+  totale?: number;
+}
+export async function acquisisciStrumentoDaFoto(sessionId: string, imageDataUrl: string): Promise<EsitoAcquisizione> {
+  return fetchAPI(`/api/sessions/${sessionId}/instruments/da-foto`, {
+    method: 'POST',
+    body: JSON.stringify({ image_base64: imageDataUrl }),
+  });
+}
+
 /** Riporta in ATTESA STRUMENTI una sessione in registrazione senza ricevuta inviata. */
 export async function mettiInAttesaStrumenti(sessionId: string) {
   return fetchAPI(`/api/sessions/${sessionId}/attesa-strumenti`, { method: 'POST' });

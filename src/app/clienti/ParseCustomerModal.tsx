@@ -13,6 +13,12 @@ interface Props {
   onClose: () => void;
   onCreated?: (customerId: string) => void;
   onUpdated?: (customerId: string) => void;
+  /** 02/10/2026 — dalla pagina Sessioni: si apre già sulla scheda Immagine («Incolla immagine»)… */
+  initialMode?: "text" | "image";
+  /** …oppure con la foto appena scattata con «Inquadra» (iPad/iPhone): si legge da sola. */
+  initialImage?: File | Blob | null;
+  /** Cliente già in rubrica: «Usa questo cliente» (es. avvia subito la sessione) senza dover aggiornare campi. */
+  onUseExisting?: (customerId: string) => void;
 }
 
 interface ParsedFields {
@@ -67,8 +73,10 @@ const STATUS_LABEL: Record<DiffStatus, string> = {
   conflict: "Diverso",
 };
 
-export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Props) {
-  const [mode, setMode] = useState<"text" | "image">("text");
+export function ParseCustomerModal({ open, onClose, onCreated, onUpdated, initialMode, initialImage, onUseExisting }: Props) {
+  const [mode, setMode] = useState<"text" | "image">(initialMode || "text");
+  // foto arrivata da «Inquadra»: appena caricata parte da sola l'estrazione
+  const [autoParse, setAutoParse] = useState(false);
   const [text, setText] = useState("");
   const [imageB64, setImageB64] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -114,7 +122,12 @@ export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Prop
     reader.readAsDataURL(file);
   };
 
-  if (!open) return null;
+  // Apertura dalla pagina Sessioni: scheda Immagine e, se c'è, la foto appena scattata
+  useEffect(() => {
+    if (!open) return;
+    setMode(initialImage ? "image" : initialMode || "text");
+    if (initialImage) { loadImageFile(initialImage); setAutoParse(true); }
+  }, [open, initialImage, initialMode]);
 
   const handleParse = async () => {
     if (mode === "text" && !text.trim()) { toast.error("Incolla prima i dati"); return; }
@@ -143,6 +156,13 @@ export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Prop
       toast.error(e instanceof Error ? e.message : "Errore estrazione");
     } finally { setParsing(false); }
   };
+
+  // la foto di «Inquadra» si legge appena è pronta in base64
+  useEffect(() => {
+    if (open && autoParse && imageB64 && mode === "image") { setAutoParse(false); handleParse(); }
+  }, [open, autoParse, imageB64, mode]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!open) return null;
 
   const handleCreateNew = async () => {
     if (!fields?.company_name) { toast.error("Ragione sociale obbligatoria"); return; }
@@ -207,27 +227,6 @@ export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Prop
     onClose();
   };
 
-  const handleCreateFromImage = async () => {
-    if (!imageB64 || !fields?.company_name) {
-      toast.error("Ragione sociale obbligatoria"); return;
-    }
-    setSaving(true);
-    try {
-      const res = await parseCustomerImage(imageB64, true);
-      if (res.duplicate) {
-        toast.warning(`Non salvato: duplicato su ${res.duplicate.company_name}`);
-      } else if (res.created?.id) {
-        toast.success(`Cliente creato: ${res.created.company_name}`);
-        onCreated?.(res.created.id);
-        handleClose();
-      } else {
-        toast.error("Creazione fallita");
-      }
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Errore salvataggio");
-    } finally { setSaving(false); }
-  };
-
   const updateField = (k: keyof ParsedFields, v: string) => {
     setFields({ ...fields, [k]: v });
   };
@@ -246,20 +245,20 @@ export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Prop
   const selectedCount = Object.values(selection).filter(Boolean).length;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <Card className="bg-white max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
-        <div className="flex items-center justify-between">
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-2 sm:p-4">
+      <Card className="bg-white max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4">
+        <div className="flex items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-bold flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-600" />
-              Nuovo cliente da testo incollato
+              Cliente da testo o foto
             </h2>
             <p className="text-xs text-gray-500 mt-1">
-              Incolla firma email, visura, biglietto da visita: l&apos;AI estrae i campi automaticamente.
+              Firma email, visura, biglietto da visita, timbro: l&apos;AI legge i dati, trova il cliente se c&apos;è già oppure lo crea.
             </p>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleClose}>
-            <X className="w-4 h-4" />
+          <Button variant="ghost" size="icon-lg" onClick={handleClose} className="size-11 shrink-0">
+            <X className="w-5 h-5" />
           </Button>
         </div>
 
@@ -399,8 +398,8 @@ export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Prop
                 </div>
               </div>
 
-              <div className="border rounded overflow-hidden text-sm">
-                <table className="w-full">
+              <div className="border rounded overflow-x-auto text-sm">
+                <table className="w-full min-w-[560px]">
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="text-left px-2 py-2 w-8"></th>
@@ -455,19 +454,27 @@ export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Prop
               </div>
             </div>
 
-            <div className="flex justify-between items-center pt-2 border-t">
+            <div className="flex flex-col gap-2 pt-2 border-t sm:flex-row sm:items-center sm:justify-between">
               <div className="text-xs text-gray-500">
                 {selectedCount} {selectedCount === 1 ? "campo selezionato" : "campi selezionati"} per l&apos;aggiornamento
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={handleClose}>Annulla</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" className="h-11" onClick={handleClose}>Annulla</Button>
+                {onUseExisting && (
+                  <Button className="h-11 bg-blue-600 hover:bg-blue-700" disabled={saving}
+                    title="Non aggiorna nulla: usa il cliente già in rubrica e prosegue (es. apre la sessione)"
+                    onClick={() => { const id = duplicate.id; handleClose(); onUseExisting(id); }}>
+                    <Check className="w-4 h-4 mr-1" /> Usa questo cliente → sessione
+                  </Button>
+                )}
                 <Button
                   onClick={handleApplyUpdate}
                   disabled={saving || selectedCount === 0}
-                  className="bg-emerald-600 hover:bg-emerald-700"
+                  className="h-11 bg-emerald-600 hover:bg-emerald-700"
+                  title={onUseExisting ? "Aggiorna i campi selezionati e prosegue con la sessione" : undefined}
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <GitMerge className="w-4 h-4 mr-1" />}
-                  Applica aggiornamento
+                  {onUseExisting ? "Aggiorna e avvia sessione" : "Applica aggiornamento"}
                 </Button>
               </div>
             </div>
@@ -491,13 +498,16 @@ export function ParseCustomerModal({ open, onClose, onCreated, onUpdated }: Prop
               ))}
             </div>
             <div className="flex justify-end gap-2 mt-4">
-              <Button variant="outline" onClick={handleClose}>Annulla</Button>
+              <Button variant="outline" className="h-11" onClick={handleClose}>Annulla</Button>
               <Button
-                onClick={mode === "image" ? handleCreateFromImage : handleCreateNew}
+                className="h-11"
+                // anche dalla foto si salva dai campi a video (così valgono le correzioni fatte a mano,
+                // e non si rilegge l'immagine una seconda volta)
+                onClick={handleCreateNew}
                 disabled={saving || !fields.company_name}
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
-                Salva nuovo cliente
+                {onUseExisting ? "Salva cliente e avvia sessione" : "Salva nuovo cliente"}
               </Button>
             </div>
           </div>

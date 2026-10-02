@@ -201,11 +201,13 @@ export function FatturaPanel({ sessionId, aggiorna = 0, onCambio }: { sessionId:
             Qui si prepara solo la <b>bozza</b>{pfAperto ? <> (nasce dal pro forma <b>{pfAperto.sigla}</b>)</> : null}: pagamento, operatore ed emissione allo SdI
             si fanno in Fatturazione, dove ti porto da solo. Il pro forma si manda con PROFORMA EMAIL / WHATSAPP qui sopra.
           </p>
+          {/* Il pulsante verde «Apri il pro forma e convertilo in fattura» sta in ALTO nella scheda sessione
+              (sotto «Scarica rapporti», sopra le Azioni) dal 02/10/2026: qui resta solo il richiamo. */}
           {pfAperto && (
-            // Christian 02/10/2026: col pro forma già fatto si va al pro forma (da lì «Converti in fattura»)
-            <Button size="lg" className="h-auto w-full justify-center bg-emerald-600 py-3 text-base font-semibold text-white hover:bg-emerald-700"
+            <button type="button" className="text-left text-sm text-emerald-700 underline underline-offset-2"
               onClick={() => router.push(`/proforma?id=${pfAperto.id}`)}>
-              <ExternalLink className="mr-2 size-5" />Apri il pro forma {pfAperto.sigla} e convertilo in fattura</Button>
+              Pro forma {pfAperto.sigla} pronto: aprilo e convertilo in fattura (pulsante verde in alto)
+            </button>
           )}
           <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
           <div className="flex flex-wrap gap-2">
