@@ -20,7 +20,9 @@ export interface Scheda extends SchedaBreve {
   lavorazione: string | null; esito: string | null; ricambi: string | null; pagamento_modo: string | null; operatore_accettazione: string | null;
   scontrino_id: string | null; fattura_id: string | null; documento_id: string | null; numero_interno: string | null; token_pubblico: string;
   eventi: Evento[]; preventivi: { id: string; tipo: string; testo: string; totale: number; inviato_a: string | null; inviato_il: string | null; operatore: string | null; created_at: string }[];
-  spedizioni: { id: string; direction: string; tracking: string; pickup_prn: string | null; test_mode: boolean; tracking_url: string | null; created_at: string; pickup_error: string | null }[];
+  spedizioni: { id: string; carrier: "UPS" | "DHL" | null; direction: string; tracking: string; pickup_prn: string | null; pickup_date: string | null;
+    pickup_location: "cliente" | "lab" | null; status: string | null; test_mode: boolean; tracking_url: string | null; created_at: string; pickup_error: string | null;
+    cost: number | null }[];
   precedente: { id: string; sigla: string } | null; successiva: { id: string; sigla: string } | null;
   collegamenti: { scontrino?: { id: string; stato: string; totale: number } | null; fattura?: { id: string; numero: string | null; stato: string; totale: number } | null;
     documento?: { id: string; sigla: string; stato: string; totale: number } | null };

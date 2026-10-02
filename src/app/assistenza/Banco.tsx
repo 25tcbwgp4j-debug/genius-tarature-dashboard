@@ -2,7 +2,7 @@
 
 // BANCO ASSISTENZA — come la schermata «SCHEDA ASSISTENZA» di FileMaker: elenco a sinistra, la scheda intera a destra,
 // pulsantiera delle fasi in alto (RICEVUTA · PREVENTIVO · AGGIORNAMENTO · ACCETTATO/RIFIUTATO · PRONTO · PAGATO · CONSEGNA),
-// stampa (A4 del banco + etichetta Brother), «Stesso modello», decodifica seriale, spedizione UPS e vendita collegata.
+// stampa (A4 del banco + etichetta Brother), «Stesso modello», decodifica seriale, spedizioni UPS/DHL (ritiro dal cliente · spedizione con ritiro da noi) e vendita collegata.
 // Tastiera: F2 o Alt+N nuova scheda · «/» cerca · Alt+← / Alt+→ scheda precedente/successiva · Ctrl/Cmd+S salva · Esc chiude.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -311,6 +311,7 @@ function SchedaView({ id, operatore, setOperatore, admin, onApri, onCambiata }: 
   const [b, setB] = useState<Bozza>({});
   const [busy, setBusy] = useState("");
   const [dialogo, setDialogo] = useState<null | "mail" | "pronto" | "spedizione" | "stesso" | "consegna" | "esito">(null);
+  const [dirSped, setDirSped] = useState<"ritiro" | "riconsegna">("riconsegna");
   const [mailTipo, setMailTipo] = useState("preventivo");
   const [mostraPw, setMostraPw] = useState(false);
   const [ser, setSer] = useState<Seriale | null>(null);
@@ -421,7 +422,8 @@ function SchedaView({ id, operatore, setOperatore, admin, onApri, onCambiata }: 
           <Button size="sm" variant="outline" disabled={!!busy} onClick={() => azione("pagamento", {}, "Pagamento registrato")}>PAGATO</Button>
           <Button size="sm" variant={st === "pronto" ? "default" : "outline"} disabled={!!busy || st === "consegnato"} onClick={() => setDialogo("consegna")}>CONSEGNA</Button>
           <span className="mx-1 w-px bg-border" />
-          <Button size="sm" variant="outline" onClick={() => setDialogo("spedizione")}><Truck className="mr-1" />UPS</Button>
+          <Button size="sm" variant="outline" title="Etichetta di ritorno + corriere prenotato dal cliente (UPS o DHL)" onClick={() => { setDirSped("ritiro"); setDialogo("spedizione"); }}><Truck className="mr-1" />RITIRO CORRIERE</Button>
+          <Button size="sm" variant="outline" title="Spedizione al cliente + corriere prenotato da noi in Viale Somalia (UPS o DHL)" onClick={() => { setDirSped("riconsegna"); setDialogo("spedizione"); }}><Truck className="mr-1" />SPEDISCI</Button>
           <Button size="sm" variant="outline" onClick={() => vendi("scontrino")} title="Apre la cassa con le righe della scheda"><ShoppingCart className="mr-1" />Scontrino</Button>
           <Button size="sm" variant="outline" disabled={!!s.fattura_id || !!busy} onClick={() => vendi("fattura")}><FileText className="mr-1" />Fattura</Button>
           <Button size="sm" variant="outline" disabled={!!s.documento_id || !!busy} onClick={() => vendi("ordine")}>Ordine</Button>
@@ -532,8 +534,7 @@ function SchedaView({ id, operatore, setOperatore, admin, onApri, onCambiata }: 
             {s.collegamenti?.scontrino && <div>Scontrino: {eur(s.collegamenti.scontrino.totale)} ({s.collegamenti.scontrino.stato})</div>}
             {s.collegamenti?.fattura && <div>Fattura: <Link className="underline" href={`/fatturazione?id=${s.collegamenti.fattura.id}`}>{s.collegamenti.fattura.numero || "bozza"}</Link> {eur(s.collegamenti.fattura.totale)} ({s.collegamenti.fattura.stato})</div>}
             {s.collegamenti?.documento && <div>Ordine: <Link className="underline" href={`/ordini?id=${s.collegamenti.documento.id}`}>{s.collegamenti.documento.sigla}</Link> ({s.collegamenti.documento.stato})</div>}
-            {s.spedizioni.map((x) => <div key={x.id}>UPS {x.direction}{x.test_mode ? " (prova)" : ""}: {x.tracking_url ? <a className="underline" href={x.tracking_url} target="_blank" rel="noreferrer">{x.tracking}</a> : x.tracking}
-              {x.pickup_prn ? ` · ritiro ${x.pickup_prn}` : ""} · <a className="underline" href={`/api/backend/api/shipments/${x.id}/label-pdf`} target="_blank" rel="noreferrer">etichetta</a></div>)}
+            {s.spedizioni.map((x) => <RigaSpedizione key={x.id} s={s} x={x} ro={ro} operatore={operatore} onCambiata={ricarica} />)}
           </div>
         </Card>
         <Card className="max-h-72 overflow-y-auto p-3">
@@ -572,7 +573,7 @@ function SchedaView({ id, operatore, setOperatore, admin, onApri, onCambiata }: 
         </div>
         <p className="mt-2 text-xs text-muted-foreground">Per incassare: «Scontrino», «Fattura» oppure «Ordine» dalla pulsantiera (prima o dopo la consegna).</p>
       </Modale>}
-      {dialogo === "spedizione" && <DialogoSpedizione s={s} operatore={operatore} onClose={() => setDialogo(null)} onFatta={() => { setDialogo(null); ricarica(); onCambiata(); }} />}
+      {dialogo === "spedizione" && <DialogoSpedizione s={s} iniziale={dirSped} operatore={operatore} onClose={() => setDialogo(null)} onFatta={() => { setDialogo(null); ricarica(); onCambiata(); }} />}
       {dialogo === "stesso" && <DialogoStessoModello s={s} ro={ro} onClose={() => setDialogo(null)} onApri={onApri}
         onCopia={(r) => { set("preventivo_righe", r); setDialogo(null); toast.success("Preventivo copiato nelle righe: controlla i prezzi sul GSX e salva"); }} />}
     </div>
@@ -759,27 +760,86 @@ function DialogoPronto({ s, bozzaLav, totale, busy, onClose, onInvia }: {
   );
 }
 
-function DialogoSpedizione({ s, operatore, onClose, onFatta }: { s: Scheda; operatore: string; onClose: () => void; onFatta: () => void }) {
-  const [dir, setDir] = useState<"riconsegna" | "ritiro">(s.stato === "in_arrivo" ? "ritiro" : "riconsegna");
-  const [ind, setInd] = useState<Record<string, string>>({});
-  const [ante, setAnte] = useState<{ indirizzo: Record<string, string>; mancanti: string[]; indirizzo_libero: string | null; oggetto: string; corpo: string; prova: boolean; email: string | null } | null>(null);
-  const [giorno, setGiorno] = useState("");
-  const [prova, setProva] = useState(true);
+type Spedizione = Scheda["spedizioni"][number];
+
+function RigaSpedizione({ s, x, ro, operatore, onCambiata }: { s: Scheda; x: Spedizione; ro: boolean; operatore: string; onCambiata: () => void }) {
   const [busy, setBusy] = useState(false);
-  const chiave = JSON.stringify({ dir, ind });
-  useEffect(() => {
-    const t = setTimeout(() => assAzione(s.id, "spedizione/anteprima", { direzione: dir, indirizzo: JSON.parse(chiave).ind, giorno_ritiro: giorno })
-      .then((a) => { setAnte(a); }).catch(toastErrore), 300);
-    return () => clearTimeout(t);
-  }, [s.id, chiave, dir, giorno]);
-  async function crea() {
-    if (!operatore) { toast.error("Scegli l'operatore"); return; }
-    if (!prova && !confirm(`Creare l'etichetta UPS VERA (costo sul conto UPS)${dir === "ritiro" && giorno ? " e prenotare il corriere" : ""}?`)) return;
+  const annullata = x.status === "annullata";
+  const cor = x.carrier || "UPS";
+  async function annulla() {
+    if (!confirm(`Annullare la spedizione ${cor} ${x.tracking}${x.pickup_prn ? ` e il ritiro ${x.pickup_prn}` : ""}${x.test_mode ? " (prova)" : ""}?`)) return;
     setBusy(true);
     try {
-      const r = await assAzione(s.id, "spedizione", { operatore, direzione: dir, indirizzo: ind, giorno_ritiro: giorno || undefined, test: prova });
-      toast.success(`UPS ${r.test ? "(PROVA) " : ""}${r.tracking}${r.prn ? ` · ritiro ${r.prn}` : ""}${r.pickup_error ? ` · ERRORE ritiro: ${r.pickup_error}` : ""}`, { duration: 9000 });
-      window.open(`/api/backend${r.label_url}`, "_blank");
+      const r = await assAzione(s.id, `spedizioni/${x.id}/annulla`, { operatore });
+      toast.success(`${cor}: ritiro ${r.pickup ?? "—"} · etichetta ${r.void ?? "—"}`);
+      onCambiata();
+    } catch (e) { toastErrore(e); } finally { setBusy(false); }
+  }
+  async function stampa() {
+    setBusy(true);
+    try {
+      const r = await assAzione(s.id, `spedizioni/${x.id}/stampa`, {});
+      if (r.agente_attivo) toast.success(`Etichetta in stampa (${r.copie} copie)`);
+      else { toast.warning("Agente di stampa non attivo: apro il PDF"); window.open(`/api/backend/api/shipments/${x.id}/label-pdf`, "_blank"); }
+    } catch (e) { toastErrore(e); } finally { setBusy(false); }
+  }
+  return (
+    <div className={annullata ? "text-muted-foreground line-through" : ""}>
+      <b>{cor}</b> {x.direction === "ritiro" ? "ritiro dal cliente" : "spedizione al cliente"}{x.test_mode ? " (prova)" : ""}:{" "}
+      {x.tracking_url ? <a className="underline" href={x.tracking_url} target="_blank" rel="noreferrer">{x.tracking}</a> : x.tracking}
+      {x.pickup_prn ? ` · ritiro ${x.pickup_prn}${x.pickup_date ? ` il ${x.pickup_date.split("-").reverse().join("/")}` : ""}${x.pickup_location === "lab" ? " da noi" : ""}` : ""}
+      {x.pickup_error ? <span className="text-red-700"> · ERRORE ritiro: {x.pickup_error}</span> : null}
+      {" · "}<a className="underline" href={`/api/backend/api/shipments/${x.id}/label-pdf`} target="_blank" rel="noreferrer">etichetta</a>
+      {!annullata && !ro && <>
+        {" · "}<button className="underline disabled:opacity-50" disabled={busy} onClick={stampa}>stampa</button>
+        {" · "}<button className="text-red-700 underline disabled:opacity-50" disabled={busy} onClick={annulla}>annulla</button>
+      </>}
+      {annullata && " (annullata)"}
+    </div>
+  );
+}
+
+type AnteSped = {
+  indirizzo: Record<string, string>; mancanti: string[]; indirizzo_libero: string | null; oggetto: string; corpo: string; prova: boolean; email: string | null;
+  corriere: "UPS" | "DHL"; prenota: boolean; giorno_ritiro: string | null; ritiro_presso: string | null; test: boolean; dhl_produzione: boolean; dhl_configurato: boolean;
+};
+
+function DialogoSpedizione({ s, iniziale, operatore, onClose, onFatta }: { s: Scheda; iniziale: "ritiro" | "riconsegna"; operatore: string; onClose: () => void; onFatta: () => void }) {
+  const [dir, setDir] = useState<"riconsegna" | "ritiro">(iniziale);
+  const [corriere, setCorriere] = useState<"UPS" | "DHL">("UPS");
+  const [ind, setInd] = useState<Record<string, string>>({});
+  const [ante, setAnte] = useState<AnteSped | null>(null);
+  const [giorno, setGiorno] = useState("");
+  // riconsegna: ritiro da noi in Viale Somalia — DHL sì di default, UPS no (passa già ogni pomeriggio alle 16:30)
+  const [daNoi, setDaNoi] = useState<boolean | null>(null);
+  const prenotaDaNoi = daNoi ?? corriere === "DHL";
+  const [prova, setProva] = useState(true);
+  const [stampa, setStampa] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const chiave = JSON.stringify({ dir, ind, corriere, giorno, prenotaDaNoi });
+  useEffect(() => {
+    const k = JSON.parse(chiave);
+    const t = setTimeout(() => assAzione(s.id, "spedizione/anteprima", {
+      corriere: k.corriere, direzione: k.dir, indirizzo: k.ind, giorno_ritiro: k.giorno || undefined, prenota: k.dir === "riconsegna" ? k.prenotaDaNoi : undefined,
+    }).then((a) => { setAnte(a); }).catch(toastErrore), 300);
+    return () => clearTimeout(t);
+  }, [s.id, chiave]);
+  const provaForzata = !!ante?.prova;
+  const inProva = prova || provaForzata;
+  const dhlBloccato = corriere === "DHL" && !inProva && !ante?.dhl_produzione;
+  async function crea() {
+    if (!operatore) { toast.error("Scegli l'operatore"); return; }
+    const conRitiro = dir === "ritiro" ? !!giorno : prenotaDaNoi;
+    if (!inProva && !confirm(`Creare l'etichetta ${corriere} VERA (costo sul conto ${corriere})${conRitiro ? " e prenotare il corriere" : ""}?`)) return;
+    setBusy(true);
+    try {
+      const r = await assAzione(s.id, "spedizione", {
+        operatore, corriere, direzione: dir, indirizzo: ind, giorno_ritiro: giorno || undefined, test: inProva,
+        prenota: dir === "riconsegna" ? prenotaDaNoi : undefined, stampa: inProva ? false : stampa,
+      });
+      toast.success(`${r.corriere} ${r.test ? "(PROVA) " : ""}${r.tracking}${r.prn ? ` · ritiro ${r.prn}` : ""}${r.pickup_error ? ` · ERRORE ritiro: ${r.pickup_error}` : ""}`
+        + (r.esito?.mail ? ` · mail ${r.esito.mail}` : "") + (r.stampa ? (r.stampa.agente_attivo ? " · in stampa" : " · agente di stampa spento") : ""), { duration: 10000 });
+      if (!r.stampa || !r.stampa.agente_attivo) window.open(`/api/backend${r.label_url}`, "_blank");
       onFatta();
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
@@ -787,27 +847,49 @@ function DialogoSpedizione({ s, operatore, onClose, onFatta }: { s: Scheda; oper
   const C = (k: string, l: string) => <label className="block"><span className={etich}>{l}</span>
     <input className={campo} value={ind[k] ?? a[k] ?? ""} onChange={(e) => setInd({ ...ind, [k]: e.target.value })} /></label>;
   return (
-    <Modale titolo={`Spedizione UPS — scheda ${s.sigla}`} onClose={onClose} largo>
+    <Modale titolo={`${dir === "ritiro" ? "Ritiro con corriere dal cliente" : "Spedizione al cliente"} — scheda ${s.sigla}`} onClose={onClose} largo>
       <div className="space-y-2">
-        <div className="flex gap-2">
-          <Button size="sm" variant={dir === "riconsegna" ? "default" : "outline"} onClick={() => setDir("riconsegna")}>Riconsegna al cliente (UPS passa alle 16:30)</Button>
-          <Button size="sm" variant={dir === "ritiro" ? "default" : "outline"} onClick={() => setDir("ritiro")}>Ritiro dal cliente</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant={dir === "ritiro" ? "default" : "outline"} onClick={() => setDir("ritiro")}>Ritiro dal cliente (verso di noi)</Button>
+          <Button size="sm" variant={dir === "riconsegna" ? "default" : "outline"} onClick={() => setDir("riconsegna")}>Spedizione al cliente (da noi)</Button>
+          <span className="mx-1 w-px bg-border" />
+          {(["UPS", "DHL"] as const).map((c) => <Button key={c} size="sm" variant={corriere === c ? "default" : "outline"} onClick={() => { setCorriere(c); setDaNoi(null); }}>{c}</Button>)}
         </div>
         {ante?.indirizzo_libero && <div className="text-xs text-muted-foreground">Indicazioni sulla scheda: {ante.indirizzo_libero}</div>}
-        <div className="grid gap-2 md:grid-cols-3">{C("name", "Ragione sociale")}{C("attention", "Alla c.a.")}{C("phone", "Telefono")}
+        <div className="grid gap-2 md:grid-cols-3">{C("name", "Ragione sociale / nome")}{C("attention", "Alla c.a.")}{C("phone", "Telefono")}
           {C("street", "Indirizzo")}{C("city", "Città")}<div className="grid grid-cols-2 gap-2">{C("zip", "CAP")}{C("province", "Prov.")}</div></div>
-        {dir === "ritiro" && <label className="block w-48"><span className={etich}>Giorno del ritiro (vuoto = senza prenotazione)</span>
-          <input type="date" className={campo} value={giorno} onChange={(e) => setGiorno(e.target.value)} /></label>}
+        {dir === "ritiro" ? (
+          <label className="block w-64"><span className={etich}>Giorno del ritiro dal cliente (vuoto = senza prenotazione, porta il pacco a un punto {corriere})</span>
+            <input type="date" className={campo} value={giorno} onChange={(e) => setGiorno(e.target.value)} /></label>
+        ) : (
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={prenotaDaNoi} onChange={(e) => setDaNoi(e.target.checked)} />
+              Prenota il ritiro del corriere da noi (Viale Somalia 244/246/248){corriere === "UPS" ? " — UPS passa comunque ogni giorno alle 16:30" : ""}</label>
+            {prenotaDaNoi && <label className="block w-44"><span className={etich}>Giorno (vuoto = oggi/prossimo feriale)</span>
+              <input type="date" className={campo} value={giorno} onChange={(e) => setGiorno(e.target.value)} /></label>}
+          </div>
+        )}
         {ante?.mancanti.length ? <div className="text-sm text-red-700">Mancano: {ante.mancanti.join(", ")}</div> : null}
-        {ante && <div className="rounded border bg-muted/30 p-2 text-xs">{ante.prova && <div className="font-semibold text-amber-800">PROVA: mail solo a {ante.email}</div>}
+        {corriere === "DHL" && ante && !ante.dhl_configurato && <div className="text-sm text-red-700">DHL non configurato sul server.</div>}
+        {dhlBloccato && <div className="text-sm text-amber-800">DHL produzione non ancora attiva sul server: per ora solo in prova (sandpit).</div>}
+        {ante && <div className="rounded border bg-muted/30 p-2 text-xs">
+          {ante.prova && <div className="font-semibold text-amber-800">SCHEDA IN PROVA: corriere sempre in ambiente di prova, mail solo a {ante.email}, nessun WhatsApp</div>}
+          {ante.prenota && <div>Ritiro {corriere} prenotato {ante.ritiro_presso === "cliente" ? "dal cliente" : `da noi (${ante.ritiro_presso})`}{ante.giorno_ritiro ? ` il ${ante.giorno_ritiro.split("-").reverse().join("/")}` : ""}</div>}
           <b>{ante.oggetto}</b><pre className="whitespace-pre-wrap font-sans">{ante.corpo}</pre></div>}
-        <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={prova} onChange={(e) => setProva(e.target.checked)} />Ambiente di PROVA UPS (nessun costo, nessun corriere, nessuna mail)</label>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={inProva} disabled={provaForzata} onChange={(e) => setProva(e.target.checked)} />
+            Ambiente di PROVA {corriere} (nessun costo, nessun corriere{provaForzata ? "" : ", nessuna mail"})</label>
+          {!inProva && <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={stampa} onChange={(e) => setStampa(e.target.checked)} />
+            Stampa l&apos;etichetta al banco ({dir === "ritiro" ? "1 copia" : "2 copie"})</label>}
+        </div>
         <div className="flex justify-end gap-2"><Button variant="outline" onClick={onClose}>Annulla</Button>
-          <Button disabled={busy || !!ante?.mancanti.length} onClick={crea}>{busy ? <Loader2 className="mr-1 animate-spin" /> : <Truck className="mr-1" />}Crea etichetta{prova ? " (prova)" : ""}</Button></div>
+          <Button disabled={busy || !!ante?.mancanti.length || dhlBloccato || (corriere === "DHL" && !!ante && !ante.dhl_configurato)} onClick={crea}>
+            {busy ? <Loader2 className="mr-1 animate-spin" /> : <Truck className="mr-1" />}Crea etichetta {corriere}{inProva ? " (prova)" : ""}</Button></div>
       </div>
     </Modale>
   );
 }
+
 
 function DialogoStessoModello({ s, ro, onClose, onApri, onCopia }: { s: Scheda; ro: boolean; onClose: () => void; onApri: (id: string) => void; onCopia: (r: EstimateLine[]) => void }) {
   const [r, setR] = useState<{ criterio: string; schede: (SchedaBreve & { preventivo_testo: string | null })[] } | null>(null);
