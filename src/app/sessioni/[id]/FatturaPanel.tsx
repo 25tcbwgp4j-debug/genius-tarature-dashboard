@@ -201,7 +201,7 @@ export function FatturaPanel({ sessionId, aggiorna = 0, onCambio }: { sessionId:
             <div><dt className="inline text-muted-foreground">SdI: </dt><dd className={`inline ${["scartata", "errore"].includes(f.stato) ? "font-semibold text-red-600" : ""}`}>{STATO_SDI[f.stato] || f.stato}</dd></div>
             <div><dt className="inline text-muted-foreground">Termine: </dt><dd className="inline">
               {st?.pagamento.modalita_label || "—"} · {st?.pagamento.termine === "differito" ? "differito concordato" : "immediato"}
-              {st?.pagamento.scadenza ? ` · scadenza ${dataIt(st.pagamento.scadenza)}` : ""}</dd></div>
+              {st?.pagamento.scadenza && !st.pagamento.pagata ? ` · scadenza ${dataIt(st.pagamento.scadenza)}` : ""}</dd></div>
             <div><dt className="inline text-muted-foreground">Pagamento: </dt><dd className={`inline font-medium ${st?.pagamento.pagata ? "text-emerald-700" : st?.pagamento.scaduta ? "text-red-600" : "text-amber-700"}`}>
               {st?.pagamento.pagata ? `pagata il ${dataIt(st.pagamento.pagato_il)}${st.pagamento.modalita_label ? ` con ${st.pagamento.modalita_label}` : ""}`
                 : st?.pagamento.scaduta ? "da pagare — SCADUTA" : "da pagare"}</dd></div>
