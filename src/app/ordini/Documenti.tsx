@@ -366,6 +366,53 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
     </div>
   );
   const aperto = d.stato === "aperto";
+  const cardAzione = azione ? (
+          <Card className="space-y-2 border-2 border-primary/40 p-3">
+            <div className="font-medium">
+              {azione === "acconto" ? "Acconto sull'ordine" : azione === "scontrino" ? `Scontrino per ${eur(d.residuo)}` : `Fattura${d.pagato ? ` (scala gli acconti: resta ${eur(d.residuo)})` : ` per ${eur(d.residuo)}`}`}
+            </div>
+            {cassaOggiChiusa && azione !== "fattura" && (
+              <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200">
+                La cassa di oggi è CHIUSA: per registrare l&apos;incasso va prima riaperta.{" "}
+                <a className="font-medium underline" href="/cassa/giornata">Apri cassa del giorno</a>
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {azione === "acconto" && <Input className="h-9 w-32 border-2 text-right font-semibold" inputMode="decimal" placeholder={`€ max ${eur(d.residuo)}`} value={f.importo} onChange={(e) => setF({ ...f, importo: e.target.value })} />}
+              <select className={campo} value={f.modalita} onChange={(e) => setF({ ...f, modalita: e.target.value })}>
+                {MOD.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+              {azione === "acconto" && (
+                <select className={campo} value={f.certificato} onChange={(e) => setF({ ...f, certificato: e.target.value as "scontrino" | "fattura" })}>
+                  <option value="scontrino">con scontrino</option><option value="fattura">con fattura d&apos;acconto</option>
+                </select>
+              )}
+              {((azione === "acconto" && f.certificato === "scontrino") || azione === "scontrino") &&
+                <Input className="h-9 w-32" placeholder="N. scontrino *" value={f.numero} onChange={(e) => setF({ ...f, numero: e.target.value })} />}
+              {azione === "fattura" && <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={f.pagata} onChange={(e) => setF({ ...f, pagata: e.target.checked })} />già pagata (incasso di oggi)</label>}
+              <Button disabled={busy || !operatore} onClick={() => conferma()}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}Conferma</Button>
+              <Button variant="ghost" onClick={() => setAzione("")}>Chiudi</Button>
+            </div>
+            {(() => {
+              // incasso col POS SumUp: l'importo va sul terminale scelto, a pagamento riuscito si registra con «POS SumUp»
+              const imp = azione === "acconto" ? (parseDec(f.importo) ?? 0) : d.residuo;
+              const serveNumero = (azione === "acconto" && f.certificato === "scontrino") || azione === "scontrino";
+              const ok = imp > 0 && !Number.isNaN(imp) && imp <= d.residuo + 0.001 && (!serveNumero || !!f.numero.trim());
+              return (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200 bg-sky-50/50 p-2 dark:bg-sky-950/20">
+                  <span className="text-xs text-muted-foreground">oppure incassa con POS / PayPal (si registra da solo a pagamento verificato){serveNumero && !f.numero.trim() ? " — prima scrivi il n. scontrino" : ""}:</span>
+                  <PagaPos importo={ok ? imp : 0} descrizione={`${azione === "acconto" ? "Acconto" : "Saldo"} ${d.sigla || ""}`.trim()}
+                    rifTipo={`documento_${azione}`} rifId={d.id} disabled={busy || !ok || !operatore} generico paypal
+                    onPagato={(p) => conferma(p.metodo === "paypal" ? "paypal" : "pos_sumup")} />
+                </div>
+              );
+            })()}
+            <div className="text-xs text-muted-foreground">
+              {azione === "fattura" ? "Si apre la bozza in Fatturazione: controlla i dati del cliente e inviala allo SdI."
+                : "Finché il registratore non è collegato, batti lo scontrino sulla cassa e scrivi qui il suo numero: la riga va da sola nella cassa del giorno."}
+            </div>
+          </Card>
+  ) : null;
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onChiudi}>
       <div className="h-full w-full max-w-2xl space-y-3 overflow-y-auto bg-background p-4" onClick={(e) => e.stopPropagation()}>
@@ -381,6 +428,22 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
             <Button size="icon" variant="ghost" onClick={onChiudi}><X className="size-4" /></Button>
           </div>
         </div>
+        {aperto && d.tipo !== "ordine" && (
+          // Christian 02/10/2026: operatore e conversioni IN ALTO (prima erano in fondo, sotto l'anteprima)
+          <Card className="space-y-2 border-2 border-primary/30 bg-primary/5 p-3">
+            <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
+            <div className="flex flex-wrap gap-2">
+              <Button size="lg" className="bg-emerald-600 font-semibold text-white hover:bg-emerald-700" onClick={() => apri("fattura")}><FileText className="mr-1 size-5" />Converti in fattura</Button>
+              <Button variant="outline" onClick={() => apri("scontrino")}><Receipt className="mr-1 size-4" />Converti in scontrino</Button>
+              {(d.tipo === "preventivo" || d.tipo === "proforma") && <Button variant="outline" disabled={busy || !operatore} onClick={() => esegui(async () => {
+                const r = await docConverti(d.id, { a: "ordine", operatore }); if (r.ordine) toast.success(`Creato ${r.ordine.sigla}`); return r;
+              }, "Preventivo convertito in ordine cliente")}><ArrowRightLeft className="mr-1 size-4" />Converti in ordine</Button>}
+              <Button variant="ghost" onClick={() => onModifica(d)}><Pencil className="mr-1 size-4" />Modifica</Button>
+              {!d.pagato && <Button variant="ghost" className="text-red-600" disabled={busy} onClick={() => confirm(`Annullare ${d.sigla}?`) && esegui(() => docAnnulla(d.id), "Annullato")}><Ban className="mr-1 size-4" />Annulla</Button>}
+            </div>
+            {cardAzione}
+          </Card>
+        )}
         <Card className="p-0">
           <table className="w-full text-sm">
             <tbody>
@@ -469,7 +532,7 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
           );
         })()}
 
-        {aperto && <SceltaOperatore value={operatore} onChange={setOperatore} compatto />}
+        {aperto && d.tipo === "ordine" && <SceltaOperatore value={operatore} onChange={setOperatore} compatto />}
 
         {aperto && d.tipo === "ordine" && proposta && !incasso && daCert(d) > 0.005 && (
           <Card className="space-y-2 border-2 border-emerald-400 bg-emerald-50/60 p-3 dark:bg-emerald-950/20">
@@ -539,65 +602,8 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
           </div>
         )}
 
-        {aperto && d.tipo !== "ordine" && (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => apri("scontrino")}><Receipt className="mr-1 size-4" />Converti in scontrino</Button>
-            <Button variant="outline" onClick={() => apri("fattura")}><FileText className="mr-1 size-4" />Converti in fattura</Button>
-            {(d.tipo === "preventivo" || d.tipo === "proforma") && <Button variant="outline" disabled={busy || !operatore} onClick={() => esegui(async () => {
-              const r = await docConverti(d.id, { a: "ordine", operatore }); if (r.ordine) toast.success(`Creato ${r.ordine.sigla}`); return r;
-            }, "Preventivo convertito in ordine cliente")}><ArrowRightLeft className="mr-1 size-4" />Converti in ordine</Button>}
-            <Button variant="ghost" onClick={() => onModifica(d)}><Pencil className="mr-1 size-4" />Modifica</Button>
-            {!d.pagato && <Button variant="ghost" className="text-red-600" disabled={busy} onClick={() => confirm(`Annullare ${d.sigla}?`) && esegui(() => docAnnulla(d.id), "Annullato")}><Ban className="mr-1 size-4" />Annulla</Button>}
-          </div>
-        )}
 
-        {azione && (
-          <Card className="space-y-2 border-2 border-primary/40 p-3">
-            <div className="font-medium">
-              {azione === "acconto" ? "Acconto sull'ordine" : azione === "scontrino" ? `Scontrino per ${eur(d.residuo)}` : `Fattura${d.pagato ? ` (scala gli acconti: resta ${eur(d.residuo)})` : ` per ${eur(d.residuo)}`}`}
-            </div>
-            {cassaOggiChiusa && azione !== "fattura" && (
-              <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200">
-                La cassa di oggi è CHIUSA: per registrare l&apos;incasso va prima riaperta.{" "}
-                <a className="font-medium underline" href="/cassa/giornata">Apri cassa del giorno</a>
-              </div>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              {azione === "acconto" && <Input className="h-9 w-32 border-2 text-right font-semibold" inputMode="decimal" placeholder={`€ max ${eur(d.residuo)}`} value={f.importo} onChange={(e) => setF({ ...f, importo: e.target.value })} />}
-              <select className={campo} value={f.modalita} onChange={(e) => setF({ ...f, modalita: e.target.value })}>
-                {MOD.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-              </select>
-              {azione === "acconto" && (
-                <select className={campo} value={f.certificato} onChange={(e) => setF({ ...f, certificato: e.target.value as "scontrino" | "fattura" })}>
-                  <option value="scontrino">con scontrino</option><option value="fattura">con fattura d&apos;acconto</option>
-                </select>
-              )}
-              {((azione === "acconto" && f.certificato === "scontrino") || azione === "scontrino") &&
-                <Input className="h-9 w-32" placeholder="N. scontrino *" value={f.numero} onChange={(e) => setF({ ...f, numero: e.target.value })} />}
-              {azione === "fattura" && <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={f.pagata} onChange={(e) => setF({ ...f, pagata: e.target.checked })} />già pagata (incasso di oggi)</label>}
-              <Button disabled={busy || !operatore} onClick={() => conferma()}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}Conferma</Button>
-              <Button variant="ghost" onClick={() => setAzione("")}>Chiudi</Button>
-            </div>
-            {(() => {
-              // incasso col POS SumUp: l'importo va sul terminale scelto, a pagamento riuscito si registra con «POS SumUp»
-              const imp = azione === "acconto" ? (parseDec(f.importo) ?? 0) : d.residuo;
-              const serveNumero = (azione === "acconto" && f.certificato === "scontrino") || azione === "scontrino";
-              const ok = imp > 0 && !Number.isNaN(imp) && imp <= d.residuo + 0.001 && (!serveNumero || !!f.numero.trim());
-              return (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200 bg-sky-50/50 p-2 dark:bg-sky-950/20">
-                  <span className="text-xs text-muted-foreground">oppure incassa con POS / PayPal (si registra da solo a pagamento verificato){serveNumero && !f.numero.trim() ? " — prima scrivi il n. scontrino" : ""}:</span>
-                  <PagaPos importo={ok ? imp : 0} descrizione={`${azione === "acconto" ? "Acconto" : "Saldo"} ${d.sigla || ""}`.trim()}
-                    rifTipo={`documento_${azione}`} rifId={d.id} disabled={busy || !ok || !operatore} generico paypal
-                    onPagato={(p) => conferma(p.metodo === "paypal" ? "paypal" : "pos_sumup")} />
-                </div>
-              );
-            })()}
-            <div className="text-xs text-muted-foreground">
-              {azione === "fattura" ? "Si apre la bozza in Fatturazione: controlla i dati del cliente e inviala allo SdI."
-                : "Finché il registratore non è collegato, batti lo scontrino sulla cassa e scrivi qui il suo numero: la riga va da sola nella cassa del giorno."}
-            </div>
-          </Card>
-        )}
+        {d.tipo === "ordine" && cardAzione}
       </div>
     </div>
   );
