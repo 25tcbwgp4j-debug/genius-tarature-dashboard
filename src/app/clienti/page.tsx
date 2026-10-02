@@ -94,13 +94,15 @@ export default function ClientiPage() {
     }
   };
 
-  // Carica stats
+  // Carica la lista
   useEffect(() => {
-    // Stats non critiche: se falliscono le card restano nascoste, ma l'errore
-    // della lista sopra e' gia' visibile. Nessun dato falso mostrato.
-    getCustomerStats().then(setStats).catch(() => setStats(null));
     loadList(1, "all");
   }, []);
+  // Stats non critiche e riservate al titolare (all'operatore il backend risponde 403: audit 02/10/2026)
+  useEffect(() => {
+    if (!admin) return;
+    getCustomerStats().then(setStats).catch(() => setStats(null));
+  }, [admin]);
 
   const handleSearch = async () => {
     if (query.length < 2) return;

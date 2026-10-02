@@ -259,7 +259,7 @@ export default function UsersTable({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">
-                    {u.last_login_at ? new Date(u.last_login_at).toLocaleString("it-IT") : "—"}
+                    {u.last_login_at ? new Date(u.last_login_at).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "—"}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="inline-flex gap-1">
