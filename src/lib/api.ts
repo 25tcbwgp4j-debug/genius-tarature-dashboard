@@ -659,6 +659,12 @@ export async function getStatistics() {
   return fetchAPI('/api/statistics');
 }
 
+// Contatore bozze mail per casella (solo titolare). Alimentato dal publisher
+// locale che legge l'Envelope Index di Apple Mail (skill mail-apple/tarature-mail).
+export async function getMailDraftsCount() {
+  return fetchAPI('/api/mail-drafts/count');
+}
+
 export async function parseCustomerText(text: string, create = false) {
   return fetchAPI('/api/customers/parse-text', {
     method: 'POST',

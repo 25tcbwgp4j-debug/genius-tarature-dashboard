@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { listSessions, getReconciliationToday, getStatistics, getScheduleStats } from "@/lib/api";
-import { ClipboardList, Wrench, Package, AlertTriangle, Users } from "lucide-react";
+import { listSessions, getReconciliationToday, getStatistics, getScheduleStats, getMailDraftsCount } from "@/lib/api";
+import { ClipboardList, Wrench, Package, AlertTriangle, Users, Mail } from "lucide-react";
 import Link from "next/link";
 import { STATUS_CONFIG, getStatusConfig } from "@/lib/constants";
 import { usePermessi } from "@/components/permessi";
@@ -21,6 +21,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ oggi: 0, attive: 0, pronti: 0, scadenze: 0 });
   const [reconciliation, setReconciliation] = useState<ReconciliationSnapshot | null>(null);
+  // Contatore bozze mail per casella — solo titolare.
+  const [bozze, setBozze] = useState<{ accounts: { account: string; label: string; count: number }[]; totale: number; aggiornato_il: string | null } | null>(null);
   // statistiche e riconciliazione clienti sono del titolare: l'operatore non le chiede (il backend risponderebbe 403).
   // All'operatore le scadenze dei prossimi 30 giorni arrivano dallo scadenzario, che è anche suo.
   const { admin, caricato } = usePermessi();
@@ -60,6 +62,12 @@ export default function Home() {
         if (recon) setReconciliation(recon);
       })
       .finally(() => setLoading(false));
+    // Bozze mail da vedere: solo il titolare (il backend risponde 403 all'operatore).
+    if (admin) {
+      getMailDraftsCount()
+        .then((b) => setBozze(b))
+        .catch(() => setBozze(null));
+    }
   }, [admin, caricato]);
 
   return (
@@ -112,6 +120,27 @@ export default function Home() {
           </div>
         </Card>
       </div>
+
+      {admin && bozze && bozze.totale > 0 && (
+        <Card className="p-4 border-indigo-200 bg-indigo-50">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-200 rounded-lg">
+              <Mail className="w-5 h-5 text-indigo-800" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-indigo-900">
+                Bozze mail da vedere: {bozze.totale}
+              </p>
+              <p className="text-sm text-indigo-800">
+                {bozze.accounts
+                  .filter((a) => a.count > 0)
+                  .map((a) => `${a.label}: ${a.count}`)
+                  .join(" · ") || "nessuna"}
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {reconciliation && (reconciliation.total_groups ?? 0) > 0 && (
         <Link href="/clienti?riconciliazione=1">
