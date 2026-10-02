@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Banknote, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, X } from "lucide-react";
+import { Banknote, Landmark, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, X } from "lucide-react";
 import { StornoDialog } from "@/components/StornoDialog";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { PagaPos } from "@/components/PagaPos";
@@ -26,7 +26,7 @@ import { toastErrore } from "@/lib/errori";
 import Link from "next/link";
 import { ivaMargine } from "@/app/fatturazione/util";
 import {
-  cassaAnnulla, cassaGiornata, docDettaglio, docRitira, cassaFattura, cassaRiprova, cassaScontrini, cassaScontrino, magPerCodice, magProdotti, proformaSessioneStato,
+  fetchAPI, cassaAnnulla, cassaGiornata, docDettaglio, docRitira, cassaFattura, cassaRiprova, cassaScontrini, cassaScontrino, magPerCodice, magProdotti, proformaSessioneStato,
   type Prodotto, type RigaCassa, type Scontrino,
 } from "@/lib/api";
 
@@ -53,6 +53,17 @@ export default function CassaPage() {
   const [sessione, setSessione] = useState<{ id: string; etichetta: string } | null>(null);
   // incasso di un ordine cliente (arrivo dal pulsante «Scontrino» dell'ordine)
   const [ordine, setOrdine] = useState<{ id: string; sigla: string; cliente: string; tipo: "acconto" | "saldo"; max: number; ritiro: boolean } | null>(null);
+  // scontrino per uno o più bonifici già arrivati sul conto SumUp (dal pulsante rosso «Bonifici», 02/10/2026)
+  const [daBonifici, setDaBonifici] = useState<{ ids: string[]; totale: number; ordinante: string; data: string; causale: string } | null>(null);
+
+  useEffect(() => {
+    const ids = (new URLSearchParams(window.location.search).get("bonifici") || "").split(",").filter(Boolean);
+    if (!ids.length) return;
+    fetchAPI(`/api/bonifici/prepara?ids=${ids.join(",")}`).then((r) => {
+      setCarrello([{ descrizione: r.descrizione || `Incasso bonifico ${r.ordinante}`, quantita: 1, prezzo: Number(r.totale), aliquota: 22 }]);
+      setDaBonifici({ ids, totale: Number(r.totale), ordinante: r.ordinante, data: r.data_valuta, causale: r.causale });
+    }).catch((e: Error) => toast.error("Bonifico non caricato: " + e.message));
+  }, []);
 
   useEffect(() => {
     const qs = new URLSearchParams(window.location.search);
@@ -191,6 +202,26 @@ export default function CassaPage() {
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
             Scontrino al posto della fattura per: <b>{sessione.etichetta}</b>. Scegli operatore e pagamento come al solito.
             <Link className="ml-auto underline" href={`/sessioni/${sessione.id}`}>Torna alla sessione</Link>
+          </div>
+        )}
+        {daBonifici && (
+          <div className="space-y-1 rounded-md border-2 border-emerald-500 bg-emerald-50 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100">
+            <div>Scontrino per {daBonifici.ids.length > 1 ? `${daBonifici.ids.length} bonifici` : "il bonifico"} di <b>{eur(daBonifici.totale)}</b> da <b>{daBonifici.ordinante || "—"}</b>
+              {" "}del {daBonifici.data.split("-").reverse().join("/")}. Causale: «{daBonifici.causale || "—"}».</div>
+            <div className="text-xs">Completa o cambia la descrizione della riga (es. «Scheda assistenza n. …»), poi «Emetti scontrino col bonifico»: pagamento bonifico, e il bonifico risulta abbinato.</div>
+            {Math.abs(tot - daBonifici.totale) > 0.005 && <div className="font-semibold text-red-700">Il carrello ({eur(tot)}) è diverso dal bonifico ({eur(daBonifici.totale)}).</div>}
+            <Button size="sm" disabled={!carrello.length || !!busy || !operatore} onClick={async () => {
+              if (Math.abs(tot - daBonifici.totale) > 0.005 && !confirm(`Il carrello (${eur(tot)}) non è uguale al bonifico (${eur(daBonifici.totale)}). Emettere comunque?`)) return;
+              const sc = await scontrino("bonifico");
+              if (!sc) return;
+              try {
+                await fetchAPI("/api/bonifici/al-banco/usa", { method: "POST", body: JSON.stringify({ bonifico_ids: daBonifici.ids, documento_tipo: "scontrino",
+                  documento_id: sc.id, descrizione: sc.descrizione, importo: tot, operatore }) });
+                toast.success("Bonifico abbinato allo scontrino");
+                window.dispatchEvent(new Event("bonifici:aggiorna"));
+              } catch (e) { toast.warning(`Scontrino emesso, ma il bonifico non è stato abbinato: ${(e as Error).message}`); }
+              setDaBonifici(null); router.replace("/cassa");
+            }}><Landmark /> Emetti scontrino col bonifico</Button>
           </div>
         )}
         {ordine && (

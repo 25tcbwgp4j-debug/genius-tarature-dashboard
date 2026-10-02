@@ -18,7 +18,7 @@ import { usePermessi } from "@/components/permessi";
 import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 import {
-  NOME_TIPO, bonAccetta, bonAnnullaAccettazione, bonCerca, bonConferma, bonControlla, bonDettaglio, bonElenco, bonIgnora, bonStato,
+  NOME_TIPO, bonAccetta, bonAnnullaAccettazione, bonConferma, bonControlla, bonDettaglio, bonElenco, bonIgnora, bonStato,
   type BonControllo, type BonProposta, type BonStato, type Bonifico,
 } from "@/lib/bonifici";
 
@@ -124,6 +124,9 @@ function Pannello({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState("");
   const [cerca, setCerca] = useState<Record<string, string>>({});
   const [trovati, setTrovati] = useState<Record<string, BonProposta[]>>({});
+  const [tipoCerca, setTipoCerca] = useState<Record<string, string>>({});
+  const [sel, setSel] = useState<string[]>([]);
+  const [operatore, setOperatore] = useOperatore();
 
   const carica = useCallback(() => { bonElenco().then(setDati).catch((e) => toastErrore(e)); }, []);
   useEffect(() => { carica(); }, [carica]);
@@ -152,8 +155,57 @@ function Pannello({ onClose }: { onClose: () => void }) {
   }
   async function cercaDoc(b: Bonifico) {
     const q = (cerca[b.id] || "").trim();
-    if (q.length < 2) return;
-    try { const r = await bonCerca(q); setTrovati((t) => ({ ...t, [b.id]: r.documenti })); } catch (e) { toastErrore(e); }
+    const tipo = tipoCerca[b.id] || "";
+    if (q.length < 2 && !tipo) { toast.info("Scrivi il numero o il cliente, oppure scegli il tipo di documento"); return; }
+    try {
+      const r = await fetchAPI(`/api/bonifici/cerca?q=${encodeURIComponent(q)}&tipo=${tipo}`);
+      setTrovati((t) => ({ ...t, [b.id]: r.documenti }));
+    } catch (e) { toastErrore(e); }
+  }
+  /** I bonifici su cui agire: la selezione multipla se questo è selezionato, altrimenti solo questo. */
+  const quali = (b: Bonifico) => (sel.includes(b.id) && sel.length > 1 ? sel : [b.id]);
+  function scontrino(ids: string[]) {
+    if (!operatore) { toast.error("Scegli l'operatore in alto"); return; }
+    onClose();
+    router.push(`/cassa?bonifici=${ids.join(",")}`);
+  }
+  async function creaDoc(ids: string[], tipo: "fattura" | "proforma" | "ordine") {
+    if (!operatore) { toast.error("Scegli l'operatore in alto"); return; }
+    setBusy(ids[0]);
+    try {
+      const p = await fetchAPI(`/api/bonifici/prepara?ids=${ids.join(",")}`);
+      const cliente = p.cliente ? `${p.cliente.denominazione}${p.cliente.piva ? ` (P.IVA ${p.cliente.piva})` : ""}`
+        : `${p.ordinante || "—"} — non trovato in rubrica: lo completi nel documento`;
+      const quando = String(p.data_valuta).split("-").reverse().join("/");
+      let totale: number = Number(p.totale), descrizione: string = p.descrizione;
+      if (tipo === "fattura") {
+        if (!confirm(`Creare una FATTURA IN BOZZA di ${eur(p.totale)}?\n\nCliente: ${cliente}\nRiga: «${p.descrizione}»\nGià quietanzata: bonifico del ${quando} (${p.riferimento}).\n\nPoi la completi e la emetti.`)) return;
+      } else {
+        const nome = tipo === "ordine" ? "ORDINE A CLIENTE" : "PRO FORMA";
+        const d = window.prompt(`${nome} per ${cliente}\nDescrizione della riga:`, p.descrizione);
+        if (d === null) return;
+        const t = window.prompt(`Totale del documento (il bonifico di ${eur(p.totale)} vale come acconto; se il totale è uguale è il saldo):`, String(p.totale).replace(".", ","));
+        if (t === null) return;
+        totale = Number(t.replace(/\./g, "").replace(",", "."));
+        if (!(totale >= Number(p.totale))) { toast.error("Il totale non può essere minore del bonifico"); return; }
+        descrizione = d.trim() || p.descrizione;
+      }
+      const r = await fetchAPI("/api/bonifici/crea", { method: "POST", body: JSON.stringify({ ids, tipo, operatore, totale, descrizione }) });
+      toast.success(r.esito);
+      setSel([]); aggiorna(); onClose();
+      router.push(r.url);
+    } catch (e) { toastErrore(e); } finally { setBusy(""); }
+  }
+  function azioniCrea(ids: string[], dis: boolean) {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-xs text-muted-foreground">{ids.length > 1 ? `Con i ${ids.length} bonifici selezionati:` : "Crea dal bonifico:"}</span>
+        <Button size="xs" variant="outline" disabled={dis} onClick={() => scontrino(ids)}>Emetti scontrino</Button>
+        <Button size="xs" variant="outline" disabled={dis} onClick={() => creaDoc(ids, "fattura")}>Crea fattura</Button>
+        <Button size="xs" variant="outline" disabled={dis} onClick={() => creaDoc(ids, "proforma")}>Crea pro forma</Button>
+        <Button size="xs" variant="outline" disabled={dis} onClick={() => creaDoc(ids, "ordine")}>Crea ordine a cliente</Button>
+      </div>
+    );
   }
   async function controlla() {
     setBusy("controlla");
@@ -182,6 +234,14 @@ function Pannello({ onClose }: { onClose: () => void }) {
               <div>Orari: {dati.orari}. Conto SumUp letto dal Mac del negozio.</div>
             </div>
           )}
+          <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
+          {sel.length > 1 && dati && (
+            <div className="space-y-1 rounded-md border border-sky-400 bg-sky-50 p-2 text-sm dark:bg-sky-950/30">
+              <div><b>{sel.length} bonifici selezionati</b> · totale {eur(dati.bonifici.filter((x) => sel.includes(x.id)).reduce((t, x) => t + Number(x.importo), 0))}
+                <button type="button" className="ml-2 text-xs underline" onClick={() => setSel([])}>togli la selezione</button></div>
+              {azioniCrea(sel, !!busy)}
+            </div>
+          )}
         </div>
 
         <div className="space-y-3 p-4">
@@ -192,6 +252,10 @@ function Pannello({ onClose }: { onClose: () => void }) {
           {dati?.bonifici.map((b) => (
             <div key={b.id} className="space-y-2 rounded-lg border p-3">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                {!b.proposta_accettata && (
+                  <input type="checkbox" className="size-4 self-center" title="Seleziona per un unico documento con più bonifici"
+                    checked={sel.includes(b.id)} onChange={(e) => setSel((x) => e.target.checked ? [...x, b.id] : x.filter((y) => y !== b.id))} />
+                )}
                 <span className="text-xl font-semibold tabular-nums">{eur(b.importo)}</span>
                 <span className="font-medium">{b.ordinante || "—"}</span>
                 <span className="ml-auto text-xs text-muted-foreground">{dataOra(b.data)}{b.data_valuta ? ` · valuta ${giorno(b.data_valuta)}` : ""}</span>
@@ -222,8 +286,16 @@ function Pannello({ onClose }: { onClose: () => void }) {
                       <AlertTriangle className="size-4" /> Nessun documento riconosciuto da solo: abbinalo a mano o ignoralo
                     </div>
                   )}
+                  {azioniCrea(quali(b), busy === b.id)}
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <Input className="h-7 w-56 text-xs" placeholder="Abbina a mano: n. documento o cliente"
+                    <span className="text-xs text-muted-foreground">Abbina a</span>
+                    <select className="h-7 rounded-md border border-input bg-background px-1 text-xs" value={tipoCerca[b.id] || ""}
+                      onChange={(e) => setTipoCerca((t) => ({ ...t, [b.id]: e.target.value }))}>
+                      <option value="">qualsiasi documento</option><option value="fattura">fattura (anche bozza)</option>
+                      <option value="proforma">pro forma</option><option value="ordine">ordine a cliente</option>
+                      <option value="sessione">sessione di taratura</option><option value="preventivo">preventivo</option>
+                    </select>
+                    <Input className="h-7 w-48 text-xs" placeholder="n. documento o cliente"
                       value={cerca[b.id] || ""} onChange={(e) => setCerca((c) => ({ ...c, [b.id]: e.target.value }))}
                       onKeyDown={(e) => { if (e.key === "Enter") cercaDoc(b); }} />
                     <Button size="xs" variant="outline" onClick={() => cercaDoc(b)}><Search /> Cerca</Button>
