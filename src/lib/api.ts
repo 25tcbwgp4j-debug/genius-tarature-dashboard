@@ -1226,7 +1226,7 @@ export interface DocumentoCliente {
   operatore?: string | null;
   // percorso dell'ordine a cliente (01/10/2026)
   fase?: FaseOrdine; ordinato_il?: string | null; arrivato_il?: string | null; ritirato_il?: string | null;
-  avvisi?: AvvisoOrdine[]; messaggio_arrivo?: string; whatsapp_link?: string | null;
+  avvisi?: AvvisoOrdine[]; messaggio_arrivo?: string; whatsapp_link?: string | null; whatsapp_auto?: boolean;
   /** fatture emesse sull'ordine e non ancora pagate · quanto resta da certificare (residuo − in_attesa) */
   in_attesa?: number; da_certificare?: number;
   /** fornitore da cui è stato ordinato (rubrica fornitori o testo libero) */
@@ -1247,8 +1247,8 @@ export async function docFase(id: string, fase: 'da_ordinare' | 'ordinato' | 'ar
   fornitore?: { fornitore_id?: string | null; fornitore_nome?: string }): Promise<DocumentoCliente> {
   return fetchAPI(`/api/documenti/${id}/fase`, { method: 'POST', body: JSON.stringify({ fase, operatore, ...(fornitore || {}) }) });
 }
-export async function docAvvisa(id: string, canale: 'email' | 'whatsapp', operatore: string): Promise<DocumentoCliente> {
-  return fetchAPI(`/api/documenti/${id}/avvisa`, { method: 'POST', body: JSON.stringify({ canale, operatore }) });
+export async function docAvvisa(id: string, canale: 'email' | 'whatsapp', operatore: string, automatico = false): Promise<DocumentoCliente> {
+  return fetchAPI(`/api/documenti/${id}/avvisa`, { method: 'POST', body: JSON.stringify({ canale, operatore, automatico }) });
 }
 export async function docRitira(id: string, operatore: string): Promise<DocumentoCliente> {
   return fetchAPI(`/api/documenti/${id}/ritira`, { method: 'POST', body: JSON.stringify({ operatore }) });

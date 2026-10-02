@@ -225,6 +225,17 @@ async function avvisaCliente(d: DocumentoCliente, canale: "email" | "whatsapp", 
     if (!confirm(`Inviare l'email di avviso a ${d.email}?`)) return null;
   } else {
     if (!d.whatsapp_link) { toast.error("Manca un cellulare valido del cliente: aggiungilo con «Modifica»"); return null; }
+    // Template Meta «ordine_arrivato» approvato: il messaggio parte da solo dal numero WhatsApp Business Genius Lab.
+    // Se l'invio automatico non riesce, si apre WhatsApp col testo pronto come prima.
+    if (d.whatsapp_auto && confirm("Inviare l'avviso WhatsApp dal numero Genius Lab (invio automatico)?")) {
+      try {
+        const r = await docAvvisa(d.id, canale, operatore, true);
+        toast.success("WhatsApp inviato dal numero Genius Lab");
+        return r;
+      } catch (e) {
+        toastErrore(e);
+      }
+    }
     window.open(d.whatsapp_link, "_blank", "noopener");
   }
   try {
