@@ -15,10 +15,10 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Banknote, Landmark, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, X } from "lucide-react";
+import { FileText, Landmark, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, Wallet, X } from "lucide-react";
 import { StornoDialog } from "@/components/StornoDialog";
-import { VerificaBonifico } from "@/components/VerificaBonifico";
-import { PagaPos } from "@/components/PagaPos";
+import { Incassa, NOMI_MODALITA } from "@/components/Incassa";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
 import { SceltaPezzo, rigaDaPezzo } from "@/components/SceltaPezzo";
@@ -30,12 +30,12 @@ import { toastErrore } from "@/lib/errori";
 import Link from "next/link";
 import { ivaMargine } from "@/app/fatturazione/util";
 import {
-  fetchAPI, cassaAnnulla, cassaGiornata, docDettaglio, docRitira, cassaFattura, cassaRiprova, cassaScontrini, cassaScontrino, magPerCodice, magProdotti, proformaSessioneStato,
-  type Prodotto, type RigaCassa, type Scontrino,
+  fetchAPI, cassaAnnulla, cassaFatturaDaScontrino, cassaGiornata, cassaRecupero, docDettaglio, docRitira, cassaFattura, cassaRiprova, cassaScontrini, cassaScontrino, magPerCodice, magProdotti, proformaSessioneStato,
+  type PagamentoScontrino, type Prodotto, type RigaCassa, type Scontrino,
 } from "@/lib/api";
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
-const MOD: Record<string, string> = { contanti: "Contanti", pos_sumup: "POS SumUp", bonifico: "Bonifico", paypal: "PayPal", non_riscosso: "Non riscosso" };
+const MOD: Record<string, string> = { ...NOMI_MODALITA, pos_sumup: "POS SumUp" };
 const STATO: Record<string, string> = {
   da_stampare: "in coda", in_stampa: "in stampa", emesso: "emesso", errore: "ERRORE", simulato: "simulato (non fiscale)", annullato: "annullato",
 };
@@ -58,6 +58,20 @@ export default function CassaPage() {
   // elenco scontrini: di oggi (default) o di un giorno passato, per fare reso/annullo di quelli già emessi
   const [giornoLista, setGiornoLista] = useState(oggiRoma);
   const [storno, setStorno] = useState<Scontrino | null>(null);
+  const [recupero, setRecupero] = useState<Scontrino | null>(null);
+  // pagamento misto attivo solo con l'agente di cassa v2 sul server (03/10/2026)
+  const [agenteV2, setAgenteV2] = useState(false);
+  useEffect(() => { fetchAPI("/api/cassa/agente/stato").then((r: { v2_attivo: boolean }) => setAgenteV2(!!r.v2_attivo)).catch(() => undefined); }, []);
+  /** fattura chiesta dopo lo scontrino: bozza con il riferimento al documento commerciale, già incassata */
+  async function fatturaDaScontrino(s: Scontrino) {
+    if (!operatore) { toast.error("Scegli prima l'operatore"); return; }
+    if (!confirm(`Fare la fattura per lo scontrino ${s.numero_rt || ""} da ${eur(Number(s.totale))}?\n\nIl corrispettivo è già certificato dallo scontrino: la fattura lo richiama, risulta già pagata e non entra di nuovo nella cassa del giorno. Poi completi il cliente e la invii.`)) return;
+    try {
+      const f = await cassaFatturaDaScontrino(s.id, { operatore });
+      toast.success("Bozza di fattura pronta: completa il cliente e inviala allo SdI");
+      router.push(`/fatturazione?id=${f.id}`);
+    } catch (e) { toastErrore(e); }
+  }
   // scontrino di una sessione di taratura (arrivo da «Converti in scontrino»)
   const [sessione, setSessione] = useState<{ id: string; etichetta: string } | null>(null);
   // incasso di un ordine cliente (arrivo dal pulsante «Scontrino» dell'ordine)
@@ -65,11 +79,19 @@ export default function CassaPage() {
   // scontrino per uno o più bonifici già arrivati sul conto SumUp (dal pulsante rosso «Bonifici», 02/10/2026)
   const [daBonifici, setDaBonifici] = useState<{ ids: string[]; totale: number; ordinante: string; data: string; causale: string } | null>(null);
   // vendita da una scheda di assistenza (/cassa?scheda=<id>)
-  const [scheda, setScheda] = useState<{ id: string; sigla: string; cliente: string } | null>(null);
+  const [scheda, setScheda] = useState<{ id: string; sigla: string; cliente: string; acconto?: number } | null>(null);
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("scheda");
+    const qs = new URLSearchParams(window.location.search);
+    const id = qs.get("scheda");
     if (!id) return;
+    const acc = Math.round(Number(qs.get("acconto") || 0) * 100) / 100;
     fetchAPI(`/api/assistenza/schede/${id}/righe-vendita`).then((r: { sigla: string; cliente: string; righe: RigaCassa[] }) => {
+      if (acc > 0) {   // scontrino d'ACCONTO sulla scheda (03/10/2026): al saldo la scheda lo scala (righe-vendita)
+        setCarrello([{ descrizione: `Acconto scheda assistenza N. ${r.sigla}${r.cliente ? ` - ${r.cliente}` : ""}`.slice(0, 200), quantita: 1, prezzo: acc, aliquota: 22 }]);
+        setScheda({ id, sigla: r.sigla, cliente: r.cliente, acconto: acc });
+        setAttScelta("apple");
+        return;
+      }
       if (!r.righe?.length) { toast.error("La scheda non ha importi da incassare"); return; }
       setCarrello(r.righe.map((x) => ({ descrizione: x.descrizione, quantita: Number(x.quantita) || 1, prezzo: Number((x as unknown as { prezzo_ivato: number }).prezzo_ivato) || 0, aliquota: Number(x.aliquota ?? 22) })));
       setScheda({ id, sigla: r.sigla, cliente: r.cliente });
@@ -122,7 +144,16 @@ export default function CassaPage() {
   useEffect(() => {
     const sid = new URLSearchParams(window.location.search).get("sessione");
     if (!sid) return;
-    proformaSessioneStato(sid).then((r) => {
+    proformaSessioneStato(sid).then(async (r) => {
+      // pro forma con acconti già incassati (03/10/2026): lo scontrino del SALDO è solo quanto resta → incasso del pro forma
+      if (r.documento && r.documento.stato === "aperto") {
+        const d = await docDettaglio(r.documento.id).catch(() => null);
+        if (d && d.pagato > 0.005) {
+          toast.info(`Sul pro forma ${d.sigla} c'è già un acconto di ${eur(d.pagato)}: lo scontrino è il saldo di ${eur(d.residuo)}`);
+          window.location.replace(`/cassa?${new URLSearchParams({ ordine: d.id, tipo: "saldo", importo: String(d.residuo) })}`);
+          return;
+        }
+      }
       const righe = r.documento?.righe || r.anteprima?.righe || [];
       if (!righe.length) { toast.error("La sessione non ha righe da mettere nello scontrino"); return; }
       if (r.documento && r.documento.stato !== "aperto") toast.warning(`Il pro forma ${r.documento.sigla} è già ${r.documento.stato}: controlla di non fare un doppione`);
@@ -176,23 +207,30 @@ export default function CassaPage() {
   // incasso di un ordine: il carrello non può superare quanto resta da pagare (prima che il cliente paghi col POS)
   const oltreOrdine = !!ordine && tot > ordine.max + 0.001;
 
-  /** Restituisce lo scontrino emesso (null se non è partito): il pulsante «Bonifico» lo usa per abbinare il bonifico. */
-  async function scontrino(modalita: string, posIncassoId?: string): Promise<{ id: string; descrizione: string } | null> {
+  /** Emette lo scontrino con uno o più pagamenti (pagamento misto, 03/10/2026). Restituisce lo scontrino emesso (null se
+   *  non è partito): il componente Incassa lo usa per abbinare il bonifico. */
+  async function scontrino(pagamenti: PagamentoScontrino[]): Promise<{ id: string; descrizione: string } | null> {
     if (!carrello.length || busy) return null;
     if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return null; }
     if (carrello.some((r) => !(r.prezzo >= 0) || Number.isNaN(r.prezzo))) { toast.error("C'è un prezzo non valido nel carrello"); return null; }
     if (ordine && tot > ordine.max + 0.001) { toast.error(`Lo scontrino supera quanto resta da pagare sull'ordine (${eur(ordine.max)})`); return null; }
-    if (modalita === "non_riscosso" && !confirm(`Emettere lo scontrino da ${eur(tot)} come NON RISCOSSO (il cliente non paga adesso)?`)) return null;
-    setBusy(modalita);
+    const nr = pagamenti.filter((p) => p.modalita === "non_riscosso").reduce((x, p) => x + p.importo, 0);
+    if (nr > 0 && nr >= tot - 0.005 && !confirm(`Emettere lo scontrino da ${eur(tot)} come NON RISCOSSO (il cliente non paga adesso)?`)) return null;
+    const come = pagamenti.map((p) => `${MOD[p.modalita] || p.modalita} ${eur(p.importo)}`).join(" + ");
+    setBusy("scontrino");
     let esito: { id: string; descrizione: string } | null = null;
     try {
-      const sc = await cassaScontrino({ righe: carrello, pagamenti: [{ modalita, importo: tot }], pos_incasso_id: posIncassoId, operatore,
+      const sc = await cassaScontrino({ righe: carrello, pagamenti, operatore,
                              ...(sessione ? { session_id: sessione.id } : {}), ...(ordine ? { documento_id: ordine.id } : {}),
+                             ...(scheda ? { scheda_id: scheda.id } : {}),
                              ...(!sessione && !ordine ? { attivita: att } : {}) });
       esito = { id: sc.id, descrizione: `Scontrino ${eur(tot)}${ordine ? ` (ordine ${ordine.sigla})` : ""} — ${carrello.map((r) => r.descrizione).join(", ")}`.slice(0, 280) };
-      toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${MOD[modalita]} · ${operatore})`);
+      toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${come} · ${operatore})${sc.resto ? ` — RESTO ${eur(sc.resto)}` : ""}`, { duration: sc.resto ? 15000 : 5000 });
       setCarrello([]); ricarica();
-      if (scheda) { await collegaScheda({ scontrino_id: sc.id }); router.push(`/assistenza?id=${scheda.id}`); setScheda(null); }
+      if (scheda) {
+        await collegaScheda({ scontrino_id: sc.id, ...(scheda.acconto ? { acconto: String(scheda.acconto) } : {}) });
+        router.push(`/assistenza?id=${scheda.id}`); setScheda(null);
+      }
       if (sessione) { router.push(`/sessioni/${sessione.id}`); setSessione(null); }
       if (ordine) {
         toast.success(`${ordine.tipo === "acconto" ? "Acconto" : "Saldo"} registrato sull'ordine ${ordine.sigla}`);
@@ -251,7 +289,7 @@ export default function CassaPage() {
             {Math.abs(tot - daBonifici.totale) > 0.005 && <div className="font-semibold text-red-700">Il carrello ({eur(tot)}) è diverso dal bonifico ({eur(daBonifici.totale)}).</div>}
             <Button size="sm" disabled={!carrello.length || !!busy || !operatore} onClick={async () => {
               if (Math.abs(tot - daBonifici.totale) > 0.005 && !confirm(`Il carrello (${eur(tot)}) non è uguale al bonifico (${eur(daBonifici.totale)}). Emettere comunque?`)) return;
-              const sc = await scontrino("bonifico");
+              const sc = await scontrino([{ modalita: "bonifico", importo: tot }]);
               if (!sc) return;
               try {
                 await fetchAPI("/api/bonifici/al-banco/usa", { method: "POST", body: JSON.stringify({ bonifico_ids: daBonifici.ids, documento_tipo: "scontrino",
@@ -265,7 +303,7 @@ export default function CassaPage() {
         )}
         {scheda && (
           <div className="flex flex-wrap items-center gap-2 rounded-md border-2 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-            Vendita dalla scheda di assistenza <b>N. {scheda.sigla}</b>{scheda.cliente ? <> — <b>{scheda.cliente}</b></> : ""}: lo scontrino si collega alla scheda.
+            {scheda.acconto ? "Acconto" : "Vendita"} dalla scheda di assistenza <b>N. {scheda.sigla}</b>{scheda.cliente ? <> — <b>{scheda.cliente}</b></> : ""}: lo scontrino si collega alla scheda{scheda.acconto ? " e l'acconto si scala dal saldo" : ""}.
             <Link className="ml-auto underline" href={`/assistenza?id=${scheda.id}`}>Torna alla scheda</Link>
           </div>
         )}
@@ -352,22 +390,13 @@ export default function CassaPage() {
               <SceltaAttivita value={att} onChange={setAttScelta} /></div>
           )}
           <SceltaOperatore value={operatore} onChange={setOperatore} />
-          <div className="grid grid-cols-2 gap-2">
-            <Button disabled={!carrello.length || !!busy || !operatore || oltreOrdine} onClick={() => scontrino("contanti")}>{busy === "contanti" ? <Loader2 className="animate-spin" /> : <Banknote />} Contanti</Button>
-            {/* un ordine si incassa davvero: niente «non riscosso» */}
-            {!ordine && <Button variant="outline" disabled={!carrello.length || !!busy || !operatore || oltreOrdine} onClick={() => scontrino("non_riscosso")}>Non riscosso</Button>}
-            {/* bonifico: si sceglie quello arrivato sul conto SumUp o si dichiara già ricevuto (data, ordinante, CRO) */}
-            <VerificaBonifico className="col-span-2" importo={tot} etichettaConferma="Emetti scontrino" documentoTipo={ordine ? "ordine" : "scontrino"}
-              disabled={!carrello.length || !!busy || !operatore || oltreOrdine}
-              onConfermato={() => scontrino("bonifico")} />
-          </div>
-          <div className="space-y-1 rounded-md border border-sky-200 bg-sky-50/50 p-2 dark:bg-sky-950/20">
-            <div className="text-xs text-muted-foreground">POS e PayPal: lo scontrino parte da solo quando SumUp / PayPal registrano il pagamento</div>
-            <div className="grid grid-cols-2 gap-2">
-              <PagaPos importo={tot} descrizione={`GENIUS LAB scontrino ${eur(tot)}`} rifTipo="scontrino" disabled={!carrello.length || !!busy || !operatore || oltreOrdine}
-                generico paypal onPagato={async (p) => { await scontrino(p.metodo === "paypal" ? "paypal" : "pos_sumup", p.id); }} />
-            </div>
-          </div>
+          {/* INCASSA (03/10/2026): uno o più metodi sullo stesso scontrino (es. 50 contanti + 100 carta), resto sui contanti,
+              quota non riscossa. POS e PayPal: verifica SumUp/PayPal; se il POS chiude il totale lo scontrino parte da solo. */}
+          {!agenteV2 && <div className="text-[11px] text-muted-foreground">Pagamento misto (es. contanti + carta) attivo quando sul server c&apos;è l&apos;agente di cassa aggiornato: per ora un metodo per scontrino.</div>}
+          <Incassa key={`${tot}-${carrello.length}-${agenteV2}`} modo="scontrino" unMetodo={!agenteV2} totale={carrello.length ? tot : 0} documentoTipo={ordine ? "ordine" : "scontrino"}
+            descrizione={`GENIUS LAB scontrino ${eur(tot)}`} nonRiscosso={!ordine /* un ordine si incassa davvero */}
+            disabled={!carrello.length || !operatore || oltreOrdine} motivo={!operatore ? "scegli l'operatore" : !carrello.length ? "aggiungi gli articoli" : ""}
+            onEmetti={async (pag) => scontrino(pag)} />
           {/* dalla sessione la fattura si prepara con «Prepara bozza da controllare» (niente doppioni non collegati) */}
           {!sessione && !ordine && <Button variant="secondary" className="w-full" disabled={!carrello.length || !!busy || !operatore || oltreOrdine} onClick={fattura}>
             {busy === "fattura" ? <Loader2 className="animate-spin" /> : <Receipt />} Fai fattura invece dello scontrino</Button>}
@@ -387,7 +416,7 @@ export default function CassaPage() {
           <div className="max-h-96 divide-y overflow-y-auto">
             {(oggi?.scontrini || []).map((s) => {
               const doc = s.tipo_documento || "vendita";
-              const negativo = doc !== "vendita";   // reso / annullo: i soldi escono
+              const negativo = doc === "reso" || doc === "annullo";   // reso / annullo: i soldi escono
               const stornabile = !negativo && ["emesso", "in_stampa"].includes(s.stato);
               return (
               <div key={s.id} className={`py-2 text-sm ${negativo ? "-mx-1 rounded bg-red-50/80 px-1 dark:bg-red-950/20" : ""}`}>
@@ -401,12 +430,19 @@ export default function CassaPage() {
                 {negativo && s.motivo && <div className="text-xs text-muted-foreground">Motivo: {s.motivo}</div>}
                 <div className="flex items-center justify-between text-xs">
                   <span className={s.stato === "errore" ? "text-red-600" : s.stato === "simulato" ? "text-amber-600" : "text-muted-foreground"}>
-                    {STATO[s.stato] || s.stato} · {s.pagamenti.map((p) => MOD[p.modalita] || p.modalita).join(", ")}{s.errore ? ` · ${s.errore}` : ""}</span>
+                    {doc === "recupero_credito" ? "RECUPERO CREDITO · " : ""}{STATO[s.stato] || s.stato} · {s.pagamenti.map((p) => `${MOD[p.modalita] || p.modalita}${s.pagamenti.length > 1 ? ` ${eur(p.importo)}` : ""}`).join(" + ")}{s.errore ? ` · ${s.errore}` : ""}</span>
                   <span className="flex gap-1">
                     {(s.stato === "errore" || s.stato === "simulato") && <Button size="xs" variant="ghost" onClick={() => cassaRiprova(s.id).then(ricarica).catch(toastErrore)}><RotateCcw /> Riprova</Button>}
                     {["da_stampare", "errore", "simulato"].includes(s.stato) && <Button size="xs" variant="ghost" onClick={() => { if (confirm("Annullare lo scontrino e rimettere in giacenza gli articoli?")) cassaAnnulla(s.id).then(ricarica).catch(toastErrore); }}>Annulla</Button>}
                     {stornabile && <Button size="xs" variant="ghost" className="text-red-600" title="Reso (anche parziale) o annullo di uno scontrino già emesso"
                       onClick={() => setStorno(s)}><Undo2 /> Storno</Button>}
+                    {!negativo && (s.credito_residuo || 0) > 0.005 && ["emesso", "in_stampa", "simulato"].includes(s.stato) &&
+                      <Button size="xs" variant="ghost" className="text-amber-700" title="Il cliente paga ora la parte non riscossa (RECUPERO CREDITI sul registratore)"
+                        onClick={() => setRecupero(s)}><Wallet /> Incassa credito {eur(s.credito_residuo || 0)}</Button>}
+                    {doc === "vendita" && ["emesso", "simulato"].includes(s.stato) && !s.fattura_id &&
+                      <Button size="xs" variant="ghost" title="Il cliente chiede la fattura dopo lo scontrino: corrispettivo già certificato, non si paga due volte"
+                        onClick={() => fatturaDaScontrino(s)}><FileText /> Fattura</Button>}
+                    {s.fattura_id && <Link className="text-xs underline" href={`/fatturazione?id=${s.fattura_id}`}>fattura</Link>}
                   </span>
                 </div>
               </div>
@@ -417,6 +453,25 @@ export default function CassaPage() {
         </Card>
       </div>
       <StornoDialog oggetto={storno ? { fonte: "scontrino", scontrino: storno } : null} onClose={() => setStorno(null)} onFatto={ricarica} />
+      {/* recupero del credito di uno scontrino «non riscosso»: un metodo per volta (RECUPERO CREDITI sul registratore) */}
+      <Dialog open={!!recupero} onOpenChange={(o) => { if (!o) setRecupero(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Incassa il credito {recupero?.numero_rt ? `dello scontrino ${recupero.numero_rt}` : ""}</DialogTitle>
+            <DialogDescription>Il cliente paga ora la parte non riscossa. Il registratore lo registra con RECUPERO CREDITI (non è un nuovo scontrino).</DialogDescription>
+          </DialogHeader>
+          <SceltaOperatore value={operatore} onChange={setOperatore} />
+          {recupero && <Incassa modo="documento" totale={recupero.credito_residuo || 0} documentoTipo="scontrino"
+            descrizione={`Recupero credito scontrino ${recupero.numero_rt || ""}`} disabled={!operatore} motivo={!operatore ? "scegli l'operatore" : ""}
+            onPagamento={async (p) => {
+              const r = await cassaRecupero(recupero.id, { pagamenti: [{ modalita: p.modalita, importo: p.importo, pos_incasso_id: p.pos_incasso_id }], operatore: operatore! });
+              ricarica();
+              if (r.a_mano) toast.warning("Registrato in dashboard. Sul registratore battilo A MANO: RECUPERO CREDITI → importo → tasto del pagamento → RECUPERO CREDITI", { duration: 20000 });
+              if (r.resta <= 0.005) setRecupero(null); else setRecupero({ ...recupero, credito_residuo: r.resta });
+              return { id: r.id, descrizione: `Recupero credito scontrino ${recupero.numero_rt || ""}` };
+            }} />}
+        </DialogContent>
+      </Dialog>
       {sceltaPezzo && <SceltaPezzo prodotto={sceltaPezzo} esclusi={carrello.map((r) => r.pezzo_id || "").filter(Boolean)} onClose={() => setSceltaPezzo(null)}
         onScelto={(pz) => { const p = sceltaPezzo; setSceltaPezzo(null); setCarrello((c) => [...c, rigaDaPezzo(p, pz)]); }} />}
     </div>

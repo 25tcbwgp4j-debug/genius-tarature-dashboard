@@ -988,6 +988,44 @@ export interface Fattura {
   sessione?: { id: string; session_number: number | null; status: string; payment_status: string; payment_method: string | null;
     payment_date: string | null; delivered_at: string | null; termini: TerminiCliente } | null;
   da_proforma?: { id: string; numero: number; anno: number; tipo: string; stato: string } | null;
+  /** registro pagamenti (03/10/2026): quanto è stato incassato, righe con metodo/data, residuo */
+  pagato?: number; incassi?: RiepilogoPagamenti | null; rate?: { importo: number; scadenza: string | null; modalita: string }[] | null;
+  /** fattura fatta su uno scontrino già battuto (corrispettivo già certificato) */
+  scontrino_id?: string | null; scontrino?: { id: string; numero_rt: string | null; data_rt: string | null; created_at: string; totale: number } | null;
+  /** fatture d'acconto (TD02) scalate da questa fattura di saldo */
+  acconti_ids?: string[] | null; acconti?: { id: string; numero: string; data: string; totale: number; pagamento_stato: string }[];
+}
+// ---------------------------------------------------------------------------------------------------------------
+// Registro pagamenti: misti, parziali, acconti e saldi (03/10/2026, migrazione 087)
+export type ModalitaIncasso = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'paypal' | 'bonifico';
+export interface RigaPagamento {
+  id: string; data: string; importo: number; modalita: ModalitaIncasso | string; tipo: 'acconto' | 'saldo' | 'parziale' | 'intero' | 'rimborso' | 'recupero';
+  stato: 'valido' | 'annullato'; fattura_id?: string | null; scontrino_id?: string | null; documento_id?: string | null; session_id?: string | null;
+  riferimento?: string | null; transaction_code?: string | null; origine?: string; operatore?: string | null; creato_da?: string | null;
+  annullato_il?: string | null; annullo_motivo?: string | null; created_at?: string;
+}
+export interface RiepilogoPagamenti {
+  totale: number; pagato: number; residuo: number; eccedenza?: number; stato: 'da_pagare' | 'parziale' | 'pagata';
+  per_modalita: Record<string, number>; descrizione: string; badge: string; righe: RigaPagamento[];
+}
+export async function pagRiepilogo(tipo: 'fattura' | 'sessione' | 'scontrino' | 'documento' | 'scheda', id: string): Promise<RiepilogoPagamenti> {
+  return fetchAPI(`/api/pagamenti/riepilogo/${tipo}/${id}`, { cache: 'no-store' });
+}
+export async function pagIncassaFattura(fid: string, body: { importo: number; modalita: ModalitaIncasso; data?: string; riferimento?: string;
+  pos_incasso_id?: string; tipo?: string; operatore: string }): Promise<RiepilogoPagamenti & { pagamento: RigaPagamento }> {
+  return fetchAPI(`/api/pagamenti/fattura/${fid}`, { method: 'POST', body: JSON.stringify(body) });
+}
+export async function pagRate(fid: string, rate: { importo: number; scadenza: string | null; modalita: string }[]): Promise<RiepilogoPagamenti> {
+  return fetchAPI(`/api/pagamenti/fattura/${fid}/rate`, { method: 'PUT', body: JSON.stringify({ rate }) });
+}
+export async function pagAnnulla(pid: string, motivo: string) {
+  return fetchAPI(`/api/pagamenti/${pid}/annulla`, { method: 'POST', body: JSON.stringify({ motivo }) });
+}
+export async function cassaRecupero(sid: string, body: { pagamenti: { modalita: string; importo: number; pos_incasso_id?: string }[]; operatore: string }): Promise<Scontrino & { resta: number; a_mano?: boolean }> {
+  return fetchAPI(`/api/cassa/scontrini/${sid}/recupero`, { method: 'POST', body: JSON.stringify(body) });
+}
+export async function cassaFatturaDaScontrino(sid: string, body: { operatore: string; anagrafica_id?: string | null; controparte?: FattControparte }): Promise<Fattura> {
+  return fetchAPI(`/api/cassa/scontrini/${sid}/fattura`, { method: 'POST', body: JSON.stringify(body) });
 }
 export async function fattConfig() { return fetchAPI('/api/fatturazione/config'); }
 export async function fattElenco(params: Record<string, string>) {
@@ -1010,7 +1048,7 @@ export async function fattEmetti(id: string, operatore: string): Promise<{ ok: b
 export async function fattPagamento(id: string, body: { modalita?: FattModalita; data?: string; riferimento?: string; annulla?: boolean }) {
   return fetchAPI(`/api/fatturazione/fatture/${id}/pagamento`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function fattLinkStripe(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}/link-stripe`, { method: 'POST' }); }
+export async function fattLinkStripe(id: string, importo?: number) { return fetchAPI(`/api/fatturazione/fatture/${id}/link-stripe`, { method: 'POST', body: JSON.stringify(importo ? { importo } : {}) }); }
 export async function fattNotaCredito(id: string, operatore: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/nota-credito`, { method: 'POST', body: JSON.stringify({ operatore }) }); }
 export async function fattDuplica(id: string, operatore: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/duplica`, { method: 'POST', body: JSON.stringify({ operatore }) }); }
 // dalla sessione si prepara SOLO la bozza (anche dal pro forma): pagamento ed emissione si fanno in Fatturazione
@@ -1020,6 +1058,8 @@ export async function fattCollegaSessione(sessionId: string, fatturaId: string) 
 export interface PagamentoSessione {
   fonte: 'fattura' | 'sessione'; pagata: boolean; modalita: string | null; modalita_label: string | null;
   pagato_il: string | null; riferimento: string | null; termine: 'immediato' | 'differito'; scadenza: string | null; scaduta: boolean;
+  /** registro pagamenti: pagato in parte (acconto) */
+  parziale?: boolean; pagato?: number; residuo?: number; totale?: number; descrizione?: string; badge?: string;
 }
 export interface TerminiCliente { testo: string | null; differito: boolean; giorni: number; fine_mese: boolean; sconto: number; descrizione: string }
 export interface AvvisoPagamento { livello: 'errore' | 'avviso'; codice: string; testo: string }
@@ -1032,6 +1072,8 @@ export interface StatoPagamentoSessione {
   proforma_doc: { id: string; sigla: string; stato: string; totale: number; convertito_in: { tipo: string; id?: string; numero?: string; pagata?: boolean } | null } | null;
   proforma: { proforma_number: string; total: number; payment_status: string } | null;
   avvisi: AvvisoPagamento[];
+  /** tutto quello che è arrivato per la sessione (fatture, acconti col pro forma, scontrini) */
+  riepilogo?: RiepilogoPagamenti | null;
 }
 export async function fattStatoSessione(sessionId: string): Promise<StatoPagamentoSessione> { return fetchAPI(`/api/fatturazione/sessione/${sessionId}`, { cache: 'no-store' }); }
 export interface CoerenzaVoce { session_id: string; session_number: number | null; cliente: string | null; status: string; payment_status: string;
@@ -1075,7 +1117,9 @@ export async function fattAnagraficaModifica(id: string, body: Partial<FattAnagr
 export interface FattCredito {
   chiave: string; nome: string | null; piva: string | null; cf: string | null; email: string | null;
   anagrafica_id: string | null; n: number; totale: number; scaduto: number; piu_vecchia: string | null;
-  fatture: { id: string; numero: string | null; data: string | null; scadenza: string | null; totale: number; stato: string; pagamento_modalita: string | null }[];
+  fatture: { id: string; numero: string | null; data: string | null; scadenza: string | null; totale: number; stato: string; pagamento_modalita: string | null;
+    /** pagamenti parziali: già incassato e quanto resta (03/10/2026) */
+    pagato?: number; residuo?: number; pagamento_stato?: string }[];
 }
 export async function fattCrediti(societa: string, direzione = 'emessa', anno = 0, dal = '', al = ''): Promise<{ clienti: FattCredito[]; totale: number; scaduto: number }> {
   return fetchAPI(`/api/fatturazione/crediti?societa=${societa}&direzione=${direzione}&anno=${anno || 0}&dal=${dal}&al=${al}`);
@@ -1205,11 +1249,14 @@ export interface Prodotto {
 export interface RigaCassa { prodotto_id?: string | null; /** pezzo serializzato venduto (iPhone, Mac…) */ pezzo_id?: string | null; descrizione: string; quantita: number; prezzo: number; aliquota: number; sconto?: number;
   /** regime IVA della riga: margine (N5) o esente (N4/N3.x); senza = aliquota */
   regime?: 'margine' | 'esente' | null; natura?: string | null; costo_acquisto?: number | null }
+export interface PagamentoScontrino { modalita: string; importo: number; consegnato?: number; pos_incasso_id?: string; transaction_code?: string | null; riferimento?: string }
 export interface Scontrino {
-  id: string; stato: string; righe: RigaCassa[]; totale: number; pagamenti: { modalita: string; importo: number }[];
+  id: string; stato: string; righe: RigaCassa[]; totale: number; pagamenti: PagamentoScontrino[];
+  /** «non riscosso»: quanto resta da recuperare (RECUPERO CREDITI) · fattura fatta dopo sullo scontrino */
+  credito_residuo?: number; fattura_id?: string | null; resto?: number; consegnato?: number;
   codice_lotteria: string | null; numero_rt: string | null; errore: string | null; risposta_rt: string | null; created_at: string;
   /** vendita (default) · reso · annullo: i documenti di reso/annullo hanno importi da leggere in NEGATIVO */
-  tipo_documento?: 'vendita' | 'reso' | 'annullo' | null; rif_scontrino_id?: string | null; motivo?: string | null; creato_da?: string | null;
+  tipo_documento?: 'vendita' | 'reso' | 'annullo' | 'recupero_credito' | null; rif_scontrino_id?: string | null; motivo?: string | null; creato_da?: string | null;
   /** CHR · VALE · DUMY · ALTRO: chi l'ha battuto */
   operatore?: string | null; data_rt?: string | null;
   /** Genius Lab Gestionale: tarature | apple */
@@ -1229,7 +1276,7 @@ export async function magModifica(id: string, body: Partial<Prodotto>): Promise<
 export async function magMovimento(id: string, body: { tipo: string; quantita: number; causale?: string; costo?: number }) {
   return fetchAPI(`/api/magazzino/prodotti/${id}/movimento`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: { modalita: string; importo: number }[]; codice_lotteria?: string; pos_incasso_id?: string; operatore: string; session_id?: string; attivita?: string;
+export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: PagamentoScontrino[]; codice_lotteria?: string; pos_incasso_id?: string; operatore: string; session_id?: string; attivita?: string; scheda_id?: string;
   /** incasso di un ordine cliente (/cassa?ordine=…): lo scontrino diventa acconto/saldo dell'ordine */ documento_id?: string }): Promise<Scontrino & { ordine?: { id: string; sigla: string } }> {
   return fetchAPI('/api/cassa/scontrini', { method: 'POST', body: JSON.stringify(body) });
 }
@@ -1329,7 +1376,7 @@ export function cassaGiornataUrlExcel(giorno: string) { return `${API_PROXY}/api
 
 // === PREVENTIVI E ORDINI CLIENTE — 30/09/2026 ===
 export interface RigaDoc { descrizione: string; quantita: number; prezzo_ivato: number; aliquota: number; sconto?: number; prodotto_id?: string | null }
-export interface PagamentoDoc {
+export interface PagamentoDoc { /** pagamento misto dello scontrino (03/10/2026) */ dettaglio?: { modalita: string; importo: number }[] | null;
   id: string; data: string; tipo: 'acconto' | 'saldo'; importo: number; modalita: string; certificato: 'scontrino' | 'fattura';
   scontrino_numero: string | null; fattura_id: string | null;
   /** scontrino battuto dal registratore: da_stampare · in_stampa · emesso · simulato · errore */

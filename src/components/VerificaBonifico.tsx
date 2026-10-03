@@ -36,9 +36,29 @@ interface BonificoArrivato {
 }
 /** Quello che il chiamante ha emesso: id e descrizione del documento (per l'abbinamento). null/undefined = non emesso. */
 export type EsitoDocumento = { id?: string | null; descrizione?: string } | null | undefined | void;
+/** Dati del bonifico scelto/dichiarato, per abbinarlo DOPO l'emissione del documento (componente Incassa, 03/10/2026). */
+export type InfoBonifico = { data: string; bonificoId?: string; dichiarato?: boolean; ordinante?: string; causale?: string };
+
+/** Abbina al documento appena emesso il bonifico scelto (o dichiarato) con VerificaBonifico in modalità «differito». */
+export async function abbinaBonifico(info: InfoBonifico, opz: { importo: number; documentoTipo: string; documentoId?: string | null; descrizione?: string; operatore?: string | null }) {
+  const body: Record<string, unknown> = { importo: opz.importo, documento_tipo: opz.documentoTipo, documento_id: opz.documentoId || null,
+    descrizione: opz.descrizione || opz.documentoTipo, operatore: opz.operatore || undefined };
+  if (info.bonificoId) body.bonifico_id = info.bonificoId;
+  else body.dichiarato = { data: info.data, ordinante: info.ordinante || "", causale: info.causale || "" };
+  try {
+    await fetchAPI("/api/bonifici/al-banco/usa", { method: "POST", body: JSON.stringify(body) });
+    window.dispatchEvent(new Event("bonifici:aggiorna"));
+  } catch (e) {
+    toast.warning(`Documento emesso, ma il bonifico non è stato registrato: ${(e as Error).message}`, { duration: 15000 });
+  }
+}
 
 export function VerificaBonifico({ importo, testo: testoIniziale = "", etichettaConferma, disabled, onConfermato, size = "sm", className = "",
-  documentoTipo = "documento", descrizione = "" }: {
+  documentoTipo = "documento", descrizione = "", differito = false, etichetta = "Bonifico" }: {
+  /** true = il documento si emette DOPO (pagamento misto): qui si sceglie solo il bonifico, l'abbinamento lo fa chi chiama con abbinaBonifico */
+  differito?: boolean;
+  /** testo del pulsante */
+  etichetta?: string;
   importo: number;
   /** nome del cliente / causale attesa: serve a riconoscere il bonifico giusto */
   testo?: string;
@@ -46,7 +66,7 @@ export function VerificaBonifico({ importo, testo: testoIniziale = "", etichetta
   etichettaConferma: string;
   disabled?: boolean;
   /** riferimento da salvare, se è stato forzato (sempre false: c'è la dichiarazione) e la data del bonifico (data di incasso) */
-  onConfermato: (riferimento: string, forzato: boolean, info: { data: string; bonificoId?: string; dichiarato?: boolean }) => Promise<EsitoDocumento> | EsitoDocumento;
+  onConfermato: (riferimento: string, forzato: boolean, info: InfoBonifico) => Promise<EsitoDocumento> | EsitoDocumento;
   size?: "sm" | "default";
   className?: string;
   /** scontrino · fattura · ordine: dove finisce il bonifico */
@@ -104,7 +124,8 @@ export function VerificaBonifico({ importo, testo: testoIniziale = "", etichetta
     const rif = `Bonifico ${b.ordinante || ""} del ${quando(giorno)} (SumUp ${b.codice.split(":").pop()})`.replace(/\s+/g, " ").trim();
     setBusy(true);
     try {
-      const doc = await onConfermato(rif.slice(0, 200), false, { data: giorno, bonificoId: b.id });
+      const doc = await onConfermato(rif.slice(0, 200), false, { data: giorno, bonificoId: b.id, ordinante: b.ordinante || "", causale: b.causale || "" });
+      if (differito) { setAperto(false); return; }
       if (doc) {
         await registra({ bonifico_id: b.id, documento_id: doc.id || null, descrizione: doc.descrizione || descrizione || documentoTipo });
         setAperto(false);
@@ -119,7 +140,8 @@ export function VerificaBonifico({ importo, testo: testoIniziale = "", etichetta
       "(dichiarato, da riscontrare)"].filter(Boolean).join(" ");
     setBusy(true);
     try {
-      const doc = await onConfermato(rif.slice(0, 200), false, { data: dich.data, dichiarato: true });
+      const doc = await onConfermato(rif.slice(0, 200), false, { data: dich.data, dichiarato: true, ordinante: dich.ordinante.trim(), causale: dich.causale.trim() });
+      if (differito) { setAperto(false); return; }
       if (doc) {
         await registra({ dichiarato: { data: dich.data, ordinante: dich.ordinante.trim(), causale: dich.causale.trim() },
                          documento_id: doc.id || null, descrizione: doc.descrizione || descrizione || documentoTipo });
@@ -134,7 +156,7 @@ export function VerificaBonifico({ importo, testo: testoIniziale = "", etichetta
   return (
     <>
       <Button size={size} variant="outline" className={className} disabled={disabled || !(importo > 0)} onClick={apri}>
-        <Landmark /> Bonifico
+        <Landmark /> {etichetta}
       </Button>
       <Dialog open={aperto} onOpenChange={(v) => { if (!busy) setAperto(v); }}>
         <DialogContent className="max-w-lg">
