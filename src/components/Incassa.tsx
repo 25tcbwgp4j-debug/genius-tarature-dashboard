@@ -143,7 +143,7 @@ export function Incassa({ totale, giaPagato = 0, modo, descrizione = "", testoCl
     else await registra(riga);
   }
 
-  const stile = "h-11 min-w-[44px] text-base";
+  const stile = "h-auto min-h-11 min-w-[44px] whitespace-normal text-sm leading-tight sm:text-base";
   const titoloRes = modo === "scontrino" ? (coperto ? "Totale coperto" : "Manca") : "Resta da incassare";
   const elenco = useMemo(() => righe.map((r) => (
     <div key={r.chiave} className="flex items-center justify-between gap-2 rounded-md bg-muted/60 px-2 py-1.5 text-sm">
@@ -233,7 +233,7 @@ export function Incassa({ totale, giaPagato = 0, modo, descrizione = "", testoCl
         </>
       )}
 
-      {modo === "scontrino" && (
+      {modo === "scontrino" && !(unMetodo && !righe.length) && (
         <Button className={`${stile} w-full bg-emerald-600 text-white hover:bg-emerald-700`} disabled={!coperto || !!busy || disabled}
           onClick={() => void emettiRef.current(righe)}>
           {busy === "emetti" ? <Loader2 className="animate-spin" /> : <Receipt />}

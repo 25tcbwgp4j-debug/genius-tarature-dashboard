@@ -347,7 +347,7 @@ export function Dettaglio({
 
           {/* Incasso della fattura EMESSA (03/10/2026): registro pagamenti — più incassi, metodi diversi, acconti e saldo */}
           {emessa && f.tipo_documento !== "TD04" && (
-            <IncassoFattura f={f} operatore={operatore} setOperatore={setOperatore} busy={busy} onCambiato={() => { carica(); onChanged(); }} />
+            <IncassoFattura f={f} operatore={operatore} busy={busy} onCambiato={() => { carica(); onChanged(); }} />
           )}
           {/* Pagamento al FORNITORE (fatture ricevute): come prima */}
           {!emessa && f.tipo_documento !== "TD04" && (
@@ -443,8 +443,8 @@ export function Dettaglio({
 
 /** Incasso di una fattura emessa (03/10/2026): righe del registro pagamenti (anche annullate), residuo, un pagamento alla
  *  volta con qualunque metodo (Incassa in modo «documento»), link Stripe per l'importo scelto, piano rate per l'XML. */
-function IncassoFattura({ f, operatore, setOperatore, busy, onCambiato }: {
-  f: Fattura; operatore: Operatore | ""; setOperatore: (o: Operatore | "") => void; busy: string; onCambiato: () => void;
+function IncassoFattura({ f, operatore, busy, onCambiato }: {
+  f: Fattura; operatore: Operatore | ""; busy: string; onCambiato: () => void;
 }) {
   const inc = f.incassi;
   const totale = Number(f.totale) || 0;
@@ -482,7 +482,7 @@ function IncassoFattura({ f, operatore, setOperatore, busy, onCambiato }: {
           corrispettivo già certificato e incassato con lo scontrino. Non entra di nuovo nella cassa del giorno.</div>
       )}
       {!!f.acconti?.length && (
-        <div className="text-xs text-muted-foreground">Scala le fatture d&apos;acconto: {f.acconti.map((a) => `n. ${a.numero} del ${dataIt(a.data)} (${eur(a.totale)})`).join(", ")}</div>
+        <div className="text-xs text-muted-foreground">Scala le fatture d&apos;acconto: {f.acconti.map((a) => `${a.numero ? `n. ${a.numero}` : "(bozza)"} del ${dataIt(a.data)} (${eur(a.totale)})`).join(", ")}</div>
       )}
       {!!righe.length && (
         <div className="divide-y rounded-md border">
@@ -505,7 +505,6 @@ function IncassoFattura({ f, operatore, setOperatore, busy, onCambiato }: {
       )}
       {residuo > 0.005 && (
         <>
-          {!operatore && <SceltaOperatore value={operatore} onChange={setOperatore} />}
           <Incassa key={`${f.id}-${pagato}`} modo="documento" totale={totale} giaPagato={pagato} documentoTipo="fattura" descrizione={desc}
             testoCliente={f.controparte_nome || ""} disabled={!!busy || !operatore} motivo={!operatore ? "scegli l'operatore" : ""}
             stripeLink={f.stato !== "bozza" ? async (imp) => (await fattLinkStripe(f.id, imp))?.url : undefined}
