@@ -11,8 +11,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, Lock, Plus, Trash2, Undo2, Unlock, XCircle } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Loader2, Lock, Plus, Trash2, Undo2, Unlock, XCircle } from "lucide-react";
 import { StornoDialog, type OggettoStorno } from "@/components/StornoDialog";
+import { AnnullaEFattura } from "@/components/AnnullaEFattura";
 import { usePermessi } from "@/components/permessi";
 import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
@@ -121,6 +122,8 @@ export default function CassaGiornataPage() {
   const [prel, setPrel] = useState({ importo: "", tipo: "eccesso", nota: "" });
   const chiusa = f?.giornata.stato === "chiusa";
   const [storno, setStorno] = useState<OggettoStorno | null>(null);
+  // il cliente chiede la fattura dopo lo scontrino: annullo sul registratore + fattura (O scontrino O fattura, 03/10/2026)
+  const [daFatturare, setDaFatturare] = useState<Scontrino | null>(null);
   const [operatore, setOperatore] = useOperatore();
   const [filtroAtt, setFiltroAtt] = useState("");   // Genius Lab Gestionale: righe Tarature / Apple
   const [convalida, setConvalida] = useState<{ aperta: boolean; motivo: string }>({ aperta: false, motivo: "" });
@@ -316,6 +319,17 @@ export default function CassaGiornataPage() {
     });
   }
 
+  function apriFattura(r: RigaGiornata) {
+    return azione("fattura", async () => {
+      const l: { scontrini: Scontrino[] } = await cassaScontrini(giorno);
+      const s = l.scontrini.find((x) => x.id === r.id);
+      if (!s) { toast.error("Scontrino non trovato"); return; }
+      if (!["emesso", "simulato"].includes(s.stato)) { toast.error("Lo scontrino non risulta emesso dal registratore"); return; }
+      if (s.fattura_id) { toast.info("Per questo scontrino c'è già la fattura"); return; }
+      setDaFatturare(s);
+    });
+  }
+
   function chiudi() {
     if (!f) return;
     return azione("chiudi", async () => {
@@ -508,6 +522,9 @@ export default function CassaGiornataPage() {
                     {stornabile && (
                       <button className="mr-2 text-muted-foreground hover:text-red-600" title="Storno / reso o annullo (va nella cassa di oggi)" disabled={!!busy}
                         onClick={() => apriStorno(r)}>{busy === "storno" ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}</button>)}
+                    {stornabile && r.fonte === "scontrino" && !chiusa && (
+                      <button className="mr-2 text-muted-foreground hover:text-sky-700" title="Il cliente vuole la fattura: annulla lo scontrino e fai la fattura (già pagata)" disabled={!!busy}
+                        onClick={() => apriFattura(r)}>{busy === "fattura" ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}</button>)}
                     {r.fonte === "manuale" && !chiusa && (
                       <button className="text-muted-foreground hover:text-red-600" title="Elimina riga" disabled={!!busy} onClick={() => eliminaRiga(r.id)}><Trash2 className="size-4" /></button>)}</td>
                 </tr>
@@ -665,6 +682,7 @@ export default function CassaGiornataPage() {
           </div>
         </div>
       </>)}
+      <AnnullaEFattura scontrino={daFatturare} onClose={() => setDaFatturare(null)} onCambiato={() => { void ricarica(); }} />
       <StornoDialog oggetto={storno} onClose={() => setStorno(null)} onFatto={() => {
         ricarica();
         if (giorno !== oggiRoma()) toast.info("Lo storno è nella cassa di oggi", { action: { label: "Vai a oggi", onClick: () => vaiA(oggiRoma()) } });

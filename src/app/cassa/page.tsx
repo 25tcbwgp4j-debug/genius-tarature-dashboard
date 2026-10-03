@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileText, Landmark, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, Wallet, X } from "lucide-react";
 import { StornoDialog } from "@/components/StornoDialog";
+import { AnnullaEFattura } from "@/components/AnnullaEFattura";
 import { Incassa, NOMI_MODALITA } from "@/components/Incassa";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
@@ -30,7 +31,7 @@ import { toastErrore } from "@/lib/errori";
 import Link from "next/link";
 import { ivaMargine } from "@/app/fatturazione/util";
 import {
-  fetchAPI, cassaAnnulla, cassaFatturaDaScontrino, cassaGiornata, cassaRecupero, docDettaglio, docRitira, cassaFattura, cassaRiprova, cassaScontrini, cassaScontrino, magPerCodice, magProdotti, proformaSessioneStato,
+  fetchAPI, cassaAnnulla, cassaGiornata, cassaRecupero, docDettaglio, docRitira, cassaFattura, cassaRiprova, cassaScontrini, cassaScontrino, magPerCodice, magProdotti, proformaSessioneStato,
   type PagamentoScontrino, type Prodotto, type RigaCassa, type Scontrino,
 } from "@/lib/api";
 
@@ -62,16 +63,8 @@ export default function CassaPage() {
   // pagamento misto attivo solo con l'agente di cassa v2 sul server (03/10/2026)
   const [agenteV2, setAgenteV2] = useState(false);
   useEffect(() => { fetchAPI("/api/cassa/agente/stato").then((r: { v2_attivo: boolean }) => setAgenteV2(!!r.v2_attivo)).catch(() => undefined); }, []);
-  /** fattura chiesta dopo lo scontrino: bozza con il riferimento al documento commerciale, già incassata */
-  async function fatturaDaScontrino(s: Scontrino) {
-    if (!operatore) { toast.error("Scegli prima l'operatore"); return; }
-    if (!confirm(`Fare la fattura per lo scontrino ${s.numero_rt || ""} da ${eur(Number(s.totale))}?\n\nIl corrispettivo è già certificato dallo scontrino: la fattura lo richiama, risulta già pagata e non entra di nuovo nella cassa del giorno. Poi completi il cliente e la invii.`)) return;
-    try {
-      const f = await cassaFatturaDaScontrino(s.id, { operatore });
-      toast.success("Bozza di fattura pronta: completa il cliente e inviala allo SdI");
-      router.push(`/fatturazione?id=${f.id}`);
-    } catch (e) { toastErrore(e); }
-  }
+  /** il cliente chiede la fattura dopo lo scontrino: O scontrino O fattura → annullo sul registratore + fattura (03/10/2026) */
+  const [daFatturare, setDaFatturare] = useState<Scontrino | null>(null);
   // scontrino di una sessione di taratura (arrivo da «Converti in scontrino»)
   const [sessione, setSessione] = useState<{ id: string; etichetta: string } | null>(null);
   // incasso di un ordine cliente (arrivo dal pulsante «Scontrino» dell'ordine)
@@ -440,9 +433,11 @@ export default function CassaPage() {
                       <Button size="xs" variant="ghost" className="text-amber-700" title="Il cliente paga ora la parte non riscossa (RECUPERO CREDITI sul registratore)"
                         onClick={() => setRecupero(s)}><Wallet /> Incassa credito {eur(s.credito_residuo || 0)}</Button>}
                     {doc === "vendita" && ["emesso", "simulato"].includes(s.stato) && !s.fattura_id &&
-                      <Button size="xs" variant="ghost" title="Il cliente chiede la fattura dopo lo scontrino: corrispettivo già certificato, non si paga due volte"
-                        onClick={() => fatturaDaScontrino(s)}><FileText /> Fattura</Button>}
-                    {s.fattura_id && <Link className="text-xs underline" href={`/fatturazione?id=${s.fattura_id}`}>fattura</Link>}
+                      <Button size="xs" variant="ghost" title="Il cliente chiede la fattura: lo scontrino si annulla sul registratore e al suo posto nasce la fattura, già pagata"
+                        onClick={() => setDaFatturare(s)}>
+                        {s.annulla_e_fattura?.stato === "in_attesa" ? <Loader2 className="animate-spin" /> : <FileText />}
+                        {s.annulla_e_fattura?.stato === "in_attesa" ? "Annullo in corso…" : s.annulla_e_fattura?.stato === "fallita" ? "Annullo non riuscito" : "Annulla e fai fattura"}</Button>}
+                    {s.fattura_id && <Link className="text-xs underline" href={`/fatturazione?id=${s.fattura_id}`}>fattura{s.stato === "annullato" ? " (al posto dello scontrino)" : ""}</Link>}
                   </span>
                 </div>
               </div>
@@ -453,6 +448,7 @@ export default function CassaPage() {
         </Card>
       </div>
       <StornoDialog oggetto={storno ? { fonte: "scontrino", scontrino: storno } : null} onClose={() => setStorno(null)} onFatto={ricarica} />
+      <AnnullaEFattura scontrino={daFatturare} onClose={() => setDaFatturare(null)} onCambiato={ricarica} />
       {/* recupero del credito di uno scontrino «non riscosso»: un metodo per volta (RECUPERO CREDITI sul registratore) */}
       <Dialog open={!!recupero} onOpenChange={(o) => { if (!o) setRecupero(null); }}>
         <DialogContent className="max-w-md">

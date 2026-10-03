@@ -990,7 +990,7 @@ export interface Fattura {
   da_proforma?: { id: string; numero: number; anno: number; tipo: string; stato: string } | null;
   /** registro pagamenti (03/10/2026): quanto è stato incassato, righe con metodo/data, residuo */
   pagato?: number; incassi?: RiepilogoPagamenti | null; rate?: { importo: number; scadenza: string | null; modalita: string }[] | null;
-  /** fattura fatta su uno scontrino già battuto (corrispettivo già certificato) */
+  /** scontrino ANNULLATO sul registratore che questa fattura sostituisce («annulla scontrino e fai fattura») */
   scontrino_id?: string | null; scontrino?: { id: string; numero_rt: string | null; data_rt: string | null; created_at: string; totale: number } | null;
   /** fatture d'acconto (TD02) scalate da questa fattura di saldo */
   acconti_ids?: string[] | null; acconti?: { id: string; numero: string; data: string; totale: number; pagamento_stato: string }[];
@@ -1024,8 +1024,25 @@ export async function pagAnnulla(pid: string, motivo: string) {
 export async function cassaRecupero(sid: string, body: { pagamenti: { modalita: string; importo: number; pos_incasso_id?: string }[]; operatore: string }): Promise<Scontrino & { resta: number; a_mano?: boolean }> {
   return fetchAPI(`/api/cassa/scontrini/${sid}/recupero`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function cassaFatturaDaScontrino(sid: string, body: { operatore: string; anagrafica_id?: string | null; controparte?: FattControparte }): Promise<Fattura> {
-  return fetchAPI(`/api/cassa/scontrini/${sid}/fattura`, { method: 'POST', body: JSON.stringify(body) });
+// «Annulla scontrino e fai fattura» (03/10/2026): O scontrino O fattura. Si annulla lo scontrino sul registratore e,
+// SOLO quando l'agente conferma l'annullo, nasce la fattura (bozza) già pagata con gli stessi pagamenti.
+export interface StatoAnnullaEFattura {
+  stato: 'nessuna' | 'in_attesa' | 'fatta' | 'fallita' | 'annullata'; errore?: string | null; fattura_id?: string | null;
+  annullo_id?: string; annullo_stato?: string; chiesta_il?: string;
+}
+export async function cassaAnnullaEFattura(sid: string, body: { operatore: string; controparte: FattControparte; anagrafica_id?: string | null;
+  customer_id?: string | null; salva_anagrafica?: boolean; numero_originale?: string; motivo?: string }): Promise<StatoAnnullaEFattura & { ok: boolean }> {
+  return fetchAPI(`/api/cassa/scontrini/${sid}/annulla-e-fattura`, { method: 'POST', body: JSON.stringify(body) });
+}
+export async function cassaAnnullaEFatturaStato(sid: string): Promise<StatoAnnullaEFattura> {
+  return fetchAPI(`/api/cassa/scontrini/${sid}/annulla-e-fattura`, { cache: 'no-store' });
+}
+export async function cassaAnnullaEFatturaRiprovaFattura(annulloId: string): Promise<Fattura> {
+  return fetchAPI(`/api/cassa/scontrini/${annulloId}/annulla-e-fattura/riprova-fattura`, { method: 'POST' });
+}
+/** Ricerca degli scontrini emessi senza fattura (numero 2312-0004, importo 12,50 o descrizione) — creazione della fattura. */
+export async function cassaScontriniDaFatturare(q: string, societa = 'genius'): Promise<{ scontrini: Scontrino[] }> {
+  return fetchAPI(`/api/cassa/scontrini-da-fatturare?q=${encodeURIComponent(q)}&societa=${societa}`, { cache: 'no-store' });
 }
 export async function fattConfig() { return fetchAPI('/api/fatturazione/config'); }
 export async function fattElenco(params: Record<string, string>) {
@@ -1252,8 +1269,10 @@ export interface RigaCassa { prodotto_id?: string | null; /** pezzo serializzato
 export interface PagamentoScontrino { modalita: string; importo: number; consegnato?: number; pos_incasso_id?: string; transaction_code?: string | null; riferimento?: string }
 export interface Scontrino {
   id: string; stato: string; righe: RigaCassa[]; totale: number; pagamenti: PagamentoScontrino[];
-  /** «non riscosso»: quanto resta da recuperare (RECUPERO CREDITI) · fattura fatta dopo sullo scontrino */
+  /** «non riscosso»: quanto resta da recuperare (RECUPERO CREDITI) · fattura che ha sostituito lo scontrino annullato */
   credito_residuo?: number; fattura_id?: string | null; resto?: number; consegnato?: number;
+  /** «annulla scontrino e fai fattura»: a che punto è (sullo scontrino originale) */
+  annulla_e_fattura?: StatoAnnullaEFattura | null;
   codice_lotteria: string | null; numero_rt: string | null; errore: string | null; risposta_rt: string | null; created_at: string;
   /** vendita (default) · reso · annullo: i documenti di reso/annullo hanno importi da leggere in NEGATIVO */
   tipo_documento?: 'vendita' | 'reso' | 'annullo' | 'recupero_credito' | null; rif_scontrino_id?: string | null; motivo?: string | null; creato_da?: string | null;

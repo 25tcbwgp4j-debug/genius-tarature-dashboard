@@ -12,9 +12,11 @@ import { CercaArticolo } from "@/components/CercaArticolo";
 import { DecInput } from "@/components/DecInput";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
+import { AnnullaEFattura } from "@/components/AnnullaEFattura";
 import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 import {
+  cassaScontriniDaFatturare,
   fattCatalogo,
   fattCrea,
   fattEmetti,
@@ -28,6 +30,7 @@ import {
   type FattRiga,
   type FattSocieta,
   type Fattura,
+  type Scontrino,
 } from "@/lib/api";
 import { MODALITA_LABEL, NATURE_IVA, SOCIETA_LABEL, TIPI_LABEL, eur, ivaMargine, stimaTotali } from "./util";
 
@@ -97,6 +100,18 @@ export function Editor({
   const [q, setQ] = useState("");
   const [trovati, setTrovati] = useState<ClienteAnagrafica[]>([]);
   const [catalogo, setCatalogo] = useState<FattVoceCatalogo[]>([]);
+  // il cliente ha già lo scontrino (03/10/2026, O scontrino O fattura): si cerca e si fa «annulla scontrino e fai fattura»
+  const [qSc, setQSc] = useState("");
+  const [scTrovati, setScTrovati] = useState<Scontrino[]>([]);
+  const [daAnnullare, setDaAnnullare] = useState<Scontrino | null>(null);
+  const [clienteSnap, setClienteSnap] = useState<{ controparte: FattControparte; anagrafica_id: string | null; customer_id: string | null } | null>(null);
+  useEffect(() => {
+    if (qSc.trim().length < 2) { setScTrovati([]); return; }
+    const t = setTimeout(() => {
+      cassaScontriniDaFatturare(qSc.trim(), societa).then((r) => setScTrovati(r.scontrini || [])).catch(() => setScTrovati([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [qSc, societa]);
 
   useEffect(() => {
     fattCatalogo(societa).then((r) => setCatalogo(r.voci || [])).catch(() => setCatalogo([]));
@@ -270,6 +285,30 @@ export function Editor({
             <div className="space-y-1"><div className={lab}>Numero</div>
               <div className="flex h-8 items-center text-sm text-muted-foreground">{iniziale?.numero || "assegnato all'invio"}</div></div>
           </div>
+
+          {/* Il cliente ha già lo scontrino: niente fattura «in più», si annulla lo scontrino e la fattura nasce già pagata */}
+          {!idSalvato && societa === "genius" && (
+            <div className="space-y-2 rounded-lg border border-dashed p-3">
+              <div className="text-sm font-medium">Il cliente ha già lo scontrino?</div>
+              <p className="text-xs text-muted-foreground">O scontrino O fattura: cerca lo scontrino (numero 2312-0004, importo o articolo), si annulla sul registratore e al suo posto nasce la fattura, già pagata con gli stessi pagamenti. I dati del cliente scritti qui sotto vengono ripresi.</p>
+              <div className="relative">
+                <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
+                <Input className="h-8 pl-8" placeholder="Cerca scontrino degli ultimi 30 giorni…" value={qSc} onChange={(e) => setQSc(e.target.value)} />
+              </div>
+              {scTrovati.length > 0 && (
+                <div className="max-h-56 divide-y overflow-y-auto rounded-md border">
+                  {scTrovati.map((s) => (
+                    <button key={s.id} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted" onClick={() => { setClienteSnap({ controparte: corpo().controparte, anagrafica_id: anagraficaId, customer_id: customerId }); setDaAnnullare(s); }}>
+                      <span><b>{s.numero_rt || "(senza numero)"}</b> · {new Date(s.data_rt || s.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        <span className="block text-xs text-muted-foreground">{(s.righe || []).map((r) => r.descrizione).join(", ").slice(0, 90)}</span></span>
+                      <span className="shrink-0 tabular-nums">{eur(Number(s.totale))}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {qSc.trim().length >= 2 && !scTrovati.length && <div className="text-xs text-muted-foreground">Nessuno scontrino emesso e senza fattura con questa ricerca.</div>}
+            </div>
+          )}
 
           {/* Cliente */}
           <div className="space-y-2 rounded-lg border p-3">
@@ -467,6 +506,9 @@ export function Editor({
             {salvando === "invio" ? <Loader2 className="animate-spin" /> : <Send />} Salva e invia allo SdI
           </Button>
         </div>
+        {/* dentro il pannello: i clic nel dialogo non devono arrivare allo sfondo (che chiude l'editor) */}
+        <AnnullaEFattura scontrino={daAnnullare} onClose={() => setDaAnnullare(null)} cliente={clienteSnap}
+          onFatta={(fid) => { setDaAnnullare(null); setSporco(false); onSaved(fid); }} />
       </div>
     </div>
   );

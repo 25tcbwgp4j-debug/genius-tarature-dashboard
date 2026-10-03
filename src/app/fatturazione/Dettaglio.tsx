@@ -478,8 +478,8 @@ function IncassoFattura({ f, operatore, busy, onCambiato }: {
         : pagato > 0 ? "bg-sky-500/15 text-sky-900 dark:text-sky-200" : "bg-amber-500/15 text-amber-800 dark:text-amber-300"}`}>{inc.badge}</div>}
       {f.scontrino && (
         <div className="rounded-md border border-sky-300 bg-sky-50 p-2 text-xs dark:bg-sky-950/30">
-          Fattura dello scontrino <b>{f.scontrino.numero_rt || "(numero non letto)"}</b> del {dataIt(f.scontrino.data_rt || f.scontrino.created_at)}:
-          corrispettivo già certificato e incassato con lo scontrino. Non entra di nuovo nella cassa del giorno.</div>
+          Al posto dello scontrino <b>{f.scontrino.numero_rt || "(numero non letto)"}</b> del {dataIt(f.scontrino.data_rt || f.scontrino.created_at)},
+          annullato sul registratore: già pagata con gli stessi pagamenti. Nota interna, non va nell&apos;XML.{f.stato === "bozza" ? " Controlla i dati e inviala allo SdI." : ""}</div>
       )}
       {!!f.acconti?.length && (
         <div className="text-xs text-muted-foreground">Scala le fatture d&apos;acconto: {f.acconti.map((a) => `${a.numero ? `n. ${a.numero}` : "(bozza)"} del ${dataIt(a.data)} (${eur(a.totale)})`).join(", ")}</div>
