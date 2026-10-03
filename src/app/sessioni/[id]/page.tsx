@@ -889,6 +889,7 @@ export default function SessionDetail() {
         apriDialogProforma={() => { setPfDopo(null); setDialogPf(true); }}
         currentStep={currentStep}
         statoPag={statoPag}
+        onRicarica={loadSession}
       />
 
       {/* Cliente (chi paga): una riga, dettagli a richiesta */}

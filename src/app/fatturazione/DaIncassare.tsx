@@ -101,7 +101,7 @@ export function DaIncassare({
   async function richiedi(c: FattCredito) {
     const ids = scelte(c);
     if (!ids.length) { toast.error("Seleziona almeno una fattura"); return; }
-    const tot = c.fatture.filter((f) => sel[f.id]).reduce((s, f) => s + Number(f.totale), 0);
+    const tot = c.fatture.filter((f) => sel[f.id]).reduce((s, f) => s + Number(f.residuo ?? f.totale), 0);
     if (!confirm(`Inviare a ${email} la richiesta di pagamento${per.label ? ` (${per.label})` : ""}: ${ids.length} fatture, ${eur(tot)}` +
       `${allega ? ", con le copie PDF delle fatture" : ""}?`)) return;
     setBusy("mail");
@@ -188,12 +188,13 @@ export function DaIncassare({
                           <td className="p-1">{dataIt(f.data)}</td>
                           <td className={`p-1 ${(f.scadenza || f.data || "") < oggi ? "font-medium text-red-600" : ""}`}>{dataIt(f.scadenza)}</td>
                           <td className="p-1 text-xs">{(STATI[f.stato] || { label: f.stato }).label}</td>
-                          <td className="p-1 text-right tabular-nums">{eur(f.totale)}</td>
+                          <td className="p-1 text-right tabular-nums">{eur(f.residuo ?? f.totale)}
+                            {Number(f.pagato || 0) > 0 && <div className="text-[11px] text-sky-700 dark:text-sky-300">su {eur(f.totale)} · acconto {eur(Number(f.pagato))}</div>}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <div className="text-right text-sm">Selezionate: <b>{eur(c.fatture.filter((f) => sel[f.id]).reduce((s, f) => s + Number(f.totale), 0))}</b></div>
+                  <div className="text-right text-sm">Selezionate: <b>{eur(c.fatture.filter((f) => sel[f.id]).reduce((s, f) => s + Number(f.residuo ?? f.totale), 0))}</b></div>
                   {emessa && (
                     <div className="space-y-2 rounded-md border bg-background p-2">
                       <div className="text-xs font-medium">

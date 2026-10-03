@@ -11,6 +11,7 @@ import { Euro, FileOutput, Loader2, Mail, MessageCircle, PackageCheck } from "lu
 import { toast } from "sonner";
 import { generateRdts, markDelivered, markSessionPaid, notifyReady, registerComplete, type StatoPagamentoSessione } from "@/lib/api";
 import { testoPagamento } from "./PagamentoStato";
+import { IncassoSessione } from "./IncassoSessione";
 
 type Sess = Record<string, any>;  // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -27,6 +28,8 @@ interface Props {
   currentStep: number;
   /** stato del pagamento dalla fattura collegata (fonte di verità, 03/10/2026) */
   statoPag?: StatoPagamentoSessione | null;
+  /** dopo un incasso (anche parziale): ricarica sessione e stato del pagamento */
+  onRicarica?: () => void;
 }
 
 function breve(iso: string | null | undefined) {
@@ -77,7 +80,7 @@ function Canali({ email, whatsapp, disabled, busy }: {
 }
 
 export function AzioniSessione({ sessionId, session, instruments, actionLoading, setActionLoading, handleAction,
-  previewLoading, apriAnteprimaProforma, apriDialogProforma, currentStep, statoPag }: Props) {
+  previewLoading, apriAnteprimaProforma, apriDialogProforma, currentStep, statoPag, onRicarica }: Props) {
   const occupato = actionLoading !== null;
   const ultimoRdt = instruments.map((i) => i.rdt_generated_at || "").filter(Boolean).sort().pop();
   // con la fattura vale la fattura: è lei che dice se è pagata (la sessione si allinea da sola)
@@ -150,6 +153,8 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
         <Gruppo titolo="Pagamento" sotto={<>
           {/* stato unico (fattura → sessione): pagata il / con cosa, oppure modalità + termine + scadenza */}
           {tp && <p className={`rounded border px-1.5 py-1 text-[11px] font-medium leading-snug ${tp.colore}`}>{tp.lungo}</p>}
+          {/* pagamento in più volte / misto / acconto e saldo (03/10/2026) */}
+          <IncassoSessione sessionId={sessionId} st={statoPag || null} disabled={occupato} onFatto={() => onRicarica?.()} />
           {!isPaid && (
           <button type="button" className="mt-1 flex h-10 w-full items-center justify-center rounded-md border border-purple-300 px-2 text-[11px] text-purple-700 hover:bg-purple-50 disabled:opacity-50" disabled={occupato}
             title="Genera link Stripe Checkout — il cliente paga in 1 clic con la carta"

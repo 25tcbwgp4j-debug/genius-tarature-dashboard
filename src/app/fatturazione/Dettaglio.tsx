@@ -11,16 +11,17 @@ import {
 import { toast } from "sonner";
 import { docDaFattura } from "@/lib/api";
 import { PagaPos } from "@/components/PagaPos";
-import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
+import { BadgeOperatore, SceltaOperatore, useOperatore, type Operatore } from "@/components/Operatore";
 import { SceltaAttivita } from "@/components/attivita";
 import { CaricoMagazzino } from "./CaricoMagazzino";
 import { usePermessi as usePermessiAtt } from "@/components/permessi";
 import { cambiaAttivita } from "@/lib/api";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
+import { Incassa, NOMI_MODALITA } from "@/components/Incassa";
 import { toastErrore } from "@/lib/errori";
 import {
   fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattInvia, fattLinkStripe, fattNotaCredito,
-  fattPagamento, fattUrlPdf, fattUrlStampa, fattUrlXml, type FattModalita, type Fattura,
+  fattPagamento, fattUrlPdf, fattUrlStampa, fattUrlXml, pagAnnulla, pagIncassaFattura, pagRate, type FattModalita, type Fattura, type ModalitaIncasso,
 } from "@/lib/api";
 import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
 
@@ -126,7 +127,8 @@ export function Dettaglio({
             <div className="mt-1 flex flex-wrap gap-1.5">
               <span className={`rounded px-1.5 py-0.5 text-xs ${st.cls}`}>{st.label}</span>
               <span className={`rounded px-1.5 py-0.5 text-xs ${pagata ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
-                {pagata ? `${emessa ? "Incassata" : "Pagata"} ${dataIt(f.pagato_il)}` : emessa ? "Da incassare" : "Da pagare"}
+                {pagata ? `${emessa ? "Incassata" : "Pagata"} ${dataIt(f.pagato_il)}` : f.pagamento_stato === "parziale"
+                  ? `Incassata in parte: ${eur(Number(f.pagato || 0))} su ${eur(Number(f.totale))}` : emessa ? "Da incassare" : "Da pagare"}
               </span>
               {f.operatore && <span className="flex items-center gap-1 text-xs text-muted-foreground">fatta da <BadgeOperatore op={f.operatore} /></span>}
               {f.ambiente === "sandbox" && <span className="rounded bg-orange-500/15 px-1.5 py-0.5 text-xs text-orange-700 dark:text-orange-300">PROVA</span>}
@@ -343,8 +345,12 @@ export function Dettaglio({
               {f.note_credito.map((n) => <button key={n.id} className="mr-2 underline" onClick={() => onOpen(n.id)}>n. {n.numero || "bozza"} ({eur(n.totale)})</button>)}</div>
           )}
 
-          {/* Pagamento */}
-          {f.tipo_documento !== "TD04" && (
+          {/* Incasso della fattura EMESSA (03/10/2026): registro pagamenti — più incassi, metodi diversi, acconti e saldo */}
+          {emessa && f.tipo_documento !== "TD04" && (
+            <IncassoFattura f={f} operatore={operatore} setOperatore={setOperatore} busy={busy} onCambiato={() => { carica(); onChanged(); }} />
+          )}
+          {/* Pagamento al FORNITORE (fatture ricevute): come prima */}
+          {!emessa && f.tipo_documento !== "TD04" && (
             <div className="space-y-2 rounded-lg border p-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{emessa ? "Incasso" : "Pagamento al fornitore"}</span>
@@ -430,6 +436,111 @@ export function Dettaglio({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/** Incasso di una fattura emessa (03/10/2026): righe del registro pagamenti (anche annullate), residuo, un pagamento alla
+ *  volta con qualunque metodo (Incassa in modo «documento»), link Stripe per l'importo scelto, piano rate per l'XML. */
+function IncassoFattura({ f, operatore, setOperatore, busy, onCambiato }: {
+  f: Fattura; operatore: Operatore | ""; setOperatore: (o: Operatore | "") => void; busy: string; onCambiato: () => void;
+}) {
+  const inc = f.incassi;
+  const totale = Number(f.totale) || 0;
+  const pagato = inc ? inc.pagato : Number(f.pagato || 0);
+  const residuo = inc ? inc.residuo : Math.max(0, totale - pagato);
+  const righe = inc?.righe || [];
+  const [rate, setRate] = useState<{ importo: string; scadenza: string }[] | null>(null);
+  const modificabile = ["bozza", "errore", "scartata"].includes(f.stato);
+  const desc = `Fattura ${f.numero || "(bozza)"} — ${f.controparte_nome || ""}`;
+
+  async function annulla(pid: string, imp: number) {
+    const motivo = prompt(`Annullare l'incasso di ${eur(imp)}? Scrivi il motivo (es. registrato per errore):`);
+    if (!motivo || motivo.trim().length < 3) return;
+    try { await pagAnnulla(pid, motivo.trim()); toast.success("Incasso annullato"); onCambiato(); } catch (e) { toastErrore(e); }
+  }
+  async function salvaRate() {
+    if (!rate) return;
+    try {
+      await pagRate(f.id, rate.filter((r) => r.importo.trim()).map((r) => ({ importo: Number(r.importo.replace(",", ".")), scadenza: r.scadenza || null, modalita: "bonifico" })));
+      toast.success("Piano rate salvato: va nell'XML (DatiPagamento)"); setRate(null); onCambiato();
+    } catch (e) { toastErrore(e); }
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium">Incasso</span>
+        <span className="text-xs text-muted-foreground">{f.scadenza && residuo > 0.005 ? `scadenza ${dataIt(f.scadenza)}` : ""}</span>
+      </div>
+      {inc?.badge && <div className={`rounded-md px-2 py-1.5 text-sm font-medium ${residuo <= 0.005 ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300"
+        : pagato > 0 ? "bg-sky-500/15 text-sky-900 dark:text-sky-200" : "bg-amber-500/15 text-amber-800 dark:text-amber-300"}`}>{inc.badge}</div>}
+      {f.scontrino && (
+        <div className="rounded-md border border-sky-300 bg-sky-50 p-2 text-xs dark:bg-sky-950/30">
+          Fattura dello scontrino <b>{f.scontrino.numero_rt || "(numero non letto)"}</b> del {dataIt(f.scontrino.data_rt || f.scontrino.created_at)}:
+          corrispettivo già certificato e incassato con lo scontrino. Non entra di nuovo nella cassa del giorno.</div>
+      )}
+      {!!f.acconti?.length && (
+        <div className="text-xs text-muted-foreground">Scala le fatture d&apos;acconto: {f.acconti.map((a) => `n. ${a.numero} del ${dataIt(a.data)} (${eur(a.totale)})`).join(", ")}</div>
+      )}
+      {!!righe.length && (
+        <div className="divide-y rounded-md border">
+          {righe.map((r) => (
+            <div key={r.id} className={`flex items-center justify-between gap-2 px-2 py-1.5 text-sm ${r.stato === "annullato" ? "opacity-50" : ""}`}>
+              <span className={r.stato === "annullato" ? "line-through" : ""}>
+                {dataIt(r.data)} · <b>{NOMI_MODALITA[r.modalita] || r.modalita}</b> {eur(Number(r.importo))}
+                {r.tipo && !["intero"].includes(r.tipo) ? <span className="ml-1 rounded bg-muted px-1 text-[11px]">{r.tipo}</span> : null}
+                {r.riferimento ? <span className="text-xs text-muted-foreground"> · {r.riferimento}</span> : null}
+                {r.operatore ? <BadgeOperatore op={r.operatore} className="ml-1" /> : null}
+                {r.stato === "annullato" && r.annullo_motivo ? <span className="text-xs"> · annullato: {r.annullo_motivo}</span> : null}
+              </span>
+              {r.stato === "valido" && !r.scontrino_id && (
+                <Button size="icon" variant="ghost" className="size-9 shrink-0" title="Annulla questo incasso (registrato per errore)" disabled={!!busy}
+                  onClick={() => annulla(r.id, Number(r.importo))}><Undo2 className="size-4" /></Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {residuo > 0.005 && (
+        <>
+          {!operatore && <SceltaOperatore value={operatore} onChange={setOperatore} />}
+          <Incassa key={`${f.id}-${pagato}`} modo="documento" totale={totale} giaPagato={pagato} documentoTipo="fattura" descrizione={desc}
+            testoCliente={f.controparte_nome || ""} disabled={!!busy || !operatore} motivo={!operatore ? "scegli l'operatore" : ""}
+            stripeLink={f.stato !== "bozza" ? async (imp) => (await fattLinkStripe(f.id, imp))?.url : undefined}
+            onPagamento={async (p) => {
+              await pagIncassaFattura(f.id, { importo: p.importo, modalita: p.modalita as ModalitaIncasso, data: p.data, riferimento: p.riferimento,
+                pos_incasso_id: p.pos_incasso_id, operatore: operatore! });
+              return { id: f.id, descrizione: desc };
+            }}
+            onFatto={onCambiato} />
+          {modificabile && (rate ? (
+            <div className="space-y-1 rounded-md border p-2 text-sm">
+              <div className="text-xs text-muted-foreground">Piano rate di quanto resta ({eur(residuo)}): va nell&apos;XML come più scadenze. Vuoto = una scadenza sola.</div>
+              {rate.map((r, i) => (
+                <div key={i} className="flex gap-2">
+                  <input className="h-9 w-28 rounded-md border border-input bg-background px-2 text-right" inputMode="decimal" placeholder="importo" value={r.importo}
+                    onChange={(e) => setRate(rate.map((x, j) => (j === i ? { ...x, importo: e.target.value } : x)))} />
+                  <input type="date" className="h-9 rounded-md border border-input bg-background px-2" value={r.scadenza}
+                    onChange={(e) => setRate(rate.map((x, j) => (j === i ? { ...x, scadenza: e.target.value } : x)))} />
+                  <Button size="icon" variant="ghost" className="size-9" onClick={() => setRate(rate.filter((_, j) => j !== i))}><X className="size-4" /></Button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setRate([...rate, { importo: "", scadenza: "" }])}>+ Rata</Button>
+                <Button size="sm" onClick={salvaRate}>Salva rate</Button>
+                <Button size="sm" variant="ghost" onClick={() => setRate(null)}>Chiudi</Button>
+              </div>
+            </div>
+          ) : (
+            <button className="text-xs underline text-muted-foreground" onClick={() => setRate((f.rate || []).length
+              ? (f.rate || []).map((r) => ({ importo: String(r.importo).replace(".", ","), scadenza: r.scadenza || "" }))
+              : [{ importo: "", scadenza: "" }, { importo: "", scadenza: "" }])}>
+              Pagamento a rate (scadenze nell&apos;XML){(f.rate || []).length ? ` · ${(f.rate || []).length} rate impostate` : ""}</button>
+          ))}
+        </>
+      )}
     </div>
   );
 }

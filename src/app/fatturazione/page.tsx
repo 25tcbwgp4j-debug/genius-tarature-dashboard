@@ -361,7 +361,7 @@ function Pagina() {
 
       {!loading && tab === "emessa" && pagamento === "da_pagare" && righe.length > 0 && (
         <Card className="flex flex-wrap items-center gap-2 p-2 text-sm">
-          <span>{righe.length} fatture da incassare · <b>{eur(righe.reduce((t, f) => t + Number(f.totale) * (f.tipo_documento === "TD04" ? -1 : 1), 0))}</b></span>
+          <span>{righe.length} fatture da incassare · <b>{eur(righe.reduce((t, f) => t + (Number(f.totale) - Number(f.pagato || 0)) * (f.tipo_documento === "TD04" ? -1 : 1), 0))}</b></span>
           <Button size="sm" className="ml-auto" onClick={() => { setCercaCrediti(q); setTab("incassare"); }}>
             <Send /> Estratto PDF e richiesta di pagamento{q ? ` a «${q}»` : ""}
           </Button>
@@ -414,6 +414,10 @@ function Pagina() {
                     <td className="p-2 text-xs">
                       {nc ? "—" : f.pagamento_stato === "pagata"
                         ? <span className="text-emerald-700 dark:text-emerald-300">{MODALITA_LABEL[f.pagamento_modalita || ""] || "pagata"} · {dataIt(f.pagato_il)}</span>
+                        : f.pagamento_stato === "parziale"
+                        ? <span className={scaduta ? "font-medium text-red-600" : "text-sky-700 dark:text-sky-300"} title="Incassata in parte (acconto)">
+                            in parte: {eur(Number(f.pagato || 0))} · resta {eur(Number(f.totale) - Number(f.pagato || 0))}{f.scadenza ? ` · ${dataIt(f.scadenza)}` : ""}
+                          </span>
                         : <span className={scaduta ? "font-medium text-red-600" : "text-amber-700 dark:text-amber-300"}>
                             {tab === "emessa" ? "da incassare" : "da pagare"}{f.scadenza ? ` · ${dataIt(f.scadenza)}` : ""}
                           </span>}

@@ -24,6 +24,15 @@ export function testoPagamento(st: StatoPagamentoSessione | null): { breve: stri
       colore: "bg-emerald-100 text-emerald-800 border-emerald-300",
     };
   }
+  // pagata in parte (acconto, pagamento in più volte — 03/10/2026): «Pagato 150 su 300 · … · residuo 150»
+  if (p.parziale && (p.residuo || 0) > 0.005) {
+    const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+    return {
+      breve: `Pagata in parte · resta ${eur(p.residuo || 0)}`,
+      lungo: `${p.badge || `Pagato ${eur(p.pagato || 0)} su ${eur(p.totale || 0)}`}${doc ? ` (${doc})` : ""}`,
+      colore: "bg-sky-100 text-sky-900 border-sky-300",
+    };
+  }
   if (st.sessione?.payment_status === "non_richiesto" && !f) {
     return { breve: "Pagamento non richiesto", lungo: "Pagamento non richiesto", colore: "bg-gray-100 text-gray-600 border-gray-300" };
   }

@@ -425,6 +425,14 @@ function SchedaView({ id, operatore, setOperatore, admin, onApri, onCambiata }: 
           <Button size="sm" variant="outline" title="Etichetta di ritorno + corriere prenotato dal cliente (UPS o DHL)" onClick={() => { setDirSped("ritiro"); setDialogo("spedizione"); }}><Truck className="mr-1" />RITIRO CORRIERE</Button>
           <Button size="sm" variant="outline" title="Spedizione al cliente + corriere prenotato da noi in Viale Somalia (UPS o DHL)" onClick={() => { setDirSped("riconsegna"); setDialogo("spedizione"); }}><Truck className="mr-1" />SPEDISCI</Button>
           <Button size="sm" variant="outline" onClick={() => vendi("scontrino")} title="Apre la cassa con le righe della scheda"><ShoppingCart className="mr-1" />Scontrino</Button>
+          <Button size="sm" variant="outline" title="Scontrino d'ACCONTO: il cliente lascia un anticipo (anche contanti + carta); al saldo si scala da solo"
+            onClick={async () => {
+              if (sporca && !(await salva(true))) return;
+              const x = prompt("Importo dell'acconto (€)", "");
+              const imp = Number(String(x || "").replace(",", "."));
+              if (!(imp > 0)) return;
+              router.push(`/cassa?${new URLSearchParams({ scheda: s.id, acconto: imp.toFixed(2) })}`);
+            }}>Acconto</Button>
           <Button size="sm" variant="outline" disabled={!!s.fattura_id || !!busy} onClick={() => vendi("fattura")}><FileText className="mr-1" />Fattura</Button>
           <Button size="sm" variant="outline" disabled={!!s.documento_id || !!busy} onClick={() => vendi("ordine")}>Ordine</Button>
         </div>

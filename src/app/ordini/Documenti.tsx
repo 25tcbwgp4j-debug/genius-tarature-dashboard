@@ -473,7 +473,9 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
             <div className="font-medium">Pagamenti</div>
             {d.pagamenti.map((p) => (
               <div key={p.id} className="flex flex-wrap justify-between gap-2">
-                <span>{dataIt(p.data)} · {p.tipo === "acconto" ? "Acconto" : "Saldo"}{p.in_attesa ? "" : ` · ${MOD_L[p.modalita] || p.modalita}`}</span>
+                <span>{dataIt(p.data)} · {p.tipo === "acconto" ? "Acconto" : "Saldo"}{p.in_attesa ? "" : p.dettaglio?.length
+                  ? ` · ${p.dettaglio.map((x) => `${MOD_L[x.modalita] || x.modalita} ${eur(x.importo)}`).join(" + ")}`
+                  : ` · ${MOD_L[p.modalita] || p.modalita}`}</span>
                 <span>{p.certificato === "scontrino"
                   ? (p.scontrino_numero ? `scontrino n. ${p.scontrino_numero}` : <span className={p.scontrino_stato === "errore" ? "text-red-600" : "text-muted-foreground"}>
                     scontrino al registratore{p.scontrino_stato ? ` (${p.scontrino_stato.replace("_", " ")})` : ""}{p.scontrino_errore ? `: ${p.scontrino_errore}` : ""}</span>)
