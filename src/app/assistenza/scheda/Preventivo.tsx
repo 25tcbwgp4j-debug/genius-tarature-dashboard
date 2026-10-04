@@ -165,6 +165,7 @@ export function Preventivo({ s, bz, setBz, ro, onInvia, onNotaInterna, onStessoM
 
         {bb.map((b) => (
           <Blocco key={b} b={b} righe={righe} ro={ro} attivo={b === bloccoAttivo} onAttiva={() => setBloccoAttivo(b)}
+            accettato={accettato || (b < Math.max(...bb) && s.preventivo_stato !== "da_fare")}
             upd={upd} togli={togli} setRighe={setRighe} />
         ))}
         {!ro && (
@@ -177,7 +178,8 @@ export function Preventivo({ s, bz, setBz, ro, onInvia, onNotaInterna, onStessoM
         )}
 
         <div className="grid gap-3 lg:grid-cols-[auto_1fr] lg:items-end">
-          <Campo label="Spese di spedizione">
+          <div>
+            <span className="mb-0.5 block text-xs font-medium text-muted-foreground">Spese di spedizione</span>
             <div className="flex flex-wrap items-center gap-2">
               <Scelta piccolo disabled={ro} valore={bz.spedizione_tipo || "nessuna"} opzioni={SPEDIZIONI.map(([k, l]) => [k, l])}
                 onChange={(v) => setBz((x) => ({ ...x, spedizione_tipo: v, spedizione_importo: v === "nessuna" ? x.spedizione_importo : (x.spedizione_importo || spedDefault) }))} />
@@ -186,7 +188,7 @@ export function Preventivo({ s, bz, setBz, ro, onInvia, onNotaInterna, onStessoM
                   <input className={`${campo} h-8 w-20 text-right`} disabled={ro} inputMode="decimal" value={bz.spedizione_importo ?? ""} onChange={(e) => setBz((x) => ({ ...x, spedizione_importo: e.target.value.replace(",", ".") }))} /></span>
               )}
             </div>
-          </Campo>
+          </div>
           <div className="text-xs text-muted-foreground lg:text-right">Di solito 28 € A/R; cambia con dimensioni e peso.</div>
         </div>
 
@@ -240,8 +242,8 @@ export function Preventivo({ s, bz, setBz, ro, onInvia, onNotaInterna, onStessoM
   );
 }
 
-function Blocco({ b, righe, ro, attivo, onAttiva, upd, togli, setRighe }: {
-  b: number; righe: EstimateLine[]; ro: boolean; attivo: boolean; onAttiva: () => void;
+function Blocco({ b, righe, ro, attivo, onAttiva, upd, togli, setRighe, accettato }: {
+  b: number; righe: EstimateLine[]; ro: boolean; attivo: boolean; onAttiva: () => void; accettato: boolean;
   upd: (i: number, k: keyof EstimateLine, v: unknown) => void; togli: (i: number) => void; setRighe: (f: (r: EstimateLine[]) => EstimateLine[]) => void;
 }) {
   const fisse = righe.map((r, i) => ({ r, i })).filter((x) => blocco(x.r) === b && x.r.opt == null);
@@ -263,7 +265,7 @@ function Blocco({ b, righe, ro, attivo, onAttiva, upd, togli, setRighe }: {
               <label className="flex items-center gap-1.5 font-semibold"><input type="radio" disabled={ro} checked={ip.scelta} onChange={() => setRighe((rr) => scegliIpotesi(rr, b, ip.opt))} />
                 {ip.n}ª IPOTESI</label>
             )}
-            <span className="text-muted-foreground">{ip.agg ? "si somma all'ipotesi scelta" : ip.scelta ? "quella proposta (nel totale)" : "alternativa"}</span>
+            <span className="text-muted-foreground">{accettato && ip.scelta ? <Pill tono="verde">ACCETTATA</Pill> : ip.agg ? "si somma all'ipotesi scelta" : ip.scelta ? "quella proposta (nel totale)" : "alternativa"}</span>
             <span className="ml-auto font-semibold tabular-nums">{eur(ip.totale)}</span>
             {!ro && <Button size="xs" variant="ghost" onClick={() => setRighe((rr) => [...rr, { t: "", p: "", opt: ip.opt, on: ip.scelta, agg: ip.agg, b }])} title="Altra voce nella stessa ipotesi"><Plus />voce</Button>}
           </div>
@@ -279,7 +281,7 @@ function Riga({ r, i, ro, upd, togli, etichetta }: { r: EstimateLine; i: number;
     <div className="space-y-1">
       <div className="flex items-start gap-1.5">
         {etichetta && <span className="mt-2.5 w-16 shrink-0 text-[11px] text-muted-foreground">{etichetta}</span>}
-        <textarea className={`${area} min-h-9 flex-1 resize-y`} rows={r.t.length > 90 ? 2 : 1} disabled={ro} value={r.t} placeholder="Descrizione della voce" onChange={(e) => upd(i, "t", e.target.value)} />
+        <textarea className={`${area} min-h-9 flex-1 resize-y`} rows={Math.min(4, Math.max(1, Math.ceil(r.t.length / 70)))} disabled={ro} value={r.t} placeholder="Descrizione della voce" onChange={(e) => upd(i, "t", e.target.value)} />
         <div className="relative w-24 shrink-0">
           <span className="pointer-events-none absolute left-2 top-2 text-sm text-muted-foreground">€</span>
           <input className={`${campo} pl-5 text-right font-semibold tabular-nums`} disabled={ro} inputMode="decimal" value={r.p ?? ""} onChange={(e) => upd(i, "p", e.target.value.replace(",", "."))} />

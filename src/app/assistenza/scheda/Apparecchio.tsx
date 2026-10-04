@@ -58,7 +58,7 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, idScheda,
 
   return (
     <div className="space-y-3">
-      <div className={`grid gap-3 ${compatto ? "" : "sm:grid-cols-2"}`}>
+      <div className={`grid gap-3 ${compatto ? "" : "sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2"}`}>
         <Campo label="Prodotto *">
           <select className={campo} disabled={ro} value={fam} onChange={(e) => {
             set("famiglia", e.target.value || null);

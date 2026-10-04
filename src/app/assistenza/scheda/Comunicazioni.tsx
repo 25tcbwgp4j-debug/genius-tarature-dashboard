@@ -66,7 +66,7 @@ export function Registro({ s }: { s: Scheda }) {
   const ev = tutti ? s.eventi : s.eventi.slice(0, 8);
   return (
     <Sezione titolo="Fasi e registro" icona={<History />}>
-      <div className="mb-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-3">
+      <div className="mb-3 grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
         {[...FASI, ["riparazione", "In riparazione"] as [string, string]].map(([k, l]) => (
           <div key={k} className="flex justify-between gap-2 border-b py-1">
             <span className="text-muted-foreground">{l}</span>

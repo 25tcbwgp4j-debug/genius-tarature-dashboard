@@ -114,7 +114,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     if (!s) return;
     try {
       const r = await assAzione(s.id, "stampa", { tipo, copie: 1 });
-      toast.success(r.agente_attivo ? `In stampa al banco (${tipo === "etichetta" ? "etichetta Brother" : "A4"})` : "Messa in coda, ma l'agente di stampa non risponde: apro il PDF");
+      toast.success(r.simulata ? "Scheda di PROVA: stampa simulata (niente stampanti del negozio), apro il PDF"
+        : r.agente_attivo ? `In stampa al banco (${tipo === "etichetta" ? "etichetta Brother" : "A4"})` : "Messa in coda, ma l'agente di stampa non risponde: apro il PDF");
       if (!r.agente_attivo) window.open(tipo === "etichetta" ? assEtichettaUrl(s.id) : assDocUrl(s.id, "auto"), "_blank");
     } catch (e) { toastErrore(e); }
   }
