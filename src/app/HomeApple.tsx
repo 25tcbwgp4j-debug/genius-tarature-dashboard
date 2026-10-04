@@ -7,22 +7,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Cruscotto } from "./assistenza/Cruscotto";
 import { Card } from "@/components/ui/card";
-import { Smartphone, Inbox, FileQuestion, Send, Wrench, PackageCheck, Euro, Landmark, Mail, Calculator, Clock, Plus } from "lucide-react";
+import { Smartphone, PackageCheck, Euro, Landmark, Mail, Calculator, Clock, Plus, FileQuestion } from "lucide-react";
 import { fetchAPI } from "@/lib/api";
 import { usePermessi } from "@/components/permessi";
-import { COLORE_STATO, ETICHETTA_STATO, dataOra, eur, type SchedaBreve, type ConfigAssistenza } from "@/lib/assistenza";
+import { COLORE_STATO, ETICHETTA_STATO, dataOra, eur, type SchedaBreve, type ConfigAssistenza, type FaseCruscotto } from "@/lib/assistenza";
 
 // letture silenziose: un 403 o un backend in avvio non deve aprire finestre di errore sulla home
 const leggi = <T,>(path: string): Promise<T | null> => fetchAPI(path, { timeoutMs: 20_000 }, false).catch(() => null);
 
-const FASI_HOME: { stato: string; label: string; icon: typeof Inbox; tono: string }[] = [
-  { stato: "in_arrivo", label: "In arrivo", icon: Inbox, tono: "bg-slate-100 text-slate-700" },
-  { stato: "da_preventivare", label: "Da preventivare", icon: FileQuestion, tono: "bg-amber-100 text-amber-700" },
-  { stato: "preventivo_inviato", label: "Preventivo inviato", icon: Send, tono: "bg-sky-100 text-sky-700" },
-  { stato: "accettato", label: "In riparazione", icon: Wrench, tono: "bg-indigo-100 text-indigo-700" },
-  { stato: "pronto", label: "Pronte", icon: PackageCheck, tono: "bg-emerald-100 text-emerald-700" },
-];
 
 function Stato({ s }: { s: string }) {
   return <span className={`inline-block whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] font-semibold ${COLORE_STATO[s] || ""}`}>{ETICHETTA_STATO[s] || s}</span>;
@@ -66,7 +61,9 @@ function Elenco({ titolo, schede, vuoto, extra, href = "/assistenza" }: { titolo
 export function HomeApple() {
   const { admin, caricato } = usePermessi();
   const [cfg, setCfg] = useState<ConfigAssistenza | null>(null);
-  const [contatori, setContatori] = useState<Record<string, number> | null>(null);
+  const router = useRouter();
+  // 05/10/2026 (§10.6): stessi contatori per fase del cruscotto delle schede assistenza
+  const [cruscotto, setCruscotto] = useState<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[] } | null>(null);
   const [pronte, setPronte] = useState<SchedaBreve[] | null>(null);
   const [daPrev, setDaPrev] = useState<SchedaBreve[] | null>(null);
   const [ultime, setUltime] = useState<SchedaBreve[] | null>(null);
@@ -81,7 +78,7 @@ export function HomeApple() {
     leggi<ConfigAssistenza>("/api/assistenza/config").then(set((c) => {
       setCfg(c);
       if (!c?.visibile) return;
-      leggi<{ contatori: Record<string, number> }>("/api/assistenza/contatori").then(set((r) => setContatori(r?.contatori || {})));
+      leggi<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[] }>("/api/assistenza/cruscotto").then(set((r) => setCruscotto(r)));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=pronto&limit=500").then(set((r) => setPronte(r?.schede || [])));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=da_preventivare&limit=10").then(set((r) => setDaPrev(r?.schede || [])));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=tutte&limit=10").then(set((r) => setUltime(r?.schede || [])));
@@ -124,24 +121,8 @@ export function HomeApple() {
       )}
 
       {visibili && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {FASI_HOME.map((f) => {
-            const Icon = f.icon;
-            return (
-              <Link key={f.stato} href={`/assistenza?stato=${f.stato}`}>
-                <Card className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors h-full">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${f.tono}`}><Icon className="w-5 h-5" /></div>
-                    <div>
-                      <p className="text-2xl font-bold">{contatori ? contatori[f.stato] ?? 0 : "…"}</p>
-                      <p className="text-sm text-gray-500">{f.label}</p>
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
+        <Cruscotto fasi={cruscotto?.fasi || null} tecnici={cruscotto?.tecnici || []} scelta={null}
+          onScegli={(x) => { if (x) router.push(`/assistenza?${new URLSearchParams({ fase: x.fase, ...(x.tecnico ? { tecnico: x.tecnico } : {}) })}`); }} />
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -8,11 +8,12 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, Cpu, ExternalLink, History, Loader2, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
-import { assSeriale, FAMIGLIE_DEFAULT, type Seriale } from "@/lib/assistenza";
-import { Campo, Pill, area, campo } from "./ui";
+import { assSeriale, FAMIGLIE_DEFAULT, type GruppoProdotti, type Seriale } from "@/lib/assistenza";
+import { AnnoInput, ProdottoCombo } from "./Prodotto";
+import { Campo, Pill, area, campo, etich } from "./ui";
 
 export type ValoriApparecchio = {
-  famiglia?: string | null; prodotto?: string | null; modello?: string | null; modello_fonte?: string | null; modello_da_scheda?: string | null;
+  famiglia?: string | null; prodotto?: string | null; anno?: number | null; modello?: string | null; modello_fonte?: string | null; modello_da_scheda?: string | null;
   seriale?: string | null; imei?: string | null; difetto?: string | null; accessori?: string | null; con_alimentatore?: boolean | null;
   password_dispositivo?: string | null; apple_id?: string | null; password_apple_id?: string | null;
 };
@@ -24,9 +25,9 @@ export function etichettaFamiglia(codice?: string | null, famiglie = FAMIGLIE_DE
   return famiglie.find((f) => f.codice === codice)?.etichetta || "";
 }
 
-export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, idScheda, onApri, compatto }: {
+export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti = [], idScheda, onApri, compatto }: {
   v: ValoriApparecchio; set: (k: K, val: unknown) => void; ro?: boolean; famiglie?: { codice: string; etichetta: string }[];
-  idScheda?: string; onApri?: (id: string) => void; compatto?: boolean;
+  prodotti?: GruppoProdotti[]; idScheda?: string; onApri?: (id: string) => void; compatto?: boolean;
 }) {
   const [ser, setSer] = useState<Seriale | null>(null);
   const [busy, setBusy] = useState(false);
@@ -48,10 +49,15 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, idScheda,
         set("modello_fonte", r.fonte || "seriale");
         set("modello_da_scheda", r.fonte === "scheda_precedente" ? r.da_scheda : null);
       }
-      if (r.famiglia_menu && !v.famiglia) {
+      // 05/10/2026 (§10.1): seriale riconosciuto → prodotto del menu + anno + modello esatto
+      if (r.prodotto_menu) {
+        set("prodotto", r.prodotto_menu);
+        if (r.famiglia_menu) set("famiglia", r.famiglia_menu);
+      } else if (r.famiglia_menu && !v.famiglia) {
         set("famiglia", r.famiglia_menu);
         if (!v.prodotto) set("prodotto", etichettaFamiglia(r.famiglia_menu, famiglie).toUpperCase());
       }
+      if (r.anno && (!v.anno || v.modello_fonte !== "manuale")) set("anno", r.anno);
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
   const altrePrecedenti = (ser?.precedenti || []).filter((p) => p.id !== idScheda);
@@ -59,16 +65,15 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, idScheda,
   return (
     <div className="space-y-3">
       <div className={`grid gap-3 ${compatto ? "" : "sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2"}`}>
-        <Campo label="Prodotto *">
-          <select className={campo} disabled={ro} value={fam} onChange={(e) => {
-            set("famiglia", e.target.value || null);
-            // il testo «prodotto» di sempre segue il menu (resta per ricerca, etichetta e storico)
-            set("prodotto", etichettaFamiglia(e.target.value, famiglie).toUpperCase() || null);
-          }}>
-            <option value="">— scegli —</option>
-            {famiglie.map((f) => <option key={f.codice} value={f.codice}>{f.etichetta}</option>)}
-          </select>
-        </Campo>
+        <div className="grid grid-cols-[1fr_96px] gap-2">
+          {/* div e non <label>: dentro c'è il menu a tendina (un label girerebbe i clic al pulsante) */}
+          <div className="min-w-0">
+            <span className={etich}>Prodotto *{fam ? ` · ${etichettaFamiglia(fam, famiglie)}` : ""}</span>
+            {/* menu completo con ricerca (lista valori FileMaker + nuovi); la famiglia segue la voce scelta */}
+            <ProdottoCombo valore={v.prodotto || ""} gruppi={prodotti} disabled={ro} onScelto={(p, f) => { set("prodotto", p); set("famiglia", f); }} />
+          </div>
+          <Campo label="Anno"><AnnoInput valore={v.anno} disabled={ro} onChange={(a) => set("anno", a)} /></Campo>
+        </div>
         <Campo label="Numero di serie">
           <div className="flex gap-1.5">
             <input className={`${campo} font-mono uppercase`} disabled={ro} value={v.seriale || ""} onChange={(e) => set("seriale", e.target.value.toUpperCase())}

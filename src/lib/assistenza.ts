@@ -9,6 +9,9 @@ export interface SchedaBreve {
   telefono: string | null; email: string | null; prodotto: string | null; modello: string | null; seriale: string | null; difetto: string | null;
   stato: StatoScheda; preventivo_esito: string; preventivo_totale: number | null; totale_lavorazione: number | null; acconto: number | null;
   ritirato: string | null; consegna_modo: string | null; tecnico: string | null; fasi: Record<string, Fase>; created_at: string;
+  // 05/10/2026 (§10, migr. 092)
+  famiglia?: string | null; anno?: number | null; tecnico_verifica?: string | null; tecnico_riparazione?: string | null;
+  verifica_stato?: "da_assegnare" | "in_corso" | "chiusa" | null; riparazione_stato?: string | null;
 }
 export interface Evento { id: string; tipo: string; descrizione: string; operatore: string | null; creato_da: string | null; created_at: string; dati?: Record<string, unknown> }
 export interface Anagrafica { id: string; denominazione: string; piva?: string | null; cf?: string | null; telefono?: string | null; email?: string | null;
@@ -39,6 +42,8 @@ export interface Scheda extends SchedaBreve {
   ricambi_fornitore: string | null; ricambi_nota: string | null; esito_motivo: string | null; tecnico_verifica: string | null; note_verifica: string | null;
   tecnico_riparazione: string | null; note_riparazione: string | null; spedizione_tipo: string | null; spedizione_importo: number | null;
   chiusura: string | null; consegna_corriere: "noi" | "cliente" | null;
+  verifica_assegnata_il: string | null; verifica_assegnata_da: string | null; verifica_chiusa_il: string | null; verifica_chiusa_da: string | null;
+  riparazione_assegnata_il: string | null; preventivo_risposta_canale: string | null; preventivo_risposta_il: string | null;
   avanzamento: Avanzamento; saldo: number; pagata: boolean; comunicazioni: Comunicazione[]; wa_linea_attiva: boolean;
   preventivo_totale: number | null;
 }
@@ -47,26 +52,40 @@ export interface Avanzamento { passi: Passo[]; attuale: string | null; prossimo:
 export interface Comunicazione { id: string; tipo: string; canale: "mail" | "whatsapp"; descrizione: string; created_at: string; operatore: string | null;
   esito: string | null; a: string | null; testo: string | null; link: string | null; oggetto: string | null }
 export interface VoceProposta { id: string; intervento: string; ipotesi: string | null; descrizione: string; prezzo: number | null; scontato_da: number | null;
-  nota: string | null; da_verificare: boolean; fonte: string | null; modello: string | null; aggiornato_il: string | null; tipo_ricambio: string | null }
-export interface Proposte { modello_chiave: string | null; famiglia: string | null; fonte: "modello" | "famiglia" | "tutte" | ""; voci: VoceProposta[];
+  nota: string | null; da_verificare: boolean; fonte: string | null; modello: string | null; modello_chiave?: string | null; aggiornato_il: string | null; tipo_ricambio: string | null }
+export interface ModelloVoci { chiave: string; nome: string; anno: number | null; pollici: number | null; voci: number }
+/** COMBO «1ª + 2ª ipotesi abbinate» dello stesso intervento e modello (+ 3ª aggiungibile) — 05/10/2026 §10.2 */
+export interface Combo { modello_chiave: string | null; modello: string | null; intervento: string; etichetta: string;
+  uno: VoceProposta | null; due: VoceProposta | null; tre: VoceProposta | null }
+export interface Proposte { modello_chiave: string | null; famiglia: string | null;
+  fonte: "modello" | "famiglia" | "tutte" | "vicino" | "ricerca" | "modello_scelto" | "filtro" | ""; nota?: string; vicini?: ModelloVoci[];
+  voci: VoceProposta[]; combo: Combo[]; pollici_scheda?: number | null; anno_scheda?: number | null;
+  filtri?: { pollici: number[]; anni: number[]; modelli: ModelloVoci[] };
   interventi: { codice: string; etichetta: string; voci: number }[] }
+export interface GruppoProdotti { gruppo: string; famiglia: string; voci: string[] }
+export interface FaseCruscotto { codice: string; etichetta: string; n: number; tecnici: { tecnico: string; n: number }[] }
 export interface TestoStandard { id: string; titolo: string; categoria: string; uso: "cliente" | "interno"; famiglie: string[]; interventi: string[]; testo: string;
   prezzi_da_verificare: boolean }
 export interface ConfigAssistenza { operatori_abilitati: boolean; numerazione_live: boolean; ultimo_numero_filemaker: number | null; admin: boolean;
   visibile: boolean; email_test: string | null; stati: { codice: StatoScheda; etichetta: string }[];
-  famiglie: { codice: string; etichetta: string }[]; tecnici: { codice: string; nome: string; attivo: boolean }[]; spedizione_default: { ar?: number } }
+  famiglie: { codice: string; etichetta: string }[]; tecnici: { codice: string; nome: string; attivo: boolean }[]; spedizione_default: { ar?: number };
+  prodotti?: GruppoProdotti[]; riparazione_stati?: { codice: string; etichetta: string }[]; canali_risposta?: { codice: string; etichetta: string }[] }
 export interface VoceListino { id: string; label: string; intervention: string; price: number | null; is_shipping: boolean }
 export interface Coppia { id: string; label: string; first_line: { t: string; nota?: string }; second_line: { t: string; nota?: string } }
 export interface Seriale { seriale: string; codice: string | null; modello: string | null; famiglia: string | null; visti: number; nota: string | null;
   precedenti: SchedaBreve[]; prezzi?: { intervention: string; price: number; basis: string; jobs: number }[];
   /** da dove viene il modello proposto: «scheda_precedente» (stesso seriale già passato) o «seriale» (decodifica) */
-  fonte: "scheda_precedente" | "seriale" | null; fonte_testo: string; da_scheda: string | null; decodificato: string | null; famiglia_menu: string | null }
+  fonte: "scheda_precedente" | "seriale" | null; fonte_testo: string; da_scheda: string | null; decodificato: string | null; famiglia_menu: string | null;
+  prodotto_menu?: string | null; anno?: number | null }
 export interface Esito { prova?: boolean; mail?: string; whatsapp?: string; whatsapp_testo?: string; whatsapp_link?: string | null }
 
 const j = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
 
 export const assConfig = (): Promise<ConfigAssistenza> => fetchAPI("/api/assistenza/config");
 export const assSetConfig = (b: { operatori_abilitati: boolean }): Promise<ConfigAssistenza> => fetchAPI("/api/assistenza/config", { method: "PATCH", body: JSON.stringify(b) });
+export const assCruscotto = (): Promise<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[] }> => fetchAPI("/api/assistenza/cruscotto");
+export const assElencoFase = (fase: string, tecnico = ""): Promise<{ schede: SchedaBreve[]; totale: number }> =>
+  fetchAPI(`/api/assistenza/schede?${new URLSearchParams({ fase, tecnico, limit: "500" })}`);
 export const assElenco = (q: string, stato: string, origine = "", limit = 150, offset = 0): Promise<{ schede: SchedaBreve[]; totale: number }> =>
   fetchAPI(`/api/assistenza/schede?q=${encodeURIComponent(q)}&stato=${stato}&origine=${origine}&limit=${limit}&offset=${offset}`);
 export const assContatori = (): Promise<{ contatori: Record<string, number> }> => fetchAPI("/api/assistenza/contatori");
@@ -90,7 +109,8 @@ export const assDocUrl = (id: string, doc: DocPdf, scarica = false) => `/api/bac
 export const assSchedaCliente = (id: string): Promise<SchedaCliente> => fetchAPI(`/api/assistenza/clienti/${id}`);
 export const assSalvaCliente = (id: string | null, b: Partial<Anagrafica>): Promise<SchedaCliente> =>
   id ? fetchAPI(`/api/assistenza/clienti/${id}`, { method: "PATCH", body: JSON.stringify(b) }) : fetchAPI("/api/assistenza/clienti", j(b));
-export const assProposte = (id: string, intervento = ""): Promise<Proposte> => fetchAPI(`/api/assistenza/schede/${id}/proposte?intervento=${intervento}`);
+export const assProposte = (id: string, intervento = "", f: { q?: string; modello?: string; pollici?: string; anno?: string } = {}): Promise<Proposte> =>
+  fetchAPI(`/api/assistenza/schede/${id}/proposte?${new URLSearchParams({ intervento, q: f.q || "", modello: f.modello || "", pollici: f.pollici || "", anno: f.anno || "" })}`);
 export const assTesti = (famiglia = "", intervento = ""): Promise<{ testi: TestoStandard[] }> => fetchAPI(`/api/assistenza/testi?famiglia=${famiglia}&intervento=${intervento}`);
 /** Pagina pubblica di tracciamento (servita dal backend: nessun login, nessun dato personale). */
 export const assTrackUrl = (token: string) => `${process.env.NEXT_PUBLIC_API_URL || "https://tarature-api-production.up.railway.app"}/api/assistenza/pubblico/${token}/pagina`;
@@ -132,3 +152,10 @@ export const FAMIGLIE_DEFAULT: { codice: string; etichetta: string }[] = [
   { codice: "altro_apple", etichetta: "Altro Apple" }, { codice: "non_apple", etichetta: "Non Apple" }];
 export const SPEDIZIONI: [string, string][] = [["nessuna", "Nessuna"], ["ar", "A/R (ritiro e riconsegna)"], ["solo_ritiro", "Solo ritiro"], ["solo_ritorno", "Solo ritorno"]];
 export const TIPI_CLIENTE: [string, string][] = [["privato", "Privato"], ["azienda", "Azienda"], ["rivenditore", "Rivenditore"]];
+export const STATI_RIPARAZIONE: [string, string][] = [["in_corso", "In lavorazione"], ["attesa_ricambi", "Attesa ricambi"],
+  ["aggiornamento_cliente", "Aggiornamento da fare al cliente"], ["piu_tempo", "Serve più tempo"],
+  ["disabilitare_trova", "Disabilitare «Trova il mio dispositivo»"], ["finita", "Finita"]];
+export const CANALI_RISPOSTA: [string, string][] = [["telefono", "Telefono"], ["whatsapp", "WhatsApp"], ["mail", "Mail"], ["negozio", "In negozio"], ["online", "Online"]];
+/** Nome del tecnico dal codice (ALEX → Alex). */
+export const nomeTecnico = (cod: string | null | undefined, tecnici: { codice: string; nome: string }[] = []) =>
+  !cod ? "" : tecnici.find((t) => t.codice.toUpperCase() === cod.toUpperCase())?.nome || cod;

@@ -109,7 +109,7 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata }:
           </div>
           <div className="space-y-3">
             <div className="text-sm font-semibold">Apparecchio</div>
-            <Apparecchio v={app} set={setA} famiglie={cfg?.famiglie} compatto />
+            <Apparecchio v={app} set={setA} famiglie={cfg?.famiglie} prodotti={cfg?.prodotti} compatto />
           </div>
         </div>
         <div className="space-y-3 border-t pt-3">

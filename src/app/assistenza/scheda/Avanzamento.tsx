@@ -1,7 +1,7 @@
 "use client";
 
 // BARRA DI AVANZAMENTO della scheda (05/10/2026, specifica §8.9 — ordine vincolante):
-// Ricevuta → Preventivo → Inviato → Accettato/Rifiutato → In riparazione → Pronto → Da pagare → Pagato → Consegna.
+// Ricevuta → Verifica → Preventivo → Inviato → Accettato/Rifiutato → In riparazione → Pronto → Da pagare → Pagato → Consegna.
 // I passi arrivano calcolati dal backend (assistenza_v2.passi); qui si disegnano e il PROSSIMO PASSO è un pulsante.
 import { ArrowRight, Check, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import type { Avanzamento as Av } from "@/lib/assistenza";
 const AZIONI: Record<string, string> = {
   arrivato: "Dispositivo arrivato", preventivo: "Vai al preventivo", invia_preventivo: "INVIA PREVENTIVO", esito: "Accettato / Rifiutato",
   pronto: "PRONTO", incassa: "Incassa / Pagato", consegna: "CONSEGNA",
+  assegna_verifica: "Assegna in verifica", chiudi_verifica: "Scrivi e chiudi la verifica", assegna_riparazione: "Assegna in riparazione",
+  stato_riparazione: "Stato riparazione", aggiornamento: "Aggiornamento al cliente",
 };
 
 export function Avanzamento({ av, onAzione, disabilitato }: { av: Av; onAzione: (azione: string) => void; disabilitato?: boolean }) {

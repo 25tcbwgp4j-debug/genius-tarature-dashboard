@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { CheckCircle2, Copy, Loader2, Mail, MessageCircle, Send, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
-import { assAnteprimaMail, assAzione, assStessoModello, dataOra, eur, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
+import { assAnteprimaMail, assAzione, assStessoModello, CANALI_RISPOSTA, dataOra, eur, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
 import { blocchi, ipotesiDelBlocco, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, Pill, Scelta, area, campo } from "./ui";
@@ -109,11 +109,13 @@ export function DialogoEsito({ s, righe, onClose, onEsito }: { s: Scheda; righe:
   const [opt, setOpt] = useState<number | null>(alt.find((x) => x.scelta)?.opt ?? alt[0]?.opt ?? null);
   const [prese, setPrese] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
+  // 05/10/2026 (§10.5): da dove è arrivata la risposta (l'accettazione online arriva da sola dal link del cliente)
+  const [canale, setCanale] = useState("telefono");
   const fisse = righe.filter((r) => (r.b ?? 0) === b && r.opt == null).reduce((t, r) => t + rowTotal(r), 0);
   const tot = fisse + (alt.find((x) => x.opt === opt)?.totale || 0) + agg.filter((x) => prese.includes(x.opt)).reduce((t, x) => t + x.totale, 0);
   async function vai(esito: "accettato" | "rifiutato") {
     setBusy(true);
-    try { if (await onEsito(esito === "accettato" ? { esito, blocco: b, ipotesi: opt, aggiunte: prese } : { esito, blocco: b })) onClose(); } finally { setBusy(false); }
+    try { if (await onEsito(esito === "accettato" ? { esito, blocco: b, ipotesi: opt, aggiunte: prese, canale } : { esito, blocco: b, canale })) onClose(); } finally { setBusy(false); }
   }
   return (
     <Modale titolo={`Risposta del cliente${b > 0 ? " al preventivo aggiuntivo" : ""} — scheda ${s.sigla}`} onClose={onClose}
@@ -132,7 +134,11 @@ export function DialogoEsito({ s, righe, onClose, onEsito }: { s: Scheda; righe:
             <span className="flex-1"><b>{x.n}ª ipotesi · aggiungibile</b><br />{x.righe.map((y) => y.r.t).join(" + ")}</span><b className="tabular-nums">+ {eur(x.totale)}</b>
           </label>
         ))}
-        <p className="text-xs text-muted-foreground">Con «ACCETTATO» la scheda va IN RIPARAZIONE e la lavorazione effettuata si compila con l&apos;ipotesi scelta e il suo importo.{s.spedizione_tipo && s.spedizione_tipo !== "nessuna" ? ` Spedizione ${eur(s.spedizione_importo)} a parte nel totale.` : ""}</p>
+        <div className="flex flex-wrap items-center gap-2 pt-1 text-sm">
+          <span className="text-xs font-medium text-muted-foreground">Il cliente ha risposto</span>
+          <Scelta piccolo valore={canale} opzioni={CANALI_RISPOSTA.filter(([k]) => k !== "online").map(([k, l]) => [k, l])} onChange={setCanale} />
+        </div>
+        <p className="text-xs text-muted-foreground">Con «ACCETTATO» la scheda va IN RIPARAZIONE (poi si assegna al tecnico) e la lavorazione effettuata si compila con l&apos;ipotesi scelta e il suo importo.{s.spedizione_tipo && s.spedizione_tipo !== "nessuna" ? ` Spedizione ${eur(s.spedizione_importo)} a parte nel totale.` : ""}</p>
       </div>
     </Modale>
   );

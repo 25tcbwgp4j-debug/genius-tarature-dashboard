@@ -7,20 +7,19 @@
 // · spedizione a flag (A/R · solo ritiro · solo ritorno, 28 € modificabile), testi standard che si AGGIUNGONO;
 // · preventivo AGGIUNTIVO dopo l'accettazione (nuovo blocco con le sue ipotesi);
 // · pulsante chiaro «INVIA PREVENTIVO» → mail + WhatsApp.
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { BookText, Copy, Loader2, Plus, Search, Send, Sparkles, Trash2, Truck, X } from "lucide-react";
+import { BookText, Copy, Plus, Search, Send, Sparkles, Trash2, Truck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import {
-  assPreventivi, assProposte, assTesti, dataOra, eur, SPEDIZIONI, type Proposte, type Scheda, type SchedaBreve, type TestoStandard, type VoceProposta,
+  assPreventivi, assTesti, dataOra, eur, SPEDIZIONI, type Combo, type Scheda, type SchedaBreve, type TestoStandard, type VoceProposta,
 } from "@/lib/assistenza";
 import {
   blocchi, blocco, ipotesiDelBlocco, NOTE_RECUPERO, nuovoOpt, parseEstimate, rowTotal, scegliIpotesi, totaleConSpedizione, type EstimateLine,
 } from "@/lib/assistenza-preventivo";
 import { Campo, Pill, Scelta, Sezione, area, campo } from "./ui";
-
-const IPOTESI_NOME: Record<string, string> = { "1": "1ª ipotesi · assistenza", "2": "2ª ipotesi · assistenza ufficiale", "3": "3ª ipotesi · aggiungibile / alternativa", aggiuntiva: "Aggiuntiva", "": "Altre voci" };
+import { VociPreventivo } from "./VociPreventivo";
 
 export type BozzaPreventivo = { righe: EstimateLine[]; diagnosi: string; note: string; spedizione_tipo: string; spedizione_importo: number | string };
 
@@ -34,23 +33,10 @@ export function Preventivo({ s, bz, setBz, ro, onInvia, onNotaInterna, onStessoM
   const inviato = s.preventivo_stato === "inviato";
   const bb = blocchi(righe);
   const [bloccoAttivo, setBloccoAttivo] = useState<number>(Math.max(...bb));
-  const [prop, setProp] = useState<Proposte | null>(null);
-  const [intervento, setIntervento] = useState("");
-  const [interventi, setInterventi] = useState<Proposte["interventi"]>([]);
-  const [carico, setCarico] = useState(false);
   const [testi, setTesti] = useState<TestoStandard[] | null>(null);
   const [cerca, setCerca] = useState("");
   const [trovati, setTrovati] = useState<{ preventivi: (SchedaBreve & { preventivo_testo: string | null })[]; sintesi: { n: number; min: number; max: number; mediana: number } | null } | null>(null);
 
-  useEffect(() => {
-    if (ro) return;
-    assProposte(s.id, "").then((p) => { setProp(p); setInterventi(p.interventi); }).catch(() => setProp(null));
-  }, [s.id, s.modello, s.famiglia, ro]);
-  async function sceglieIntervento(iv: string) {
-    setIntervento(iv);
-    setCarico(true);
-    try { setProp(await assProposte(s.id, iv)); } catch (e) { toastErrore(e); } finally { setCarico(false); }
-  }
 
   const spedImp = bz.spedizione_tipo && bz.spedizione_tipo !== "nessuna" ? Number(String(bz.spedizione_importo).replace(",", ".")) || 0 : 0;
   const tot = totaleConSpedizione(righe, spedImp);
@@ -58,30 +44,34 @@ export function Preventivo({ s, bz, setBz, ro, onInvia, onNotaInterna, onStessoM
   // ---- operazioni sulle righe
   const upd = (i: number, k: keyof EstimateLine, val: unknown) => setRighe((r) => r.map((x, j) => (j === i ? { ...x, [k]: val } : x)));
   const togli = (i: number) => setRighe((r) => r.filter((_, j) => j !== i));
-  function aggiungiVoce(v: Pick<VoceProposta, "descrizione" | "prezzo" | "scontato_da" | "id">, come: "1" | "2" | "3" | "fissa", b = bloccoAttivo) {
+  // 05/10/2026 (§10.2): la COMBO «1ª + 2ª (+ 3ª aggiungibile)» sostituisce le ipotesi del blocco attivo (le voci fisse
+  // restano). Prima il clic sulla stessa voce la ripeteva come voce fissa in 1ª/2ª/3ª: ora una voce già presente nel
+  // blocco non si aggiunge due volte.
+  const rigaDa = (v: VoceProposta, b: number): EstimateLine => ({ t: v.descrizione, p: v.prezzo ?? "", listino: v.scontato_da || null, nota: null, b, voce_id: v.id, opt: null, on: false });
+  function inserisciCombo(c: Combo) {
+    const b = bloccoAttivo;
+    const esistenti = ipotesiDelBlocco(righe, b);
+    if (esistenti.length && !confirm(`Sostituire le ${esistenti.length} ipotesi già scritte con la combinazione «${c.etichetta}»? (le voci fisse restano)`)) return;
     setRighe((r) => {
-      const riga: EstimateLine = { t: v.descrizione, p: v.prezzo ?? "", listino: v.scontato_da || null, nota: null, b, voce_id: v.id || undefined, opt: null, on: false };
-      if (come === "fissa") return [...r, riga];
-      const ips = ipotesiDelBlocco(r, b);
-      const alt = ips.filter((x) => !x.agg);
-      if (come === "3") return [...r, { ...riga, opt: nuovoOpt(r, b), agg: true, on: false }];
-      // 1ª / 2ª: se l'ipotesi n-esima c'è già si sostituisce la sua voce, altrimenti si aggiunge
-      const n = come === "1" ? 0 : 1;
-      const es = alt[n];
-      if (es) return r.map((x, j) => (j === es.righe[0].i ? { ...riga, opt: es.opt, on: x.on, agg: false } : x)).filter((x, j) => !es.righe.slice(1).some((y) => y.i === j));
-      const opt = nuovoOpt(r, b);
-      return [...r, { ...riga, opt, on: alt.length === 0, agg: false }];
+      const resto = r.filter((x) => !(blocco(x) === b && x.opt != null));
+      const nuove: EstimateLine[] = [];
+      if (c.uno) nuove.push({ ...rigaDa(c.uno, b), opt: 0, on: true, agg: false });
+      if (c.due) nuove.push({ ...rigaDa(c.due, b), opt: 1, on: !c.uno, agg: false });
+      if (c.tre) nuove.push({ ...rigaDa(c.tre, b), opt: 2, on: false, agg: true });
+      return [...resto, ...nuove];
     });
+    toast.success(`Inserita la combinazione «${c.etichetta}»${c.modello ? ` (${c.modello})` : ""}: controlla i prezzi`);
   }
-  function proponi() {
-    if (!prop) return;
-    const voci = prop.voci.filter((v) => !intervento || v.intervento === intervento);
-    const p1 = voci.find((v) => v.ipotesi === "1"), p2 = voci.find((v) => v.ipotesi === "2"), p3 = voci.find((v) => v.ipotesi === "3");
-    if (!p1 && !p2) { toast.info("Per questo intervento non ci sono voci di 1ª/2ª ipotesi: aggiungile dall'elenco"); return; }
-    if (p1) aggiungiVoce(p1, "1");
-    if (p2) aggiungiVoce(p2, "2");
-    if (p3) aggiungiVoce(p3, "3");
-    toast.success("Ipotesi proposte dalle voci del modello: controlla i prezzi");
+  function aggiungiVoce(v: VoceProposta, come: "ipotesi" | "aggiungibile" | "fissa") {
+    const b = bloccoAttivo;
+    if (righe.some((x) => blocco(x) === b && x.voce_id === v.id)) { toast.info("Questa voce è già nel preventivo"); return; }
+    setRighe((r) => {
+      const riga = rigaDa(v, b);
+      if (come === "fissa") return [...r, riga];
+      if (come === "aggiungibile") return [...r, { ...riga, opt: nuovoOpt(r, b), agg: true, on: false }];
+      const alt = ipotesiDelBlocco(r, b).filter((x) => !x.agg);
+      return [...r, { ...riga, opt: nuovoOpt(r, b), on: alt.length === 0, agg: false }];
+    });
   }
   function nuovoBlocco() {
     const b = Math.max(...bb) + 1;
@@ -95,18 +85,13 @@ export function Preventivo({ s, bz, setBz, ro, onInvia, onNotaInterna, onStessoM
   }
   async function apriTesti() {
     if (testi) { setTesti(null); return; }
-    try { setTesti((await assTesti(s.famiglia || "", intervento)).testi); } catch (e) { toastErrore(e); }
+    try { setTesti((await assTesti(s.famiglia || "", "")).testi); } catch (e) { toastErrore(e); }
   }
   async function cercaPrev() {
     if (cerca.trim().length < 2) return;
     try { setTrovati(await assPreventivi(cerca)); } catch (e) { toastErrore(e); }
   }
 
-  const gruppi = useMemo(() => {
-    const g: Record<string, VoceProposta[]> = {};
-    for (const v of prop?.voci || []) if (!intervento || v.intervento === intervento) (g[v.ipotesi || ""] ||= []).push(v);
-    return Object.entries(g).sort(([a], [b]) => (a || "9").localeCompare(b || "9"));
-  }, [prop, intervento]);
 
   const statoPrev = accettato ? <Pill tono="verde">accettato</Pill> : s.preventivo_stato === "rifiutato" ? <Pill tono="rosso">rifiutato</Pill>
     : inviato ? <Pill tono="blu">inviato {dataOra(s.preventivo_inviato_il)}{s.preventivo_inviato_da ? ` · ${s.preventivo_inviato_da}` : ""}</Pill>
@@ -120,47 +105,9 @@ export function Preventivo({ s, bz, setBz, ro, onInvia, onNotaInterna, onStessoM
           <input className={campo} disabled={ro} placeholder="es. SCHEDA LOGICA IN CORTO" value={bz.diagnosi} onChange={(e) => setBz((b) => ({ ...b, diagnosi: e.target.value }))} />
         </Campo>
 
-        {!ro && prop && (
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-              <b>Voci di preventivo</b>
-              <span className="text-xs text-muted-foreground">{prop.fonte === "modello" ? <>del modello <b>{s.modello}</b></> : prop.fonte === "famiglia" ? "della famiglia (per questo modello non ci sono voci dedicate)" : prop.fonte === "tutte" ? "generiche" : "nessuna voce: scrivi il modello o scegli il prodotto"}</span>
-              {accettato && <Pill tono="ambra">vanno nel {bloccoAttivo > 0 ? "preventivo aggiuntivo" : "preventivo"}</Pill>}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {interventi.map((iv) => (
-                <button key={iv.codice} type="button" onClick={() => sceglieIntervento(intervento === iv.codice ? "" : iv.codice)}
-                  className={`rounded-full border px-2.5 py-1 text-xs font-medium ${intervento === iv.codice ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}>
-                  {iv.etichetta} <span className="opacity-60">{iv.voci}</span></button>
-              ))}
-              {carico && <Loader2 className="size-4 animate-spin" />}
-            </div>
-            {intervento && (
-              <div className="mt-3 space-y-2">
-                <Button size="sm" onClick={proponi}><Sparkles />Proponi 1ª + 2ª ipotesi</Button>
-                {gruppi.map(([ip, voci]) => (
-                  <div key={ip}>
-                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{IPOTESI_NOME[ip] || ip}</div>
-                    <div className="divide-y rounded-md border bg-background">
-                      {voci.map((v) => (
-                        <div key={v.id} className="flex flex-wrap items-center gap-2 px-2.5 py-1.5 text-sm">
-                          <span className="min-w-0 flex-1">{v.descrizione}{v.modello && prop.fonte !== "modello" ? <span className="text-xs text-muted-foreground"> · {v.modello}</span> : null}</span>
-                          {v.da_verificare && <Pill tono="ambra" title="Prezzi dello storico che non collimano: verificare su GSX">da verificare</Pill>}
-                          <b className="w-20 text-right tabular-nums">{v.prezzo != null ? eur(v.prezzo) : "—"}</b>
-                          <span className="flex gap-1">
-                            {(["1", "2", "3", "fissa"] as const).map((c) => (
-                              <Button key={c} size="xs" variant="outline" onClick={() => aggiungiVoce(v, c)} title={c === "3" ? "3ª ipotesi aggiungibile (si somma alla scelta)" : c === "fissa" ? "voce fissa (si somma sempre)" : `come ${c}ª ipotesi`}>
-                                {c === "fissa" ? "fissa" : c === "3" ? "3ª +" : `${c}ª`}</Button>
-                            ))}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        {!ro && (
+          <VociPreventivo idScheda={s.id} modelloScheda={s.modello || s.prodotto || ""} chiave={`${s.modello}|${s.prodotto}|${s.famiglia}|${s.anno}`}
+            accettato={accettato} bloccoAggiuntivo={bloccoAttivo > 0} onCombo={inserisciCombo} onVoce={aggiungiVoce} />
         )}
 
         {bb.map((b) => (
@@ -202,7 +149,7 @@ export function Preventivo({ s, bz, setBz, ro, onInvia, onNotaInterna, onStessoM
             <Button size="sm" variant="outline" onClick={apriTesti}><BookText />Testi standard</Button>
             <Button size="sm" variant="outline" onClick={onStessoModello}><Copy />Stesso modello</Button>
             <div className="flex items-center gap-1">
-              <input className={`${campo} h-8 w-56`} placeholder="Cerca preventivi: «air 2020 logica»" value={cerca} onChange={(e) => setCerca(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") cercaPrev(); }} />
+              <input className={`${campo} h-8 w-56`} placeholder="Cerca nello storico: «air 2020 logica»" value={cerca} onChange={(e) => setCerca(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") cercaPrev(); }} />
               <Button size="sm" variant="outline" onClick={cercaPrev}><Search /></Button>
             </div>
             <Button className="ml-auto h-10 px-4 text-sm font-semibold" disabled={!righe.length} onClick={onInvia}>

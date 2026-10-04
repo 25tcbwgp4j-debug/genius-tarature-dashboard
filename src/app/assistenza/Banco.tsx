@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOperatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
-import { assConfig, assContatori, assElenco, assPerNumero, assSetConfig, type ConfigAssistenza, type SchedaBreve } from "@/lib/assistenza";
+import { assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, assSetConfig, nomeTecnico, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve } from "@/lib/assistenza";
+import { Cruscotto } from "./Cruscotto";
 import { NuovaScheda } from "./scheda/NuovaScheda";
 import { SchedaView } from "./scheda/SchedaView";
 import { Badge } from "./scheda/ui";
@@ -47,7 +48,11 @@ export function Banco() {
   const [filtro, setFiltro] = useState(statoLink && FILTRI_VALIDI.includes(statoLink) ? statoLink : "aperte");
   const [elenco, setElenco] = useState<SchedaBreve[] | null>(null);
   const [totale, setTotale] = useState(0);
-  const [contatori, setContatori] = useState<Record<string, number>>({});
+  // 05/10/2026 (§10.6): cruscotto per fase (e tecnico) al posto dei chip filtro
+  const [cruscotto, setCruscotto] = useState<FaseCruscotto[] | null>(null);
+  const [tecniciCr, setTecniciCr] = useState<{ codice: string; nome: string }[]>([]);
+  const faseLink = sp.get("fase");
+  const [fase, setFase] = useState<{ fase: string; tecnico: string } | null>(faseLink ? { fase: faseLink, tecnico: sp.get("tecnico") || "" } : null);
   const [salto, setSalto] = useState("");
   const [nuova, setNuova] = useState(false);
   const cerca = useRef<HTMLInputElement>(null);
@@ -63,17 +68,21 @@ export function Banco() {
   const inRicerca = q.trim().length > 0;
   const carica = useCallback(() => {
     const st = q.trim() ? "tutte" : filtro;
-    // con 1-2 lettere si mostrano le prime 500 (il resto con «Mostra tutte»); da 3 lettere tutti i risultati
-    const p = q.trim().length >= 3 ? tutteLeSchede(q, st) : assElenco(q, st, "", q.trim() ? 500 : 150);
+    // con 1-2 lettere si mostrano le prime 500 (il resto con «Mostra tutte»); da 3 lettere tutti i risultati.
+    // Una fase del cruscotto scelta (senza ricerca) mostra solo quelle schede (e del tecnico, se scelto).
+    const p = !q.trim() && fase ? assElencoFase(fase.fase, fase.tecnico)
+      : q.trim().length >= 3 ? tutteLeSchede(q, st) : assElenco(q, st, "", q.trim() ? 500 : 150);
     p.then((r) => { setElenco(r.schede); setTotale(r.totale); }).catch((e) => { toastErrore(e); setElenco([]); });
-    assContatori().then((r) => setContatori(r.contatori)).catch(() => undefined);
-  }, [q, filtro]);
+    assCruscotto().then((r) => { setCruscotto(r.fasi); setTecniciCr(r.tecnici); }).catch(() => undefined);
+  }, [q, filtro, fase]);
   useEffect(() => { const t = setTimeout(carica, 250); return () => clearTimeout(t); }, [carica]);
   useEffect(() => {
     const n = sp.get("n");
     if (n) assPerNumero(n).then((r) => setAperta(r.id)).catch(toastErrore);
     const st = sp.get("stato");
-    if (st && FILTRI_VALIDI.includes(st)) { setFiltro(st); setElenco(null); }
+    if (st && FILTRI_VALIDI.includes(st)) { setFiltro(st); setFase(null); setElenco(null); }
+    const fl = sp.get("fase");
+    if (fl) { setFase({ fase: fl, tecnico: sp.get("tecnico") || "" }); setElenco(null); }
     if (sp.get("nuova") === "1") setNuova(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp]);
@@ -83,7 +92,7 @@ export function Banco() {
     if (!elenco || altreInCarico) return;
     setAltreInCarico(true);
     try {
-      const r = await tutteLeSchede(q, q.trim() ? "tutte" : filtro);
+      const r = !q.trim() && fase ? await assElencoFase(fase.fase, fase.tecnico) : await tutteLeSchede(q, q.trim() ? "tutte" : filtro);
       setElenco(r.schede); setTotale(r.totale);
     } catch (e) { toastErrore(e); } finally { setAltreInCarico(false); }
   }
@@ -138,6 +147,14 @@ export function Banco() {
         <Button className={cfg?.admin ? "" : "ml-auto"} onClick={() => setNuova(true)} title="F2 o Alt+N"><Plus />NUOVA SCHEDA</Button>
       </div>
 
+      <Cruscotto fasi={cruscotto} tecnici={tecniciCr} scelta={fase}
+        onScegli={(x) => {
+          setFase(x); setElenco(null); setQ("");
+          if (x) setElencoChiuso(false);
+          // su iPhone/iPad in verticale la scheda aperta copre l'elenco: si torna all'elenco della fase
+          if (x && aperta && typeof window !== "undefined" && window.innerWidth < 1024) chiudi();
+        }} />
+
       <div className={`grid gap-3 ${elencoChiuso ? "" : "lg:grid-cols-[300px_minmax(0,1fr)]"}`}>
         {/* elenco */}
         <div className={`flex max-h-[calc(100vh-7rem)] flex-col gap-2 rounded-xl border bg-card p-2 shadow-sm lg:sticky lg:top-2 ${elencoChiuso ? "hidden" : aperta ? "hidden lg:flex" : ""}`}>
@@ -149,13 +166,16 @@ export function Banco() {
             <Input className="h-8 w-24" placeholder="N. scheda" value={salto} onChange={(e) => setSalto(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") salta(); }} inputMode="numeric" />
           </div>
-          <div className="flex flex-wrap gap-1 text-xs">
-            {([["aperte", "Aperte"], ["da_preventivare", "Da preventivare"], ["preventivo_inviato", "Prev. inviato"], ["accettato", "In riparazione"],
-              ["rifiutato", "Rifiutate"], ["pronto", "Pronte"], ["da_pagare", "Da pagare"], ["in_arrivo", "In arrivo"], ["consegnato", "Consegnate"], ["tutte", "Tutte"]] as const).map(([k, l]) => (
-              <button key={k} onClick={() => { setFiltro(k); setElenco(null); }}
-                className={`rounded-full border px-2 py-0.5 ${filtro === k ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
-                {l}{contatori[k] ? ` ${contatori[k]}` : ""}
-              </button>
+          <div className="flex flex-wrap items-center gap-1 text-xs">
+            {fase && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary/10 px-2 py-0.5 font-medium">
+                {cruscotto?.find((f) => f.codice === fase.fase)?.etichetta || fase.fase}{fase.tecnico ? ` · ${nomeTecnico(fase.tecnico, tecniciCr)}` : ""}
+                <button onClick={() => { setFase(null); setElenco(null); }} aria-label="Togli il filtro della fase" className="ml-0.5">✕</button>
+              </span>
+            )}
+            {([["aperte", "Aperte"], ["consegnato", "Consegnate"], ["tutte", "Tutte"]] as const).map(([k, l]) => (
+              <button key={k} onClick={() => { setFiltro(k); setFase(null); setElenco(null); }}
+                className={`rounded-full border px-2 py-0.5 ${!fase && filtro === k ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{l}</button>
             ))}
           </div>
           <div className="text-xs text-muted-foreground">{elenco ? `${totale.toLocaleString("it-IT")} schede${inRicerca ? " trovate su tutte le schede" : ""}${totale > elenco.length ? ` (mostrate le ${elenco.length.toLocaleString("it-IT")} più recenti: in fondo «Mostra tutte»)` : ""}` : "…"}</div>
@@ -170,7 +190,11 @@ export function Banco() {
                   <span className="truncate">{s.azienda || s.nominativo}</span>
                   <span className="ml-auto"><Badge stato={s.stato} /></span>
                 </div>
-                <div className="truncate text-xs text-muted-foreground">{s.prodotto}{s.difetto ? ` · ${s.difetto}` : ""}</div>
+                <div className="truncate text-xs text-muted-foreground">{s.prodotto}{s.anno ? ` ${s.anno}` : ""}{s.difetto ? ` · ${s.difetto}` : ""}</div>
+                {(s.stato === "da_preventivare" && s.tecnico_verifica) || (s.stato === "accettato" && s.tecnico_riparazione) ? (
+                  <div className="truncate text-[11px] font-medium text-sky-800 dark:text-sky-300">
+                    {s.stato === "accettato" ? `Riparazione: ${nomeTecnico(s.tecnico_riparazione, tecniciCr)}` : `Verifica: ${nomeTecnico(s.tecnico_verifica, tecniciCr)}${s.verifica_stato === "chiusa" ? " (chiusa)" : ""}`}
+                  </div>) : null}
               </button>
             ))}
             {/* 04/10/2026: si aprono le più recenti; «Mostra tutte» porta l'elenco completo (scorrevole) */}

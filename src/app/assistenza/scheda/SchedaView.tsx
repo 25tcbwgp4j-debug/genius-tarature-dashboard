@@ -25,10 +25,12 @@ import { DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPa
 import { Documenti } from "./Documenti";
 import { Lavorazione } from "./Lavorazione";
 import { Preventivo, type BozzaPreventivo } from "./Preventivo";
+import { DialogoAssegna, DialogoChiudiVerifica, PannelloTecnici } from "./Tecnici";
 import { Badge, Campo, Pill, Sezione, area, campo } from "./ui";
 
 type Bozza = Partial<Scheda>;
-type Dialogo = null | { k: "invio"; tipo: TipoInvio } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" };
+type Dialogo = null | { k: "invio"; tipo: TipoInvio } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
+  | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" };
 
 function bozzaPreventivo(m: Partial<Scheda>): BozzaPreventivo {
   return { righe: (m.preventivo_righe as EstimateLine[]) || [], diagnosi: m.preventivo?.diagnosi || "", note: m.preventivo?.note || "",
@@ -46,6 +48,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const [dlg, setDlg] = useState<Dialogo>(null);
   const refPrev = useRef<HTMLDivElement>(null);
   const refDoc = useRef<HTMLDivElement>(null);
+  const refTec = useRef<HTMLDivElement>(null);
+  const tecnici = (cfg?.tecnici || []).filter((t) => t.attivo !== false);
   const admin = !!cfg?.admin;
 
   const ricarica = useCallback(() => assScheda(id).then((x) => { setS(x); setB({}); }).catch(toastErrore), [id]);
@@ -131,11 +135,27 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "pronto") setDlg({ k: "pronto" });
     else if (a === "incassa") { refDoc.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }
     else if (a === "consegna") setDlg({ k: "consegna" });
+    // 05/10/2026 (§10.5): verifica e riparazione assegnate ai tecnici
+    else if (a === "assegna_verifica") setDlg({ k: "assegna_verifica" });
+    else if (a === "chiudi_verifica") setDlg({ k: "chiudi_verifica" });
+    else if (a === "assegna_riparazione") setDlg({ k: "assegna_riparazione" });
+    else if (a === "stato_riparazione") refTec.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (a === "aggiornamento") setDlg({ k: "invio", tipo: "aggiornamento_riparazione" });
+  }
+  async function statoRiparazione(stato: string) {
+    let nota = "";
+    if (stato === "attesa_ricambi" || stato === "piu_tempo") {
+      const x = prompt(stato === "attesa_ricambi" ? "Quale ricambio, dove è ordinato e quando arriva? (facoltativo)" : "Perché serve più tempo? (facoltativo)", "");
+      if (x === null) return;
+      nota = x;
+    }
+    const r = await azione("stato-riparazione", { riparazione_stato: stato, nota }, `Riparazione: ${stato === "finita" ? "FINITA — ora «PRONTO»" : "stato aggiornato"}`);
+    if (r && (stato === "aggiornamento_cliente" || stato === "disabilitare_trova")) setDlg({ k: "invio", tipo: "aggiornamento_riparazione" });
   }
 
   if (!s) return <div className="rounded-xl border bg-card p-10 text-center"><Loader2 className="inline size-5 animate-spin" /></div>;
   const appV: ValoriApparecchio = {
-    famiglia: v("famiglia"), prodotto: v("prodotto"), modello: v("modello"), modello_fonte: v("modello_fonte"), modello_da_scheda: v("modello_da_scheda"),
+    famiglia: v("famiglia"), prodotto: v("prodotto"), anno: v("anno"), modello: v("modello"), modello_fonte: v("modello_fonte"), modello_da_scheda: v("modello_da_scheda"),
     seriale: v("seriale"), imei: v("imei"), difetto: v("difetto"), accessori: v("accessori"), con_alimentatore: v("con_alimentatore"),
     password_dispositivo: v("password_dispositivo"), apple_id: v("apple_id"), password_apple_id: v("password_apple_id"),
   };
@@ -172,7 +192,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {!ro && (st === "preventivo_inviato" || (st === "da_preventivare" && bz.righe.length > 0)) && (
           <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "esito" })}>Accettato / Rifiutato</Button>)}
         {!ro && st === "accettato" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "invio", tipo: "aggiornamento_riparazione" })}><MessageSquareText />Aggiornamento riparazione</Button>}
-        {!ro && st !== "in_arrivo" && st !== "consegnato" && <Button size="sm" variant={st === "accettato" || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
+        {!ro && st !== "in_arrivo" && st !== "consegnato" && <Button size="sm" variant={(st === "accettato" && s.riparazione_stato === "finita") || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
         {!ro && st === "pronto" && <Button size="sm" variant={s.pagata || s.saldo <= 0 ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "consegna" })}>CONSEGNA</Button>}
         <span className="mx-0.5 hidden h-6 w-px bg-border sm:block" />
         <MenuPdf id={s.id} />
@@ -214,8 +234,15 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         </Sezione>
 
         <Sezione titolo="Apparecchio" icona={<FileText />} sottotitolo={`accettato ${dataOra(s.fasi?.accettazione?.il || s.created_at)}${s.operatore_accettazione ? ` · ${s.operatore_accettazione}` : ""}`}>
-          <Apparecchio v={appV} set={(k, val) => set(k as keyof Scheda, val)} ro={ro} famiglie={cfg?.famiglie} idScheda={s.id} onApri={onApri} />
+          <Apparecchio v={appV} set={(k, val) => set(k as keyof Scheda, val)} ro={ro} famiglie={cfg?.famiglie} prodotti={cfg?.prodotti} idScheda={s.id} onApri={onApri} />
         </Sezione>
+      </div>
+
+      <div ref={refTec} className="scroll-mt-28">
+        <PannelloTecnici s={s} tecnici={tecnici} ro={ro} busy={!!busy}
+          onAssegnaVerifica={() => setDlg({ k: "assegna_verifica" })} onChiudiVerifica={() => setDlg({ k: "chiudi_verifica" })}
+          onRiapriVerifica={() => azione("riapri-verifica", {}, "Verifica riaperta")}
+          onAssegnaRiparazione={() => setDlg({ k: "assegna_riparazione" })} onStato={statoRiparazione} />
       </div>
 
       <div ref={refPrev} className="scroll-mt-28">
@@ -226,7 +253,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       </div>
 
       <div className="grid gap-3 xl:grid-cols-[3fr_2fr]">
-        <Lavorazione s={s} v={v} set={set} ro={ro} tecnici={(cfg?.tecnici || []).filter((t) => t.attivo).map((t) => t.codice).concat(["CHR", "VALE", "DUMY"])} />
+        <Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} />
         <div ref={refDoc} className="scroll-mt-28 space-y-3">
           <Documenti s={s} ro={ro} busy={!!busy}
             onScontrino={async () => { if (sporca && !(await salva(true))) return; router.push(`/cassa?scheda=${s.id}`); }}
@@ -266,6 +293,14 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           try { const n = await assModifica(s.id, { consegna_corriere: "cliente", consegna_modo: "spedizione", operatore }); setS(n); toast.success("Annotato: ritira il corriere del cliente"); setDlg(null); }
           catch (e) { toastErrore(e); }
         }} />}
+      {dlg?.k === "assegna_verifica" && <DialogoAssegna titolo={`Assegna in verifica — scheda ${s.sigla}`} tecnici={tecnici} attuale={s.tecnico_verifica}
+        testo="Chi fa la verifica (test in ingresso / diagnosi)? Il tecnico poi scrive la verifica e la chiude." onClose={() => setDlg(null)}
+        onAssegna={async (t) => !!(await azione("assegna-verifica", { tecnico: t }, `Verifica assegnata a ${t}`))} />}
+      {dlg?.k === "chiudi_verifica" && <DialogoChiudiVerifica s={s} tecnici={tecnici} onClose={() => setDlg(null)}
+        onChiudi={async (body) => !!(await azione("chiudi-verifica", body, "Verifica chiusa: da preventivare"))} />}
+      {dlg?.k === "assegna_riparazione" && <DialogoAssegna titolo={`Assegna in riparazione — scheda ${s.sigla}`} tecnici={tecnici} attuale={s.tecnico_riparazione}
+        testo="Chi fa la riparazione? Poi si aggiorna lo stato: attesa ricambi, aggiornamento al cliente, serve più tempo, «Trova il mio dispositivo», finita."
+        onClose={() => setDlg(null)} onAssegna={async (t) => !!(await azione("assegna-riparazione", { tecnico: t }, `Riparazione assegnata a ${t}`))} />}
       {dlg?.k === "stesso" && <DialogoStessoModello s={s} ro={ro} onClose={() => setDlg(null)} onApri={onApri}
         onCopia={(r) => { setBz((x) => ({ ...x, righe: r })); setDlg(null); toast.success("Preventivo copiato: controlla i prezzi e salva"); }} />}
       {dlg?.k === "cliente" && <SchedaClienteModal id={s.anagrafica_id}
