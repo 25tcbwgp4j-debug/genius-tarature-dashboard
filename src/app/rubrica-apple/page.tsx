@@ -71,7 +71,7 @@ export default function RubricaApple() {
           <Card className="p-3">
             <p className="text-sm font-semibold flex items-center gap-1"><MessageCircle className="w-4 h-4" /> WhatsApp negozio {rie.whatsapp.numero}</p>
             <p className="text-xs text-gray-500">
-              {rie.whatsapp.collegata ? "linea collegata" : "linea non ancora collegata"} · sola lettura · {rie.con_cellulare.toLocaleString("it-IT")} clienti con cellulare, pronti per l&apos;abbinamento
+              {rie.whatsapp.collegata ? "linea collegata" : "linea non ancora collegata"} · sola lettura · {`${rie.con_cellulare.toLocaleString("it-IT")} clienti con cellulare`}, pronti per l&apos;abbinamento
             </p>
           </Card>
         </div>
@@ -112,11 +112,11 @@ export default function RubricaApple() {
               <div className="text-sm text-gray-600 dark:text-gray-300 flex flex-wrap gap-x-4 gap-y-1 sm:justify-end">
                 {c.schede > 0 && (
                   <span>
-                    {c.schede} schede{c.schede_aperte ? <b className="text-amber-700"> · {c.schede_aperte} aperte</b> : null}
+                    {c.schede} {c.schede === 1 ? "scheda" : "schede"}{c.schede_aperte ? <b className="text-amber-700"> · {c.schede_aperte} aperte</b> : null}
                     {c.ultima_scheda && <> · <Link className="underline" href={`/assistenza?id=${c.ultima_scheda.id}`}>{c.ultima_scheda.sigla}</Link></>}
                   </span>
                 )}
-                {c.fatture > 0 && <span>{c.fatture} fatture · {eur(c.fatturato)}</span>}
+                {c.fatture > 0 && <span>{c.fatture} {c.fatture === 1 ? "fattura" : "fatture"} · {eur(c.fatturato)}</span>}
                 <span className="text-gray-400">ultima: {giorno(c.ultima_attivita)}</span>
               </div>
             </div>
