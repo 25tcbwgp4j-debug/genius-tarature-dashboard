@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
-import { Smartphone, Inbox, FileQuestion, Send, Wrench, PackageCheck, Euro, Landmark, Mail, Calculator, Clock } from "lucide-react";
+import { Smartphone, Inbox, FileQuestion, Send, Wrench, PackageCheck, Euro, Landmark, Mail, Calculator, Clock, Plus } from "lucide-react";
 import { fetchAPI } from "@/lib/api";
 import { usePermessi } from "@/components/permessi";
 import { COLORE_STATO, ETICHETTA_STATO, dataOra, eur, type SchedaBreve, type ConfigAssistenza } from "@/lib/assistenza";
@@ -48,7 +48,7 @@ function RigaScheda({ s, extra }: { s: SchedaBreve; extra?: React.ReactNode }) {
 
 const MAX_RIGHE = 10;   // la home resta corta anche su iPhone: il resto è nelle schede assistenza
 
-function Elenco({ titolo, schede, vuoto, extra }: { titolo: React.ReactNode; schede: SchedaBreve[] | null; vuoto: string; extra?: (s: SchedaBreve) => React.ReactNode }) {
+function Elenco({ titolo, schede, vuoto, extra, href = "/assistenza" }: { titolo: React.ReactNode; schede: SchedaBreve[] | null; vuoto: string; extra?: (s: SchedaBreve) => React.ReactNode; href?: string }) {
   const altre = (schede?.length || 0) - MAX_RIGHE;
   return (
     <Card>
@@ -57,7 +57,7 @@ function Elenco({ titolo, schede, vuoto, extra }: { titolo: React.ReactNode; sch
         {schede === null ? <p className="p-4 text-sm text-gray-500">Caricamento…</p>
           : schede.length === 0 ? <p className="p-4 text-sm text-gray-500">{vuoto}</p>
           : schede.slice(0, MAX_RIGHE).map((s) => <RigaScheda key={s.id} s={s} extra={extra?.(s)} />)}
-        {altre > 0 && <Link href="/assistenza" className="block p-3 text-sm text-blue-700 dark:text-blue-300 hover:underline">… e altre {altre}: apri le schede assistenza</Link>}
+        {altre > 0 && <Link href={href} className="block p-3 text-sm text-blue-700 dark:text-blue-300 hover:underline">… e altre {altre}: apri le schede assistenza</Link>}
       </div>
     </Card>
   );
@@ -106,9 +106,14 @@ export function HomeApple() {
         <Smartphone className="w-6 h-6" />
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Panoramica Apple</h2>
         {visibili && (
-          <Link href="/assistenza" className="ml-auto inline-flex items-center gap-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 px-3 py-2 text-sm font-semibold">
-            <Smartphone className="w-4 h-4" /> Apri le schede assistenza
-          </Link>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Link href="/assistenza?nuova=1" className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800/60">
+              <Plus className="w-4 h-4" /> Nuova accettazione
+            </Link>
+            <Link href="/assistenza" className="inline-flex items-center gap-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 px-3 py-2 text-sm font-semibold">
+              <Smartphone className="w-4 h-4" /> Apri le schede assistenza
+            </Link>
+          </div>
         )}
       </div>
 
@@ -123,7 +128,7 @@ export function HomeApple() {
           {FASI_HOME.map((f) => {
             const Icon = f.icon;
             return (
-              <Link key={f.stato} href="/assistenza">
+              <Link key={f.stato} href={`/assistenza?stato=${f.stato}`}>
                 <Card className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors h-full">
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${f.tono}`}><Icon className="w-5 h-5" /></div>
@@ -176,14 +181,14 @@ export function HomeApple() {
       {visibili && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <Elenco titolo={<span className="flex items-center gap-2"><Euro className="w-4 h-4" /> Pronte, in attesa di pagamento{daPagare ? ` (${daPagare.length})` : ""}</span>}
-            schede={daPagare} vuoto="Nessuna scheda pronta da incassare."
+            schede={daPagare} href="/assistenza?stato=pronto" vuoto="Nessuna scheda pronta da incassare."
             extra={(s) => <span className="text-sm font-medium">{eur(s.totale_lavorazione ?? s.preventivo_totale)}</span>} />
           <Elenco titolo={<span className="flex items-center gap-2"><PackageCheck className="w-4 h-4" /> Pagate, da consegnare o spedire{pagate ? ` (${pagate.length})` : ""}</span>}
-            schede={pagate} vuoto="Nessuna scheda pagata in attesa di consegna." />
+            schede={pagate} href="/assistenza?stato=pronto" vuoto="Nessuna scheda pagata in attesa di consegna." />
           <Elenco titolo={<span className="flex items-center gap-2"><FileQuestion className="w-4 h-4" /> In attesa di preventivo</span>}
-            schede={daPrev} vuoto="Nessuna scheda da preventivare." />
+            schede={daPrev} href="/assistenza?stato=da_preventivare" vuoto="Nessuna scheda da preventivare." />
           <Elenco titolo={<span className="flex items-center gap-2"><Clock className="w-4 h-4" /> Ultime schede</span>}
-            schede={ultime} vuoto="Nessuna scheda." />
+            schede={ultime} href="/assistenza?stato=tutte" vuoto="Nessuna scheda." />
         </div>
       )}
     </div>

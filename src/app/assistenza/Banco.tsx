@@ -58,7 +58,11 @@ export function Banco() {
   const [cfg, setCfg] = useState<ConfigAssistenza | null>(null);
   const [operatore, setOperatore] = useOperatore();
   const [q, setQ] = useState("");
-  const [filtro, setFiltro] = useState("aperte");
+  // 04/10/2026: filtro e nuova accettazione apribili da link (riquadri della Panoramica Apple, segnalibri):
+  // /assistenza?stato=pronto · /assistenza?nuova=1
+  const FILTRI_VALIDI = ["aperte", "da_preventivare", "preventivo_inviato", "accettato", "rifiutato", "pronto", "in_arrivo", "consegnato", "tutte"];
+  const statoLink = sp.get("stato");
+  const [filtro, setFiltro] = useState(statoLink && FILTRI_VALIDI.includes(statoLink) ? statoLink : "aperte");
   const [elenco, setElenco] = useState<SchedaBreve[] | null>(null);
   const [totale, setTotale] = useState(0);
   const [contatori, setContatori] = useState<Record<string, number>>({});
@@ -78,6 +82,10 @@ export function Banco() {
   useEffect(() => {
     const n = sp.get("n");
     if (n) assPerNumero(n).then((r) => setAperta(r.id)).catch(toastErrore);
+    const st = sp.get("stato");
+    if (st && FILTRI_VALIDI.includes(st)) { setFiltro(st); setElenco(null); }
+    if (sp.get("nuova") === "1") setNuova(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp]);
 
   const apri = useCallback((id: string) => { setAperta(id); router.replace(`/assistenza?id=${id}`); }, [router]);
