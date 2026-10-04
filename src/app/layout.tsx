@@ -50,7 +50,8 @@ export const viewport: Viewport = {
 const SW_REGISTER = `
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
+    // updateViaCache 'none' + update(): il service worker nuovo si prende subito, senza cache HTTP di mezzo (04/10/2026)
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((reg) => reg.update()).catch((err) => {
       console.warn('SW registration failed:', err);
     });
   });

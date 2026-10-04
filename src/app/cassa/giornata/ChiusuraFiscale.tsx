@@ -2,15 +2,18 @@
 // Chiusura fiscale con UN pulsante: la dashboard mette in coda il comando, l'agente sul server del negozio fa
 // l'azzeramento Z01 sul registratore (che stampa la chiusura e invia i corrispettivi), poi rilegge le Z del giorno
 // e ne scrive il totale nel controllo «Scontrini».
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { cassaChiusuraFiscale, cassaChiusureFiscali, type ChiusuraRt, type RichiestaChiusura } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 
-const eur = (v: number) => v.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
-const ora = (iso: string) => new Date(iso).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
+// formattatori creati una volta sola (04/10/2026: toLocaleString ne crea uno nuovo a ogni chiamata)
+const FMT_EUR = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" });
+const FMT_ORA = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
+const eur = (v: number) => FMT_EUR.format(v);
+const ora = (iso: string) => FMT_ORA.format(new Date(iso));
 // dopo 5 minuti senza risposta la rotellina si ferma e si spiega cosa controllare (02/10/2026: rimasta ferma per ore)
 const ATTESA_MAX_MS = 5 * 60 * 1000;
 const PRIMA = (a: RichiestaChiusura) => ["da_stampare", "in_stampa"].includes(a.stato);
@@ -32,31 +35,49 @@ export function ChiusuraFiscale({ giorno, oggi, operatore, onFatta }: { giorno: 
   const inCorso = inAttesa && !scaduta;
   const zFatte = zDopo(chiusure, ultima);
 
-  const carica = useCallback(async () => {
+  const carica = useCallback(async (signal?: AbortSignal) => {
     try {
-      const r = await cassaChiusureFiscali(giorno);
+      const r = await cassaChiusureFiscali(giorno, signal);
+      if (signal?.aborted) return null;
       setRichieste(r.richieste); setChiusure(r.chiusure);
       return r;
     } catch { return null; }
   }, [giorno]);
-  useEffect(() => { carica(); }, [carica]);
+  // cambio giorno: si svuota subito (niente Z del giorno prima) e la lettura del giorno vecchio si annulla
+  useEffect(() => {
+    const ctl = new AbortController();
+    setRichieste([]); setChiusure([]);
+    carica(ctl.signal);
+    return () => ctl.abort();
+  }, [carica]);
 
-  // mentre la chiusura è in coda o in corso controllo ogni 3 secondi (dopo 5 minuti ogni 30: la Z può arrivare tardi)
+  // mentre la chiusura è in coda o in corso controllo ogni 3 secondi (dopo 5 minuti ogni 30: la Z può arrivare tardi).
+  // Un solo interval: dipende solo da «in attesa/scaduta», la richiesta e la callback si leggono dai ref (04/10/2026:
+  // prima si ricreava a ogni lettura e a ogni render della pagina)
+  const ultimaId = useRef<string | undefined>(undefined);
+  ultimaId.current = ultima?.id;
+  const fatta = useRef(onFatta);
+  fatta.current = onFatta;
   useEffect(() => {
     if (!inAttesa) return;
+    let inCorsa = false;
     const t = setInterval(async () => {
-      setAdesso(Date.now());
-      const r = await carica();
-      const u = r?.richieste[r.richieste.length - 1];
-      if (u && u.id === ultima.id && !PRIMA(u)) {
-        const z = zDopo(r?.chiusure || [], u);
-        if (u.stato === "emesso") { toast.success("Chiusura fiscale fatta: il registratore ha stampato la chiusura e inviato i corrispettivi"); onFatta(); }
-        else if (z.length) { toast.success(`Chiusura fiscale fatta: Z ${z.map((c) => c.z).join(", ")} registrata (l'agente ha segnalato: ${u.errore || u.stato})`, { duration: 15000 }); onFatta(); }
-        else toast.error(`Chiusura NON fatta: ${u.errore || u.stato}`, { duration: 15000 });
-      }
+      if (inCorsa || document.hidden) return;
+      inCorsa = true;
+      try {
+        setAdesso(Date.now());
+        const r = await carica();
+        const u = r?.richieste[r.richieste.length - 1];
+        if (u && u.id === ultimaId.current && !PRIMA(u)) {
+          const z = zDopo(r?.chiusure || [], u);
+          if (u.stato === "emesso") { toast.success("Chiusura fiscale fatta: il registratore ha stampato la chiusura e inviato i corrispettivi"); fatta.current(); }
+          else if (z.length) { toast.success(`Chiusura fiscale fatta: Z ${z.map((c) => c.z).join(", ")} registrata (l'agente ha segnalato: ${u.errore || u.stato})`, { duration: 15000 }); fatta.current(); }
+          else toast.error(`Chiusura NON fatta: ${u.errore || u.stato}`, { duration: 15000 });
+        }
+      } finally { inCorsa = false; }
     }, scaduta ? 30000 : 3000);
     return () => clearInterval(t);
-  }, [inAttesa, scaduta, ultima, carica, onFatta]);
+  }, [inAttesa, scaduta, carica]);
 
   async function avvia() {
     if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }

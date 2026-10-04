@@ -1,7 +1,10 @@
 // Date nel fuso di Roma (il negozio lavora in Europe/Rome, non in UTC).
 
-/** Oggi a Roma come «AAAA-MM-GG». */
-export const oggiRoma = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Rome" }).format(new Date());
+// un solo formattatore (crearne uno a ogni chiamata costa, soprattutto su Safari e sugli iMac vecchi — 04/10/2026)
+const FMT_ROMA = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Rome" });
+
+/** Oggi a Roma come «AAAA-MM-GG» secondo l'orologio di QUESTO computer (dove conta, meglio l'«oggi» del server). */
+export const oggiRoma = () => FMT_ROMA.format(new Date());
 
 /** Anno in corso a Roma. */
 export const annoRoma = () => Number(oggiRoma().slice(0, 4));

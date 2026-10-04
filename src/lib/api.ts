@@ -12,7 +12,7 @@ const API_PROXY = '/api/backend';
 
 /** Errore del backend con codice HTTP e dettaglio (es. 409 «fattura già esistente» con la fattura trovata).
  *  `inAttesa` = operazione protetta mandata all'amministratore per l'approvazione (non è un vero errore). */
-export type ApiError = Error & { status?: number; detail?: any; inAttesa?: boolean; autorizzazioneId?: string };  // eslint-disable-line @typescript-eslint/no-explicit-any
+export type ApiError = Error & { status?: number; detail?: any; inAttesa?: boolean; autorizzazioneId?: string; timeout?: boolean };  // eslint-disable-line @typescript-eslint/no-explicit-any
 
 // === AUTORIZZAZIONE DELL'AMMINISTRATORE (livelli di accesso, 01/10/2026) ===
 // Un'operazione protetta (cancellazione, storno, riapertura cassa…) chiamata da un operatore risponde
@@ -38,7 +38,12 @@ function latin1(v: string) { return v.replace(/[^\x20-\x7E\xA0-\xFF]/g, '?'); }
 /** Testo libero negli header (motivo, email): accenti tolti (così → cosi), resto in ASCII. */
 function ascii(v: string) { return v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '?'); }
 
-export async function fetchAPI(path: string, options: RequestInit = {}, conDialog = true): Promise<any> {  // eslint-disable-line @typescript-eslint/no-explicit-any
+/** Opzioni di fetchAPI: `timeoutMs` = oltre questo tempo la richiesta si annulla con un errore chiaro (04/10/2026:
+ *  sugli iMac una richiesta rimasta appesa — Safari dopo lo stop, backend occupato — lasciava la rotellina per sempre). */
+export type OpzioniAPI = RequestInit & { timeoutMs?: number };
+
+export async function fetchAPI(path: string, opzioni: OpzioniAPI = {}, conDialog = true): Promise<any> {  // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { timeoutMs, ...options } = opzioni;
   const url = `${API_PROXY}${path}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -46,10 +51,31 @@ export async function fetchAPI(path: string, options: RequestInit = {}, conDialo
     'X-Attivita': attivitaSalvata(),
     ...(options.headers as Record<string, string> | undefined),
   };
-  const res = await fetch(url, {
-    ...options,
-    headers,
-  });
+  // timeout: un AbortController nostro, collegato a quello del chiamante (AbortSignal.timeout/any non ci sono su Safari 15)
+  let ctl: AbortController | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let scaduto = false;
+  const esterno = options.signal;
+  const inoltra = () => ctl?.abort();
+  if (timeoutMs) {
+    ctl = new AbortController();
+    if (esterno) { if (esterno.aborted) ctl.abort(); else esterno.addEventListener('abort', inoltra); }
+    timer = setTimeout(() => { scaduto = true; ctl?.abort(); }, timeoutMs);
+  }
+  let res: Response;
+  try {
+    res = await fetch(url, { ...options, headers, signal: ctl ? ctl.signal : esterno });
+  } catch (e) {
+    if (scaduto) {
+      const err = new Error(`Il server non ha risposto entro ${Math.round((timeoutMs || 0) / 1000)} secondi`) as ApiError;
+      err.status = 0; err.timeout = true;
+      throw err;
+    }
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (esterno) esterno.removeEventListener('abort', inoltra);
+  }
   if (!res.ok) {
     if (res.status === 401) {
       // Sessione scaduta: redirect a login (solo lato client)
@@ -68,7 +94,7 @@ export async function fetchAPI(path: string, options: RequestInit = {}, conDialo
         esegui: (h) => {
           const extra: Record<string, string> = { 'X-Admin-Email': ascii(h['X-Admin-Email'].trim()), 'X-Admin-Password': latin1(h['X-Admin-Password']) };
           if (h['X-Motivo']?.trim()) extra['X-Motivo'] = ascii(h['X-Motivo'].trim()).slice(0, 300);
-          return fetchAPI(path, { ...options, headers: { ...(options.headers as Record<string, string> | undefined), ...extra } }, false);
+          return fetchAPI(path, { ...options, timeoutMs, headers: { ...(options.headers as Record<string, string> | undefined), ...extra } }, false);
         },
       });
     }
@@ -1341,6 +1367,8 @@ export interface FoglioCassa {
   };
   controlli: ControlloCassa[]; conti_tornano: boolean; tagli: string[]; tagli_apertura: string[]; tagli_chiusura: string[];
   calendario?: CalendarioGiorno;
+  /** «oggi» secondo il server (Roma): la pagina non si fida dell'orologio del Mac (04/10/2026) */
+  oggi_roma?: string;
 }
 
 // === GIORNI DI CHIUSURA della cassa (04/10/2026) ===
@@ -1385,10 +1413,14 @@ export async function calendarioBlocca(giornoSettimana: 5 | 6, regolaId?: string
 export async function calendarioFestivita(giorni: string[], aperti: string[] = []): Promise<{ ok: boolean; chiusi: string[]; errori: { giorno: string; errore: string }[] }> {
   return fetchAPI('/api/cassa/calendario/festivita', { method: 'POST', body: JSON.stringify({ giorni, aperti }) });
 }
-export async function cassaDaChiudere(): Promise<DaChiudere> { return fetchAPI('/api/cassa/calendario/da-chiudere'); }
-export async function cassaGiornata(giorno: string): Promise<FoglioCassa> { return fetchAPI(`/api/cassa/giornata?giorno=${giorno}`); }
+/** Cassa del giorno: letture con timeout (20 s) e annullabili quando si cambia giorno (04/10/2026). */
+export const CASSA_TIMEOUT_MS = 20_000;
+export async function cassaDaChiudere(signal?: AbortSignal): Promise<DaChiudere> { return fetchAPI('/api/cassa/calendario/da-chiudere', { signal, timeoutMs: CASSA_TIMEOUT_MS }); }
+export async function cassaGiornata(giorno: string, signal?: AbortSignal): Promise<FoglioCassa> {
+  return fetchAPI(`/api/cassa/giornata?giorno=${giorno}`, { signal, timeoutMs: CASSA_TIMEOUT_MS });
+}
 export async function cassaGiornataSalva(giorno: string, body: Partial<FoglioCassa['giornata']>): Promise<FoglioCassa> {
-  return fetchAPI(`/api/cassa/giornata?giorno=${giorno}`, { method: 'PUT', body: JSON.stringify(body) });
+  return fetchAPI(`/api/cassa/giornata?giorno=${giorno}`, { method: 'PUT', body: JSON.stringify(body), timeoutMs: CASSA_TIMEOUT_MS });
 }
 export async function cassaGiornataRiga(body: Record<string, string | number>): Promise<FoglioCassa> {
   return fetchAPI('/api/cassa/giornata/movimenti', { method: 'POST', body: JSON.stringify(body) });
@@ -1534,8 +1566,8 @@ export interface RichiestaChiusura { id: string; stato: string; errore?: string 
 export async function cassaChiusuraFiscale(operatore: string): Promise<{ ok: boolean; id: string }> {
   return fetchAPI('/api/cassa/chiusura-fiscale', { method: 'POST', body: JSON.stringify({ operatore }) });
 }
-export async function cassaChiusureFiscali(giorno: string): Promise<{ richieste: RichiestaChiusura[]; chiusure: ChiusuraRt[]; rt_scontrini: number | null }> {
-  return fetchAPI(`/api/cassa/chiusure-fiscali?giorno=${encodeURIComponent(giorno)}`);
+export async function cassaChiusureFiscali(giorno: string, signal?: AbortSignal): Promise<{ richieste: RichiestaChiusura[]; chiusure: ChiusuraRt[]; rt_scontrini: number | null }> {
+  return fetchAPI(`/api/cassa/chiusure-fiscali?giorno=${encodeURIComponent(giorno)}`, { signal, timeoutMs: CASSA_TIMEOUT_MS });
 }
 
 

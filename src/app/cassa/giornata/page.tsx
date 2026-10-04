@@ -26,6 +26,7 @@ import { GiorniChiusura } from "./GiorniChiusura";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma, spostaGiorno } from "@/lib/date";
+import type { ApiError } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 import {
   cassaAnnulla, cassaScontrini, type RigaGiornata, type Scontrino,
@@ -33,7 +34,9 @@ import {
   type FoglioCassa, type Tagli, calendarioApri, calendarioChiudi, cassaDaChiudere, type DaChiudere,
 } from "@/lib/api";
 
-const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+// formattatori creati UNA volta: prima se ne creava uno per ogni cifra della tabella (lento sugli iMac vecchi, 04/10/2026)
+const FMT_EUR = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" });
+const eur = (v: number | null | undefined) => FMT_EUR.format(v || 0);
 const COL = [["contanti", "Contanti"], ["pos", "POS"], ["stripe", "Stripe"], ["bonifico", "Bonifico"], ["paypal", "PayPal"]] as const;
 const FONTE: Record<string, string> = { fattura: "auto", fattura_prec: "auto", scontrino: "dashboard", manuale: "a mano" };
 const TIPI_RIGA: [string, string][] = [
@@ -42,7 +45,19 @@ const TIPI_RIGA: [string, string][] = [
 ];
 const TIPI_PRELIEVO: Record<string, string> = { eccesso: "Troppi contanti in cassa", spesa: "Spesa", altro: "Altro" };
 const tondo = (v: number) => Math.round(v * 100) / 100;
-const dataIt = (g: string, o?: Intl.DateTimeFormatOptions) => new Date(`${g}T12:00:00Z`).toLocaleDateString("it-IT", { timeZone: "Europe/Rome", ...o });
+const FMT_DATE = new Map<string, Intl.DateTimeFormat>();
+const dataIt = (g: string, o?: Intl.DateTimeFormatOptions) => {
+  const k = JSON.stringify(o || {});
+  let fmt = FMT_DATE.get(k);
+  if (!fmt) { fmt = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", ...o }); FMT_DATE.set(k, fmt); }
+  return fmt.format(new Date(`${g}T12:00:00Z`));
+};
+/** Giorno passato nell'indirizzo (?giorno=AAAA-MM-GG): si legge una volta sola all'apertura, mai riscritto (niente rimbalzi). */
+function giornoDaUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const g = new URLSearchParams(window.location.search).get("giorno") || "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(g) ? g : null;
+}
 const RIGA_VUOTA = { tipo: "scontrino", numero: "", importo: "", modalita: "contanti", descrizione: "", modello: "", prodotto_id: "" };
 type Timer = ReturnType<typeof setTimeout>;
 
@@ -113,8 +128,17 @@ function Bloccato({ da, il, extra, onSblocca, busy }: { da?: string | null; il?:
 
 export default function CassaGiornataPage() {
   const { admin } = usePermessi();
-  const [giorno, setGiorno] = useState(oggiRoma);
+  // giorno mostrato: quello dell'indirizzo o, finché il server non risponde, l'«oggi» dell'orologio del Mac;
+  // alla prima risposta si allinea UNA volta all'«oggi» del server (oggi_roma), poi decide solo l'utente.
+  const [giorno, setGiorno] = useState(() => giornoDaUrl() || oggiRoma());
   const giornoRef = useRef(giorno);
+  const sceltoDaUtente = useRef(giornoDaUrl() !== null);
+  const allineato = useRef(false);
+  const [oggiServer, setOggiServer] = useState<string | null>(null);
+  const oggi = oggiServer || oggiRoma();
+  const oggiRef = useRef(oggi);
+  oggiRef.current = oggi;
+  const [tentativo, setTentativo] = useState(0);
   const [f, setF] = useState<FoglioCassa | null>(null);
   const [bozza, setBozza] = useState<FoglioCassa["giornata"] | null>(null);
   const [errore, setErrore] = useState("");
@@ -160,47 +184,96 @@ export default function CassaGiornataPage() {
     await Promise.all([base?.(), reint?.(), ...inVolo.current]);
   }, []);
 
+  /** Rilettura del giorno guardato (dopo un'azione o dal controllo periodico di oggi). */
   const ricarica = useCallback(() => {
     const g = giornoRef.current;
-    return cassaGiornata(g).then(applica).catch((e: Error) => { if (g === giornoRef.current) setErrore(e.message); });
+    return cassaGiornata(g).then((r) => {
+      if (r.oggi_roma) setOggiServer(r.oggi_roma);
+      applica(r);
+    }).catch((e: Error) => { if (g === giornoRef.current) setErrore(e.message); });
   }, [applica]);
-  useEffect(() => { giornoRef.current = giorno; ricarica(); }, [giorno, ricarica]);
-  const caricaDaChiudere = useCallback(() => { cassaDaChiudere().then(setDaChiudere).catch(() => {}); }, []);
-  useEffect(() => { caricaDaChiudere(); }, [caricaDaChiudere, f?.giornata.stato]);
+
+  // UN caricamento per cambio giorno (04/10/2026): la richiesta del giorno precedente si annulla (AbortController),
+  // dopo 20 s senza risposta si riprova una volta da sola (Safari dopo lo stop del Mac lascia connessioni morte),
+  // poi compare l'errore con «Riprova» invece della rotellina infinita.
+  useEffect(() => {
+    giornoRef.current = giorno;
+    const ctl = new AbortController();
+    let vivo = true;
+    const carica = async (prova: number): Promise<void> => {
+      try {
+        const r = await cassaGiornata(giorno, ctl.signal);
+        if (!vivo) return;
+        if (r.oggi_roma) setOggiServer(r.oggi_roma);
+        // prima apertura senza giorno scelto: se l'orologio del Mac non è quello del server, si va all'oggi del server (una volta)
+        if (!allineato.current) {
+          allineato.current = true;
+          if (!sceltoDaUtente.current && r.oggi_roma && r.oggi_roma !== giorno) { setGiorno(r.oggi_roma); return; }
+        }
+        applica(r);
+      } catch (e) {
+        if (!vivo || ctl.signal.aborted) return;
+        const err = e as ApiError;
+        if (prova === 0 && (err.timeout || e instanceof TypeError)) return carica(1);
+        setErrore(err.timeout ? `${err.message}. Controlla la connessione e premi «Riprova».` : err.message);
+      }
+    };
+    carica(0);
+    return () => { vivo = false; ctl.abort(); };
+  }, [giorno, tentativo, applica]);
+
+  // «da chiudere» non dipende dal giorno guardato: si legge all'apertura, quando la finestra torna in primo piano
+  // e dopo le azioni che cambiano lo stato di una giornata (prima: due volte a ogni cambio giorno)
+  const caricaDaChiudere = useCallback(() => {
+    return cassaDaChiudere().then((d) => { setDaChiudere(d); if (d.oggi?.giorno) setOggiServer(d.oggi.giorno); return d; }).catch(() => null);
+  }, []);
+  useEffect(() => {
+    caricaDaChiudere();
+    const vis = () => { if (document.visibilityState === "visible") caricaDaChiudere(); };
+    document.addEventListener("visibilitychange", vis);
+    return () => document.removeEventListener("visibilitychange", vis);
+  }, [caricaDaChiudere]);
 
   /** Cambio giorno: prima salvo quello che è in sospeso sul giorno vecchio. */
   const vaiA = useCallback(async (g: string) => {
+    sceltoDaUtente.current = true;
     await flush();
     setF(null); setBozza(null); setErrore(""); setNuova(RIGA_VUOTA);
     setGiorno(g);
   }, [flush]);
 
-  // fatture, scontrini e POS entrano da soli: aggiorno ogni minuto se la giornata è aperta,
-  // ma MAI mentre si scrive o c'è un salvataggio in corso (altrimenti si cancella quello che si sta digitando)
+  // fatture, scontrini e POS entrano da soli: aggiorno ogni minuto SOLO la cassa di OGGI aperta (non i giorni
+  // passati, futuri o chiusi), MAI mentre si scrive o c'è un salvataggio in corso, mai a finestra nascosta
+  const aggiornaOgni = !!f && giorno === oggi && !chiusa && !nonLav && !f.giornata.futura;
   useEffect(() => {
-    if (chiusa || nonLav) return;
+    if (!aggiornaOgni) return;
     const t = setInterval(() => {
       const el = document.activeElement;
       const scrive = el instanceof HTMLElement && el.matches("input,textarea,select");
       if (!salvaT.current && !reintT.current && !inVolo.current.size && !scrive && !document.hidden) ricarica();
     }, 60000);
     return () => clearInterval(t);
-  }, [chiusa, nonLav, ricarica]);
+  }, [aggiornaOgni, ricarica]);
 
-  // la pagina resta aperta sul banco: a mezzanotte si passa da sola al giorno nuovo
+  // la pagina resta aperta sul banco: a mezzanotte si passa da sola al giorno nuovo. L'orologio del Mac fa solo da
+  // sveglia: il giorno nuovo è quello che dice il server (un Mac avanti o indietro non fa saltare la cassa)
   useEffect(() => {
     let ultimo = oggiRoma();
     const controlla = () => {
       const o = oggiRoma();
       if (o === ultimo) return;
-      const prima = ultimo; ultimo = o;
-      if (giornoRef.current === prima) { vaiA(o); toast.info("È cominciato un nuovo giorno: ti porto alla cassa di oggi"); }
+      ultimo = o;
+      const prima = oggiRef.current;
+      caricaDaChiudere().then((d) => {
+        const nuovo = d?.oggi?.giorno;
+        if (nuovo && nuovo !== prima && giornoRef.current === prima) { vaiA(nuovo); toast.info("È cominciato un nuovo giorno: ti porto alla cassa di oggi"); }
+      });
     };
     window.addEventListener("focus", controlla);
     document.addEventListener("visibilitychange", controlla);
     const t = setInterval(controlla, 60000);
     return () => { window.removeEventListener("focus", controlla); document.removeEventListener("visibilitychange", controlla); clearInterval(t); };
-  }, [vaiA]);
+  }, [vaiA, caricaDaChiudere]);
 
   function modifica(p: Partial<FoglioCassa["giornata"]>) {
     if (!bozza || chiusa) return;
@@ -293,7 +366,7 @@ export default function CassaGiornataPage() {
     if (imp === null || Number.isNaN(imp) || imp === 0) { toast.error("Inserisci l'importo (es. 25 o 12,50)"); return; }
     const mod = modForzata || nuova.modalita;
     // oggi un incasso POS/PayPal si registra solo dopo la verifica automatica (pulsanti sotto); i giorni passati restano liberi
-    if (!modForzata && (mod === "pos" || mod === "paypal") && giorno === oggiRoma() && imp > 0) {
+    if (!modForzata && (mod === "pos" || mod === "paypal") && giorno === oggi && imp > 0) {
       if (!admin) { toast.error("POS e PayPal di oggi: usa i pulsanti di pagamento sotto, la riga si aggiunge quando SumUp/PayPal confermano"); return; }
       if (!confirm("Registrare la riga POS/PayPal SENZA verifica del pagamento (solo amministratore)?")) return;
     }
@@ -346,6 +419,7 @@ export default function CassaGiornataPage() {
       if (!fresco.conti_tornano) { setConvalida({ aperta: true, motivo: "" }); return; }   // differenze: si convalida col motivo
       if (!confirm(`Chiudere la cassa del ${dataIt(giorno)}?`)) return;
       applica(await cassaGiornataChiudi(giorno, false, ""));
+      caricaDaChiudere();
       toast.success("Giornata chiusa");
     });
   }
@@ -356,6 +430,7 @@ export default function CassaGiornataPage() {
     if (m.length < 5) { toast.error("Scegli o scrivi il motivo della differenza"); return; }
     return azione("chiudi", async () => {
       applica(await cassaGiornataChiudi(giorno, true, m));
+      caricaDaChiudere();
       setConvalida({ aperta: false, motivo: "" });
       toast.success("Differenza convalidata, giornata chiusa");
     });
@@ -367,18 +442,18 @@ export default function CassaGiornataPage() {
     return azione("salta", async () => {
       const r = await calendarioChiudi(giorno, "non_lavorato", "Salta questa chiusura");
       toast.success(`Giorno non lavorato: la cassa passa a ${dataIt(r.successivo_lavorativo, { weekday: "long", day: "numeric", month: "numeric" })}`);
-      await ricarica();
+      await ricarica(); caricaDaChiudere();
     });
   }
   /** Il giorno chiuso in realtà è stato lavorato (anomalie o apertura straordinaria). */
   function lavorato() {
     if (!confirm(`Segnare ${dataIt(giorno, { weekday: "long", day: "numeric", month: "long" })} come giorno LAVORATO? Si apre la sua cassa.`)) return;
-    return azione("lavorato", async () => { await calendarioApri(giorno, "aperto dalla cassa del giorno"); toast.success("Giorno lavorato: cassa aperta"); await ricarica(); });
+    return azione("lavorato", async () => { await calendarioApri(giorno, "aperto dalla cassa del giorno"); toast.success("Giorno lavorato: cassa aperta"); await ricarica(); caricaDaChiudere(); });
   }
 
   function riapri() {
     if (!confirm("Riaprire la giornata per correggerla? Alla nuova chiusura l'Excel verrà rigenerato.")) return;
-    return azione("riapri", async () => { applica(await cassaGiornataRiapri(giorno)); });
+    return azione("riapri", async () => { applica(await cassaGiornataRiapri(giorno)); caricaDaChiudere(); });
   }
 
   const g = bozza;
@@ -431,7 +506,7 @@ export default function CassaGiornataPage() {
         </label>
         <Button size="icon" variant="outline" className="size-10 md:size-8" title="Giorno lavorativo successivo (salta i giorni di chiusura)"
           onClick={() => vaiA(cal?.successivo_lavorativo || spostaGiorno(giorno, 1))}><ChevronRight className="size-4" /></Button>
-        {giorno !== oggiRoma() && <Button size="sm" variant="ghost" onClick={() => vaiA(oggiRoma())}>Oggi</Button>}
+        {giorno !== oggi && <Button size="sm" variant="ghost" onClick={() => vaiA(oggi)}>Oggi</Button>}
         {f && nonLav && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-800 dark:bg-slate-700 dark:text-slate-100">NON LAVORATO</span>}
         {f && !f.giornata.futura && !nonLav && (
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chiusa ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"}`}>
@@ -519,15 +594,15 @@ export default function CassaGiornataPage() {
               riportati da <b>{dataIt(f.giornata.apertura_da, { weekday: "long", day: "2-digit", month: "2-digit" })}</b>.</div>
           )}
           <div className="mt-2 flex flex-wrap justify-center gap-2">
-            {cal?.precedente_lavorativo && cal.precedente_lavorativo !== oggiRoma() && <Button size="sm" variant="outline" className="h-10" onClick={() => vaiA(cal.precedente_lavorativo!)}>
+            {cal?.precedente_lavorativo && cal.precedente_lavorativo !== oggi && <Button size="sm" variant="outline" className="h-10" onClick={() => vaiA(cal.precedente_lavorativo!)}>
               Vai a {dataIt(cal.precedente_lavorativo, { weekday: "long", day: "numeric", month: "numeric" })}</Button>}
-            <Button size="sm" variant="outline" className="h-10" onClick={() => vaiA(oggiRoma())}>Vai alla cassa di oggi</Button>
+            <Button size="sm" variant="outline" className="h-10" onClick={() => vaiA(oggi)}>Vai alla cassa di oggi</Button>
           </div>
         </Card>
       ) : !f || !g || !rp ? (errore
         ? <Card className="space-y-2 p-4 text-sm"><div className="font-medium text-red-700">Non riesco a caricare la cassa del {dataIt(giorno)}</div>
             <div className="text-muted-foreground">{errore}</div>
-            <Button size="sm" onClick={() => { setErrore(""); ricarica(); }}>Riprova</Button></Card>
+            <Button size="sm" onClick={() => { setErrore(""); setTentativo((n) => n + 1); }}>Riprova</Button></Card>
         : <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" />Carico…</div>) : (<>
         {g.origine === "excel" && (
           <div className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm dark:bg-sky-950/30">
@@ -574,7 +649,7 @@ export default function CassaGiornataPage() {
                 <Input className="h-9 w-40" placeholder="Modello" value={nuova.modello} onChange={(e) => setNuova({ ...nuova, modello: e.target.value })} />
                 <Button onClick={() => aggiungi()} disabled={!!busy || !operatore}>{busy === "riga" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}Aggiungi riga</Button>
               </div>
-              {giorno === oggiRoma() && ["scontrino", "acconto", "fattura", "altro"].includes(nuova.tipo) && (() => {
+              {giorno === oggi && ["scontrino", "acconto", "fattura", "altro"].includes(nuova.tipo) && (() => {
                 const imp = parseDec(nuova.importo);
                 return (
                   <div className="flex flex-wrap items-center gap-2">
@@ -646,7 +721,7 @@ export default function CassaGiornataPage() {
             sotto={<>{rp.scontrini_n} scontrini nel foglio {eur(rp.scontrini_totale)}{rp.storni_totale ? ` (storni ${eur(rp.storni_totale)})` : ""}</>}>
             <DecInput className="mt-1 h-8 bg-background" disabled={chiusa} placeholder="totale dalla chiusura fiscale" value={g.rt_scontrini}
               onValue={(v) => modifica({ rt_scontrini: v })} />
-            <ChiusuraFiscale giorno={giorno} oggi={giorno === oggiRoma() && !chiusa} operatore={operatore} onFatta={ricarica} />
+            <ChiusuraFiscale giorno={giorno} oggi={giorno === oggi && !chiusa} operatore={operatore} onFatta={ricarica} />
           </Riquadro>
           <Riquadro titolo="Fatture del giorno" stato="info" valore={eur(rp.fatture_totale)}
             sotto={<>{rp.fatture_n} fatture{rp.fatture_prec_totale ? ` · + fatture precedenti incassate oggi ${eur(rp.fatture_prec_totale)}` : ""}</>} />
@@ -781,7 +856,7 @@ export default function CassaGiornataPage() {
       <AnnullaEFattura scontrino={daFatturare} onClose={() => setDaFatturare(null)} onCambiato={() => { void ricarica(); }} />
       <StornoDialog oggetto={storno} onClose={() => setStorno(null)} onFatto={() => {
         ricarica();
-        if (giorno !== oggiRoma()) toast.info("Lo storno è nella cassa di oggi", { action: { label: "Vai a oggi", onClick: () => vaiA(oggiRoma()) } });
+        if (giorno !== oggi) toast.info("Lo storno è nella cassa di oggi", { action: { label: "Vai a oggi", onClick: () => vaiA(oggi) } });
       }} />
     </div>
   );

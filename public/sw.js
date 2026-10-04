@@ -1,10 +1,11 @@
 // AvaTech Tarature — Service Worker (PWA)
-// Strategia: NetworkFirst (preferisci server fresco, fallback cache se offline).
-// NON cachea API/auth (sempre fresh). Cachea solo asset statici.
+// 04/10/2026 (v2): il service worker NON intercetta più pagine, script e chiamate. Prima ogni GET passava di qui e
+// finiva in una cache che cresceva a ogni rilascio (mai svuotata): sugli iMac vecchi rallentava la dashboard e, con
+// la rete incerta, poteva servire un bundle vecchio. Ora: solo icone/manifest in cache, pagina offline di ripiego,
+// e all'attivazione si cancellano le cache vecchie (tarature-v1).
 
-const CACHE_NAME = 'tarature-v1';
+const CACHE_NAME = 'tarature-v2';
 const STATIC_ASSETS = [
-  '/',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
@@ -20,36 +21,21 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
-
   const url = new URL(request.url);
-
-  // NEVER cache API calls (sempre fresh dal server)
-  if (url.pathname.startsWith('/api/') || url.hostname.includes('railway.app') || url.hostname.includes('supabase.co')) {
-    return; // lascia passare normalmente al network
+  if (url.origin !== self.location.origin) return;
+  // solo le icone e il manifest dalla cache; tutto il resto (pagine, bundle JS/CSS, API) va diretto in rete
+  if (STATIC_ASSETS.includes(url.pathname)) {
+    event.respondWith(caches.match(request).then((r) => r || fetch(request)));
   }
-
-  // NetworkFirst per HTML/JS/CSS (server prima, cache fallback offline)
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response && response.status === 200 && response.type === 'basic') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      })
-      .catch(() => caches.match(request))
-  );
 });
 
 // Push notifications (web push - VAPID)
