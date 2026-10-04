@@ -51,6 +51,21 @@ function Modale({ titolo, onClose, children, largo = false }: { titolo: string; 
   );
 }
 
+// Tutte le schede che rispondono a ricerca/filtro, a blocchi da 500 (il massimo del backend), 4 richieste per volta.
+async function tutteLeSchede(q: string, stato: string): Promise<{ schede: SchedaBreve[]; totale: number }> {
+  const primo = await assElenco(q, stato, "", 500, 0);
+  const pagine: number[] = [];
+  for (let off = 500; off < primo.totale; off += 500) pagine.push(off);
+  const resto: SchedaBreve[][] = [];
+  for (let i = 0; i < pagine.length; i += 4) {
+    const blocco = await Promise.all(pagine.slice(i, i + 4).map((off) => assElenco(q, stato, "", 500, off).then((r) => r.schede)));
+    resto.push(...blocco);
+  }
+  const visti = new Set<string>();
+  const schede = [primo.schede, ...resto].flat().filter((x) => (visti.has(x.id) ? false : (visti.add(x.id), true)));
+  return { schede, totale: primo.totale };
+}
+
 // ---------------------------------------------------------------------------
 export function Banco() {
   const router = useRouter();
@@ -74,8 +89,14 @@ export function Banco() {
   const aperta = apertaLocale ?? idLink;
 
   useEffect(() => { assConfig().then(setCfg).catch(() => undefined); }, []);
+  // 04/10/2026 (Christian): come in FileMaker la ricerca vale su TUTTE le schede (non solo sul filtro scelto)
+  // e porta TUTTI i risultati: così si vedono tutte le schede di un cliente, anche le storiche.
+  const inRicerca = q.trim().length > 0;
   const carica = useCallback(() => {
-    assElenco(q, filtro).then((r) => { setElenco(r.schede); setTotale(r.totale); }).catch((e) => { toastErrore(e); setElenco([]); });
+    const st = q.trim() ? "tutte" : filtro;
+    // con 1-2 lettere si mostrano le prime 500 (il resto con «Mostra tutte»); da 3 lettere tutti i risultati
+    const p = q.trim().length >= 3 ? tutteLeSchede(q, st) : assElenco(q, st, "", q.trim() ? 500 : 150);
+    p.then((r) => { setElenco(r.schede); setTotale(r.totale); }).catch((e) => { toastErrore(e); setElenco([]); });
     assContatori().then((r) => setContatori(r.contatori)).catch(() => undefined);
   }, [q, filtro]);
   useEffect(() => { const t = setTimeout(carica, 250); return () => clearTimeout(t); }, [carica]);
@@ -93,9 +114,8 @@ export function Banco() {
     if (!elenco || altreInCarico) return;
     setAltreInCarico(true);
     try {
-      const r = await assElenco(q, filtro, "", 150, elenco.length);
-      setElenco((prima) => [...(prima || []), ...r.schede.filter((x) => !(prima || []).some((y) => y.id === x.id))]);
-      setTotale(r.totale);
+      const r = await tutteLeSchede(q, q.trim() ? "tutte" : filtro);
+      setElenco(r.schede); setTotale(r.totale);
     } catch (e) { toastErrore(e); } finally { setAltreInCarico(false); }
   }
 
@@ -166,11 +186,12 @@ export function Banco() {
               </button>
             ))}
           </div>
-          <div className="text-xs text-muted-foreground">{elenco ? `${totale.toLocaleString("it-IT")} schede${totale > elenco.length ? ` (mostrate le ${elenco.length.toLocaleString("it-IT")} più recenti: in fondo «Mostra altre», oppure cerca per nome, seriale o numero)` : ""}` : "…"}</div>
+          <div className="text-xs text-muted-foreground">{elenco ? `${totale.toLocaleString("it-IT")} schede${inRicerca ? " trovate su tutte le schede" : ""}${totale > elenco.length ? ` (mostrate le ${elenco.length.toLocaleString("it-IT")} più recenti: in fondo «Mostra tutte»)` : ""}` : "…"}</div>
           <div className="-mx-2 flex-1 overflow-y-auto">
             {elenco === null && <div className="p-4 text-center"><Loader2 className="inline size-4 animate-spin" /></div>}
             {elenco?.map((s) => (
               <button key={s.id} onClick={() => apri(s.id)}
+                style={{ contentVisibility: "auto", containIntrinsicSize: "auto 46px" }}
                 className={`block w-full border-t px-3 py-1.5 text-left text-sm hover:bg-muted/60 ${aperta === s.id ? "bg-primary/10" : ""}`}>
                 <div className="flex items-center gap-2">
                   <b className="tabular-nums">{s.sigla}</b>
@@ -180,11 +201,11 @@ export function Banco() {
                 <div className="truncate text-xs text-muted-foreground">{s.prodotto}{s.difetto ? ` · ${s.difetto}` : ""}</div>
               </button>
             ))}
-            {/* 04/10/2026: l'elenco arriva a blocchi (le più recenti per prime); «Mostra altre» carica le successive */}
+            {/* 04/10/2026: si aprono le più recenti; «Mostra tutte» porta l'elenco completo (scorrevole) */}
             {elenco && totale > elenco.length && (
               <button disabled={altreInCarico} onClick={caricaAltre}
                 className="block w-full border-t px-3 py-2 text-center text-sm text-blue-700 hover:bg-muted/60 disabled:opacity-60 dark:text-blue-300">
-                {altreInCarico ? <Loader2 className="inline size-4 animate-spin" /> : `Mostra altre ${Math.min(150, totale - elenco.length)} (ne restano ${(totale - elenco.length).toLocaleString("it-IT")})`}
+                {altreInCarico ? <><Loader2 className="inline size-4 animate-spin" /> carico tutte le {totale.toLocaleString("it-IT")} schede…</> : `Mostra tutte (${totale.toLocaleString("it-IT")})`}
               </button>
             )}
           </div>
