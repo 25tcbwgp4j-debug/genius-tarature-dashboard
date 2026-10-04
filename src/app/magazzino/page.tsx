@@ -53,7 +53,11 @@ export default function MagazzinoPage() {
   }, [q, sotto, filtroAtt, filtroCat]);
   useEffect(() => { const t = setTimeout(carica, q ? 300 : 0); return () => clearTimeout(t); }, [carica, q]);
 
-  // Carico rapido con lo scanner: se l'articolo esiste aggiunge la quantità, altrimenti apre «nuovo articolo» col codice
+  // Carico con lo scanner: se l'articolo esiste NON carica da solo (04/10/2026, Christian: una lettura «di controllo»
+  // diventava un carico). Mostra articolo e giacenza attuale e chiede «Quanti ne carichi?»; Invio conferma, Esc annulla.
+  // Se non esiste apre «nuovo articolo» col codice.
+  const [daCaricare, setDaCaricare] = useState<{ p: Prodotto; qta: string } | null>(null);
+  const [caricando, setCaricando] = useState(false);
   const caricoScanner = useCallback(async (codice: string) => {
     let p: Prodotto;
     try {
@@ -64,12 +68,20 @@ export default function MagazzinoPage() {
       else toastErrore(e);
       return;
     }
+    setDaCaricare({ p, qta: String(caricoQta || 1) });
+  }, [caricoQta, attSelettore]);
+  async function confermaCarico() {
+    if (!daCaricare || caricando) return;
+    const n = Number(daCaricare.qta.replace(",", "."));
+    if (!Number.isFinite(n) || n <= 0) { toast.error("Scrivi quanti pezzi carichi (più di 0)"); return; }
+    setCaricando(true);
     try {
-      const r = await magMovimento(p.id, { tipo: "carico", quantita: caricoQta, causale: "Carico con scanner" });
-      toast.success(`${p.descrizione}: +${caricoQta} → giacenza ${r.giacenza}`);
+      const r = await magMovimento(daCaricare.p.id, { tipo: "carico", quantita: n, causale: "Carico con scanner" });
+      toast.success(`${daCaricare.p.descrizione}: +${n} → giacenza ${r.giacenza}`);
+      setDaCaricare(null);
       carica();
-    } catch (e) { toastErrore(e); }
-  }, [caricoQta, carica, attSelettore]);
+    } catch (e) { toastErrore(e); } finally { setCaricando(false); }
+  }
 
   const [creando, setCreando] = useState(false);
   async function salvaNuovo() {
@@ -102,7 +114,7 @@ export default function MagazzinoPage() {
       )}
       {puoModificare && <Card className="space-y-2 p-3 print:hidden">
         <div className="flex items-center gap-2 text-sm font-medium"><PackagePlus className="size-4" /> Carico con lo scanner
-          <span className="ml-2 text-xs font-normal text-muted-foreground">quantità per ogni lettura</span>
+          <span className="ml-2 text-xs font-normal text-muted-foreground">quantità proposta (la confermi a ogni lettura)</span>
           <input type="number" min={1} className="h-7 w-16 rounded border border-input bg-background px-1" value={caricoQta} onChange={(e) => setCaricoQta(Math.max(1, Number(e.target.value)))} />
         </div>
         <ScannerInput onCodice={caricoScanner} placeholder="Spara il codice dell'articolo che entra in magazzino" />
@@ -157,6 +169,28 @@ export default function MagazzinoPage() {
         ))}
       </div>
 
+        {daCaricare && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !caricando && setDaCaricare(null)}>
+            <Card className="w-full max-w-sm space-y-3 p-4" onClick={(e) => e.stopPropagation()}>
+              <div className="text-sm text-muted-foreground">Carico con lo scanner</div>
+              <div className="font-medium">{daCaricare.p.descrizione}</div>
+              <div className="text-xs text-muted-foreground">{daCaricare.p.codice}{daCaricare.p.barcode ? ` · ${daCaricare.p.barcode}` : ""}</div>
+              <div className="rounded-md bg-muted px-3 py-2 text-sm">Giacenza attuale: <b className="tabular-nums">{Number(daCaricare.p.giacenza || 0)}</b></div>
+              <label className="block space-y-1">
+                <div className="text-sm font-medium">Quanti ne carichi?</div>
+                <Input autoFocus inputMode="numeric" className="h-11 text-lg" value={daCaricare.qta}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => setDaCaricare({ ...daCaricare, qta: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confermaCarico(); } if (e.key === "Escape") setDaCaricare(null); }} />
+              </label>
+              {Number(daCaricare.qta.replace(",", ".")) > 0 && <div className="text-xs text-muted-foreground">Dopo il carico: {Number(daCaricare.p.giacenza || 0) + Number(daCaricare.qta.replace(",", "."))}</div>}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" className="h-11" disabled={caricando} onClick={() => setDaCaricare(null)}>Annulla (non carico)</Button>
+                <Button className="h-11" disabled={caricando} onClick={confermaCarico}>{caricando ? <Loader2 className="size-4 animate-spin" /> : <PackagePlus className="size-4" />} Carica</Button>
+              </div>
+            </Card>
+          </div>
+        )}
       {(nuovo || aperto) && (
         <Scheda p={aperto} nuovo={nuovo} setNuovo={setNuovo} onClose={() => { setAperto(null); setNuovo(null); }} onSalvaNuovo={salvaNuovo} creando={creando}
           onCambiato={(p) => { carica(); if (p) apri(p.id); }} campo={campo} solaLettura={!puoModificare} />
