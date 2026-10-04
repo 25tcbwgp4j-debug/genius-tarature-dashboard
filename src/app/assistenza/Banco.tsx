@@ -88,6 +88,17 @@ export function Banco() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp]);
 
+  const [altreInCarico, setAltreInCarico] = useState(false);
+  async function caricaAltre() {
+    if (!elenco || altreInCarico) return;
+    setAltreInCarico(true);
+    try {
+      const r = await assElenco(q, filtro, "", 150, elenco.length);
+      setElenco((prima) => [...(prima || []), ...r.schede.filter((x) => !(prima || []).some((y) => y.id === x.id))]);
+      setTotale(r.totale);
+    } catch (e) { toastErrore(e); } finally { setAltreInCarico(false); }
+  }
+
   const apri = useCallback((id: string) => { setAperta(id); router.replace(`/assistenza?id=${id}`); }, [router]);
 
   useEffect(() => {
@@ -155,7 +166,7 @@ export function Banco() {
               </button>
             ))}
           </div>
-          <div className="text-xs text-muted-foreground">{elenco ? `${totale.toLocaleString("it-IT")} schede${totale > elenco.length ? ` (le ${elenco.length} più recenti)` : ""}` : "…"}</div>
+          <div className="text-xs text-muted-foreground">{elenco ? `${totale.toLocaleString("it-IT")} schede${totale > elenco.length ? ` (mostrate le ${elenco.length.toLocaleString("it-IT")} più recenti: in fondo «Mostra altre», oppure cerca per nome, seriale o numero)` : ""}` : "…"}</div>
           <div className="-mx-2 flex-1 overflow-y-auto">
             {elenco === null && <div className="p-4 text-center"><Loader2 className="inline size-4 animate-spin" /></div>}
             {elenco?.map((s) => (
@@ -169,6 +180,13 @@ export function Banco() {
                 <div className="truncate text-xs text-muted-foreground">{s.prodotto}{s.difetto ? ` · ${s.difetto}` : ""}</div>
               </button>
             ))}
+            {/* 04/10/2026: l'elenco arriva a blocchi (le più recenti per prime); «Mostra altre» carica le successive */}
+            {elenco && totale > elenco.length && (
+              <button disabled={altreInCarico} onClick={caricaAltre}
+                className="block w-full border-t px-3 py-2 text-center text-sm text-blue-700 hover:bg-muted/60 disabled:opacity-60 dark:text-blue-300">
+                {altreInCarico ? <Loader2 className="inline size-4 animate-spin" /> : `Mostra altre ${Math.min(150, totale - elenco.length)} (ne restano ${(totale - elenco.length).toLocaleString("it-IT")})`}
+              </button>
+            )}
           </div>
         </Card>
 
