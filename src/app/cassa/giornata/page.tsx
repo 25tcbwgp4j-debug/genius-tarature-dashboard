@@ -490,7 +490,7 @@ export default function CassaGiornataPage() {
           <div className="flex items-center gap-2 text-lg font-semibold"><CalendarOff className="size-6 text-slate-600" />
             {dataIt(giorno, { weekday: "long", day: "numeric", month: "long" }).replace(/^./, (x) => x.toUpperCase())}: negozio chiuso</div>
           <div className="text-sm text-muted-foreground">
-            {f.giornata.motivo_chiusura || cal?.etichetta}. Nessuno scontrino, nessuna fattura: la cassa salta questo giorno e i contanti
+            {cal?.fonte === "settimana" ? "Fine settimana" : (f.giornata.motivo_chiusura || cal?.etichetta)}. Nessuno scontrino, nessuna fattura: la cassa salta questo giorno e i contanti
             si riportano {cal?.precedente_lavorativo ? <>da <b>{dataIt(cal.precedente_lavorativo, { weekday: "long", day: "2-digit", month: "2-digit" })}</b></> : "dall'ultimo giorno lavorato"}
             {cal ? <> a <b>{dataIt(cal.successivo_lavorativo, { weekday: "long", day: "2-digit", month: "2-digit" })}</b></> : null}.
           </div>

@@ -73,7 +73,7 @@ export function GiorniChiusura({ aperto, onChiudi, giornoIniziale, onCambiato }:
         {!v ? <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" />Carico…</div> : (
           <div className="space-y-5">
             <div className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm dark:bg-sky-950/30">
-              Oggi <b>{v.oggi.nome}</b>: {v.oggi.lavorativo ? "giorno lavorativo" : <>negozio chiuso ({v.oggi.etichetta})</>}.
+              Oggi <b>{v.oggi.nome}</b>: {v.oggi.lavorativo ? "giorno lavorativo" : <>negozio chiuso{v.oggi.fonte === "settimana" ? "" : ` (${v.oggi.etichetta})`}</>}.
               {" "}Prossimo giorno lavorativo: <b>{dataIt(v.prossimo_lavorativo, { weekday: "long", day: "numeric", month: "long" })}</b>.
             </div>
 
@@ -85,9 +85,9 @@ export function GiorniChiusura({ aperto, onChiudi, giornoIniziale, onCambiato }:
                   const rr = regole(gs);
                   return (
                     <div key={gs} className={`space-y-2 rounded-lg border-2 p-3 ${rr.length ? "border-emerald-400" : "border-slate-300"}`}>
-                      <div className="flex items-center gap-2 font-medium capitalize">
+                      <div className="flex items-center gap-2 font-medium first-letter:uppercase">
                         {rr.length ? <Unlock className="size-4 text-emerald-700" /> : <Lock className="size-4 text-slate-600" />}
-                        {nomeGs(gs)}: {rr.length ? "sbloccati" : "bloccati (chiusi)"}
+                        {gs === 5 ? "Sabati" : "Domeniche"}: {rr.length ? "sbloccati" : "bloccati (chiusi)"}
                       </div>
                       {rr.map((r) => (
                         <div key={r.id} className="flex items-center gap-2 rounded-md bg-emerald-50 px-2 py-1 text-sm dark:bg-emerald-950/30">
@@ -151,7 +151,7 @@ export function GiorniChiusura({ aperto, onChiudi, giornoIniziale, onCambiato }:
                   </div>
                 ) : (
                   <div className="rounded-md border border-slate-300 bg-muted/40 px-3 py-2 text-sm">
-                    {ante.nome}: {ante.lavorativo ? "oggi risulta lavorativo" : <>già chiuso ({ante.etichetta})</>}. Nessuno scontrino, fattura o movimento di cassa.
+                    {ante.nome}: {ante.lavorativo ? "risulta lavorativo" : <>già chiuso ({ante.etichetta})</>}. Nessuno scontrino, fattura o movimento di cassa.
                     {ante.elettronici.length > 0 && <> Incassi elettronici: {ante.elettronici.map((e) => e.testo).join(", ")} → passano alla cassa di {dataIt(ante.passano_al, { weekday: "long", day: "numeric", month: "numeric" })}.</>}
                   </div>
                 )
@@ -175,7 +175,7 @@ export function GiorniChiusura({ aperto, onChiudi, giornoIniziale, onCambiato }:
                       <div key={f.giorno} className={`flex items-center gap-2 rounded-md border px-2 py-1 ${sel ? "border-slate-700 bg-slate-100 dark:bg-slate-800" : ""}`}>
                         <button type="button" className="flex min-h-11 flex-1 items-center gap-2 text-left text-sm"
                           onClick={() => { const n = new Set(scelte); if (sel) n.delete(f.giorno); else n.add(f.giorno); setScelte(n); }}>
-                          <span className={`flex size-5 items-center justify-center rounded border ${sel ? "bg-slate-800 text-white" : ""}`}>{sel ? "✓" : ""}</span>
+                          <span className={`flex size-5 shrink-0 items-center justify-center rounded border ${sel ? "bg-slate-800 text-white" : ""}`}>{sel ? "✓" : ""}</span>
                           <span className="w-32 font-medium">{dataIt(f.giorno)}</span><span>{f.nome}</span>
                         </button>
                         <Button size="sm" variant="ghost" className="h-9" disabled={!!busy}
