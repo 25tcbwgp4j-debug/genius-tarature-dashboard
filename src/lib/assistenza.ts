@@ -12,7 +12,12 @@ export interface SchedaBreve {
 }
 export interface Evento { id: string; tipo: string; descrizione: string; operatore: string | null; creato_da: string | null; created_at: string; dati?: Record<string, unknown> }
 export interface Anagrafica { id: string; denominazione: string; piva?: string | null; cf?: string | null; telefono?: string | null; email?: string | null;
-  referente?: string | null; indirizzo?: string | null; cap?: string | null; comune?: string | null; provincia?: string | null }
+  referente?: string | null; indirizzo?: string | null; cap?: string | null; comune?: string | null; provincia?: string | null; paese?: string | null;
+  sdi?: string | null; pec?: string | null; tipo_cliente?: "privato" | "azienda" | "rivenditore" | null; vuole_fattura?: boolean | null;
+  cellulare?: string | null; cellulare_whatsapp?: string | null; email_contabilita?: string | null; email_altre?: string | null;
+  sped_presso?: string | null; sped_indirizzo?: string | null; sped_cap?: string | null; sped_comune?: string | null; sped_provincia?: string | null;
+  note_cliente?: string | null; origine?: string | null }
+export interface SchedaCliente extends Anagrafica { schede: { id: string; sigla: string; prodotto: string | null; modello: string | null; difetto: string | null; stato: string; created_at: string }[] }
 export interface Scheda extends SchedaBreve {
   anagrafica_id: string | null; referente: string | null; telefono_referente: string | null; indirizzo_spedizione: string | null; imei: string | null;
   acquistato_il: string | null; anno_garanzia: string | null; password_dispositivo: string | null; apple_id: string | null; password_apple_id: string | null;
@@ -27,14 +32,36 @@ export interface Scheda extends SchedaBreve {
   collegamenti: { scontrino?: { id: string; stato: string; totale: number } | null; fattura?: { id: string; numero: string | null; stato: string; totale: number } | null;
     documento?: { id: string; sigla: string; stato: string; totale: number } | null };
   anagrafica: Anagrafica | null; etichetta_stato: string; prova: boolean;
+  // v2 (04-05/10/2026)
+  famiglia: string | null; modello_fonte: string | null; modello_da_scheda: string | null; con_alimentatore: boolean | null;
+  preventivo: { diagnosi?: string; note?: string } | null; preventivo_stato: string | null; preventivo_operatore: string | null;
+  preventivo_inviato_il: string | null; preventivo_inviato_da: string | null; ricambi_stato: string | null; ricambi_arrivo_previsto: string | null;
+  ricambi_fornitore: string | null; ricambi_nota: string | null; esito_motivo: string | null; tecnico_verifica: string | null; note_verifica: string | null;
+  tecnico_riparazione: string | null; note_riparazione: string | null; spedizione_tipo: string | null; spedizione_importo: number | null;
+  chiusura: string | null; consegna_corriere: "noi" | "cliente" | null;
+  avanzamento: Avanzamento; saldo: number; pagata: boolean; comunicazioni: Comunicazione[]; wa_linea_attiva: boolean;
+  preventivo_totale: number | null;
 }
+export interface Passo { codice: string; etichetta: string; stato: "fatto" | "attuale" | "da_fare" | "saltato"; dettaglio: string }
+export interface Avanzamento { passi: Passo[]; attuale: string | null; prossimo: { azione?: string; testo?: string } }
+export interface Comunicazione { id: string; tipo: string; canale: "mail" | "whatsapp"; descrizione: string; created_at: string; operatore: string | null;
+  esito: string | null; a: string | null; testo: string | null; link: string | null; oggetto: string | null }
+export interface VoceProposta { id: string; intervento: string; ipotesi: string | null; descrizione: string; prezzo: number | null; scontato_da: number | null;
+  nota: string | null; da_verificare: boolean; fonte: string | null; modello: string | null; aggiornato_il: string | null; tipo_ricambio: string | null }
+export interface Proposte { modello_chiave: string | null; famiglia: string | null; fonte: "modello" | "famiglia" | "tutte" | ""; voci: VoceProposta[];
+  interventi: { codice: string; etichetta: string; voci: number }[] }
+export interface TestoStandard { id: string; titolo: string; categoria: string; uso: "cliente" | "interno"; famiglie: string[]; interventi: string[]; testo: string;
+  prezzi_da_verificare: boolean }
 export interface ConfigAssistenza { operatori_abilitati: boolean; numerazione_live: boolean; ultimo_numero_filemaker: number | null; admin: boolean;
-  visibile: boolean; email_test: string | null; stati: { codice: StatoScheda; etichetta: string }[] }
+  visibile: boolean; email_test: string | null; stati: { codice: StatoScheda; etichetta: string }[];
+  famiglie: { codice: string; etichetta: string }[]; tecnici: { codice: string; nome: string; attivo: boolean }[]; spedizione_default: { ar?: number } }
 export interface VoceListino { id: string; label: string; intervention: string; price: number | null; is_shipping: boolean }
 export interface Coppia { id: string; label: string; first_line: { t: string; nota?: string }; second_line: { t: string; nota?: string } }
 export interface Seriale { seriale: string; codice: string | null; modello: string | null; famiglia: string | null; visti: number; nota: string | null;
-  precedenti: SchedaBreve[]; prezzi?: { intervention: string; price: number; basis: string; jobs: number }[] }
-export interface Esito { prova?: boolean; mail?: string; whatsapp?: string }
+  precedenti: SchedaBreve[]; prezzi?: { intervention: string; price: number; basis: string; jobs: number }[];
+  /** da dove viene il modello proposto: «scheda_precedente» (stesso seriale già passato) o «seriale» (decodifica) */
+  fonte: "scheda_precedente" | "seriale" | null; fonte_testo: string; da_scheda: string | null; decodificato: string | null; famiglia_menu: string | null }
+export interface Esito { prova?: boolean; mail?: string; whatsapp?: string; whatsapp_testo?: string; whatsapp_link?: string | null }
 
 const j = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
 
@@ -58,6 +85,13 @@ export const assStessoModello = (id: string): Promise<{ criterio: string; schede
 export const assPreventivi = (q: string): Promise<{ preventivi: (SchedaBreve & { preventivo_testo: string | null })[]; sintesi: { n: number; min: number; max: number; mediana: number } | null }> =>
   fetchAPI(`/api/assistenza/preventivi?q=${encodeURIComponent(q)}`);
 export const assPdfUrl = (id: string, tipo: "cliente" | "interna" = "cliente") => `/api/backend/api/assistenza/schede/${id}/pdf?tipo=${tipo}`;
+export type DocPdf = "auto" | "ricevuta" | "preventivo" | "pronto" | "consuntivo" | "interna";
+export const assDocUrl = (id: string, doc: DocPdf, scarica = false) => `/api/backend/api/assistenza/schede/${id}/pdf?doc=${doc}${scarica ? "&scarica=1" : ""}`;
+export const assSchedaCliente = (id: string): Promise<SchedaCliente> => fetchAPI(`/api/assistenza/clienti/${id}`);
+export const assSalvaCliente = (id: string | null, b: Partial<Anagrafica>): Promise<SchedaCliente> =>
+  id ? fetchAPI(`/api/assistenza/clienti/${id}`, { method: "PATCH", body: JSON.stringify(b) }) : fetchAPI("/api/assistenza/clienti", j(b));
+export const assProposte = (id: string, intervento = ""): Promise<Proposte> => fetchAPI(`/api/assistenza/schede/${id}/proposte?intervento=${intervento}`);
+export const assTesti = (famiglia = "", intervento = ""): Promise<{ testi: TestoStandard[] }> => fetchAPI(`/api/assistenza/testi?famiglia=${famiglia}&intervento=${intervento}`);
 /** Pagina pubblica di tracciamento (servita dal backend: nessun login, nessun dato personale). */
 export const assTrackUrl = (token: string) => `${process.env.NEXT_PUBLIC_API_URL || "https://tarature-api-production.up.railway.app"}/api/assistenza/pubblico/${token}/pagina`;
 export const assEtichettaUrl = (id: string) => `/api/backend/api/assistenza/schede/${id}/etichetta.pdf`;
@@ -73,7 +107,7 @@ export const COLORE_STATO: Record<string, string> = {
   annullata: "bg-gray-100 text-gray-400 border-gray-300 line-through",
 };
 export const ETICHETTA_STATO: Record<string, string> = {
-  in_arrivo: "In arrivo", da_preventivare: "Da preventivare", preventivo_inviato: "Preventivo inviato", accettato: "In lavorazione",
+  in_arrivo: "In arrivo", da_preventivare: "Da preventivare", preventivo_inviato: "Preventivo inviato", accettato: "In riparazione",
   rifiutato: "Rifiutato", pronto: "Pronto", consegnato: "Consegnato", annullata: "Annullata",
 };
 export const FASI: [string, string][] = [["accettazione", "Accettazione"], ["preventivo", "Preventivo"], ["aggiornamento", "Aggiorn."],
@@ -87,3 +121,14 @@ export function dataOra(iso?: string | null): string {
 }
 export const eur = (v: number | string | null | undefined) =>
   v === null || v === undefined || v === "" ? "—" : new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(v) || 0);
+
+export const DOCUMENTI_PDF: [DocPdf, string][] = [["ricevuta", "Ricevuta d'ingresso"], ["preventivo", "Preventivo"], ["pronto", "Pronto per il ritiro"],
+  ["consuntivo", "Consuntivo con bonifico"], ["interna", "Scheda interna (solo per noi)"]];
+export const FAMIGLIE_DEFAULT: { codice: string; etichetta: string }[] = [
+  { codice: "iphone", etichetta: "iPhone" }, { codice: "ipad", etichetta: "iPad" }, { codice: "airpods", etichetta: "AirPods" },
+  { codice: "ipod", etichetta: "iPod" }, { codice: "macbook_air", etichetta: "MacBook Air" }, { codice: "macbook_pro", etichetta: "MacBook Pro" },
+  { codice: "macbook", etichetta: "MacBook" }, { codice: "imac", etichetta: "iMac" }, { codice: "mac_mini", etichetta: "Mac mini" },
+  { codice: "mac_studio", etichetta: "Mac Studio" }, { codice: "mac_pro", etichetta: "Mac Pro" }, { codice: "watch", etichetta: "Apple Watch" },
+  { codice: "altro_apple", etichetta: "Altro Apple" }, { codice: "non_apple", etichetta: "Non Apple" }];
+export const SPEDIZIONI: [string, string][] = [["nessuna", "Nessuna"], ["ar", "A/R (ritiro e riconsegna)"], ["solo_ritiro", "Solo ritiro"], ["solo_ritorno", "Solo ritorno"]];
+export const TIPI_CLIENTE: [string, string][] = [["privato", "Privato"], ["azienda", "Azienda"], ["rivenditore", "Rivenditore"]];

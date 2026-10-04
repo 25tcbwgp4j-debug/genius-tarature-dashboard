@@ -20,7 +20,7 @@ const FASI_HOME: { stato: string; label: string; icon: typeof Inbox; tono: strin
   { stato: "in_arrivo", label: "In arrivo", icon: Inbox, tono: "bg-slate-100 text-slate-700" },
   { stato: "da_preventivare", label: "Da preventivare", icon: FileQuestion, tono: "bg-amber-100 text-amber-700" },
   { stato: "preventivo_inviato", label: "Preventivo inviato", icon: Send, tono: "bg-sky-100 text-sky-700" },
-  { stato: "accettato", label: "In lavorazione", icon: Wrench, tono: "bg-indigo-100 text-indigo-700" },
+  { stato: "accettato", label: "In riparazione", icon: Wrench, tono: "bg-indigo-100 text-indigo-700" },
   { stato: "pronto", label: "Pronte", icon: PackageCheck, tono: "bg-emerald-100 text-emerald-700" },
 ];
 

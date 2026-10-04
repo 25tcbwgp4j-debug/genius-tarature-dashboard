@@ -19,7 +19,10 @@ export type EstimateLine = {
   listino?: number | null   // prezzo barrato: «(scontato da € 530)» NON è un addebito
   nota?: string | null      // 'compreso | senza | solo recupero dati'
   opt?: number | null       // null = voce fissa; 0,1,2… = ipotesi alternativa
-  on?: boolean              // l'ipotesi scelta
+  on?: boolean              // l'ipotesi scelta (per le aggiungibili: presa)
+  b?: number                // blocco: 0 = preventivo, 1… = preventivo aggiuntivo (05/10/2026)
+  agg?: boolean             // ipotesi AGGIUNGIBILE: si somma all'ipotesi scelta (es. solo recupero backup)
+  voce_id?: string          // voce di preventivo da cui viene
 }
 
 export const num = (v: unknown): number => {
@@ -76,7 +79,7 @@ export function estimateText(lines: EstimateLine[]): string {
    ──────────────────────────────────────────────────────────────────────────── */
 
 const RE_LISTINO = /\(\s*(?:scont\w*\s*da|da\s*listino)\s*€\s*(\d+)\s*\)?/i
-const RE_NOTA = /\((compreso|senza|solo)\s+recupero\s+(?:dati|backup)\)?/i
+const RE_NOTA = /\((compreso|probabile|senza|solo)\s+recupero\s+(?:dati|backup)\)?/i
 
 /** Nei preventivi vecchi l'euro è scritto EURO, EUR o €. */
 const normEuro = (t: string) =>
@@ -91,7 +94,7 @@ function readLine(txt: string, opt: number | null): EstimateLine {
   const mL = t.match(RE_LISTINO)
   if (mL) { listino = Number(mL[1]); t = t.replace(mL[0], ' ') }   // non è un addebito
   const mN = t.match(RE_NOTA)
-  if (mN) { nota = mN[0].replace(/[()]/g, '').trim().toLowerCase(); t = t.replace(mN[0], ' ') }
+  if (mN) { nota = mN[0].replace(/[()]/g, '').trim().toLowerCase().replace(/^compreso/, 'probabile'); t = t.replace(mN[0], ' ') }
   if (/\+\s*IVA/i.test(t)) { iva = true; t = t.replace(/\+\s*IVA/gi, ' ') }
 
   const mP = t.match(/€\s*(\d+(?:[.,]\d+)?)/)              // il primo importo è il prezzo
@@ -129,3 +132,32 @@ export function parseEstimate(text: string): EstimateLine[] {
   })
   return out
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   05/10/2026 — blocchi (preventivo aggiuntivo), ipotesi aggiungibili e spedizione a flag.
+   Stesse regole del backend (assistenza_preventivo.py). Prezzi IVA COMPRESA.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+export const NOTE_RECUPERO = ['probabile recupero dati', 'senza recupero dati', 'solo recupero dati']
+export const blocco = (r: EstimateLine) => r.b ?? 0
+export const blocchi = (lines: EstimateLine[]): number[] => {
+  const s = [...new Set((lines ?? []).map(blocco))].sort((a, b) => a - b)
+  return s.length ? s : [0]
+}
+export type Ipotesi = { opt: number; n: number; agg: boolean; righe: { r: EstimateLine; i: number }[]; totale: number; scelta: boolean }
+/** Ipotesi del blocco (righe con lo stesso opt = un'ipotesi fatta di più voci), con l'indice della riga nell'elenco. */
+export function ipotesiDelBlocco(lines: EstimateLine[], b: number): Ipotesi[] {
+  const g = new Map<number, { r: EstimateLine; i: number }[]>()
+  lines.forEach((r, i) => { if (blocco(r) === b && r.opt != null) g.set(r.opt, [...(g.get(r.opt) ?? []), { r, i }]) })
+  return [...g.keys()].sort((a, b2) => a - b2).map((opt, k) => {
+    const righe = g.get(opt)!
+    return { opt, n: k + 1, agg: righe.some((x) => x.r.agg), righe, totale: Math.round(righe.reduce((t, x) => t + rowTotal(x.r), 0) * 100) / 100,
+      scelta: righe.every((x) => x.r.on) }
+  })
+}
+export const totaleConSpedizione = (lines: EstimateLine[], spedizione: number) => Math.round((total(lines) + (spedizione || 0)) * 100) / 100
+/** Prossimo numero di ipotesi libero nel blocco. */
+export const nuovoOpt = (lines: EstimateLine[], b: number) => Math.max(-1, ...lines.filter((r) => blocco(r) === b && r.opt != null).map((r) => r.opt as number)) + 1
+/** Scegli l'ipotesi (alternativa) del blocco: le altre alternative si spengono, le aggiungibili restano come sono. */
+export const scegliIpotesi = (lines: EstimateLine[], b: number, opt: number) =>
+  lines.map((r) => (blocco(r) !== b || r.opt == null || r.agg ? r : { ...r, on: r.opt === opt }))
