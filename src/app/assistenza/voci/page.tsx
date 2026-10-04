@@ -179,7 +179,7 @@ export default function VociPreventivo() {
     if (vista === "intervento") {
       if (intervento) p.set("intervento", intervento);
       if (famiglia) p.set("famiglia", famiglia);
-      p.set("raggruppa", intervento ? "modello" : "intervento");
+      if (!intervento) p.set("raggruppa", "intervento");   // con l'intervento scelto si raggruppa per famiglia (qui sotto)
     } else {
       if (!famiglia) return null;
       if (modello) p.set("modello", modello); else p.set("famiglia", famiglia);
@@ -208,6 +208,16 @@ export default function VociPreventivo() {
       gruppi: d.gruppi?.map((g) => ({ ...g, voci: g.voci.map((x) => (x.id === nuova.id ? nuova : x)) })),
     });
   }, []);
+
+  // vista per intervento con l'intervento scelto: un riquadro per famiglia, il modello scritto nella riga (compatto)
+  const gruppi: Gruppo[] = useMemo(() => {
+    if (!dati) return [];
+    if (dati.gruppi) return dati.gruppi;
+    const per = new Map<string, Voce[]>();
+    for (const v of dati.voci) per.set(v.famiglia, [...(per.get(v.famiglia) || []), v]);
+    const etichetta = (f: string) => meta?.famiglie.find((x) => x.codice === f)?.etichetta || f;
+    return [...per.entries()].map(([f, voci]) => ({ chiave: f, etichetta: etichetta(f), voci }));
+  }, [dati, meta]);
 
   const famiglieConVoci = (meta?.famiglie || []).filter((f) => f.codice !== "tutte" && f.voci > 0);
   const famigliePerModello = (meta?.famiglie || []).filter((f) => f.codice !== "tutte" && f.codice !== "non_apple");
@@ -290,7 +300,7 @@ export default function VociPreventivo() {
             </p>
           )}
           {dati?.totale === 0 && <Card className="p-4 text-sm text-gray-500">Nessuna voce. Le voci dai prezzi dello storico delle schede arriveranno con l&apos;import del listino da storico.</Card>}
-          {(dati?.gruppi || []).map((g) => (
+          {gruppi.map((g) => (
             <Card key={g.chiave} className="overflow-hidden">
               <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 border-b flex items-center justify-between">
                 <h3 className="font-semibold text-gray-900 dark:text-gray-100">{g.etichetta}</h3>
@@ -299,7 +309,7 @@ export default function VociPreventivo() {
               <div className="divide-y">
                 {g.voci.map((v) => (
                   <RigaVoce key={v.id} v={v} admin={admin} onSalvata={aggiorna}
-                    mostraModello={vista === "modello" ? !v.modello_chiave || !modello : !intervento} />
+                    mostraModello={vista === "modello" ? !v.modello_chiave || !modello : true} />
                 ))}
               </div>
             </Card>
