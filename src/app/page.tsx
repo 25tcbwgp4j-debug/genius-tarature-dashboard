@@ -8,6 +8,8 @@ import { ClipboardList, Wrench, Package, AlertTriangle, Users, Mail } from "luci
 import Link from "next/link";
 import { STATUS_CONFIG, getStatusConfig } from "@/lib/constants";
 import { usePermessi } from "@/components/permessi";
+import { useAttivita } from "@/components/attivita";
+import { HomeApple } from "./HomeApple";
 
 interface ReconciliationSnapshot {
   total_groups?: number;
@@ -15,7 +17,13 @@ interface ReconciliationSnapshot {
   snapshot_date?: string | null;
 }
 
+// HOME PER DIVISIONE (04/10/2026): con il selettore su «Apple» la home è la panoramica delle schede di assistenza.
 export default function Home() {
+  const { attivita } = useAttivita();
+  return attivita === "apple" ? <HomeApple /> : <HomeTarature />;
+}
+
+function HomeTarature() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

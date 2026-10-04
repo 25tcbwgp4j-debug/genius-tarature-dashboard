@@ -49,7 +49,7 @@ export function AttivitaProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** Selettore Tarature / Apple (in alto nella sidebar). */
-export function SelettoreAttivita() {
+export function SelettoreAttivita({ onCambia }: { onCambia?: (a: Attivita) => void } = {}) {
   const { attivita, setAttivita } = useAttivita();
   return (
     <div className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-gray-100 dark:bg-gray-800" role="radiogroup" aria-label="Attività">
@@ -61,7 +61,7 @@ export function SelettoreAttivita() {
             type="button"
             role="radio"
             aria-checked={on}
-            onClick={() => setAttivita(a.codice)}
+            onClick={() => { if (a.codice !== attivita) { setAttivita(a.codice); onCambia?.(a.codice); } }}
             className={`px-2 py-1.5 rounded-md text-sm font-semibold transition-colors ${
               on
                 ? a.codice === "apple"

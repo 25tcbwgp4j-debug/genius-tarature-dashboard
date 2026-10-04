@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Calculator,
@@ -37,6 +37,7 @@ import {
   History,
   Smartphone,
   Truck,
+  LayoutDashboard,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -47,40 +48,68 @@ import { paginaDelTitolare } from "@/lib/riservate";
 import { SelettoreAttivita, useAttivita } from "@/components/attivita";
 import { fetchAPI } from "@/lib/api";
 
-// Voci solo del laboratorio tarature: con il selettore su «Apple» non si vedono (Genius Lab Gestionale, 02/10/2026).
-// Tutto ciò che è negozio (cassa, fatture, ordini, magazzino, bonifici) resta sempre.
-const SOLO_TARATURE = new Set(["/sessioni", "/rapporti", "/scadenzario"]);
-
-// Voci nascoste all'operatore: quelle delle sezioni del titolare (lib/riservate.ts, 02/10/2026)
+// MENU PER DIVISIONE (04/10/2026): il selettore Tarature/Apple cambia davvero ambiente.
+// Ogni divisione ha il suo menu; le sezioni del negozio (fatture, cassa, spedizioni, ordini, pro forma, magazzino,
+// fatturato) sono in entrambi. I permessi restano quelli di sempre: voci del titolare (lib/riservate.ts) nascoste
+// all'operatore; schede di assistenza e rubrica Apple solo a chi vede le schede (titolare, o operatori dopo l'ok).
 type Voce = { href: string; label: string; icon: typeof ClipboardList };
-const navItems: Voce[] = [
+
+// sezioni comuni alle due divisioni (stesso ordine nei due menu)
+const COMUNI: Voce[] = [
+  { href: "/fatturazione", label: "Fatturazione", icon: Receipt },
+  { href: "/cassa", label: "Scontrino (registratore)", icon: ShoppingCart },
+  { href: "/cassa/giornata", label: "Cassa del giorno", icon: Calculator },
+  { href: "/spedizioni", label: "Spedizioni", icon: Truck },
+  { href: "/ordini", label: "Ordini e preventivi", icon: NotebookPen },
+  { href: "/proforma", label: "Pro forma", icon: FileSpreadsheet },
+  { href: "/magazzino", label: "Magazzino", icon: Boxes },
+];
+// amministrazione (del titolare), in fondo a entrambi i menu
+const AMMINISTRAZIONE: Voce[] = [
+  { href: "/autorizzazioni", label: "Autorizzazioni", icon: ShieldCheck },
+  { href: "/utenti", label: "Utenti", icon: UserCog },
+  { href: "/audit", label: "Registro modifiche", icon: History },
+  { href: "/impostazioni", label: "Impostazioni", icon: Settings },
+];
+
+export const MENU_TARATURE: Voce[] = [
   { href: "/", label: "Registro", icon: ClipboardList },
-  { href: "/chat", label: "Chat WhatsApp", icon: MessageSquare },
+  { href: "/chat", label: "Chat WhatsApp tarature", icon: MessageSquare },
   { href: "/rubrica", label: "Rubrica", icon: BookUser },
   { href: "/sessioni", label: "Sessioni", icon: Wrench },
   { href: "/clienti", label: "Clienti", icon: Users },
   { href: "/nuovi-clienti", label: "Nuovi Clienti", icon: UserPlus },
   { href: "/partner", label: "Partner B2B", icon: Handshake },
   { href: "/rapporti", label: "Rapporti", icon: FileText },
-  { href: "/fatturazione", label: "Fatturazione", icon: Receipt },
-  { href: "/cassa", label: "Scontrino (registratore)", icon: ShoppingCart },
-  { href: "/cassa/giornata", label: "Cassa del giorno", icon: Calculator },
-  { href: "/assistenza", label: "Schede assistenza", icon: Smartphone },
-  { href: "/spedizioni", label: "Spedizioni", icon: Truck },
-  { href: "/ordini", label: "Ordini e preventivi", icon: NotebookPen },
-  { href: "/proforma", label: "Pro forma", icon: FileSpreadsheet },
-  { href: "/magazzino", label: "Magazzino", icon: Boxes },
+  ...COMUNI,
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
   { href: "/automazioni", label: "Automazioni", icon: Activity },
   { href: "/enrichment", label: "Arricchimento", icon: Zap },
   { href: "/statistiche", label: "Statistiche", icon: BarChart3 },
   { href: "/statistiche/fatturato", label: "Fatturato negozio", icon: TrendingUp },
-  { href: "/autorizzazioni", label: "Autorizzazioni", icon: ShieldCheck },
-  { href: "/utenti", label: "Utenti", icon: UserCog },
-  { href: "/audit", label: "Registro modifiche", icon: History },
+  ...AMMINISTRAZIONE.slice(0, 3),
   { href: "/qrcode", label: "QR Code", icon: QrCode },
-  { href: "/impostazioni", label: "Impostazioni", icon: Settings },
+  ...AMMINISTRAZIONE.slice(3),
 ];
+
+export const MENU_APPLE: Voce[] = [
+  { href: "/assistenza", label: "Schede assistenza", icon: Smartphone },
+  { href: "/", label: "Panoramica Apple", icon: LayoutDashboard },
+  { href: "/rubrica-apple", label: "Rubrica clienti Apple", icon: BookUser },
+  ...COMUNI,
+  { href: "/statistiche/fatturato", label: "Fatturato negozio", icon: TrendingUp },
+  ...AMMINISTRAZIONE,
+];
+
+// voci che si vedono solo a chi vede le schede di assistenza (in prova: solo il titolare)
+const DELLE_SCHEDE = new Set(["/assistenza", "/rubrica-apple"]);
+
+/** La pagina appartiene solo all'altra divisione? (serve per tornare alla home quando si cambia divisione) */
+function soloDellAltra(pathname: string, menu: Voce[]): boolean {
+  if (pathname === "/") return false;
+  const dentro = (m: Voce[]) => m.some((v) => v.href !== "/" && (pathname === v.href || pathname.startsWith(v.href + "/")));
+  return !dentro(menu);
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -100,8 +129,13 @@ export function Sidebar() {
     if (admin || pathname === "/login" || pathname.startsWith("/login/")) return;
     fetchAPI("/api/assistenza/config").then((c: { operatori_abilitati?: boolean }) => setAssistenzaOperatori(!!c.operatori_abilitati)).catch(() => undefined);
   }, [admin, pathname]);
-  const voci = navItems.filter((v) => (admin || !paginaDelTitolare(v.href)) && !(attivita === "apple" && SOLO_TARATURE.has(v.href))
-    && (v.href !== "/assistenza" || admin || assistenzaOperatori));
+  const voci = (attivita === "apple" ? MENU_APPLE : MENU_TARATURE).filter((v) => (admin || !paginaDelTitolare(v.href))
+    && (!DELLE_SCHEDE.has(v.href) || admin || assistenzaOperatori));
+  // cambiando divisione da una pagina che nell'altra non c'è (es. Sessioni → Apple) si va alla sua home
+  const router = useRouter();
+  const cambiaDivisione = (a: "tarature" | "apple") => {
+    if (soloDellAltra(pathname, a === "apple" ? MENU_APPLE : MENU_TARATURE)) router.push(a === "apple" ? "/assistenza" : "/");
+  };
   // messaggi WhatsApp fermi perché la linea dell'attività non è ancora abbinata (es. staff Genius 334 986 7400)
   const [avvisiWa, setAvvisiWa] = useState<string[]>([]);
   useEffect(() => {
@@ -169,7 +203,7 @@ export function Sidebar() {
         <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Genius Lab Gestionale</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tarature · Assistenza Mac e iPhone</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{attivita === "apple" ? "Assistenza Mac e iPhone" : "Laboratorio tarature F-GAS"}</p>
           </div>
           <button
             type="button"
@@ -181,7 +215,7 @@ export function Sidebar() {
           </button>
         </div>
         <div className="px-4 pt-4 space-y-2">
-          <SelettoreAttivita />
+          <SelettoreAttivita onCambia={cambiaDivisione} />
           {avvisiWa.map((m) => (
             <p key={m} className="text-[11px] leading-snug text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
               {m}
