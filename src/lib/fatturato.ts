@@ -15,6 +15,8 @@ export interface FattGiorno extends ConCategorie {
   n_scontrini: number; n_annulli: number; n_fatture: number; n_note_credito: number; note_credito: number;
   pagamenti: ImportiMetodo; pag_scontrini: ImportiMetodo; pag_fatture: ImportiMetodo;
   rt: number | null; differenza_rt: number | null;
+  /** giorno di chiusura del negozio (04/10/2026): etichetta del motivo */
+  chiuso?: string;
 }
 export interface FattMese extends ConCategorie {
   mese: string;
@@ -27,12 +29,16 @@ export interface FattTotali extends ConCategorie {
   scontrini: number; fatture: number; totale: number; imponibile: number; iva: number; note_credito: number;
   n_scontrini: number; n_annulli: number; n_fatture: number; n_note_credito: number;
   giorni_attivi: number; media_giorno: number; scontrino_medio: number; fattura_media: number;
+  /** giorni del calendario fino a oggi: lavorati e di chiusura (04/10/2026) */
+  giorni_lavorati?: number; giorni_chiusi?: number;
   pagamenti: ImportiMetodo; pag_scontrini: ImportiMetodo; pag_fatture: ImportiMetodo;
   giorno_migliore: { giorno: string; totale: number } | null;
 }
 export interface FattStatistiche {
   societa: string; dal: string; al: string;
   totali: FattTotali; giornaliero: FattGiorno[]; mensile: FattMese[];
+  /** giorni di chiusura del periodo: giorno → motivo */
+  chiusi?: Record<string, string>;
   confronto: null | { dal: string; al: string; scontrini: number; fatture: number; totale: number;
     var_totale_pct: number | null; var_scontrini_pct: number | null; var_fatture_pct: number | null };
   primo_dato: string | null; rt_totale: number; giorni_con_rt: number;

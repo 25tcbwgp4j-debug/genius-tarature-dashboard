@@ -100,7 +100,10 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
   const mostraBanner = aperto || (haRapporti && !giaInviato && !attiva && !conEsito && !nonOra && !dest.do_not_contact);
 
   const scelti = (["email", "whatsapp"] as CanalePronto[]).filter((c) => canali[c]);
-  const oggi = oggiRoma(), domani = spostaGiorno(oggiRoma(), 1);
+  // «Domani alle…» = il prossimo giorno di apertura (di venerdì propone lunedì; ferie e chiusure saltate) — 04/10/2026
+  const oggi = oggiRoma(), domani = st.prossimo_lavorativo || spostaGiorno(oggiRoma(), 1);
+  const domaniVero = domani === spostaGiorno(oggi, 1);
+  const nomeDomani = domaniVero ? "Domani" : new Date(`${domani}T12:00:00Z`).toLocaleDateString("it-IT", { weekday: "long", timeZone: "Europe/Rome" }).replace(/^./, (x) => x.toUpperCase());
   const quandoScelto = (): { data: string; ora: string } | null =>
     scelta === "oggi" ? { data: oggi, ora: oraOggi } : scelta === "domani" ? { data: domani, ora: oraDomani }
       : scelta === "libero" ? { data, ora } : scelta === "suggerito" ? partiRoma(st.suggerito) : null;
@@ -235,7 +238,7 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
         {([
           ["adesso", "Adesso"],
           ["oggi", "Oggi alle…"],
-          ["domani", "Domani alle…"],
+          ["domani", `${nomeDomani} alle…`],
           ["suggerito", `${dataOraRoma(st.suggerito).replace(/^./, (x) => x.toUpperCase())}`],
           ["libero", "Data e ora a scelta"],
         ] as [Scelta, string][]).map(([k, label]) => (
@@ -248,7 +251,7 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
 
       {(scelta === "oggi" || scelta === "domani") && (
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <span className="text-sm">{scelta === "oggi" ? "Oggi" : "Domani"} ({dataOraRoma(`${scelta === "oggi" ? oggi : domani}T12:00:00`).split(" alle ")[0]}) alle</span>
+          <span className="text-sm">{scelta === "oggi" ? "Oggi" : nomeDomani} ({dataOraRoma(`${scelta === "oggi" ? oggi : domani}T12:00:00`).split(" alle ")[0]}) alle</span>
           <Input type="time" value={scelta === "oggi" ? oraOggi : oraDomani}
             onChange={(e) => (scelta === "oggi" ? setOraOggi : setOraDomani)(e.target.value)} className="w-28 bg-white" />
           <span className="text-xs text-gray-500">ora di Roma</span>

@@ -96,6 +96,7 @@ export const TIPI_AUTORIZZAZIONE: Record<string, string> = {
   annulla_scontrino: "Annullare uno scontrino", storno_scontrino: "Stornare (reso) uno scontrino", elimina_riga_cassa: "Cancellare una riga della cassa del giorno",
   riapri_cassa: "Riaprire una cassa già chiusa", annulla_documento: "Annullare un ordine/preventivo",
   sblocca_conteggio: "Sbloccare un conteggio di cassa già confermato",
+  calendario_cassa: "Cambiare i giorni di chiusura della cassa (sabati, domeniche, festivi, chiusure)",
 };
 export async function autIo(): Promise<Permessi> { return fetchAPI('/api/autorizzazioni/io'); }
 /** stato: 'in_attesa' oppure '' per tutte (storico). L'operatore vede solo le sue. */
@@ -386,6 +387,8 @@ export interface StatoPronto {
   programmazione: ProgrammazionePronto;
   destinatari: { email: string | null; whatsapp: string | null; motivo_no_whatsapp: string | null; do_not_contact: boolean; cliente?: string; contatto?: string | null };
   suggerito: string;
+  /** prossimo giorno lavorativo dal calendario della cassa (venerdì → lunedì, ferie saltate) — 04/10/2026 */
+  prossimo_lavorativo?: string;
   gia_inviato: Record<CanalePronto, boolean>;
 }
 export async function getProntoProgrammato(sessionId: string): Promise<StatoPronto> {
@@ -1323,7 +1326,7 @@ export interface RigaGiornata {
 export interface ControlloCassa { chiave: string; nome: string; atteso: number | null; trovato: number; differenza: number | null; ok: boolean; mancante: boolean; nota: string }
 export interface FoglioCassa {
   giornata: {
-    giorno: string; stato: 'aperta' | 'chiusa'; apertura_tagli: Tagli; chiusura_tagli: Tagli; prelievi: { importo: number; nota: string; tipo?: string }[];
+    giorno: string; stato: 'aperta' | 'chiusa' | 'non_lavorata'; apertura_tagli: Tagli; non_lavorata?: boolean; motivo_chiusura?: string | null; chiusura_tagli: Tagli; prelievi: { importo: number; nota: string; tipo?: string }[];
     pos_terminale: number | null; rt_scontrini: number | null; note: string | null; chiusa_il?: string | null; chiusa_da?: string | null;
     file_scaricato_il?: string | null; nuova?: boolean; apertura_da?: string | null; futura?: boolean; origine?: string; file_excel?: string | null;
     reintegro_tagli?: Tagli; reintegro_nota?: string | null; apertura_confermata_il?: string | null; apertura_confermata_da?: string | null; apertura_differenza?: number | null;
@@ -1337,7 +1340,52 @@ export interface FoglioCassa {
     reintegro: number; cassa_per_domani: number; apertura_attesa: number | null; apertura_attesa_tagli: Tagli | null; apertura_attesa_da: string | null;
   };
   controlli: ControlloCassa[]; conti_tornano: boolean; tagli: string[]; tagli_apertura: string[]; tagli_chiusura: string[];
+  calendario?: CalendarioGiorno;
 }
+
+// === GIORNI DI CHIUSURA della cassa (04/10/2026) ===
+export interface StatoGiornoCal {
+  giorno: string; nome: string; lavorativo: boolean; motivo: string | null; etichetta: string; fonte: string; nota: string | null;
+  festivita_proposta?: string | null;
+}
+export interface CalendarioGiorno extends StatoGiornoCal {
+  precedente_lavorativo: string | null; successivo_lavorativo: string; prossimo_lavorativo: string; oggi_lavorativo: boolean;
+  /** giorni chiusi subito prima i cui incassi elettronici sono in questa cassa */
+  assorbiti: { giorno: string; nome: string; etichetta: string }[];
+  /** giorno chiuso: movimenti fisici (anomalia) ed elettronici (passano al giorno lavorativo successivo) */
+  anomalie: string[]; elettronici: { testo: string; importo: number; modalita: string }[]; passano_al?: string | null;
+}
+export interface RegolaCal { id: string; giorno_settimana: 5 | 6; giorno_nome: string; dal: string | null; al: string | null; nota: string | null; creato_da: string | null; created_at: string }
+export interface DataCal { giorno: string; giorno_nome: string; stato: 'chiuso' | 'aperto'; motivo: string | null; motivo_nome: string; nota: string | null; passato: boolean; creato_da: string | null }
+export interface FestivitaProposta { giorno: string; nome: string; giorno_nome: string; gia_chiuso: boolean; etichetta: string }
+export interface VistaCalendario {
+  oggi: StatoGiornoCal; prossimo_lavorativo: string; regole: RegolaCal[]; date: DataCal[]; festivita: FestivitaProposta[];
+  motivi: Record<string, string>; sabato_sbloccato_oggi: boolean; domenica_sbloccata_oggi: boolean;
+}
+export interface DaChiudere { giornate: { giorno: string; nome: string; tipo: 'da_chiudere' | 'anomalia'; testo: string; elenco?: string[] }[]; prossimo_lavorativo: string; oggi: StatoGiornoCal }
+export async function calendarioCassa(): Promise<VistaCalendario> { return fetchAPI('/api/cassa/calendario'); }
+export async function calendarioAnteprima(giorno: string): Promise<StatoGiornoCal & { fisici: string[]; elettronici: { testo: string }[]; si_puo_chiudere: boolean; passano_al: string }> {
+  return fetchAPI(`/api/cassa/calendario/anteprima/${giorno}`);
+}
+export async function calendarioChiudi(giorno: string, motivo: string, nota = ''): Promise<{ ok: boolean; successivo_lavorativo: string }> {
+  return fetchAPI(`/api/cassa/calendario/giorni/${giorno}/chiuso`, { method: 'POST', body: JSON.stringify({ motivo, nota }) });
+}
+export async function calendarioApri(giorno: string, nota = ''): Promise<{ ok: boolean }> {
+  return fetchAPI(`/api/cassa/calendario/giorni/${giorno}/aperto`, { method: 'POST', body: JSON.stringify({ nota }) });
+}
+export async function calendarioRimuovi(giorno: string): Promise<{ ok: boolean }> {
+  return fetchAPI(`/api/cassa/calendario/giorni/${giorno}`, { method: 'DELETE' });
+}
+export async function calendarioSblocca(giornoSettimana: 5 | 6, dal: string, al: string, nota = ''): Promise<{ ok: boolean }> {
+  return fetchAPI(`/api/cassa/calendario/sblocca/${giornoSettimana}`, { method: 'POST', body: JSON.stringify({ dal: dal || null, al: al || null, nota }) });
+}
+export async function calendarioBlocca(giornoSettimana: 5 | 6, regolaId?: string): Promise<{ ok: boolean; disattivate: number }> {
+  return fetchAPI(`/api/cassa/calendario/blocca/${giornoSettimana}`, { method: 'POST', body: JSON.stringify(regolaId ? { regola_id: regolaId } : {}) });
+}
+export async function calendarioFestivita(giorni: string[], aperti: string[] = []): Promise<{ ok: boolean; chiusi: string[]; errori: { giorno: string; errore: string }[] }> {
+  return fetchAPI('/api/cassa/calendario/festivita', { method: 'POST', body: JSON.stringify({ giorni, aperti }) });
+}
+export async function cassaDaChiudere(): Promise<DaChiudere> { return fetchAPI('/api/cassa/calendario/da-chiudere'); }
 export async function cassaGiornata(giorno: string): Promise<FoglioCassa> { return fetchAPI(`/api/cassa/giornata?giorno=${giorno}`); }
 export async function cassaGiornataSalva(giorno: string, body: Partial<FoglioCassa['giornata']>): Promise<FoglioCassa> {
   return fetchAPI(`/api/cassa/giornata?giorno=${giorno}`, { method: 'PUT', body: JSON.stringify(body) });

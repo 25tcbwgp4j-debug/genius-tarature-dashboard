@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Loader2, Lock, Plus, Trash2, Undo2, Unlock, XCircle } from "lucide-react";
+import { CalendarDays, CalendarOff, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Loader2, Lock, Plus, Trash2, Undo2, Unlock, XCircle } from "lucide-react";
 import { StornoDialog, type OggettoStorno } from "@/components/StornoDialog";
 import { AnnullaEFattura } from "@/components/AnnullaEFattura";
 import { usePermessi } from "@/components/permessi";
@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { ChiusuraFiscale } from "./ChiusuraFiscale";
 import { ReportCommercialista } from "./ReportCommercialista";
+import { GiorniChiusura } from "./GiorniChiusura";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma, spostaGiorno } from "@/lib/date";
@@ -29,7 +30,7 @@ import { toastErrore } from "@/lib/errori";
 import {
   cassaAnnulla, cassaScontrini, type RigaGiornata, type Scontrino,
   cassaGiornata, cassaGiornataChiudi, cassaGiornataConferma, cassaGiornataConfermaApertura, cassaGiornataSblocca, type BloccoCassa, cassaGiornataElimina, cassaGiornataRiapri, cassaGiornataRiga, cassaGiornataSalva, cassaGiornataUrlExcel,
-  type FoglioCassa, type Tagli,
+  type FoglioCassa, type Tagli, calendarioApri, calendarioChiudi, cassaDaChiudere, type DaChiudere,
 } from "@/lib/api";
 
 const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
@@ -121,6 +122,11 @@ export default function CassaGiornataPage() {
   const [nuova, setNuova] = useState(RIGA_VUOTA);
   const [prel, setPrel] = useState({ importo: "", tipo: "eccesso", nota: "" });
   const chiusa = f?.giornata.stato === "chiusa";
+  // giorni di chiusura (04/10/2026): sabato/domenica bloccati, festivi, chiusure → niente cassa quel giorno
+  const nonLav = !!f?.giornata.non_lavorata;
+  const cal = f?.calendario;
+  const [giorniAperto, setGiorniAperto] = useState(false);
+  const [daChiudere, setDaChiudere] = useState<DaChiudere | null>(null);
   const [storno, setStorno] = useState<OggettoStorno | null>(null);
   // il cliente chiede la fattura dopo lo scontrino: annullo sul registratore + fattura (O scontrino O fattura, 03/10/2026)
   const [daFatturare, setDaFatturare] = useState<Scontrino | null>(null);
@@ -159,6 +165,8 @@ export default function CassaGiornataPage() {
     return cassaGiornata(g).then(applica).catch((e: Error) => { if (g === giornoRef.current) setErrore(e.message); });
   }, [applica]);
   useEffect(() => { giornoRef.current = giorno; ricarica(); }, [giorno, ricarica]);
+  const caricaDaChiudere = useCallback(() => { cassaDaChiudere().then(setDaChiudere).catch(() => {}); }, []);
+  useEffect(() => { caricaDaChiudere(); }, [caricaDaChiudere, f?.giornata.stato]);
 
   /** Cambio giorno: prima salvo quello che è in sospeso sul giorno vecchio. */
   const vaiA = useCallback(async (g: string) => {
@@ -170,14 +178,14 @@ export default function CassaGiornataPage() {
   // fatture, scontrini e POS entrano da soli: aggiorno ogni minuto se la giornata è aperta,
   // ma MAI mentre si scrive o c'è un salvataggio in corso (altrimenti si cancella quello che si sta digitando)
   useEffect(() => {
-    if (chiusa) return;
+    if (chiusa || nonLav) return;
     const t = setInterval(() => {
       const el = document.activeElement;
       const scrive = el instanceof HTMLElement && el.matches("input,textarea,select");
       if (!salvaT.current && !reintT.current && !inVolo.current.size && !scrive && !document.hidden) ricarica();
     }, 60000);
     return () => clearInterval(t);
-  }, [chiusa, ricarica]);
+  }, [chiusa, nonLav, ricarica]);
 
   // la pagina resta aperta sul banco: a mezzanotte si passa da sola al giorno nuovo
   useEffect(() => {
@@ -353,6 +361,21 @@ export default function CassaGiornataPage() {
     });
   }
 
+  /** «Salta questa chiusura»: oggi (o il giorno guardato) siamo rimasti chiusi → non lavorato, la cassa passa al successivo. */
+  function saltaChiusura() {
+    if (!confirm(`Segnare ${dataIt(giorno, { weekday: "long", day: "numeric", month: "long" })} come giorno NON lavorato? La cassa salta questo giorno e i contanti si riportano al giorno lavorativo successivo.`)) return;
+    return azione("salta", async () => {
+      const r = await calendarioChiudi(giorno, "non_lavorato", "Salta questa chiusura");
+      toast.success(`Giorno non lavorato: la cassa passa a ${dataIt(r.successivo_lavorativo, { weekday: "long", day: "numeric", month: "numeric" })}`);
+      await ricarica();
+    });
+  }
+  /** Il giorno chiuso in realtà è stato lavorato (anomalie o apertura straordinaria). */
+  function lavorato() {
+    if (!confirm(`Segnare ${dataIt(giorno, { weekday: "long", day: "numeric", month: "long" })} come giorno LAVORATO? Si apre la sua cassa.`)) return;
+    return azione("lavorato", async () => { await calendarioApri(giorno, "aperto dalla cassa del giorno"); toast.success("Giorno lavorato: cassa aperta"); await ricarica(); });
+  }
+
   function riapri() {
     if (!confirm("Riaprire la giornata per correggerla? Alla nuova chiusura l'Excel verrà rigenerato.")) return;
     return azione("riapri", async () => { applica(await cassaGiornataRiapri(giorno)); });
@@ -401,21 +424,30 @@ export default function CassaGiornataPage() {
       </Dialog>
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-2 text-2xl font-semibold">Cassa del giorno</h1>
-        <Button size="icon" variant="outline" className="size-8" onClick={() => vaiA(spostaGiorno(giorno, -1))}><ChevronLeft className="size-4" /></Button>
+        <Button size="icon" variant="outline" className="size-10 md:size-8" title="Giorno lavorativo precedente (salta i giorni di chiusura)"
+          onClick={() => vaiA(cal?.precedente_lavorativo || spostaGiorno(giorno, -1))}><ChevronLeft className="size-4" /></Button>
         <label className="flex items-center gap-1"><CalendarDays className="size-4" />
           <input type="date" className="h-8 rounded-md border border-input bg-background px-2 text-sm" value={giorno} onChange={(e) => e.target.value && vaiA(e.target.value)} />
         </label>
-        <Button size="icon" variant="outline" className="size-8" onClick={() => vaiA(spostaGiorno(giorno, 1))}><ChevronRight className="size-4" /></Button>
+        <Button size="icon" variant="outline" className="size-10 md:size-8" title="Giorno lavorativo successivo (salta i giorni di chiusura)"
+          onClick={() => vaiA(cal?.successivo_lavorativo || spostaGiorno(giorno, 1))}><ChevronRight className="size-4" /></Button>
         {giorno !== oggiRoma() && <Button size="sm" variant="ghost" onClick={() => vaiA(oggiRoma())}>Oggi</Button>}
-        {f && !f.giornata.futura && (
+        {f && nonLav && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-800 dark:bg-slate-700 dark:text-slate-100">NON LAVORATO</span>}
+        {f && !f.giornata.futura && !nonLav && (
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chiusa ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"}`}>
             {chiusa ? `CHIUSA${f.giornata.chiusa_da ? ` da ${f.giornata.chiusa_da}` : ""}` : "APERTA"}
           </span>
         )}
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => setGiorniAperto(true)} title="Sabati, domeniche, festivi e chiusure">
+            <CalendarOff className="mr-1 size-4" />Giorni di chiusura</Button>
+          {f && !f.giornata.futura && !nonLav && !chiusa && cal?.lavorativo && f.righe.length === 0 && (
+            <Button size="sm" variant="outline" disabled={!!busy} onClick={saltaChiusura} title="Siamo rimasti chiusi: giorno non lavorato">
+              {busy === "salta" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <CalendarOff className="mr-1 size-4" />}Salta questa chiusura</Button>
+          )}
           {admin && <ReportCommercialista giorno={giorno} />}
-          {!f?.giornata.futura && <Button size="sm" variant="outline" onClick={() => { window.location.href = cassaGiornataUrlExcel(giorno); }}><FileSpreadsheet className="mr-1 size-4" />Excel</Button>}
-          {f?.giornata.futura ? null : chiusa
+          {!f?.giornata.futura && !nonLav && <Button size="sm" variant="outline" onClick={() => { window.location.href = cassaGiornataUrlExcel(giorno); }}><FileSpreadsheet className="mr-1 size-4" />Excel</Button>}
+          {f?.giornata.futura || nonLav ? null : chiusa
             ? <Button size="sm" variant="outline" onClick={riapri} disabled={!!busy}>{busy === "riapri" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Unlock className="mr-1 size-4" />}Riapri</Button>
             : <Button size="sm" onClick={chiudi} disabled={!f || !!busy} className={f?.conti_tornano ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"}>
                 {busy === "chiudi" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Lock className="mr-1 size-4" />}{f?.conti_tornano ? "Chiudi giornata" : "Convalida e chiudi"}
@@ -423,10 +455,74 @@ export default function CassaGiornataPage() {
         </div>
       </div>
 
-      {f?.giornata.futura ? (
-        <Card className="p-6 text-center text-muted-foreground">
-          📅 Il {dataIt(giorno, { weekday: "long", day: "numeric", month: "long" })} deve ancora arrivare: la cassa si apre quel giorno.
-          <div className="mt-2"><Button size="sm" variant="outline" onClick={() => vaiA(oggiRoma())}>Vai alla cassa di oggi</Button></div>
+      <GiorniChiusura aperto={giorniAperto} onChiudi={() => setGiorniAperto(false)} giornoIniziale={giorno}
+        onCambiato={() => { ricarica(); caricaDaChiudere(); }} />
+
+      {(daChiudere?.giornate || []).filter((x) => x.giorno !== giorno).length > 0 && (
+        <div className="space-y-1 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm dark:bg-amber-950/30">
+          {(daChiudere?.giornate || []).filter((x) => x.giorno !== giorno).map((x) => (
+            <div key={x.giorno} className="flex flex-wrap items-center gap-2">
+              <span className="flex-1">{x.tipo === "anomalia" ? "⚠️" : "🔓"} {x.testo}</span>
+              <Button size="sm" variant="outline" className="h-9" onClick={() => vaiA(x.giorno)}>Apri {x.nome}</Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {f && cal && !cal.lavorativo && !nonLav && cal.anomalie.length > 0 && (
+        <div className="space-y-1 rounded-md border-2 border-red-400 bg-red-50 px-3 py-2 text-sm dark:bg-red-950/30">
+          <div className="font-semibold">⚠️ {cal.nome} è un giorno di chiusura ({cal.etichetta}) ma ci sono movimenti:</div>
+          <ul className="list-disc pl-5">{cal.anomalie.map((t, i) => <li key={i}>{t}</li>)}</ul>
+          <div>Se avete lavorato, segnalo come giorno lavorato e chiudi la sua cassa come gli altri giorni.</div>
+          <Button size="sm" className="h-10" disabled={!!busy} onClick={lavorato}>È un giorno lavorato</Button>
+        </div>
+      )}
+      {f && cal && cal.lavorativo && cal.assorbiti.length > 0 && !f.giornata.futura && (
+        <div className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm dark:bg-sky-950/30">
+          📅 Negozio chiuso {cal.assorbiti.map((a) => a.nome).join(", ")}: il riporto dei contanti arriva da{" "}
+          <b>{f.riepilogo.apertura_attesa_da ? dataIt(f.riepilogo.apertura_attesa_da, { weekday: "long", day: "2-digit", month: "2-digit" }) : "l'ultimo giorno lavorato"}</b>
+          {" "}e gli eventuali incassi elettronici (Stripe, PayPal, POS) di quei giorni sono in questa cassa.
+        </div>
+      )}
+
+      {f && nonLav ? (
+        <Card className="space-y-3 p-5">
+          <div className="flex items-center gap-2 text-lg font-semibold"><CalendarOff className="size-6 text-slate-600" />
+            {dataIt(giorno, { weekday: "long", day: "numeric", month: "long" }).replace(/^./, (x) => x.toUpperCase())}: negozio chiuso</div>
+          <div className="text-sm text-muted-foreground">
+            {f.giornata.motivo_chiusura || cal?.etichetta}. Nessuno scontrino, nessuna fattura: la cassa salta questo giorno e i contanti
+            si riportano {cal?.precedente_lavorativo ? <>da <b>{dataIt(cal.precedente_lavorativo, { weekday: "long", day: "2-digit", month: "2-digit" })}</b></> : "dall'ultimo giorno lavorato"}
+            {cal ? <> a <b>{dataIt(cal.successivo_lavorativo, { weekday: "long", day: "2-digit", month: "2-digit" })}</b></> : null}.
+          </div>
+          {cal && cal.elettronici.length > 0 && (
+            <div className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm dark:bg-sky-950/30">
+              Incassi elettronici arrivati oggi: {cal.elettronici.map((e) => e.testo).join(", ")}. Entrano nella cassa di{" "}
+              <b>{dataIt(cal.passano_al || cal.successivo_lavorativo, { weekday: "long", day: "2-digit", month: "2-digit" })}</b>: non passano dal cassetto né dal registratore.
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {cal && <Button className="h-11" onClick={() => vaiA(cal.successivo_lavorativo)}>Vai a {dataIt(cal.successivo_lavorativo, { weekday: "long", day: "numeric", month: "numeric" })}</Button>}
+            {cal?.precedente_lavorativo && <Button variant="outline" className="h-11" onClick={() => vaiA(cal.precedente_lavorativo!)}>Torna a {dataIt(cal.precedente_lavorativo, { weekday: "long", day: "numeric", month: "numeric" })}</Button>}
+            <Button variant="outline" className="h-11" disabled={!!busy || f.giornata.futura} onClick={lavorato}>
+              {busy === "lavorato" ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}È un giorno lavorato</Button>
+          </div>
+        </Card>
+      ) : f?.giornata.futura ? (
+        <Card className="space-y-2 p-6 text-center text-muted-foreground">
+          {cal && !cal.lavorativo ? (
+            <div>🚪 {dataIt(giorno, { weekday: "long", day: "numeric", month: "long" })}: negozio chiuso ({cal.etichetta}). La cassa salta questo giorno.</div>
+          ) : (
+            <div>📅 Il {dataIt(giorno, { weekday: "long", day: "numeric", month: "long" })} deve ancora arrivare: la cassa si apre quel giorno.</div>
+          )}
+          {cal?.lavorativo && f.giornata.apertura_da && (
+            <div className="text-foreground">Si aprirà con <b>{eur(Object.entries(f.giornata.apertura_tagli || {}).reduce((t, [k, n]) => t + Number(k) * Number(n || 0), 0))}</b> in contanti,
+              riportati da <b>{dataIt(f.giornata.apertura_da, { weekday: "long", day: "2-digit", month: "2-digit" })}</b>.</div>
+          )}
+          <div className="mt-2 flex flex-wrap justify-center gap-2">
+            {cal?.precedente_lavorativo && cal.precedente_lavorativo !== oggiRoma() && <Button size="sm" variant="outline" className="h-10" onClick={() => vaiA(cal.precedente_lavorativo!)}>
+              Vai a {dataIt(cal.precedente_lavorativo, { weekday: "long", day: "numeric", month: "numeric" })}</Button>}
+            <Button size="sm" variant="outline" className="h-10" onClick={() => vaiA(oggiRoma())}>Vai alla cassa di oggi</Button>
+          </div>
         </Card>
       ) : !f || !g || !rp ? (errore
         ? <Card className="space-y-2 p-4 text-sm"><div className="font-medium text-red-700">Non riesco a caricare la cassa del {dataIt(giorno)}</div>

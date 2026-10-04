@@ -241,7 +241,7 @@ function Attivita({ dati, scala }: { dati: FattStatistiche; scala: "giorno" | "m
     while (d <= fine) {
       const k = isoDi(d);
       const g = per.get(k);
-      out.push({ key: k, label: giornoLabel(k), parti: parti(g?.cat || zero), totale: g?.totale || 0, extra: giornoLungo(k) });
+      out.push({ key: k, label: giornoLabel(k), parti: parti(g?.cat || zero), totale: g?.totale || 0, extra: giornoLungo(k) + (dati.chiusi?.[k] ? ` · chiuso (${dati.chiusi[k]})` : "") });
       d.setDate(d.getDate() + 1);
     }
     return out;
@@ -299,7 +299,7 @@ function Attivita({ dati, scala }: { dati: FattStatistiche; scala: "giorno" | "m
             <tbody>
               {righe.map(({ k, l, r }) => (
                 <tr key={k} className="border-b border-gray-50">
-                  <td className="py-1.5 pr-3 font-medium whitespace-nowrap">{l}</td>
+                  <td className="py-1.5 pr-3 font-medium whitespace-nowrap">{l}{scala === "giorno" && dati.chiusi?.[k] ? <span className="ml-1 rounded bg-gray-100 px-1 text-[10px] text-gray-600" title={dati.chiusi[k]}>chiuso</span> : null}</td>
                   <td className="py-1.5 px-2 text-right text-orange-700">{fmtEur(r.cat.tarature)}</td><td className="py-1.5 px-2 text-right text-gray-500">{pct(r.cat.tarature, r.totale)}</td>
                   <td className="py-1.5 px-2 text-right text-slate-700">{fmtEur(r.cat.apple)}</td><td className="py-1.5 px-2 text-right text-gray-500">{pct(r.cat.apple, r.totale)}</td>
                   <td className="py-1.5 px-2 text-right text-amber-700">{r.cat.da_classificare ? fmtEur(r.cat.da_classificare) : "—"}</td>
@@ -365,7 +365,7 @@ export default function FatturatoPage() {
     while (d <= fine) {
       const k = isoDi(d);
       const g = per.get(k);
-      out.push({ key: k, label: giornoLabel(k), parti: partiDoc(g?.scontrini || 0, g?.fatture || 0), totale: g?.totale || 0, extra: giornoLungo(k) });
+      out.push({ key: k, label: giornoLabel(k), parti: partiDoc(g?.scontrini || 0, g?.fatture || 0), totale: g?.totale || 0, extra: giornoLungo(k) + (dati.chiusi?.[k] ? ` · chiuso (${dati.chiusi[k]})` : "") });
       d.setDate(d.getDate() + 1);
     }
     return out;
@@ -439,7 +439,7 @@ export default function FatturatoPage() {
             <Kpi icon={<FileText className="w-4 h-4" />} label="Imponibile fatture" tone="indigo" value={fmtEur(t.imponibile)}
               sub={`IVA ${fmtEur(t.iva)}`} />
             <Kpi icon={<CalendarDays className="w-4 h-4" />} label="Media al giorno" tone="purple" value={fmtEur(t.media_giorno)}
-              sub={`scontrino medio ${fmtEur(t.scontrino_medio)} · fattura ${fmtEur(t.fattura_media)}`} />
+              sub={`scontrino medio ${fmtEur(t.scontrino_medio)} · fattura ${fmtEur(t.fattura_media)}${t.giorni_lavorati !== undefined ? ` · ${t.giorni_lavorati} giorni lavorati, ${t.giorni_chiusi} chiusi` : ""}`} />
             <Kpi icon={<Trophy className="w-4 h-4" />} label="Giorno migliore" tone="amber"
               value={t.giorno_migliore ? fmtEur(t.giorno_migliore.totale) : "—"}
               sub={t.giorno_migliore ? giornoLungo(t.giorno_migliore.giorno) : undefined} />
@@ -489,7 +489,7 @@ export default function FatturatoPage() {
                     {(scala === "mese" ? dati.mensile.map((m) => ({ k: m.mese, l: meseLabel(m.mese), r: m, ns: m.n_scontrini, rt: undefined as number | null | undefined, drt: null as number | null }))
                       : dati.giornaliero.map((g) => ({ k: g.giorno, l: giornoLungo(g.giorno), r: g, ns: g.n_scontrini, rt: g.rt, drt: g.differenza_rt }))).map(({ k, l, r, ns, rt, drt }) => (
                       <tr key={k} className="border-b border-gray-50">
-                        <td className="py-1.5 pr-3 font-medium whitespace-nowrap">{l}</td>
+                        <td className="py-1.5 pr-3 font-medium whitespace-nowrap">{l}{scala === "giorno" && dati.chiusi?.[k] ? <span className="ml-1 rounded bg-gray-100 px-1 text-[10px] text-gray-600" title={dati.chiusi[k]}>chiuso</span> : null}</td>
                         <td className="py-1.5 px-2 text-right text-teal-700">{fmtEur(r.scontrini)}</td>
                         <td className="py-1.5 px-2 text-right text-gray-500">{ns}</td>
                         <td className="py-1.5 px-2 text-right text-blue-700">{fmtEur(r.fatture)}</td>
