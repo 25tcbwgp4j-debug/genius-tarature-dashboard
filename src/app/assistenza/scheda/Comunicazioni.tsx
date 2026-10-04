@@ -29,7 +29,7 @@ export function Comunicazioni({ s }: { s: Scheda }) {
     <Sezione titolo="Comunicazioni al cliente" icona={<MessagesSquare />}
       sottotitolo={s.prova ? "scheda di PROVA: mail solo all'indirizzo di test, WhatsApp mai" : !s.wa_linea_attiva ? "WhatsApp Apple in sola lettura: si mandano a mano" : null}>
       {com.length === 0 ? <div className="text-sm text-muted-foreground">{s.sola_lettura ? "Scheda storica FileMaker." : "Ancora nessuna comunicazione."}</div> : (
-        <div className="divide-y rounded-lg border">
+        <div className="max-h-[520px] divide-y overflow-y-auto rounded-lg border">
           {com.map((c) => (
             <div key={c.id} className="px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">
