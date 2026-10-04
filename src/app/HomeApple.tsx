@@ -46,14 +46,18 @@ function RigaScheda({ s, extra }: { s: SchedaBreve; extra?: React.ReactNode }) {
   );
 }
 
+const MAX_RIGHE = 10;   // la home resta corta anche su iPhone: il resto è nelle schede assistenza
+
 function Elenco({ titolo, schede, vuoto, extra }: { titolo: React.ReactNode; schede: SchedaBreve[] | null; vuoto: string; extra?: (s: SchedaBreve) => React.ReactNode }) {
+  const altre = (schede?.length || 0) - MAX_RIGHE;
   return (
     <Card>
       <div className="p-4 border-b font-semibold">{titolo}</div>
       <div className="divide-y">
         {schede === null ? <p className="p-4 text-sm text-gray-500">Caricamento…</p>
           : schede.length === 0 ? <p className="p-4 text-sm text-gray-500">{vuoto}</p>
-          : schede.map((s) => <RigaScheda key={s.id} s={s} extra={extra?.(s)} />)}
+          : schede.slice(0, MAX_RIGHE).map((s) => <RigaScheda key={s.id} s={s} extra={extra?.(s)} />)}
+        {altre > 0 && <Link href="/assistenza" className="block p-3 text-sm text-blue-700 dark:text-blue-300 hover:underline">… e altre {altre}: apri le schede assistenza</Link>}
       </div>
     </Card>
   );
@@ -78,7 +82,7 @@ export function HomeApple() {
       setCfg(c);
       if (!c?.visibile) return;
       leggi<{ contatori: Record<string, number> }>("/api/assistenza/contatori").then(set((r) => setContatori(r?.contatori || {})));
-      leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=pronto&limit=50").then(set((r) => setPronte(r?.schede || [])));
+      leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=pronto&limit=500").then(set((r) => setPronte(r?.schede || [])));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=da_preventivare&limit=10").then(set((r) => setDaPrev(r?.schede || [])));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=tutte&limit=10").then(set((r) => setUltime(r?.schede || [])));
     }));
