@@ -48,7 +48,6 @@ export function AzioniProforma({ d, onCambiato }: { d: DocumentoCliente; onCambi
     const nome = altra === "apple" ? "Apple" : "Tarature";
     let corpo: { attivita: "tarature" | "apple"; conferma?: boolean; anche_collegati?: boolean } = { attivita: altra };
     if (!aperto) {
-      if (!admin) { toast.error("Pro forma già convertito: la divisione la cambia solo il titolare"); return; }
       if (!confirm(`${d.sigla} è già ${d.stato}. Spostarlo in ${nome}?\n\nCambia solo l'ETICHETTA interna (anche dello scontrino/fattura nati dalla conversione): numerazione unica, XML e registratore non cambiano.`)) return;
       corpo = { ...corpo, conferma: true, anche_collegati: true };
     } else if (!confirm(`Spostare ${d.sigla} in ${nome}? Cambiano mittente e firma delle mail, linea WhatsApp ed etichetta del PDF.`)) return;
@@ -72,8 +71,8 @@ export function AzioniProforma({ d, onCambiato }: { d: DocumentoCliente; onCambi
           {busy === "email" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Mail className="mr-1 size-4" />}Invia per email</Button>
         <Button size="sm" variant="outline" className="border-green-500 text-green-800 dark:text-green-300" disabled={!!busy} onClick={() => apriInvio("whatsapp")}>
           {busy === "whatsapp" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <MessageCircle className="mr-1 size-4" />}Invia per WhatsApp</Button>
-        {d.stato !== "annullato" && <Button size="sm" variant="ghost" disabled={!!busy || (!aperto && !admin)} onClick={sposta}
-          title={!aperto && !admin ? "Pro forma convertito: solo il titolare" : undefined}>
+        {d.stato !== "annullato" && <Button size="sm" variant="ghost" disabled={!!busy} onClick={sposta}
+          title={!aperto && !admin ? "Pro forma convertito: serve l'autorizzazione del titolare" : undefined}>
           <ArrowRightLeft className="mr-1 size-4" />Sposta in {altra === "apple" ? "Apple" : "Tarature"}</Button>}
       </div>
       <SpedisciDocumento link={{ documento_id: d.id }} />
