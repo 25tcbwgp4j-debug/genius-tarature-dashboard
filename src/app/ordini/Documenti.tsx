@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowRightLeft, Ban, CheckCircle2, FileText, Loader2, Mail, MessageCircle, PackageCheck, Pencil, Plus, Receipt, Save, Search, Trash2, Truck, Undo2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
+import { EstraiDati, esistenteInCampi } from "@/components/EstraiDati";
 import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
@@ -22,8 +23,8 @@ import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 import {
   cassaGiornata, getDocumentoPdfUrl, docAcconto, docAnnulla, docAvvisa, docConverti, docCrea, docDettaglio, docElenco, docFase, docModifica, docRitira,
-  fattAnagrafiche, fattCatalogo,
-  type DocumentoCliente, type EsitoIncassoOrdine, type FaseOrdine, type FattAnagrafica, type FattVoceCatalogo, type RigaDoc,
+  fattAnagrafiche, fattCatalogo, fattEstraiSalva,
+  type CampiEstratti, type DocumentoCliente, type EsitoIncassoOrdine, type FaseOrdine, type FattAnagrafica, type FattVoceCatalogo, type RigaDoc,
   type TipoDocumento, type VistaOrdini,
 } from "@/lib/api";
 import { IncassoOrdine } from "./IncassoOrdine";
@@ -92,6 +93,16 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
     return () => clearTimeout(t);
   }, [q]);
   const tot = b.righe.reduce((s, r) => s + r.quantita * r.prezzo_ivato * (1 - (r.sconto || 0) / 100), 0);
+  /** «Estrai dati» → «Compila» (05/10/2026): nome, recapiti e controparte completa per la fattura */
+  function daEstratti(c: Partial<CampiEstratti>, anagraficaId: string | null) {
+    const nome = c.denominazione || [c.nome, c.cognome].filter(Boolean).join(" ");
+    setB({ ...b, anagrafica_id: anagraficaId, cliente_nome: nome || b.cliente_nome, telefono: c.telefono || b.telefono, email: c.email || b.email,
+      controparte: { denominazione: nome, ...(c.tipo === "privato" ? { nome: c.nome, cognome: c.cognome } : {}), piva: c.piva || "", cf: c.cf || "",
+        sdi: c.tipo === "estero" ? "" : c.sdi || "", pec: c.pec || "", indirizzo: c.indirizzo || "", cap: c.cap || "", comune: c.comune || "",
+        provincia: c.provincia || "", paese: (c.paese || "IT").slice(0, 2), email: c.email || "", telefono: c.telefono || "" } });
+    toast.success("Dati del cliente compilati");
+  }
+  const cp = b.controparte || {};
   const riga = (i: number, p: Partial<RigaDoc>) => setB({ ...b, righe: b.righe.map((r, j) => (j === i ? { ...r, ...p } : r)) });
 
   async function salva() {
@@ -117,7 +128,18 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
           <Button size="icon" variant="ghost" onClick={chiudi}><X className="size-4" /></Button>
         </div>
         <Card className="space-y-2 p-3">
-          <div className="text-sm font-medium">Cliente</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">Cliente</span>
+            {/* «Estrai dati»: incolli firma/visura/WhatsApp o una foto/PDF e i campi si compilano da soli */}
+            <EstraiDati societa="genius" className="ml-auto"
+              onCompila={(c, a) => daEstratti(c, a?.id || null)}
+              onUsaEsistente={async (e) => {
+                if (e.fonte === "fatturazione") { daEstratti(esistenteInCampi(e), e.id); return; }
+                // cliente Tarature: si porta anche nella rubrica di fatturazione (senza doppioni) per collegarlo
+                const c = esistenteInCampi(e);
+                try { const a = await fattEstraiSalva("genius", c); daEstratti(c, a.id); } catch { daEstratti(c, null); }
+              }} />
+          </div>
           <div className="relative">
             <Search className="pointer-events-none absolute left-2 top-2.5 size-4 text-muted-foreground" />
             <Input className="pl-8" placeholder="Cerca in anagrafica (nome, P.IVA)… oppure scrivi sotto" value={q} onChange={(e) => { setQ(e.target.value); if (e.target.value.trim().length < 2) setTrovati([]); }} />
@@ -139,6 +161,12 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
             <Input placeholder="Telefono" value={b.telefono} onChange={(e) => setB({ ...b, telefono: e.target.value })} />
             <Input placeholder="Email" value={b.email} onChange={(e) => setB({ ...b, email: e.target.value })} />
           </div>
+          {(cp.piva || cp.cf || cp.indirizzo) && (
+            <div className="rounded-md bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
+              Per la fattura: {[cp.piva && `P.IVA ${cp.piva}`, cp.cf && cp.cf !== cp.piva && `CF ${cp.cf}`, cp.sdi && `SDI ${cp.sdi}`, cp.pec && `PEC ${cp.pec}`,
+                [cp.indirizzo, cp.cap, cp.comune, cp.provincia && `(${cp.provincia})`].filter(Boolean).join(" ")].filter(Boolean).join(" · ")}
+            </div>
+          )}
           {b.anagrafica_id ? <div className="text-xs text-emerald-700">✓ collegato all&apos;anagrafica (dati pronti per la fattura)</div>
             : (b.tipo === "ordine" || b.tipo === "preventivo") && <div className="text-xs text-muted-foreground">Al salvataggio il cliente va in rubrica: se c&apos;è già (stesso telefono, email o nome) si collega la sua scheda, senza doppioni.</div>}
         </Card>

@@ -1159,6 +1159,32 @@ export async function fattAnagraficaModifica(id: string, body: Partial<FattAnagr
   return fetchAPI(`/api/fatturazione/anagrafiche/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
+// «Estrai dati» della controparte (05/10/2026): testo incollato e/o foto/PDF → campi normalizzati
+export type TipoControparte = 'azienda' | 'privato' | 'estero';
+export interface CampiEstratti {
+  tipo: TipoControparte; denominazione: string; nome: string; cognome: string; piva: string; cf: string; sdi: string;
+  pec: string; email: string; telefono: string; indirizzo: string; cap: string; comune: string; provincia: string;
+  paese: string; referente: string;
+}
+export interface EsistenteEstratto {
+  fonte: 'fatturazione' | 'tarature'; id: string;
+  record: Record<string, string | null | undefined> & { id: string };
+}
+export interface EsitoEstrai {
+  campi: CampiEstratti;
+  /** testo · ai · vies · regola (es. SDI 0000000 messo perché c'è solo la PEC) */
+  fonti: Partial<Record<keyof CampiEstratti, 'testo' | 'ai' | 'vies' | 'regola'>>;
+  incerti: (keyof CampiEstratti)[]; mancanti: string[]; avvisi: string[];
+  vies: { disponibile: boolean; valida?: boolean; nome?: string; indirizzo?: string; messaggio?: string } | null;
+  esistenti: EsistenteEstratto[]; ai: { usata: boolean; errore?: string }; vuoto: boolean;
+}
+export async function fattEstraiControparte(body: { testo?: string; file_base64?: string; media_type?: string; societa: string }): Promise<EsitoEstrai> {
+  return fetchAPI('/api/fatturazione/estrai-controparte', { method: 'POST', body: JSON.stringify(body), timeoutMs: 90000 });
+}
+export async function fattEstraiSalva(societa: string, controparte: Partial<CampiEstratti>): Promise<FattAnagrafica & { _nuova?: boolean }> {
+  return fetchAPI('/api/fatturazione/estrai-controparte/salva', { method: 'POST', body: JSON.stringify({ societa, controparte }) });
+}
+
 // Crediti per cliente, estratto conto, incassi multipli, export CSV — 30/09/2026
 export interface FattCredito {
   chiave: string; nome: string | null; piva: string | null; cf: string | null; email: string | null;

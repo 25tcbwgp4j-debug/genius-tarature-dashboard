@@ -13,6 +13,7 @@ import { DecInput } from "@/components/DecInput";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
 import { AnnullaEFattura } from "@/components/AnnullaEFattura";
+import { EstraiDati } from "@/components/EstraiDati";
 import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 import {
@@ -23,6 +24,8 @@ import {
   fattAnagrafiche,
   fattModifica,
   searchCustomers,
+  type CampiEstratti,
+  type EsistenteEstratto,
   type FattAnagrafica,
   type FattControparte,
   type FattVoceCatalogo,
@@ -184,6 +187,29 @@ export function Editor({
     setTrovati([]);
   }
 
+  /** «Estrai dati» → «Compila»: campi del documento + collegamento alla riga di rubrica appena salvata */
+  function daEstratti(c: CampiEstratti, a: FattAnagrafica | null) {
+    setTipoCliente(c.tipo);
+    setCliente({
+      denominazione: c.denominazione, nome: c.nome, cognome: c.cognome, piva: c.piva, cf: c.cf,
+      sdi: c.tipo === "estero" ? "" : c.sdi, pec: c.pec, indirizzo: c.indirizzo, cap: c.cap, comune: c.comune,
+      provincia: c.provincia, paese: c.paese || "IT", email: c.email, telefono: c.telefono,
+    });
+    setAnagraficaId(a?.id || null); setCustomerId(null); setSporco(true);
+    toast.success("Dati del cliente compilati: controllali prima di salvare");
+  }
+  function daEsistente(e: EsistenteEstratto) {
+    const r = e.record;
+    if (e.fonte === "fatturazione") {
+      scegliCliente({ id: e.id, company_name: r.denominazione || "", vat_number: r.piva || "", tax_id: r.cf || "", sdi_code: r.sdi || "",
+        pec: r.pec || "", address: r.indirizzo || "", zip_code: r.cap || "", city: r.comune || "", province: r.provincia || "",
+        email: r.email || "", _fonte: "fatturazione" });
+    } else {
+      scegliCliente({ ...(r as unknown as ClienteAnagrafica), id: e.id, _fonte: "tarature" });
+    }
+    setSporco(true);
+  }
+
   function setC(k: keyof FattControparte, v: string) { setCliente((p) => ({ ...p, [k]: v })); }
   function setR(i: number, k: keyof FattRiga, v: string | number | null) {
     setRighe((p) => p.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
@@ -333,6 +359,8 @@ export function Editor({
                   </div>
                 )}
               </div>
+              {/* «Estrai dati»: incolli firma/visura/WhatsApp o una foto/PDF e i campi si compilano da soli */}
+              <EstraiDati societa={societa} onCompila={daEstratti} onUsaEsistente={daEsistente} className="w-full sm:w-auto" />
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
               {tipoCliente === "privato" ? (
