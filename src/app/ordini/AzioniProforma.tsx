@@ -146,8 +146,9 @@ function FinestraInvio({ d, a, onChiudi, onInviato }: { d: DocumentoCliente; a: 
         </div>
         {!email && !a.automatica && (
           <div className="rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100" data-testid="wa-non-attiva">
-            {a.attivita === "apple" ? <><b>Linea 334 non ancora attiva</b> per l&apos;invio dal gestionale. </> : null}
-            {a.avviso}. Nessun invio automatico.
+            {a.attivita === "apple"
+              ? <><b>Linea 334 non ancora attiva</b> per l&apos;invio dal gestionale: si apre WhatsApp sul telefono col testo pronto.</>
+              : <>{a.avviso}.</>} Nessun invio automatico.
           </div>
         )}
         <label className="block text-xs text-muted-foreground">{email ? "Destinatario (email)" : "Numero WhatsApp"}
