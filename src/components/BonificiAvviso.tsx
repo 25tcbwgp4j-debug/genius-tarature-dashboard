@@ -2,11 +2,11 @@
 
 // BONIFICI IN ENTRATA (02/10/2026, Christian): su QUALSIASI pagina un pulsante rosso col numero dei bonifici arrivati
 // sul conto SumUp da gestire. Il pannello mostra importo, data, causale, ordinante e le proposte di abbinamento.
-// «Accetta il match» apre il documento (non segna nulla): la barra in basso mostra la quietanza (bonifico, data valuta,
-// riferimento) e l'operatore conferma lì — bozza → Emetti e invia · pro forma → fattura · sessione → incasso ·
-// ordine → acconto/saldo. Poi il bonifico sparisce dal pulsante.
+// «Accetta il match» apre il documento (non segna nulla) e, sopra, la FINESTRA PRECOMPILATA col bonifico (05/10/2026):
+// metodo bonifico, importo, data di accredito, ordinante, rif. SumUp — un clic su «Conferma» (fattura → quietanza ·
+// pro forma → fattura o scontrino già pagati · sessione → incasso · ordine → acconto/saldo). Poi il bonifico sparisce.
 
-import { Suspense, useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { Suspense, useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -19,8 +19,8 @@ import { usePermessi } from "@/components/permessi";
 import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 import {
-  NOME_TIPO, bonAccetta, bonAnnullaAccettazione, bonConferma, bonDettaglio, bonElenco, bonIgnora, bonStato,
-  type BonControllo, type BonProposta, type BonStato, type Bonifico,
+  NOME_TIPO, bonAccetta, bonAnnullaAccettazione, bonConferma, bonDettaglio, bonElenco, bonIgnora, bonPrecompilato, bonStato,
+  type BonAzione, type BonControllo, type BonPrecompilato, type BonProposta, type BonStato, type Bonifico,
 } from "@/lib/bonifici";
 
 const EVENTO = "bonifici:aggiorna";
@@ -105,7 +105,7 @@ function Avviso() {
         </button>
       )}
       {aperto && <Pannello onClose={() => { setAperto(false); carica(); }} />}
-      {inVerifica && <BarraConferma key={inVerifica} id={inVerifica} onFine={fineVerifica} />}
+      {inVerifica && <ConfermaBonifico key={inVerifica} id={inVerifica} onFine={fineVerifica} />}
     </>
   );
 }
@@ -136,6 +136,7 @@ function Pannello({ onClose }: { onClose: () => void }) {
     setBusy(b.id);
     try {
       const r = await bonAccetta(b.id, p, manuale);
+      salvaCorreggi(null);
       salvaInVerifica(b.id);
       aggiorna();
       onClose();
@@ -344,74 +345,177 @@ function Pannello({ onClose }: { onClose: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// Barra nella pagina del documento: quietanza proposta + conferma definitiva dell'operatore
-function BarraConferma({ id, onFine }: { id: string; onFine: () => void }) {
-  const router = useRouter();
+// AZIONE PRECOMPILATA COL BONIFICO (05/10/2026, casi Esposito 108 € e Flaminia fatt. 740): accettata la proposta, nella
+// pagina del documento si apre SUBITO una finestra già riempita col bonifico (metodo bonifico, importo, data di accredito,
+// ordinante, riferimento SumUp): basta «Conferma». Le finestre della pagina (Incassa, Converti…) non chiedono più il metodo
+// finché il bonifico è in abbinamento: aprono questa. «Correggi» lascia usare la pagina (metodo proposto: bonifico).
+const CORREGGI = "bonifico_correggi";
+const APRI = "bonifici:apri";
+
+function leggiCorreggi(): string | null {
+  try { return sessionStorage.getItem(CORREGGI); } catch { return null; }
+}
+function salvaCorreggi(id: string | null) {
+  try { if (id) sessionStorage.setItem(CORREGGI, id); else sessionStorage.removeItem(CORREGGI); } catch { /* storage non disponibile */ }
+  window.dispatchEvent(new Event(CHIAVE));
+}
+/** Apre la finestra precompilata del bonifico in abbinamento (dalle pagine dei documenti). */
+export function apriConfermaBonifico() { window.dispatchEvent(new Event(APRI)); }
+
+/** Il bonifico in abbinamento per QUESTO documento (fattura, pro forma, ordine, sessione), se c'è. */
+export function useBonificoDelDocumento(...ids: (string | null | undefined)[]): { bonifico: Bonifico | null; correggi: boolean } {
+  const id = useSyncExternalStore(sottoscrivi, leggiInVerifica, () => null);
+  const corr = useSyncExternalStore(sottoscrivi, leggiCorreggi, () => null);
   const [b, setB] = useState<Bonifico | null>(null);
+  const chiave = ids.filter(Boolean).join(",");
+  useEffect(() => {
+    if (!id) return;
+    let vivo = true;
+    bonDettaglio(id).then((r) => { if (vivo) setB(r.bonifico); }).catch(() => { if (vivo) setB(null); });
+    return () => { vivo = false; };
+  }, [id]);
+  const p = b?.proposta_accettata;
+  const miei = chiave.split(",").filter(Boolean);
+  const tocca = !!(id && b && b.id === id && p && ["nuovo", "abbinato"].includes(b.stato) &&
+    [p.id, ...(p.ids || []), p.session_id].some((x) => x && miei.includes(x)));
+  return { bonifico: tocca ? b : null, correggi: tocca && corr === id };
+}
+
+const AZIONI_FATTURA = new Set(["bozza", "pf", "proforma", "ordine", "preventivo", "sessione"]);
+
+function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
+  const router = useRouter();
+  const [pre, setPre] = useState<BonPrecompilato | null>(null);
   const [operatore, setOperatore] = useOperatore();
-  const [sdi, setSdi] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [sdi, setSdi] = useState(false);
+  const [busy, setBusy] = useState("");
+  const [grande, setGrande] = useState(() => leggiCorreggi() !== id);
 
   useEffect(() => {
-    bonDettaglio(id).then((r) => {
+    bonPrecompilato(id).then((r) => {
       if (!r.bonifico.proposta_accettata || !["nuovo", "abbinato"].includes(r.bonifico.stato)) onFine();
-      else setB(r.bonifico);
+      else setPre(r);
     }).catch(() => onFine());
   }, [id, onFine]);
-  if (!b || !b.proposta_accettata) return null;
-  const p = b.proposta_accettata;
-  const acconto = p.tipo === "ordine" && Number(b.importo) + 0.005 < Number(p.importo);
-  const conSdi = ["bozza", "proforma", "pf", "ordine", "preventivo"].includes(p.tipo);
+  useEffect(() => {
+    const apri = () => setGrande(true);
+    window.addEventListener(APRI, apri);
+    return () => window.removeEventListener(APRI, apri);
+  }, []);
+  if (!pre) return null;
+  const b = pre.bonifico, p = b.proposta_accettata!, pg = pre.pagamento, doc = pre.documento, cf = pre.confronto;
+  const giaPagato = Math.max(0, Math.round((Number(doc.totale) - Number(doc.residuo)) * 100) / 100);
 
-  async function conferma(extra: { emetti?: boolean; crea_fattura?: boolean } = {}) {
+  async function conferma(azione: BonAzione) {
     if (!operatore) { toast.error("Scegli l'operatore prima di confermare"); return; }
-    setBusy(true);
+    setBusy(azione);
     try {
-      const r = await bonConferma(id, { operatore, emetti: sdi, ...extra });
-      toast.success(r.bonifico.esito || "Bonifico abbinato");
+      const conSdi = sdi && (azione === "fattura" || azione === "ordine" || (azione === "quietanza" && p.tipo === "bozza"));
+      const r = await bonConferma(id, { operatore, azione, emetti: conSdi, crea_fattura: azione === "fattura" ? true : undefined });
+      salvaCorreggi(null);
+      if (r.scontrino) toast.success(`Scontrino di ${eur(r.scontrino.totale ?? pg.importo_da_registrare)} inviato al registratore, pagato con bonifico: il numero lo restituisce il registratore`, { duration: 10000 });
+      else toast.success(r.bonifico.esito || "Bonifico registrato");
       if (r.invio && !r.invio.ok) toast.warning(`Invio allo SdI non riuscito: ${r.invio.errore || ""}`, { duration: 15000 });
       onFine();
       aggiorna();
       if (r.fattura_id) router.push(`/fatturazione?id=${r.fattura_id}`);
       else window.location.reload();
-    } catch (e) { toastErrore(e); } finally { setBusy(false); }
+    } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
-  async function annulla() {
-    setBusy(true);
-    try { await bonAnnullaAccettazione(id); onFine(); aggiorna(); } catch (e) { toastErrore(e); } finally { setBusy(false); }
+  async function nonCorrisponde() {
+    setBusy("annulla");
+    try { await bonAnnullaAccettazione(id); salvaCorreggi(null); onFine(); aggiorna(); } catch (e) { toastErrore(e); } finally { setBusy(""); }
+  }
+  function correggi() {
+    salvaCorreggi(id);
+    setGrande(false);
+    toast.info("Registra il pagamento dalla pagina: il metodo proposto è il bonifico");
   }
 
+  const riga = `${NOME_TIPO[p.tipo]} ${doc.numero || p.numero || ""}${doc.nome || p.nome ? ` (${doc.nome || p.nome})` : ""}`;
+  if (!grande) return (
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-emerald-500 bg-emerald-50 px-3 py-2 shadow-2xl dark:bg-emerald-950/90 print:hidden lg:left-64">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 text-sm">
+        <div className="min-w-0 flex-1"><b>Bonifico {eur(pg.importo)}</b> da {pg.ordinante || "—"} → {riga}
+          <span className="text-xs text-muted-foreground"> · accredito {giorno(pg.data)} · rif. SumUp {pg.transaction_code}</span></div>
+        <Button size="sm" onClick={() => setGrande(true)}><Banknote /> Apri la conferma del bonifico</Button>
+        <Button size="sm" variant="ghost" disabled={!!busy} onClick={nonCorrisponde}>Non corrisponde</Button>
+        <Link href="#" onClick={(e) => { e.preventDefault(); salvaCorreggi(null); onFine(); }} className="self-center text-xs underline">Nascondi</Link>
+      </div>
+    </div>
+  );
+
+  const colore = cf.esito === "uguale" ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+    : cf.esito === "parziale" ? "border-amber-500 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+    : "border-red-500 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-100";
+  const scontrino = pre.azioni.some((a) => a.azione === "scontrino");
+  const fattura = pre.azioni.some((a) => (a.azione === "fattura" || a.azione === "ordine" || (a.azione === "quietanza" && p.tipo === "bozza"))) && AZIONI_FATTURA.has(p.tipo);
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-amber-500 bg-amber-50 px-3 py-2 shadow-2xl dark:bg-amber-950/90 print:hidden lg:left-64">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-        <div className="min-w-0 flex-1">
-          <div className="font-semibold">
-            Bonifico {eur(b.importo)} da {b.ordinante || "—"} → {NOME_TIPO[p.tipo]} {p.numero} {p.nome ? `(${p.nome})` : ""} {eur(p.importo)}
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4 print:hidden" role="dialog" aria-modal="true"
+      aria-label="Conferma del bonifico arrivato" onClick={() => setGrande(false)}>
+      <div className="max-h-[95vh] w-full max-w-xl space-y-3 overflow-y-auto rounded-t-xl bg-background p-4 shadow-2xl sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-semibold"><Banknote className="size-5 text-emerald-600" /> Bonifico arrivato → {riga}</h2>
+            <div className="text-sm text-muted-foreground">Il pagamento è già noto: controlla e premi <b>Conferma</b>. Non serve scegliere il metodo.</div>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Quietanza: <b>bonifico</b> · valuta {giorno(b.data_valuta || b.data)} · rif. SumUp {b.codice.split(":").pop()} · causale «{b.causale || "—"}»
-            {Math.abs(Number(b.importo) - Number(p.importo)) > 0.005 && <span className="ml-1 font-semibold text-red-700 dark:text-red-300">· importo diverso dal documento: verifica!</span>}
-          </div>
+          <Button variant="ghost" size="icon-sm" onClick={() => setGrande(false)} aria-label="Riduci"><X /></Button>
         </div>
-        <SceltaOperatore className="w-72" value={operatore} onChange={setOperatore} compatto />
-        {conSdi && (
-          <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={sdi} onChange={(e) => setSdi(e.target.checked)} /> invia subito allo SdI</label>
+
+        <div className="grid grid-cols-2 gap-2 text-sm" data-testid="bonifico-precompilato">
+          <Campo l="Metodo" v={<span className="rounded bg-emerald-600 px-2 py-0.5 text-xs font-semibold text-white">Bonifico</span>} />
+          <Campo l="Importo del bonifico" v={<span className="text-lg font-bold tabular-nums">{eur(pg.importo)}</span>} />
+          <Campo l="Data di accredito" v={giorno(pg.data)} />
+          <Campo l="Ordinante" v={pg.ordinante || "—"} />
+          <Campo l="Rif. SumUp (transaction code)" v={<span className="font-mono">{pg.transaction_code}</span>} />
+          <Campo l="Causale" v={pg.causale || "—"} />
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 text-center text-sm">
+          <div className="rounded-md border p-2"><div className="text-[11px] uppercase text-muted-foreground">Totale documento</div><div className="font-semibold tabular-nums">{eur(doc.totale)}</div></div>
+          <div className="rounded-md border p-2"><div className="text-[11px] uppercase text-muted-foreground">Già pagato</div><div className="font-semibold tabular-nums">{eur(giaPagato)}</div></div>
+          <div className="rounded-md border p-2"><div className="text-[11px] uppercase text-muted-foreground">Resta prima del bonifico</div><div className="font-semibold tabular-nums">{eur(doc.residuo)}</div></div>
+        </div>
+        <div className={`rounded-md border-2 px-3 py-2 text-sm ${colore}`}>
+          <div className="font-semibold">Si registra: {eur(pg.importo_da_registrare)} con bonifico del {giorno(pg.data)}
+            {cf.esito === "uguale" ? " · documento pagato per intero" : cf.esito === "parziale" ? ` · resta da incassare ${eur(cf.resta_dopo)}` : ` · eccedenza ${eur(cf.eccedenza)}`}</div>
+          <div className="text-xs">{cf.testo}</div>
+        </div>
+        {!pre.gestibile && <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200">
+          Su questo documento non resta nulla da incassare: premi «Non corrisponde» e abbina il bonifico a un altro documento.</div>}
+
+        <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
+        {scontrino && <div className="text-xs text-muted-foreground">Scontrino: si batte sul registratore come pagamento elettronico (bonifico). Il numero dello scontrino lo restituisce il registratore: non va scritto a mano.</div>}
+        {fattura && (
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4" checked={sdi} onChange={(e) => setSdi(e.target.checked)} />
+            invia subito allo SdI (altrimenti la fattura resta in bozza da controllare)</label>
         )}
-        <div className="flex flex-wrap gap-1.5">
-          {p.tipo === "bozza" && <Button size="sm" disabled={busy} onClick={() => conferma()}>{busy ? <Loader2 className="animate-spin" /> : <Check />} {sdi ? "Emetti e invia" : "Quietanza (emetto dopo)"}</Button>}
-          {p.tipo === "fattura" && <Button size="sm" disabled={busy} onClick={() => conferma()}><Check /> Conferma incasso</Button>}
-          {p.tipo === "fatture" && <Button size="sm" disabled={busy} onClick={() => conferma()}><Check /> Conferma incasso delle fatture</Button>}
-          {(p.tipo === "proforma" || p.tipo === "pf") && <Button size="sm" disabled={busy} onClick={() => conferma()}><Check /> Trasforma in fattura</Button>}
-          {p.tipo === "sessione" && <>
-            <Button size="sm" disabled={busy} onClick={() => conferma({ crea_fattura: false })}><Check /> Registra incasso</Button>
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => conferma({ crea_fattura: true })}>Incasso + fattura quietanzata</Button>
-          </>}
-          {p.tipo === "ordine" && <Button size="sm" disabled={busy} onClick={() => conferma()}><Check /> Registra {acconto ? "acconto" : "saldo"} con fattura</Button>}
-          {p.tipo === "preventivo" && <Button size="sm" disabled={busy} onClick={() => conferma()}><Check /> Converti in ordine e registra incasso</Button>}
-          <Button size="sm" variant="ghost" disabled={busy} onClick={annulla}>Non corrisponde</Button>
-          <Link href="#" onClick={(e) => { e.preventDefault(); onFine(); }} className="self-center text-xs underline">Nascondi</Link>
+
+        <div className="flex flex-col gap-2">
+          {pre.azioni.map((a, i) => (
+            <Button key={a.azione} size="lg" disabled={!!busy || !operatore || !pre.gestibile}
+              className={`h-auto min-h-12 whitespace-normal text-base ${i === 0 ? "bg-emerald-600 font-semibold text-white hover:bg-emerald-700" : ""}`}
+              variant={i === 0 ? "default" : "outline"} onClick={() => conferma(a.azione)}>
+              {busy === a.azione ? <Loader2 className="animate-spin" /> : <Check />} {a.etichetta}
+            </Button>
+          ))}
+          {!operatore && <div className="text-xs text-red-700">Scegli chi sta facendo l&apos;operazione per confermare.</div>}
+        </div>
+        <div className="flex flex-wrap items-center gap-3 border-t pt-2 text-sm">
+          <button type="button" className="underline" onClick={correggi}>Correggi importo o metodo</button>
+          <button type="button" className="text-red-700 underline dark:text-red-300" disabled={!!busy} onClick={nonCorrisponde}>Non corrisponde</button>
+          <button type="button" className="ml-auto text-xs text-muted-foreground underline" onClick={() => setGrande(false)}>Riduci</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Campo({ l, v }: { l: string; v: ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-md border bg-muted/30 px-2 py-1.5">
+      <div className="text-[11px] uppercase text-muted-foreground">{l}</div>
+      <div className="break-words">{v}</div>
     </div>
   );
 }

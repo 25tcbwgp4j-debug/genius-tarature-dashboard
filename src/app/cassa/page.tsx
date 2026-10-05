@@ -282,7 +282,7 @@ export default function CassaPage() {
             {Math.abs(tot - daBonifici.totale) > 0.005 && <div className="font-semibold text-red-700">Il carrello ({eur(tot)}) è diverso dal bonifico ({eur(daBonifici.totale)}).</div>}
             <Button size="sm" disabled={!carrello.length || !!busy || !operatore} onClick={async () => {
               if (Math.abs(tot - daBonifici.totale) > 0.005 && !confirm(`Il carrello (${eur(tot)}) non è uguale al bonifico (${eur(daBonifici.totale)}). Emettere comunque?`)) return;
-              const sc = await scontrino([{ modalita: "bonifico", importo: tot }]);
+              const sc = await scontrino([{ modalita: "bonifico", importo: tot, ...(daBonifici.ids.length === 1 ? { bonifico_id: daBonifici.ids[0] } : {}) }]);
               if (!sc) return;
               try {
                 await fetchAPI("/api/bonifici/al-banco/usa", { method: "POST", body: JSON.stringify({ bonifico_ids: daBonifici.ids, documento_tipo: "scontrino",

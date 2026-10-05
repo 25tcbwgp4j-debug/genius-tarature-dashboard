@@ -1321,7 +1321,8 @@ export interface Prodotto {
 export interface RigaCassa { prodotto_id?: string | null; /** pezzo serializzato venduto (iPhone, Mac…) */ pezzo_id?: string | null; descrizione: string; quantita: number; prezzo: number; aliquota: number; sconto?: number;
   /** regime IVA della riga: margine (N5) o esente (N4/N3.x); senza = aliquota */
   regime?: 'margine' | 'esente' | null; natura?: string | null; costo_acquisto?: number | null }
-export interface PagamentoScontrino { modalita: string; importo: number; consegnato?: number; pos_incasso_id?: string; transaction_code?: string | null; riferimento?: string }
+export interface PagamentoScontrino { modalita: string; importo: number; consegnato?: number; pos_incasso_id?: string; transaction_code?: string | null; riferimento?: string;
+  /** bonifico arrivato sul conto (incassi.id): la riga del registro pagamenti lo collega (05/10/2026) */ bonifico_id?: string }
 export interface Scontrino {
   id: string; stato: string; righe: RigaCassa[]; totale: number; pagamenti: PagamentoScontrino[];
   /** «non riscosso»: quanto resta da recuperare (RECUPERO CREDITI) · fattura che ha sostituito lo scontrino annullato */

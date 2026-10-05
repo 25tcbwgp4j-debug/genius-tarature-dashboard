@@ -18,6 +18,7 @@ import { usePermessi as usePermessiAtt } from "@/components/permessi";
 import { cambiaAttivita } from "@/lib/api";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { Incassa, NOMI_MODALITA } from "@/components/Incassa";
+import { apriConfermaBonifico, useBonificoDelDocumento } from "@/components/BonificiAvviso";
 import { toastErrore } from "@/lib/errori";
 import {
   fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattInvia, fattLinkStripe, fattNotaCredito,
@@ -454,6 +455,9 @@ function IncassoFattura({ f, operatore, busy, onCambiato }: {
   const [rate, setRate] = useState<{ importo: string; scadenza: string }[] | null>(null);
   const modificabile = ["bozza", "errore", "scartata"].includes(f.stato);
   const desc = `Fattura ${f.numero || "(bozza)"} — ${f.controparte_nome || ""}`;
+  // bonifico arrivato e abbinato a questa fattura (05/10/2026, caso Flaminia fatt. 740): niente «come registrare il
+  // pagamento?» — si propone il bonifico già incassato; «Correggi» (nella finestra) riporta qui i metodi
+  const { bonifico: bon, correggi: bonCorreggi } = useBonificoDelDocumento(f.id);
 
   async function annulla(pid: string, imp: number) {
     const motivo = prompt(`Annullare l'incasso di ${eur(imp)}? Scrivi il motivo (es. registrato per errore):`);
@@ -503,7 +507,15 @@ function IncassoFattura({ f, operatore, busy, onCambiato }: {
           ))}
         </div>
       )}
-      {residuo > 0.005 && (
+      {residuo > 0.005 && bon && !bonCorreggi && (
+        <div className="space-y-2 rounded-md border-2 border-emerald-500 bg-emerald-50 p-3 text-sm text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100">
+          <div className="font-semibold">Bonifico già incassato: {eur(Number(bon.importo))} da {bon.ordinante || "—"}</div>
+          <div className="text-xs">Metodo <b>bonifico</b> · accredito {(bon.data_valuta || bon.data).slice(0, 10).split("-").reverse().join("/")} · rif. SumUp {bon.codice.split(":").pop()}
+            {Math.abs(Number(bon.importo) - residuo) > 0.005 && <b> · {Number(bon.importo) < residuo ? `dopo restano ${eur(residuo - Number(bon.importo))}` : `eccedenza ${eur(Number(bon.importo) - residuo)}`}</b>}</div>
+          <Button className="h-11 w-full bg-emerald-600 text-base font-semibold text-white hover:bg-emerald-700" onClick={apriConfermaBonifico}>Conferma incasso del bonifico</Button>
+        </div>
+      )}
+      {residuo > 0.005 && !(bon && !bonCorreggi) && (
         <>
           <Incassa key={`${f.id}-${pagato}`} modo="documento" totale={totale} giaPagato={pagato} documentoTipo="fattura" descrizione={desc}
             testoCliente={f.controparte_nome || ""} disabled={!!busy || !operatore} motivo={!operatore ? "scegli l'operatore" : ""}

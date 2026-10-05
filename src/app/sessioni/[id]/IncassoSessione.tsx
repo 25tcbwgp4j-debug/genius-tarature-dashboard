@@ -19,6 +19,7 @@ import { parseDec } from "@/components/DecInput";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { docIncassa, fetchAPI, type StatoPagamentoSessione } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
+import { apriConfermaBonifico, useBonificoDelDocumento } from "@/components/BonificiAvviso";
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
 
@@ -33,6 +34,8 @@ export function IncassoSessione({ sessionId, st, disabled, onFatto }: {
   const r = st?.riepilogo;
   const fattura = st?.fattura || null;
   const pf = st?.proforma_doc && st.proforma_doc.stato === "aperto" ? st.proforma_doc : null;
+  // bonifico arrivato e abbinato a questa sessione (05/10/2026): si apre la conferma precompilata, non la scelta del metodo
+  const { bonifico: bon, correggi: bonCorreggi } = useBonificoDelDocumento(sessionId, fattura?.id, pf?.id);
   const totale = r?.totale ?? 0;
   const pagato = r?.pagato ?? 0;
   const residuo = r ? r.residuo : 0;
@@ -54,7 +57,7 @@ export function IncassoSessione({ sessionId, st, disabled, onFatto }: {
 
   return (
     <>
-      <Button className="mt-1 h-11 w-full text-xs font-bold" variant="outline" disabled={disabled} onClick={() => setAperto(true)}
+      <Button className="mt-1 h-11 w-full text-xs font-bold" variant="outline" disabled={disabled} onClick={() => (bon && !bonCorreggi ? apriConfermaBonifico() : setAperto(true))}
         title="Pagamento in più volte, con metodi diversi, acconto e saldo">
         <Wallet className="size-4" /> {pagato > 0.005 ? `INCASSA IL RESTO (${eur(residuo)})` : "INCASSA · ACCONTO"}
       </Button>

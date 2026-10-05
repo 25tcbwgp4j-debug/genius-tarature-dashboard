@@ -86,8 +86,22 @@ export const bonAccetta = (id: string, proposta: BonProposta, manuale = false): 
 export const bonAnnullaAccettazione = (id: string) => fetchAPI(`/api/bonifici/${id}/annulla-accettazione`, { method: "POST", body: "{}" });
 export const bonIgnora = (id: string, motivo: string) =>
   fetchAPI(`/api/bonifici/${id}/ignora`, { method: "POST", body: JSON.stringify({ motivo }) });
-export const bonConferma = (id: string, body: { operatore: string; emetti?: boolean; crea_fattura?: boolean }):
-  Promise<{ bonifico: Bonifico; fattura_id?: string; invio?: { ok: boolean; numero?: string; errore?: string } }> =>
+/** Azione PRECOMPILATA col bonifico (05/10/2026): tutto già pronto, basta «Conferma». */
+export type BonAzione = "quietanza" | "fattura" | "scontrino" | "incasso" | "ordine";
+export interface BonPrecompilato {
+  bonifico: Bonifico;
+  pagamento: { metodo: "bonifico"; importo: number; importo_da_registrare: number; data: string; transaction_code: string;
+    riferimento: string; ordinante: string | null; causale: string | null; iban: string | null };
+  documento: { tipo: BonTipo; id: string | null; numero: string | null; nome: string | null; totale: number; residuo: number; session_id?: string | null };
+  confronto: { esito: "uguale" | "parziale" | "eccedenza"; differenza: number; resta_dopo: number; eccedenza: number; testo: string };
+  azioni: { azione: BonAzione; etichetta: string }[];
+  gestibile: boolean;
+}
+export const bonPrecompilato = (id: string): Promise<BonPrecompilato> => fetchAPI(`/api/bonifici/${id}/precompilato`);
+
+export const bonConferma = (id: string, body: { operatore: string; azione?: BonAzione; emetti?: boolean; crea_fattura?: boolean }):
+  Promise<{ bonifico: Bonifico; fattura_id?: string; documento_id?: string; scontrino?: { id: string; stato?: string; totale?: number };
+    invio?: { ok: boolean; numero?: string; errore?: string } }> =>
   fetchAPI(`/api/bonifici/${id}/conferma`, { method: "POST", body: JSON.stringify(body) });
 export const bonControlla = (): Promise<BonStato & { live: boolean; nota?: string; nuovi?: number }> =>
   fetchAPI("/api/bonifici/controlla", { method: "POST", body: "{}" });

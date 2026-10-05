@@ -21,6 +21,8 @@ import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita, type Attivi
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
+import { apriConfermaBonifico, useBonificoDelDocumento } from "@/components/BonificiAvviso";
+import type { Bonifico } from "@/lib/bonifici";
 import {
   cassaGiornata, getDocumentoPdfUrl, docAcconto, docAnnulla, docAvvisa, docConverti, docCrea, docDettaglio, docElenco, docFase, docModifica, docRitira,
   fattAnagrafiche, fattCatalogo, fattEstraiSalva,
@@ -279,6 +281,17 @@ async function avvisaCliente(d: DocumentoCliente, canale: "email" | "whatsapp", 
   } catch (e) { toastErrore(e); return null; }
 }
 
+/** Bonifico già arrivato per questo documento: un clic apre la conferma precompilata (05/10/2026). */
+function BannerBonifico({ b }: { b: Bonifico }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border-2 border-emerald-500 bg-emerald-50 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100">
+      <span className="min-w-0 flex-1">Pagato con <b>bonifico di {eur(b.importo)}</b> da <b>{b.ordinante || "—"}</b>
+        {" "}(accredito {(b.data_valuta || b.data).slice(0, 10).split("-").reverse().join("/")} · rif. SumUp {b.codice.split(":").pop()})</span>
+      <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={apriConfermaBonifico}>Conferma col bonifico</Button>
+    </div>
+  );
+}
+
 function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModifica }: {
   id: string; proponiIncasso?: boolean; onChiudi: () => void; onCambiato: () => void; onModifica: (d: DocumentoCliente) => void;
 }) {
@@ -301,15 +314,24 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
     docDettaglio(id).then((r) => { setD(r); setErrore(""); }).catch((e: Error) => setErrore(e.message || "Errore"));
   }, [id]);
   useEffect(() => { carica(); }, [carica]);
+  // bonifico arrivato e abbinato a questo documento (05/10/2026, caso Esposito PF 10/2026): le conversioni aprono la
+  // finestra PRECOMPILATA col bonifico (fattura o scontrino già pagati), non la scelta del metodo; con «Correggi» si usa
+  // il pannello qui sotto, col bonifico come metodo proposto (mai contanti)
+  const { bonifico: bonDoc, correggi: bonCorreggi } = useBonificoDelDocumento(id, d?.session_id);
+  const apriIncasso = (x: { modo: "acconto" | "intero"; titolo?: string; poiRitira?: boolean }) => {
+    if (bonDoc && !bonCorreggi) { apriConfermaBonifico(); return; }
+    setIncasso(x);
+  };
 
   /** Apre il pannello dell'azione con i valori giusti (numero scontrino sempre vuoto: niente numeri riusati). */
   function apri(a: "acconto" | "scontrino" | "fattura") {
+    if (bonDoc && !bonCorreggi) { apriConfermaBonifico(); return; }
     setAzione(a);
     setCorreggi(false);
     const gia = d?.pagamento_sessione;
     setF(a === "fattura"
       ? { importo: "", modalita: gia?.pagata ? gia.modalita : "bonifico", certificato: "fattura", numero: "", pagata: false }
-      : { importo: "", modalita: "contanti", certificato: "scontrino", numero: "", pagata: false });
+      : { importo: "", modalita: bonDoc ? "bonifico" : "contanti", certificato: "scontrino", numero: "", pagata: false });
     setCassaOggiChiusa(false);
     // acconti e scontrini entrano nella cassa di OGGI: avviso subito se è già chiusa
     cassaGiornata(oggiRoma()).then((r) => setCassaOggiChiusa(r.giornata.stato === "chiusa")).catch(() => undefined);
@@ -346,7 +368,7 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
     if (!d) return;
     if (daCert(d) > 0.005) {
       setProposta(false);
-      setIncasso({ modo: "intero", titolo: `Ritiro: prima il saldo di ${eur(daCert(d))}`, poiRitira: true });
+      apriIncasso({ modo: "intero", titolo: `Ritiro: prima il saldo di ${eur(daCert(d))}`, poiRitira: true });
       return;
     }
     const attesa = d.residuo > 0.005;
@@ -484,9 +506,11 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
             <Button size="icon" variant="ghost" onClick={onChiudi}><X className="size-4" /></Button>
           </div>
         </div>
+        {aperto && d.tipo === "ordine" && bonDoc && <BannerBonifico b={bonDoc} />}
         {aperto && d.tipo !== "ordine" && (
           // Christian 02/10/2026: operatore e conversioni IN ALTO (prima erano in fondo, sotto l'anteprima)
           <Card className="space-y-2 border-2 border-primary/30 bg-primary/5 p-3">
+            {bonDoc && <BannerBonifico b={bonDoc} />}
             <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
             <div className="flex flex-wrap gap-2">
               <Button size="lg" className="bg-emerald-600 font-semibold text-white hover:bg-emerald-700" onClick={() => apri("fattura")}><FileText className="mr-1 size-5" />Converti in fattura</Button>
@@ -596,8 +620,8 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
           <Card className="space-y-2 border-2 border-emerald-400 bg-emerald-50/60 p-3 dark:bg-emerald-950/20">
             <div className="font-semibold">✅ {d.sigla} salvato. Il cliente paga adesso?</div>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => { setProposta(false); setIncasso({ modo: "acconto" }); }}><Wallet className="mr-1 size-4" />Acconto</Button>
-              <Button onClick={() => { setProposta(false); setIncasso({ modo: "intero" }); }}><Wallet className="mr-1 size-4" />Pagamento totale {eur(daCert(d))}</Button>
+              <Button onClick={() => { setProposta(false); apriIncasso({ modo: "acconto" }); }}><Wallet className="mr-1 size-4" />Acconto</Button>
+              <Button onClick={() => { setProposta(false); apriIncasso({ modo: "intero" }); }}><Wallet className="mr-1 size-4" />Pagamento totale {eur(daCert(d))}</Button>
               <Button variant="outline" onClick={() => setProposta(false)}>Più tardi (resta da pagare)</Button>
             </div>
           </Card>
@@ -619,7 +643,7 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
         {aperto && d.tipo === "ordine" && !incasso && (
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
-              {daCert(d) > 0.005 && <Button variant="outline" onClick={() => { setProposta(false); setIncasso({ modo: d.pagato ? "intero" : "acconto" }); }}>
+              {daCert(d) > 0.005 && <Button variant="outline" onClick={() => { setProposta(false); apriIncasso({ modo: d.pagato ? "intero" : "acconto" }); }}>
                 <Wallet className="mr-1 size-4" />Registra pagamento</Button>}
               {(d.fase || "da_ordinare") === "da_ordinare" && <Button variant="outline" disabled={busy} onClick={() => setFornitore("ordinato")}>
                 <Truck className="mr-1 size-4" />Ordinato al fornitore</Button>}
