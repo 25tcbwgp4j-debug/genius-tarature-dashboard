@@ -157,6 +157,8 @@ export default function CassaGiornataPage() {
   const [operatore, setOperatore] = useOperatore();
   const [filtroAtt, setFiltroAtt] = useState("");   // Genius Lab Gestionale: righe Tarature / Apple
   const [convalida, setConvalida] = useState<{ aperta: boolean; motivo: string }>({ aperta: false, motivo: "" });
+  // dettaglio di una riga (05/10/2026): scontrino con le righe vendute, oppure riga a mano senza documento
+  const [dettaglio, setDettaglio] = useState<{ riga: RigaGiornata; scontrino?: Scontrino | null; collegato?: Scontrino | null } | null>(null);
 
   // Salvataggi con attesa di 700 ms: prima di ogni azione (chiusura, conferma, righe, prelievi, cambio giorno)
   // si «svuotano» con flush(), così il backend lavora sempre sugli ultimi numeri scritti.
@@ -411,6 +413,21 @@ export default function CassaGiornataPage() {
     });
   }
 
+  /** Clic su una riga (05/10/2026): apre SEMPRE il documento. Fattura → scheda fattura, ordine → ordine (nuova scheda,
+   *  la cassa resta aperta); scontrino → dettaglio con righe e pagamenti; riga a mano → i suoi dati. */
+  async function apriDocumento(r: RigaGiornata) {
+    if (r.fonte === "fattura" || r.fonte === "fattura_prec") { window.open(`/fatturazione?id=${encodeURIComponent(r.id)}`, "_blank"); return; }
+    if (r.fonte === "manuale" && r.documento_id) { window.open(`/ordini?id=${encodeURIComponent(r.documento_id)}`, "_blank"); return; }
+    if (r.fonte !== "scontrino") { setDettaglio({ riga: r }); return; }
+    setDettaglio({ riga: r, scontrino: undefined });
+    try {
+      const l: { scontrini: Scontrino[] } = await cassaScontrini(giorno);
+      const s = l.scontrini.find((x) => x.id === r.id) || null;
+      const coll = s?.rif_scontrino_id ? l.scontrini.find((x) => x.id === s.rif_scontrino_id) || null : null;
+      setDettaglio((d) => d && d.riga.id === r.id ? { riga: r, scontrino: s, collegato: coll } : d);
+    } catch (e) { toastErrore(e); setDettaglio((d) => d && d.riga.id === r.id ? { riga: r, scontrino: null } : d); }
+  }
+
   function chiudi() {
     if (!f) return;
     return azione("chiudi", async () => {
@@ -495,6 +512,68 @@ export default function CassaGiornataPage() {
               {busy === "chiudi" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <CheckCircle2 className="mr-1 size-4" />}Convalida e chiudi
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!dettaglio} onOpenChange={(o) => !o && setDettaglio(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          {dettaglio && (() => {
+            const r = dettaglio.riga, s = dettaglio.scontrino;
+            const quando = (t?: string | null) => t ? new Date(t).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }) : "—";
+            return (<>
+              <DialogHeader>
+                <DialogTitle>{r.tipo}{r.numero ? ` n. ${r.numero}` : ""}</DialogTitle>
+                <DialogDescription>{dataIt(giorno)}{r.orario ? ` · ore ${r.orario}` : ""}{r.operatore ? ` · operatore ${r.operatore}` : ""} · {FONTE[r.fonte]}</DialogDescription>
+              </DialogHeader>
+              {r.fonte === "scontrino" && s === undefined && <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" />Carico lo scontrino…</div>}
+              {r.fonte === "scontrino" && s === null && <div className="text-sm text-red-700">Scontrino non trovato.</div>}
+              {s ? (
+                <div className="space-y-3 text-sm">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <span className="text-muted-foreground">Numero RT</span><span className="font-medium">{s.numero_rt || "— (non ancora emesso)"}</span>
+                    <span className="text-muted-foreground">Data e ora</span><span>{quando(s.data_rt || s.created_at)}</span>
+                    <span className="text-muted-foreground">Operatore</span><span>{s.operatore || "—"}</span>
+                    <span className="text-muted-foreground">Stato</span><span>{s.stato.replace("_", " ")}</span>
+                    {s.codice_lotteria && <><span className="text-muted-foreground">Lotteria</span><span>{s.codice_lotteria}</span></>}
+                    {s.motivo && <><span className="text-muted-foreground">Motivo</span><span>{s.motivo}</span></>}
+                    {dettaglio.collegato && <><span className="text-muted-foreground">Scontrino originale</span><span>n. {dettaglio.collegato.numero_rt || "—"} del {quando(dettaglio.collegato.data_rt || dettaglio.collegato.created_at)}</span></>}
+                    {r.intestato && <><span className="text-muted-foreground">Intestato a</span><span>{r.intestato}</span></>}
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                      <tr><th className="px-2 py-1 text-left">Descrizione</th><th className="px-2 text-right">Q.tà</th><th className="px-2 text-right">Prezzo</th><th className="px-2 text-right">IVA</th><th className="px-2 text-right">Totale</th></tr>
+                    </thead>
+                    <tbody>
+                      {(s.righe || []).map((x, i) => (
+                        <tr key={i} className="border-t align-top">
+                          <td className="whitespace-normal break-words px-2 py-1">{x.descrizione}</td>
+                          <td className="px-2 text-right tabular-nums">{x.quantita}</td>
+                          <td className="px-2 text-right tabular-nums">{eur(x.prezzo)}</td>
+                          <td className="px-2 text-right">{x.regime === "margine" ? "margine" : x.regime === "esente" ? (x.natura || "esente") : `${x.aliquota}%`}</td>
+                          <td className="px-2 text-right tabular-nums">{eur(x.prezzo * x.quantita - (x.sconto || 0))}</td>
+                        </tr>
+                      ))}
+                      <tr className="border-t-2 font-semibold"><td className="px-2 py-1" colSpan={4}>Totale</td><td className="px-2 text-right tabular-nums">{eur(s.totale)}</td></tr>
+                    </tbody>
+                  </table>
+                  <div>
+                    <div className="text-xs font-semibold uppercase text-muted-foreground">Pagamenti</div>
+                    {(s.pagamenti || []).filter((p) => Number(p.importo)).map((p, i) => (
+                      <div key={i} className="flex justify-between border-b py-0.5"><span>{p.modalita.replace("_", " ")}{p.transaction_code ? ` · ${p.transaction_code}` : ""}</span><span className="tabular-nums">{eur(p.importo)}</span></div>
+                    ))}
+                  </div>
+                  {s.fattura_id && <Button size="sm" variant="outline" onClick={() => window.open(`/fatturazione?id=${encodeURIComponent(s.fattura_id!)}`, "_blank")}><FileText className="mr-1 size-4" />Apri la fattura collegata</Button>}
+                </div>
+              ) : r.fonte !== "scontrino" && (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <span className="text-muted-foreground">Cosa paga</span><span className="whitespace-normal break-words">{r.descrizione || "—"}</span>
+                  {r.modello && <><span className="text-muted-foreground">Modello</span><span>{r.modello}</span></>}
+                  {COL.filter(([k]) => r[k]).map(([k, l]) => <span key={k} className="contents"><span className="text-muted-foreground">{l}</span><span className="tabular-nums">{eur(r[k])}</span></span>)}
+                  <span className="text-muted-foreground">Intestato a</span><span>{r.intestato || "—"}</span>
+                  <span className="col-span-2 mt-1 text-xs text-muted-foreground">Riga registrata a mano nella cassa: non c&apos;è un documento collegato.</span>
+                </div>
+              )}
+            </>);
+          })()}
         </DialogContent>
       </Dialog>
       <div className="flex flex-wrap items-center gap-2">
@@ -671,15 +750,17 @@ export default function CassaGiornataPage() {
               <tr><th className="px-2 py-2 text-left">Orario</th><th className="px-2 text-left">Documento</th><th className="px-2 text-left">Num.</th>
                 <th className="px-2 text-left" title="Operatore">Op.</th>
                 {COL.map(([k, l]) => <th key={k} className="px-2 text-right">{l}</th>)}
-                <th className="px-2 text-left">Cosa paga?</th><th className="px-2 text-left">Modello</th><th className="px-2" /></tr>
+                <th className="min-w-[280px] px-2 text-left">Cosa paga?</th><th className="px-2 text-left">Modello</th>
+                <th className="min-w-[140px] px-2 text-left">Intestato a</th><th className="px-2" /></tr>
             </thead>
             <tbody>
-              <tr className="border-t bg-muted/20"><td /><td className="px-2 py-1 font-medium">APERTURA</td><td>cassa</td><td /><td className="px-2 text-right tabular-nums">{eur(rp.apertura)}</td><td colSpan={7} /></tr>
+              <tr className="border-t bg-muted/20"><td /><td className="px-2 py-1 font-medium">APERTURA</td><td>cassa</td><td /><td className="px-2 text-right tabular-nums">{eur(rp.apertura)}</td><td colSpan={8} /></tr>
               {f.righe.filter((r) => !filtroAtt || r.attivita === filtroAtt).map((r) => {
                 const negativo = ["STORNO", "ANNULLO"].includes(r.tipo);
                 const stornabile = r.tipo === "SCONTRINO" && (r.fonte === "manuale" || r.fonte === "scontrino") && r.totale > 0;
                 return (
-                <tr key={`${r.fonte}-${r.id}`} className={`border-t ${negativo ? "bg-red-50/70 dark:bg-red-950/20" : ""}`}>
+                <tr key={`${r.fonte}-${r.id}`} title="Apri il documento" onClick={() => apriDocumento(r)}
+                  className={`cursor-pointer border-t align-top hover:bg-sky-50 dark:hover:bg-sky-950/30 ${negativo ? "bg-red-50/70 dark:bg-red-950/20" : ""}`}>
                   <td className="px-2 py-1 tabular-nums text-muted-foreground" title={r.orario ? undefined : "senza orario: in coda alla giornata"}>{r.orario || "—"}</td>
                   <td className="px-2 py-1">{negativo
                     ? <span className="rounded bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">{r.tipo}</span>
@@ -687,9 +768,11 @@ export default function CassaGiornataPage() {
                   <td className="px-2">{r.numero}</td>
                   <td className="px-2"><BadgeOperatore op={r.operatore} /></td>
                   {COL.map(([k]) => <td key={k} className={`px-2 text-right tabular-nums ${r[k] ? (r[k] < 0 ? "text-red-600" : "") : "text-muted-foreground/40"}`}>{r[k] ? eur(r[k]) : "0"}</td>)}
-                  <td className="max-w-[280px] truncate px-2" title={r.descrizione}>{r.descrizione}</td>
-                  <td className="px-2">{r.modello}</td>
-                  <td className="whitespace-nowrap px-2 text-right">
+                  {/* cosa paga: TUTTE le righe del documento, a capo, mai troncate (05/10/2026) */}
+                  <td className="whitespace-normal break-words px-2 py-1 font-medium">{r.descrizione}</td>
+                  <td className="px-2 py-1">{r.modello}</td>
+                  <td className="whitespace-normal break-words px-2 py-1 text-muted-foreground">{r.intestato || ""}</td>
+                  <td className="whitespace-nowrap px-2 py-1 text-right" onClick={(e) => e.stopPropagation()}>
                     {stornabile && (
                       <button className="mr-2 text-muted-foreground hover:text-red-600" title="Storno / reso o annullo (va nella cassa di oggi)" disabled={!!busy}
                         onClick={() => apriStorno(r)}>{busy === "storno" ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}</button>)}
@@ -701,9 +784,9 @@ export default function CassaGiornataPage() {
                 </tr>
                 );
               })}
-              {!f.righe.length && <tr><td colSpan={12} className="px-2 py-4 text-center text-muted-foreground">Nessun movimento</td></tr>}
+              {!f.righe.length && <tr><td colSpan={13} className="px-2 py-4 text-center text-muted-foreground">Nessun movimento</td></tr>}
               <tr className="border-t-2 font-semibold"><td className="px-2 py-1" colSpan={4}>TOTALI</td>
-                {COL.map(([k]) => <td key={k} className="px-2 text-right tabular-nums">{eur(f.totali[k] + (k === "contanti" ? rp.apertura : 0))}</td>)}<td colSpan={3} /></tr>
+                {COL.map(([k]) => <td key={k} className="px-2 text-right tabular-nums">{eur(f.totali[k] + (k === "contanti" ? rp.apertura : 0))}</td>)}<td colSpan={4} /></tr>
             </tbody>
           </table>
         </Card>

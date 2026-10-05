@@ -1389,6 +1389,10 @@ export interface RigaGiornata {
   orario?: string; ts?: string | null; operatore?: string;
   /** Genius Lab Gestionale: tarature | apple */
   attivita?: 'tarature' | 'apple' | null;
+  /** a chi è intestato il documento (fattura: controparte; scontrino solo se fatturato; vuoto = nessuno) — 05/10/2026 */
+  intestato?: string;
+  /** righe a mano: ordine/documento collegato (acconti e saldi) */
+  documento_id?: string | null; certificato?: string | null;
 }
 export interface ControlloCassa { chiave: string; nome: string; atteso: number | null; trovato: number; differenza: number | null; ok: boolean; mancante: boolean; nota: string }
 export interface FoglioCassa {
