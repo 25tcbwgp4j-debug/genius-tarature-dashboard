@@ -30,6 +30,7 @@ import {
   type TipoDocumento, type VistaOrdini,
 } from "@/lib/api";
 import { IncassoOrdine } from "./IncassoOrdine";
+import { AzioniProforma } from "./AzioniProforma";
 
 const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
 const MOD: [string, string][] = [["contanti", "Contanti"], ["pos_sumup", "POS SumUp"], ["bonifico", "Bonifico"], ["paypal", "PayPal"], ["carta_stripe", "Carta online (Stripe)"]];
@@ -73,7 +74,9 @@ const NOME: Record<TipoDocumento, string> = { ordine: "ordine cliente", preventi
 const TITOLO: Record<TipoDocumento, string> = { ordine: "Ordine cliente", preventivo: "Preventivo", proforma: "Fattura pro forma", ddt: "Documento di trasporto" };
 type Bozza = { id?: string; tipo: TipoDocumento; cliente_nome: string; telefono: string; email: string; anagrafica_id: string | null;
   controparte: DocumentoCliente["controparte"]; rif: string; note: string; righe: (RigaDoc & { _k?: string })[];
-  attivita?: Attivita | null };
+  attivita?: Attivita | null; scadenza?: string;
+  /** pro forma convertito o pagato (05/10/2026): si cambiano solo email e telefono, per gli invii */
+  soloContatti?: boolean; sigla?: string };
 const bozzaVuota = (tipo: TipoDocumento): Bozza => ({ tipo, cliente_nome: "", telefono: "", email: "", anagrafica_id: null, controparte: {}, rif: "", note: "", righe: [] });
 
 function Editor({ iniziale, listino, onChiudi, onSalvato }: {
@@ -110,6 +113,12 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
   async function salva() {
     if (busy) return;
     if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (b.soloContatti && b.id) {
+      setBusy(true);
+      try { onSalvato(await docModifica(b.id, { email: b.email.trim(), telefono: b.telefono.trim(), operatore })); }
+      catch (e) { toastErrore(e); } finally { setBusy(false); }
+      return;
+    }
     if (!b.cliente_nome.trim()) { toast.error("Scrivi il nome del cliente"); return; }
     const righe = b.righe.filter((r) => r.descrizione.trim()).map(({ _k, ...r }) => { void _k; return r; });
     if (!righe.length) { toast.error("Aggiungi almeno una riga"); return; }
@@ -117,7 +126,8 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
     setBusy(true);
     try {
       const corpo = { tipo: b.tipo, cliente_nome: b.cliente_nome.trim(), telefono: b.telefono, email: b.email, anagrafica_id: b.anagrafica_id,
-        controparte: b.controparte, rif: b.rif, note: b.note, righe, operatore, attivita: att };
+        controparte: { ...b.controparte, email: b.email, telefono: b.telefono }, rif: b.rif, note: b.note, righe, operatore, attivita: att,
+        ...(b.tipo === "proforma" ? { scadenza: b.scadenza || null } : {}) };
       onSalvato(b.id ? await docModifica(b.id, corpo) : await docCrea(corpo));
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
@@ -126,9 +136,22 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={chiudi}>
       <div className="h-full w-full max-w-3xl space-y-3 overflow-y-auto bg-background p-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{b.id ? "Modifica" : "Nuovo"} {NOME[b.tipo]}</h2>
+          <h2 className="text-lg font-semibold">{b.id ? "Modifica" : "Nuovo"} {NOME[b.tipo]}{b.sigla ? ` ${b.sigla}` : ""}</h2>
           <Button size="icon" variant="ghost" onClick={chiudi}><X className="size-4" /></Button>
         </div>
+        {b.soloContatti && (
+          <div className="rounded-md border-2 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+            🔒 {b.sigla} è già convertito o pagato: cliente, righe, prezzi e note non si modificano più.
+            Si possono cambiare solo <b>email e telefono</b>, per inviarlo.
+          </div>
+        )}
+        {b.soloContatti ? (
+          <Card className="grid gap-2 p-3 sm:grid-cols-2">
+            <div className="text-sm font-medium sm:col-span-2">{b.cliente_nome}</div>
+            <Input placeholder="Telefono" value={b.telefono} onChange={(e) => setB({ ...b, telefono: e.target.value })} />
+            <Input placeholder="Email" value={b.email} onChange={(e) => setB({ ...b, email: e.target.value })} />
+          </Card>
+        ) : <>
         <Card className="space-y-2 p-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">Cliente</span>
@@ -163,14 +186,20 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
             <Input placeholder="Telefono" value={b.telefono} onChange={(e) => setB({ ...b, telefono: e.target.value })} />
             <Input placeholder="Email" value={b.email} onChange={(e) => setB({ ...b, email: e.target.value })} />
           </div>
-          {(cp.piva || cp.cf || cp.indirizzo) && (
-            <div className="rounded-md bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
-              Per la fattura: {[cp.piva && `P.IVA ${cp.piva}`, cp.cf && cp.cf !== cp.piva && `CF ${cp.cf}`, cp.sdi && `SDI ${cp.sdi}`, cp.pec && `PEC ${cp.pec}`,
-                [cp.indirizzo, cp.cap, cp.comune, cp.provincia && `(${cp.provincia})`].filter(Boolean).join(" ")].filter(Boolean).join(" · ")}
+          {/* dati per la fattura (05/10/2026): tutti modificabili finché il documento è aperto */}
+          <details className="rounded-md border px-2 py-1" open={b.tipo === "proforma" || !!(cp.piva || cp.cf || cp.indirizzo)}>
+            <summary className="cursor-pointer text-xs text-muted-foreground">Dati per la fattura e la spedizione (P.IVA, CF, indirizzo, SDI, PEC)</summary>
+            <div className="mt-2 grid gap-2 sm:grid-cols-6">
+              {([["piva", "P.IVA", 2], ["cf", "Codice fiscale", 2], ["sdi", "Codice SDI", 1], ["paese", "Paese", 1], ["indirizzo", "Indirizzo e civico", 3],
+                ["cap", "CAP", 1], ["comune", "Comune", 1], ["provincia", "Prov.", 1], ["pec", "PEC", 6]] as const).map(([k, l, w]) => (
+                <label key={k} className={`text-xs text-muted-foreground ${w === 6 ? "sm:col-span-6" : w === 3 ? "sm:col-span-3" : w === 2 ? "sm:col-span-2" : "sm:col-span-1"}`}>{l}
+                  <Input className="h-8" value={(cp as Record<string, string | undefined>)[k] || ""}
+                    onChange={(e) => setB({ ...b, controparte: { ...cp, [k]: k === "provincia" || k === "paese" ? e.target.value.toUpperCase().slice(0, 2) : e.target.value } })} /></label>
+              ))}
             </div>
-          )}
+          </details>
           {b.anagrafica_id ? <div className="text-xs text-emerald-700">✓ collegato all&apos;anagrafica (dati pronti per la fattura)</div>
-            : (b.tipo === "ordine" || b.tipo === "preventivo") && <div className="text-xs text-muted-foreground">Al salvataggio il cliente va in rubrica: se c&apos;è già (stesso telefono, email o nome) si collega la sua scheda, senza doppioni.</div>}
+            : <div className="text-xs text-muted-foreground">Al salvataggio il cliente va in rubrica: se c&apos;è già (stesso telefono, email o nome) si collega la sua scheda, senza doppioni.</div>}
         </Card>
         <Card className="space-y-2 p-3">
           <div className="text-sm font-medium">Articoli</div>
@@ -199,9 +228,12 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
         <Card className="grid gap-2 p-3 sm:grid-cols-2">
           <Input placeholder="Riferimento (es. SCHEDA 63020)" value={b.rif} onChange={(e) => setB({ ...b, rif: e.target.value })} />
           <Input placeholder="Note (tempi di consegna, fornitore…)" value={b.note} onChange={(e) => setB({ ...b, note: e.target.value })} />
+          {b.tipo === "proforma" && <label className="flex items-center gap-2 text-sm text-muted-foreground">Scadenza del pagamento
+            <input type="date" className={campo} value={b.scadenza || ""} onChange={(e) => setB({ ...b, scadenza: e.target.value })} /></label>}
         </Card>
         <div className="flex items-center gap-2 text-sm"><span className="text-muted-foreground">Attività</span>
           <SceltaAttivita value={att} onChange={(a) => { setAtt(a); setSporco(true); }} /></div>
+        </>}
         <SceltaOperatore value={operatore} onChange={setOperatore} />
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={chiudi}>Annulla</Button>
@@ -576,10 +608,16 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
         )}
         {d.note && <div className="text-sm text-muted-foreground">📝 {d.note}</div>}
         {d.tipo === "proforma" && (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Button size="sm" variant="outline" onClick={() => window.open(getDocumentoPdfUrl(d.id), "_blank")}><FileText className="mr-1 size-4" />PDF del pro forma</Button>
-            {d.session_id && <a className="text-primary underline" href={`/sessioni/${d.session_id}`}>apri la sessione di taratura</a>}
-          </div>
+          <Card className="space-y-2 p-3">
+            {/* 05/10/2026: stampa, invio email/WhatsApp, divisione e spedizione su TUTTI i pro forma (anche convertiti) */}
+            <AzioniProforma d={d} onCambiato={(nd) => { if (nd) setD(nd); else carica(); onCambiato(); }} />
+            {d.scadenza && <div className="text-sm">Scadenza del pagamento: <b>{dataIt(d.scadenza)}</b></div>}
+            {(d.stato === "convertito" || d.stato === "saldato") && (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">🔒 Già {d.stato === "convertito" ? "convertito" : "pagato"}: si modificano solo email e telefono.
+                <Button size="xs" variant="ghost" onClick={() => onModifica(d)}><Pencil className="mr-1 size-3" />Email e telefono</Button></div>
+            )}
+            {d.session_id && <a className="text-sm text-primary underline" href={`/sessioni/${d.session_id}`}>apri la sessione di taratura</a>}
+          </Card>
         )}
         {d.tipo === "proforma" && (
           // il pro forma si vede com'è: lo stesso PDF che riceve il cliente (layout della fattura)
@@ -823,7 +861,8 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
       {aperto && <Dettaglio key={aperto} id={aperto} proponiIncasso={aperto === nuovoId} onChiudi={() => { setNuovoId(null); chiudiDettaglio(); }} onCambiato={carica}
         onModifica={(d) => { chiudiDettaglio(); setEditor({ id: d.id, tipo: d.tipo, cliente_nome: d.cliente_nome || "", telefono: d.telefono || "", email: d.email || "",
           anagrafica_id: d.anagrafica_id, controparte: d.controparte || {}, rif: d.rif || "", note: d.note || "", righe: d.righe,
-          attivita: d.attivita }); }} />}
+          attivita: d.attivita, scadenza: d.scadenza || "", sigla: d.sigla,
+          soloContatti: d.tipo === "proforma" && (d.stato === "convertito" || d.stato === "saldato") }); }} />}
     </div>
   );
 }

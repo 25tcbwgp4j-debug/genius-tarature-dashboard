@@ -1511,7 +1511,9 @@ export interface PagamentoDoc { /** pagamento misto dello scontrino (03/10/2026)
   in_attesa?: boolean; fattura_numero?: string | null; fattura_stato?: string | null; fattura_tipo?: string | null;
 }
 export type FaseOrdine = 'da_ordinare' | 'ordinato' | 'arrivato' | 'ritirato';
-export interface AvvisoOrdine { canale: 'email' | 'whatsapp'; il: string; destinatario: string; operatore?: string; da?: string }
+export interface AvvisoOrdine { canale: 'email' | 'whatsapp'; il: string; destinatario: string; operatore?: string; da?: string;
+  /** invio del pro forma (05/10/2026): inviata · in_coda · wa.me (linea Apple in sola lettura) */
+  tipo?: string; modo?: string; mittente?: string; linea?: string }
 export interface DocumentoCliente {
   id: string; tipo: TipoDocumento; anno: number; numero: number; sigla: string; data: string;
   stato: 'aperto' | 'convertito' | 'saldato' | 'annullato'; anagrafica_id: string | null; controparte: FattControparte;
@@ -1531,6 +1533,9 @@ export interface DocumentoCliente {
   attivita?: 'tarature' | 'apple' | null;
   /** pro forma di una sessione già pagata (link Stripe, POS, bonifico): la fattura nasce quietanzata con questo (05/10/2026) */
   pagamento_sessione?: PagamentoGiaArrivato | null;
+  /** scadenza del pagamento del pro forma (05/10/2026) */
+  scadenza?: string | null;
+  attivita_nota?: string | null;
 }
 export interface PagamentoGiaArrivato {
   pagata: boolean; fonte: 'registro' | 'sessione'; modalita: FattModalita; modalita_label: string;
@@ -1647,3 +1652,36 @@ export async function magPropostaCaricoFattura(fid: string): Promise<{ fattura: 
 export async function magCaricoFattura(fid: string, righe: Record<string, unknown>[]): Promise<{ ok: boolean; esiti: { indice: number; ok: boolean; errore?: string; pezzi?: number; quantita?: number }[] }> {
   return fetchAPI(`/api/magazzino/carico-fattura/${fid}`, { method: 'POST', body: JSON.stringify({ righe }) });
 }
+
+
+// === AZIONI SUL PRO FORMA (05/10/2026, caso PF 10/2026): stampa, invio email/WhatsApp, divisione, spedisci ===
+export interface InvioAnteprima {
+  canale: 'email' | 'whatsapp'; attivita: 'tarature' | 'apple'; destinatario: string; testo: string; invii: AvvisoOrdine[];
+  mittente?: string; firma?: string; oggetto?: string; allegato?: string;
+  numero?: string | null; link_pdf?: string; wa_link?: string | null; linea?: string; etichetta?: string; automatica?: boolean; avviso?: string | null;
+}
+export const docStampa = (id: string): Promise<{ ok: boolean; id: string; copie: number; agente_attivo: boolean }> =>
+  fetchAPI(`/api/documenti/${id}/stampa`, { method: 'POST', body: '{}' });
+export const docInvioAnteprima = (id: string, canale: 'email' | 'whatsapp'): Promise<InvioAnteprima> =>
+  fetchAPI(`/api/documenti/${id}/invio?canale=${canale}`);
+export const docInvia = (id: string, b: { canale: 'email' | 'whatsapp'; destinatario: string; testo: string; oggetto?: string; operatore: string; solo_link?: boolean }):
+  Promise<{ ok: boolean; canale: string; a: string; modo?: string; wa_link?: string | null; avviso?: string | null; mittente?: string }> =>
+  fetchAPI(`/api/documenti/${id}/invia`, { method: 'POST', body: JSON.stringify(b) });
+export const docSposta = (id: string, b: { attivita: 'tarature' | 'apple'; conferma?: boolean; anche_collegati?: boolean }):
+  Promise<DocumentoCliente & { collegati_spostati: string[] }> =>
+  fetchAPI(`/api/documenti/${id}/attivita`, { method: 'POST', body: JSON.stringify(b) });
+export type LinkDocumento = { documento_id?: string | null; fattura_id?: string | null; scontrino_id?: string | null };
+export interface SpedPrecompilata {
+  attivita: 'tarature' | 'apple'; controparte: SpedIndirizzo; email: string; riferimento: string; contenuto: string; mancanti: string[];
+  link: LinkDocumento; mittente: string;
+}
+export const spedPrecompila = (l: LinkDocumento): Promise<SpedPrecompilata> => {
+  const p = new URLSearchParams();
+  Object.entries(l).forEach(([k, v]) => { if (v) p.set(k, v); });
+  return fetchAPI(`/api/spedizioni/precompila?${p.toString()}`);
+};
+export const spedDelDocumento = (l: LinkDocumento): Promise<{ spedizioni: SpedRiga[] }> => {
+  const p = new URLSearchParams();
+  Object.entries(l).forEach(([k, v]) => { if (v) p.set(k, v); });
+  return fetchAPI(`/api/spedizioni?${p.toString()}`);
+};
