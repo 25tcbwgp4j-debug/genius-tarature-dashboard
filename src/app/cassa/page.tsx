@@ -331,8 +331,11 @@ export default function CassaPage() {
               <th className="p-2 text-right">IVA</th><th className="p-2 text-right">Totale</th><th /></tr></thead>
             <tbody>
               {carrello.map((r, i) => (
-                <tr key={`${r.prodotto_id || "libera"}-${i}-${r.descrizione}`} className="border-b last:border-0">
-                  <td className="p-2">{r.descrizione}{r.giacenza !== undefined && r.quantita > r.giacenza && <div className="text-xs text-amber-600">giacenza {r.giacenza}</div>}
+                <tr key={`${r.prodotto_id || "libera"}-${i}`} className="border-b last:border-0">
+                  <td className="p-2">
+                    {/* descrizione modificabile: es. «SCHEDA ASSISTENZA N.» + numero della scheda */}
+                    <Input className="h-8 min-w-[12rem]" maxLength={200} value={r.descrizione} onChange={(e) => setR(i, "descrizione", e.target.value)} />
+                    {r.giacenza !== undefined && r.quantita > r.giacenza && <div className="text-xs text-amber-600">giacenza {r.giacenza}</div>}
                     {regimeCassa(r) === "margine" && (() => {
                       const m = ivaMargine(r.quantita * r.prezzo * (1 - (r.sconto || 0) / 100), r.costo_acquisto == null ? null : r.costo_acquisto * r.quantita);
                       return (
