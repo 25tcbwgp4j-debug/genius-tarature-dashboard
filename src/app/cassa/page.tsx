@@ -334,7 +334,8 @@ export default function CassaPage() {
                 <tr key={`${r.prodotto_id || "libera"}-${i}`} className="border-b last:border-0">
                   <td className="p-2">
                     {/* descrizione modificabile: es. «SCHEDA ASSISTENZA N.» + numero della scheda */}
-                    <Input className="h-8 min-w-[12rem]" maxLength={200} value={r.descrizione} onChange={(e) => setR(i, "descrizione", e.target.value)} />
+                    <Input className="h-8 min-w-[12rem]" maxLength={200} value={r.descrizione} onChange={(e) => setR(i, "descrizione", e.target.value)}
+                      onBlur={(e) => { if (!e.target.value.trim()) setR(i, "descrizione", "Articolo"); }} />
                     {r.giacenza !== undefined && r.quantita > r.giacenza && <div className="text-xs text-amber-600">giacenza {r.giacenza}</div>}
                     {regimeCassa(r) === "margine" && (() => {
                       const m = ivaMargine(r.quantita * r.prezzo * (1 - (r.sconto || 0) / 100), r.costo_acquisto == null ? null : r.costo_acquisto * r.quantita);
