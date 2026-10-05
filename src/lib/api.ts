@@ -967,7 +967,7 @@ export const spedStampaBanco = (id: string): Promise<{ id: string; copie: number
 
 // === FATTURAZIONE (Openapi SDI) — 30/09/2026 ===
 export type FattSocieta = 'genius' | 'gingy' | 'avantifiori';
-export type FattModalita = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'paypal' | 'bonifico' | 'non_pagato';
+export type FattModalita = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'paypal' | 'bonifico' | 'assegno' | 'non_pagato';
 export interface FattRiga {
   descrizione: string;
   quantita: number;
@@ -1026,7 +1026,7 @@ export interface Fattura {
 }
 // ---------------------------------------------------------------------------------------------------------------
 // Registro pagamenti: misti, parziali, acconti e saldi (03/10/2026, migrazione 087)
-export type ModalitaIncasso = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'paypal' | 'bonifico';
+export type ModalitaIncasso = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'paypal' | 'bonifico' | 'assegno';
 export interface RigaPagamento {
   id: string; data: string; importo: number; modalita: ModalitaIncasso | string; tipo: 'acconto' | 'saldo' | 'parziale' | 'intero' | 'rimborso' | 'recupero';
   stato: 'valido' | 'annullato'; fattura_id?: string | null; scontrino_id?: string | null; documento_id?: string | null; session_id?: string | null;
@@ -1041,8 +1041,19 @@ export async function pagRiepilogo(tipo: 'fattura' | 'sessione' | 'scontrino' | 
   return fetchAPI(`/api/pagamenti/riepilogo/${tipo}/${id}`, { cache: 'no-store' });
 }
 export async function pagIncassaFattura(fid: string, body: { importo: number; modalita: ModalitaIncasso; data?: string; riferimento?: string;
-  pos_incasso_id?: string; tipo?: string; operatore: string }): Promise<RiepilogoPagamenti & { pagamento: RigaPagamento }> {
+  pos_incasso_id?: string; incasso_id?: string; transaction_code?: string; tipo?: string; operatore: string }): Promise<RiepilogoPagamenti & { pagamento: RigaPagamento }> {
   return fetchAPI(`/api/pagamenti/fattura/${fid}`, { method: 'POST', body: JSON.stringify(body) });
+}
+/** Movimento PayPal/POS già arrivato, proposto per «Già pagato» (05/10/2026) */
+export interface MovimentoProposto { id: string; fonte: string; codice: string; data: string; importo: number; ordinante?: string | null;
+  causale?: string | null; registra: number; differenza: number; punti: number; perche: string }
+export async function pagMovimentiFattura(fid: string, metodo: 'paypal' | 'pos_sumup', aggiorna = false):
+  Promise<{ residuo: number; movimenti: MovimentoProposto[]; nota?: string | null; avviso?: string | null }> {
+  return fetchAPI(`/api/pagamenti/fattura/${fid}/movimenti?metodo=${metodo}${aggiorna ? '&aggiorna=1' : ''}`);
+}
+export async function pagTerminiFattura(fid: string): Promise<{ testo: string | null; modalita: string; scadenza: string | null;
+  differito: boolean; descrizione: string; scadenza_fattura?: string | null }> {
+  return fetchAPI(`/api/pagamenti/fattura/${fid}/termini`);
 }
 export async function pagRate(fid: string, rate: { importo: number; scadenza: string | null; modalita: string }[]): Promise<RiepilogoPagamenti> {
   return fetchAPI(`/api/pagamenti/fattura/${fid}/rate`, { method: 'PUT', body: JSON.stringify({ rate }) });
@@ -1090,7 +1101,10 @@ export async function fattModifica(id: string, body: Record<string, unknown>): P
   return fetchAPI(`/api/fatturazione/fatture/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 export async function fattElimina(id: string) { return fetchAPI(`/api/fatturazione/fatture/${id}`, { method: 'DELETE' }); }
-export async function fattEmetti(id: string, operatore: string): Promise<{ ok: boolean; numero?: string | null; errore?: string | null }> { return fetchAPI(`/api/fatturazione/fatture/${id}/emetti`, { method: 'POST', body: JSON.stringify({ operatore }) }); }
+/** Invio allo SdI (05/10/2026): una bozza da incassare parte solo con `da_pagare: true` + scadenza (conferma esplicita) */
+export async function fattEmetti(id: string, operatore: string, daPagare?: { scadenza: string; modalita?: string }): Promise<{ ok: boolean; numero?: string | null; errore?: string | null }> {
+  return fetchAPI(`/api/fatturazione/fatture/${id}/emetti`, { method: 'POST', body: JSON.stringify(daPagare ? { operatore, da_pagare: true, ...daPagare } : { operatore }) });
+}
 export async function fattPagamento(id: string, body: { modalita?: FattModalita; data?: string; riferimento?: string; annulla?: boolean }) {
   return fetchAPI(`/api/fatturazione/fatture/${id}/pagamento`, { method: 'POST', body: JSON.stringify(body) });
 }

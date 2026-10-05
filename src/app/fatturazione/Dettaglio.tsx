@@ -2,7 +2,7 @@
 
 // Scheda di una fattura: dati, controlli prima dell'invio, pagamento, azioni ed esiti SdI.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   AlertTriangle, Banknote, Copy, CreditCard, FileCode2, FileDown, Link2, Loader2, Mail, MessageCircle, Pencil, Printer,
@@ -19,20 +19,24 @@ import { cambiaAttivita } from "@/lib/api";
 import { SpedisciDocumento } from "@/components/SpedisciDocumento";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { Incassa, NOMI_MODALITA } from "@/components/Incassa";
+import { GiaPagato } from "@/components/GiaPagato";
 import { apriConfermaBonifico, useBonificoDelDocumento } from "@/components/BonificiAvviso";
 import { toastErrore } from "@/lib/errori";
 import {
   fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattInvia, fattLinkStripe, fattNotaCredito,
-  fattPagamento, fattUrlPdf, fattUrlStampa, fattUrlXml, pagAnnulla, pagIncassaFattura, pagRate, type FattModalita, type Fattura, type ModalitaIncasso,
+  fattPagamento, fattUrlPdf, fattUrlStampa, fattUrlXml, pagAnnulla, pagIncassaFattura, pagRate, pagTerminiFattura,
+  type FattModalita, type Fattura, type ModalitaIncasso,
 } from "@/lib/api";
 import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
 
 const MODALITA_SCONTRINO: Record<string, string> = { contanti: "Contanti", pos_sumup: "POS SumUp", bonifico: "Bonifico", paypal: "PayPal", carta_stripe: "Carta (Stripe)" };
 
 export function Dettaglio({
-  id, onClose, onChanged, onEdit, onOpen,
+  id, onClose, onChanged, onEdit, onOpen, intento,
 }: {
   id: string;
+  /** aperta dall'editor con «Salva e registra pagamento» / «Salva come da pagare» */
+  intento?: "pagamento" | "da_pagare" | null;
   onClose: () => void;
   onChanged: () => void;
   onEdit: (f: Fattura) => void;
@@ -106,6 +110,8 @@ export function Dettaglio({
   const emessa = f.direzione === "emessa";
   const st = STATI[f.stato] || { label: f.stato, cls: "bg-muted" };
   const inviabile = emessa && ["bozza", "errore", "scartata"].includes(f.stato);
+  // 05/10/2026 — PRIMA il pagamento, POI lo SdI: la bozza da incassare si invia dal pannello «Pagamento» (ultimo passo)
+  const passaDalPagamento = emessa && f.stato === "bozza" && f.tipo_documento !== "TD04" && Number(f.totale) > 0.005;
   const c = f.controparte || {};
   const pagata = f.pagamento_stato === "pagata";
   const modalitaPagamento: { k: FattModalita; label: string; icon: typeof Banknote }[] = [
@@ -170,7 +176,7 @@ export function Dettaglio({
           {emessa && <SceltaOperatore className="max-w-md" value={operatore} onChange={setOperatore} compatto />}
           {/* Azioni */}
           <div className="flex flex-wrap gap-2">
-            {inviabile && (
+            {inviabile && !passaDalPagamento && (
               <Button size="sm" disabled={!!busy || !!f.controlli?.length || !operatore}
                 onClick={() => azione("emetti", () => fattEmetti(f.id, operatore), (r) => r.ok ? toast.success(`Fattura ${r.numero} inviata allo SdI`) : toast.error(`Invio non riuscito: ${r.errore}`))}>
                 {busy === "emetti" ? <Loader2 className="animate-spin" /> : <Send />} {f.stato === "bozza" ? "Invia allo SdI" : "Reinvia allo SdI"}
@@ -353,7 +359,8 @@ export function Dettaglio({
 
           {/* Incasso della fattura EMESSA (03/10/2026): registro pagamenti — più incassi, metodi diversi, acconti e saldo */}
           {emessa && f.tipo_documento !== "TD04" && (
-            <IncassoFattura f={f} operatore={operatore} busy={busy} onCambiato={() => { carica(); onChanged(); }} />
+            <IncassoFattura f={f} operatore={operatore} busy={busy} onCambiato={() => { carica(); onChanged(); }}
+              intento={intento} passaDalPagamento={passaDalPagamento} />
           )}
           {/* Pagamento al FORNITORE (fatture ricevute): come prima */}
           {!emessa && f.tipo_documento !== "TD04" && (
@@ -449,8 +456,9 @@ export function Dettaglio({
 
 /** Incasso di una fattura emessa (03/10/2026): righe del registro pagamenti (anche annullate), residuo, un pagamento alla
  *  volta con qualunque metodo (Incassa in modo «documento»), link Stripe per l'importo scelto, piano rate per l'XML. */
-function IncassoFattura({ f, operatore, busy, onCambiato }: {
+function IncassoFattura({ f, operatore, busy, onCambiato, intento, passaDalPagamento }: {
   f: Fattura; operatore: Operatore | ""; busy: string; onCambiato: () => void;
+  intento?: "pagamento" | "da_pagare" | null; passaDalPagamento: boolean;
 }) {
   const inc = f.incassi;
   const totale = Number(f.totale) || 0;
@@ -463,6 +471,8 @@ function IncassoFattura({ f, operatore, busy, onCambiato }: {
   // bonifico arrivato e abbinato a questa fattura (05/10/2026, caso Flaminia fatt. 740): niente «come registrare il
   // pagamento?» — si propone il bonifico già incassato; «Correggi» (nella finestra) riporta qui i metodi
   const { bonifico: bon, correggi: bonCorreggi } = useBonificoDelDocumento(f.id);
+  const pannello = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (intento === "pagamento") pannello.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [intento]);
 
   async function annulla(pid: string, imp: number) {
     const motivo = prompt(`Annullare l'incasso di ${eur(imp)}? Scrivi il motivo (es. registrato per errore):`);
@@ -478,9 +488,9 @@ function IncassoFattura({ f, operatore, busy, onCambiato }: {
   }
 
   return (
-    <div className="space-y-2 rounded-lg border p-3">
+    <div ref={pannello} className={`space-y-2 rounded-lg border p-3 ${passaDalPagamento ? "border-primary/50" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium">Incasso</span>
+        <span className="text-sm font-medium">{passaDalPagamento ? "1 · Pagamento" : "Incasso"}</span>
         <span className="text-xs text-muted-foreground">{f.scadenza && residuo > 0.005 ? `scadenza ${dataIt(f.scadenza)}` : ""}</span>
       </div>
       {inc?.badge && <div className={`rounded-md px-2 py-1.5 text-sm font-medium ${residuo <= 0.005 ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300"
@@ -524,13 +534,23 @@ function IncassoFattura({ f, operatore, busy, onCambiato }: {
         <>
           <Incassa key={`${f.id}-${pagato}`} modo="documento" totale={totale} giaPagato={pagato} documentoTipo="fattura" descrizione={desc}
             testoCliente={f.controparte_nome || ""} disabled={!!busy || !operatore} motivo={!operatore ? "scegli l'operatore" : ""}
-            stripeLink={f.stato !== "bozza" ? async (imp) => (await fattLinkStripe(f.id, imp))?.url : undefined}
+            stripeLink={async (imp) => (await fattLinkStripe(f.id, imp))?.url}
             onPagamento={async (p) => {
               await pagIncassaFattura(f.id, { importo: p.importo, modalita: p.modalita as ModalitaIncasso, data: p.data, riferimento: p.riferimento,
                 pos_incasso_id: p.pos_incasso_id, operatore: operatore! });
               return { id: f.id, descrizione: desc };
             }}
             onFatto={onCambiato} />
+          {/* già pagato fuori dal banco: POS (codice o ricerca), PayPal (ID o ricerca tra i movimenti), assegno */}
+          <GiaPagato fatturaId={f.id} residuo={residuo} disabled={!!busy || !operatore} motivo={!operatore ? "scegli l'operatore" : ""}
+            onRegistra={async (d) => {
+              try {
+                await pagIncassaFattura(f.id, { ...d, operatore: operatore! });
+                toast.success(`Registrato: ${NOMI_MODALITA[d.modalita] || d.modalita} ${eur(d.importo)}`);
+                onCambiato();
+                return true;
+              } catch (e) { toastErrore(e); return false; }
+            }} />
           {modificabile && (rate ? (
             <div className="space-y-1 rounded-md border p-2 text-sm">
               <div className="text-xs text-muted-foreground">Piano rate di quanto resta ({eur(residuo)}): va nell&apos;XML come più scadenze. Vuoto = una scadenza sola.</div>
@@ -557,6 +577,84 @@ function IncassoFattura({ f, operatore, busy, onCambiato }: {
           ))}
         </>
       )}
+      {passaDalPagamento && <InvioSdi f={f} residuo={residuo} operatore={operatore} busy={busy} intento={intento} onCambiato={onCambiato} />}
+    </div>
+  );
+}
+
+
+/** ULTIMO PASSO (05/10/2026): «Invia allo SdI» solo col pagamento registrato per intero, oppure con la scelta
+ *  ESPLICITA «Da pagare» (scadenza + metodo atteso dai termini del cliente) e conferma. I DatiPagamento dell'XML
+ *  escono dal registro pagamenti (incassi con la loro data) + il residuo con la scadenza scelta qui. */
+function InvioSdi({ f, residuo, operatore, busy, intento, onCambiato }: {
+  f: Fattura; residuo: number; operatore: Operatore | ""; busy: string; intento?: "pagamento" | "da_pagare" | null; onCambiato: () => void;
+}) {
+  const pagata = residuo <= 0.005;
+  const [daPagare, setDaPagare] = useState(intento === "da_pagare");
+  const [scadenza, setScadenza] = useState(f.scadenza || "");
+  const [modalita, setModalita] = useState<string>(f.pagamento_modalita && f.pagamento_modalita !== "non_pagato" ? f.pagamento_modalita : "bonifico");
+  const [termini, setTermini] = useState<{ testo: string | null; descrizione: string } | null>(null);
+  const [invio, setInvio] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (pagata) return;
+    pagTerminiFattura(f.id).then((t) => {
+      setTermini({ testo: t.testo, descrizione: t.descrizione });
+      if (!f.scadenza && t.scadenza) setScadenza(t.scadenza);
+      if (t.modalita && (!f.pagamento_modalita || f.pagamento_modalita === "bonifico")) setModalita(t.modalita);
+    }).catch(() => undefined);
+  }, [f.id, f.scadenza, f.pagamento_modalita, pagata]);
+  useEffect(() => { if (intento === "da_pagare") box.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, [intento]);
+  const controlli = f.controlli || [];
+  const motivo = !operatore ? "scegli l'operatore" : controlli.length ? "completa i dati mancanti (in alto)" : "";
+
+  async function invia(comeDaPagare: boolean) {
+    if (invio || busy) return;
+    if (comeDaPagare) {
+      if (!scadenza) { toast.error("Indica la scadenza del pagamento"); return; }
+      const pagato = Number(f.totale) - residuo;
+      if (!confirm(`Inviare allo SdI la fattura DA PAGARE?\n\n${f.controparte_nome || ""} · totale ${eur(Number(f.totale))}`
+        + (pagato > 0.005 ? ` · già incassati ${eur(pagato)}` : "")
+        + `\nResta da pagare: ${eur(residuo)} entro il ${scadenza.split("-").reverse().join("/")} (${NOMI_MODALITA[modalita] || modalita}).`
+        + "\n\nDopo l'invio la fattura non si modifica più.")) return;
+    } else if (!confirm(`Inviare allo SdI la fattura di ${f.controparte_nome || ""} (${eur(Number(f.totale))}, pagata)?`)) return;
+    setInvio(true);
+    try {
+      const r = await fattEmetti(f.id, operatore as string, comeDaPagare ? { scadenza, modalita } : undefined);
+      if (r.ok) toast.success(`Fattura ${r.numero} inviata allo SdI`); else toast.error(`Invio non riuscito: ${r.errore}`);
+      onCambiato();
+    } catch (e) { toastErrore(e); } finally { setInvio(false); }
+  }
+
+  return (
+    <div ref={box} className="mt-3 space-y-2 border-t pt-3">
+      <div className="text-sm font-medium">2 · Invia allo SdI</div>
+      {pagata ? (
+        <div className="rounded-md bg-emerald-500/15 px-2 py-1.5 text-sm text-emerald-800 dark:text-emerald-300">Pagamento registrato per intero: la fattura può partire.</div>
+      ) : (
+        <>
+          <label className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-md border p-2 text-sm ${daPagare ? "border-amber-500 bg-amber-50 dark:bg-amber-950/30" : ""}`}>
+            <input type="checkbox" className="size-5" checked={daPagare} onChange={(e) => setDaPagare(e.target.checked)} />
+            <span><b>Da pagare</b>: il cliente paga dopo ({eur(residuo)}){termini?.testo ? ` · termini del cliente: ${termini.testo} (${termini.descrizione})` : ""}</span>
+          </label>
+          {daPagare && (
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs text-muted-foreground">Scadenza
+                <input type="date" className="mt-0.5 h-11 w-full rounded-md border border-input bg-background px-2 text-sm" value={scadenza} onChange={(e) => setScadenza(e.target.value)} /></label>
+              <label className="text-xs text-muted-foreground">Come pagherà
+                <select className="mt-0.5 h-11 w-full rounded-md border border-input bg-background px-2 text-sm" value={modalita} onChange={(e) => setModalita(e.target.value)}>
+                  {["bonifico", "paypal", "carta_stripe", "pos_sumup", "contanti", "assegno"].map((k) => <option key={k} value={k}>{NOMI_MODALITA[k] || k}</option>)}
+                </select></label>
+            </div>
+          )}
+          {!daPagare && <div className="text-xs text-amber-700 dark:text-amber-300">Registra il pagamento qui sopra, oppure spunta «Da pagare» con la scadenza.</div>}
+        </>
+      )}
+      {motivo && <div className="text-xs text-amber-700 dark:text-amber-300">Prima {motivo}.</div>}
+      <Button className={`h-auto min-h-11 w-full text-base font-semibold ${!pagata && daPagare ? "bg-amber-600 text-white hover:bg-amber-700" : ""}`}
+        disabled={!!busy || invio || !!motivo || !(pagata || (daPagare && !!scadenza))} onClick={() => invia(!pagata)}>
+        {invio ? <Loader2 className="animate-spin" /> : <Send />} {pagata ? "Invia allo SdI" : "Invia allo SdI come DA PAGARE"}
+      </Button>
     </div>
   );
 }

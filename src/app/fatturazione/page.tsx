@@ -58,6 +58,8 @@ function Pagina() {
   const [cfg, setCfg] = useState<Config | null>(null);
   const [loading, setLoading] = useState(false);
   const [aperta, setAperta] = useState<string | null>(null);
+  // dall'editor (05/10/2026): «Salva e registra pagamento» / «Salva come da pagare» → la bozza si apre sul passo giusto
+  const [intento, setIntento] = useState<"pagamento" | "da_pagare" | null>(null);
   const [editor, setEditor] = useState<{ f: Fattura | null; anag?: FattAnagrafica } | null>(null);
   const [anno, setAnno] = useState<number>(annoRoma);
   const [prove, setProve] = useState(false);
@@ -453,7 +455,7 @@ function Pagina() {
       )}
 
       {aperta && (
-        <Dettaglio id={aperta} onClose={chiudiDettaglio} onChanged={carica}
+        <Dettaglio id={aperta} onClose={() => { setIntento(null); chiudiDettaglio(); }} onChanged={carica} intento={intento}
           onEdit={(f) => { setAperta(null); setEditor({ f }); }}
           onOpen={(id) => setAperta(id)} />
       )}
@@ -464,7 +466,7 @@ function Pagina() {
       {editor && (
         <Editor iniziale={editor.f} anagrafica={editor.anag} societaDefault={(societa as FattSocieta) || "genius"}
           onClose={() => setEditor(null)}
-          onSaved={(id) => { setEditor(null); carica(); setAperta(id); }} />
+          onSaved={(id, passo) => { setEditor(null); carica(); setIntento(passo || null); setAperta(id); }} />
       )}
     </div>
   );

@@ -24,6 +24,7 @@ export const MODALITA_LABEL: Record<string, string> = {
   carta_stripe: "Carta (Stripe)",
   paypal: "PayPal",
   bonifico: "Bonifico",
+  assegno: "Assegno",
   non_pagato: "Da pagare",
 };
 

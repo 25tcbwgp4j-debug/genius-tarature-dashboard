@@ -26,7 +26,7 @@ const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", c
 const r2 = (v: number) => Math.round((Number(v) || 0) * 100) / 100;
 export const NOMI_MODALITA: Record<string, string> = {
   contanti: "Contanti", pos_sumup: "Carta (POS)", carta_stripe: "Carta online (Stripe)", paypal: "PayPal", bonifico: "Bonifico",
-  non_riscosso: "Non riscosso",
+  non_riscosso: "Non riscosso", assegno: "Assegno",
 };
 
 export type RigaIncasso = PagamentoScontrino & { chiave: string; bonifico?: InfoBonifico; etichetta?: string };

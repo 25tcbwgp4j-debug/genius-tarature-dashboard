@@ -1,12 +1,14 @@
 "use client";
 
-// Editor di una fattura (nuova o bozza): società, cliente (anche dall'anagrafica), righe,
-// pagamento. "Salva bozza" o "Salva e invia allo SdI".
+// Editor di una fattura (nuova o bozza): società, cliente (anche dall'anagrafica), righe, pagamento previsto.
+// 05/10/2026 — PRIMA il pagamento, POI lo SdI: qui si salva SEMPRE una bozza. «Salva e registra pagamento» apre la bozza
+// sul pannello Pagamento; «Salva come da pagare» la apre sulla scelta «Da pagare» (scadenza e termini del cliente).
+// L'invio allo SdI è l'ultimo passo, nella scheda della fattura.
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Plus, Search, Send, Trash2, Truck, Wrench, X } from "lucide-react";
+import { CalendarClock, Loader2, Plus, Search, Trash2, Truck, Wallet, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { DecInput } from "@/components/DecInput";
@@ -20,7 +22,6 @@ import {
   cassaScontriniDaFatturare,
   fattCatalogo,
   fattCrea,
-  fattEmetti,
   fattAnagrafiche,
   fattModifica,
   searchCustomers,
@@ -58,7 +59,8 @@ export function Editor({
   anagrafica?: FattAnagrafica;
   societaDefault: FattSocieta;
   onClose: () => void;
-  onSaved: (id: string) => void;
+  /** passo: dove aprire la bozza salvata («pagamento» o «da_pagare»); assente = solo salvata */
+  onSaved: (id: string, passo?: "pagamento" | "da_pagare") => void;
 }) {
   const [operatore, setOperatore] = useOperatore();
   const [societa, setSocieta] = useState<FattSocieta>(iniziale?.societa || anagrafica?.societa || societaDefault);
@@ -95,11 +97,10 @@ export function Editor({
   const [sporco, setSporco] = useState(false);
   const chiudi = () => { if (sporco && !confirm("Chiudere senza salvare? Le modifiche andranno perse.")) return; onClose(); };
   const [modalita, setModalita] = useState<FattModalita>(iniziale?.pagamento_modalita || "bonifico");
-  const [pagata, setPagata] = useState(iniziale?.pagamento_stato === "pagata");
   const [scadenza, setScadenza] = useState(iniziale?.scadenza || "");
   const [causale, setCausale] = useState(iniziale?.causale || "");
   const [note, setNote] = useState(iniziale?.note || "");
-  const [salvando, setSalvando] = useState<"" | "bozza" | "invio">("");
+  const [salvando, setSalvando] = useState<"" | "bozza" | "pagamento" | "da_pagare">("");
   const [q, setQ] = useState("");
   const [trovati, setTrovati] = useState<ClienteAnagrafica[]>([]);
   const [catalogo, setCatalogo] = useState<FattVoceCatalogo[]>([]);
@@ -254,28 +255,24 @@ export function Editor({
       customer_id: customerId || undefined,
       anagrafica_id: anagraficaId || undefined,
       salva_anagrafica: !anagraficaId && salvaAnag,
-      pagata, operatore,
+      operatore,
       ...(societa === "genius" ? { attivita } : {}),
     };
   }
 
-  async function salva(invia: boolean) {
+  /** Salva SEMPRE come bozza (mai allo SdI da qui). `passo` = cosa si apre dopo: pannello Pagamento o «Da pagare». */
+  async function salva(passo?: "pagamento" | "da_pagare") {
     if (salvando) return;
     if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     const b = corpo();
     if (!b.righe.length) { toast.error("Aggiungi almeno una riga"); return; }
-    setSalvando(invia ? "invio" : "bozza");
+    setSalvando(passo || "bozza");
     try {
       const f = idSalvato ? await fattModifica(idSalvato, b) : await fattCrea(b);
       setIdSalvato(f.id); setSporco(false);
-      if (invia) {
-        const r = await fattEmetti(f.id, operatore);
-        if (r.ok) toast.success(`Fattura ${r.numero} inviata allo SdI`);
-        else toast.error(`Invio non riuscito: ${r.errore}`);
-      } else {
-        toast.success("Bozza salvata");
-      }
-      onSaved(f.id);
+      toast.success(passo === "pagamento" ? "Bozza salvata: registra il pagamento, poi invia allo SdI"
+        : passo === "da_pagare" ? "Bozza salvata: controlla scadenza e termini, poi invia allo SdI come da pagare" : "Bozza salvata");
+      onSaved(f.id, passo);
     } catch (e) {
       toastErrore(e);
     } finally {
@@ -502,13 +499,11 @@ export function Editor({
 
           {/* Pagamento */}
           <div className="grid grid-cols-2 gap-3 rounded-lg border p-3 sm:grid-cols-4">
-            <label className="space-y-1"><div className={lab}>Pagamento</div>
+            <label className="space-y-1"><div className={lab}>Pagamento previsto</div>
               <select className={campo} value={modalita} onChange={(e) => setModalita(e.target.value as FattModalita)}>
-                {Object.entries(MODALITA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                {Object.entries(MODALITA_LABEL).filter(([k]) => k !== "non_pagato").map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select></label>
-            <label className="flex items-end gap-2 pb-1.5 text-sm">
-              <input type="checkbox" checked={pagata} onChange={(e) => setPagata(e.target.checked)} /> già incassata
-            </label>
+            <div className="flex items-end pb-1.5 text-xs text-muted-foreground sm:col-span-1">Incasso vero e invio allo SdI: dopo il salvataggio, nella bozza.</div>
             <label className="space-y-1"><div className={lab}>Scadenza</div>
               <input type="date" className={campo} value={scadenza} onChange={(e) => setScadenza(e.target.value)} /></label>
             <div className="col-span-2 space-y-1 sm:col-span-4"><div className={lab}>Causale (compare in fattura)</div>
@@ -527,11 +522,15 @@ export function Editor({
         </div>
         <div className="flex flex-wrap justify-end gap-2 px-4 py-3">
           <Button variant="ghost" onClick={chiudi}>Annulla</Button>
-          <Button variant="outline" disabled={!!salvando || !operatore} onClick={() => salva(false)}>
+          {/* 05/10/2026: niente «Invia allo SdI» da qui — prima il pagamento (o la scelta «da pagare»), poi lo SdI */}
+          <Button variant="ghost" disabled={!!salvando || !operatore} onClick={() => salva()}>
             {salvando === "bozza" && <Loader2 className="animate-spin" />} Salva bozza
           </Button>
-          <Button disabled={!!salvando || !operatore} onClick={() => salva(true)}>
-            {salvando === "invio" ? <Loader2 className="animate-spin" /> : <Send />} Salva e invia allo SdI
+          <Button variant="outline" className="min-h-11" disabled={!!salvando || !operatore} onClick={() => salva("da_pagare")}>
+            {salvando === "da_pagare" ? <Loader2 className="animate-spin" /> : <CalendarClock />} Salva come da pagare
+          </Button>
+          <Button className="min-h-11" disabled={!!salvando || !operatore} onClick={() => salva("pagamento")}>
+            {salvando === "pagamento" ? <Loader2 className="animate-spin" /> : <Wallet />} Salva e registra pagamento
           </Button>
         </div>
         {/* dentro il pannello: i clic nel dialogo non devono arrivare allo sfondo (che chiude l'editor) */}
