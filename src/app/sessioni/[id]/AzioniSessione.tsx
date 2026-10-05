@@ -35,7 +35,9 @@ interface Props {
 function breve(iso: string | null | undefined) {
   if (!iso) return null;
   try {
-    return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    // solo la data (es. «2026-10-02», pagamento della fattura): niente ora inventata («02:00» = mezzanotte UTC)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return new Date(`${iso}T12:00:00Z`).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Rome" });
+    return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
   } catch { return null; }
 }
 
@@ -186,7 +188,14 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
             </a>
           ) : (
           <>
-          <p className="text-[10px] leading-tight text-gray-500">Premi solo quando i soldi sono <b>già arrivati</b>{fattura ? <> — si registra sulla fattura {fattura.numero || "(bozza)"}</> : null}:</p>
+          {isPaid && statoPag?.pagamento?.modalita && !["bonifico", "contanti", "pos_sumup"].includes(statoPag.pagamento.modalita) && (
+            // 05/10/2026 (caso 172): pagata col link Stripe — prima nessun pulsante risultava attivo e sembrava «contanti»
+            <p className="rounded-md border-2 border-emerald-500 bg-emerald-50 px-2 py-1.5 text-center text-[11px] font-semibold text-emerald-800">
+              ✓ {statoPag.pagamento.modalita === "carta_stripe" ? "Carta online (Stripe)" : statoPag.pagamento.modalita_label}
+              {statoPag.pagamento.riferimento ? <span className="block break-all text-[9px] font-normal">{statoPag.pagamento.riferimento}</span> : null}
+            </p>
+          )}
+          <p className="text-[10px] leading-tight text-gray-500">{isPaid ? "Per cambiare il metodo:" : <>Premi solo quando i soldi sono <b>già arrivati</b>{fattura ? <> — si registra sulla fattura {fattura.numero || "(bozza)"}</> : null}:</>}</p>
           <div className="grid grid-cols-3 gap-1.5">
             {([["bonifico", "BONIFICO"], ["contanti", "CONTANTI"], ["pos", "POS"]] as const).map(([method, label]) => {
               const isActive = isPaid && session.payment_method === method;
@@ -211,7 +220,7 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
           </div>
           </>
           )}
-          <Quando ts={isPaid ? (statoPag?.pagamento?.pagato_il || session.payment_date) : null} />
+          <Quando ts={isPaid ? ((statoPag?.pagamento?.fonte !== "fattura" && session.payment_date) || statoPag?.pagamento?.pagato_il || session.payment_date) : null} />
         </Gruppo>
 
         <Gruppo titolo="Chiusura" sotto="Operazione interna: nessun messaggio al cliente, scadenzario +365 gg">

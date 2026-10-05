@@ -1502,6 +1502,12 @@ export interface DocumentoCliente {
   fornitore_id?: string | null; fornitore_nome?: string | null;
   /** Genius Lab Gestionale: tarature | apple */
   attivita?: 'tarature' | 'apple' | null;
+  /** pro forma di una sessione già pagata (link Stripe, POS, bonifico): la fattura nasce quietanzata con questo (05/10/2026) */
+  pagamento_sessione?: PagamentoGiaArrivato | null;
+}
+export interface PagamentoGiaArrivato {
+  pagata: boolean; fonte: 'registro' | 'sessione'; modalita: FattModalita; modalita_label: string;
+  data: string | null; riferimento: string | null; importo: number;
 }
 export type TipoDocumento = 'preventivo' | 'ordine' | 'proforma' | 'ddt';
 export type VistaOrdini = 'aperti' | 'arrivati' | 'completati' | 'annullati' | 'tutti';
@@ -1536,7 +1542,8 @@ export async function docAcconto(id: string, body: { importo: number; modalita: 
   Promise<DocumentoCliente & { fattura?: { id: string } }> {
   return fetchAPI(`/api/documenti/${id}/acconto`, { method: 'POST', body: JSON.stringify(body) });
 }
-export async function docConverti(id: string, body: { a: 'ordine' | 'fattura' | 'scontrino'; modalita?: string; scontrino_numero?: string; pagata?: boolean; operatore: string }):
+export async function docConverti(id: string, body: { a: 'ordine' | 'fattura' | 'scontrino'; modalita?: string; scontrino_numero?: string; pagata?: boolean; operatore: string;
+  /** sessione già pagata: metodo confermato (o corretto) nella finestra di conversione */ metodo_sessione?: string }):
   Promise<DocumentoCliente & { fattura?: { id: string }; ordine?: { id: string; sigla: string } }> {
   return fetchAPI(`/api/documenti/${id}/converti`, { method: 'POST', body: JSON.stringify(body) });
 }

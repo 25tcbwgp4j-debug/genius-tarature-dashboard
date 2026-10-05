@@ -259,6 +259,9 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
   const [errore, setErrore] = useState("");
   const [azione, setAzione] = useState<"" | "acconto" | "scontrino" | "fattura">("");
   const [f, setF] = useState({ importo: "", modalita: "contanti", certificato: "scontrino" as "scontrino" | "fattura", numero: "", pagata: false });
+  // pro forma di una sessione già pagata (05/10/2026, caso PF 3/2026): la fattura nasce quietanzata con quel pagamento;
+  // «correggi» apre la scelta del metodo solo se il metodo registrato è sbagliato
+  const [correggi, setCorreggi] = useState(false);
   const [busy, setBusy] = useState(false);
   const [operatore, setOperatore] = useOperatore();
   const [cassaOggiChiusa, setCassaOggiChiusa] = useState(false);
@@ -274,8 +277,10 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
   /** Apre il pannello dell'azione con i valori giusti (numero scontrino sempre vuoto: niente numeri riusati). */
   function apri(a: "acconto" | "scontrino" | "fattura") {
     setAzione(a);
+    setCorreggi(false);
+    const gia = d?.pagamento_sessione;
     setF(a === "fattura"
-      ? { importo: "", modalita: "bonifico", certificato: "fattura", numero: "", pagata: false }
+      ? { importo: "", modalita: gia?.pagata ? gia.modalita : "bonifico", certificato: "fattura", numero: "", pagata: false }
       : { importo: "", modalita: "contanti", certificato: "scontrino", numero: "", pagata: false });
     setCassaOggiChiusa(false);
     // acconti e scontrini entrano nella cassa di OGGI: avviso subito se è già chiusa
@@ -334,6 +339,12 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
     if (!d) return;
     if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     const mod = modForzata || f.modalita;
+    if (azione === "fattura" && d.pagamento_sessione?.pagata && !modForzata) {
+      // sessione già pagata: nessun incasso di oggi, la fattura prende il pagamento della sessione (metodo eventualmente corretto)
+      esegui(() => docConverti(d.id, { a: "fattura", modalita: mod, pagata: false, metodo_sessione: mod, operatore }),
+        `Fattura creata in bozza, già pagata (${MOD_L[mod] || mod})`);
+      return;
+    }
     // POS e PayPal passano SOLO dalla verifica automatica (pulsanti qui sotto): niente conferma «sulla parola»
     if (!modForzata && (mod === "pos_sumup" || mod === "paypal") && azione !== "fattura") {
       toast.error("Con POS o PayPal usa i pulsanti di pagamento qui sotto: l'incasso si registra quando SumUp/PayPal lo confermano");
@@ -372,6 +383,7 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
     </div>
   );
   const aperto = d.stato === "aperto";
+  const gia = d.pagamento_sessione?.pagata ? d.pagamento_sessione : null;
   const cardAzione = azione ? (
           <Card className="space-y-2 border-2 border-primary/40 p-3">
             <div className="font-medium">
@@ -383,11 +395,21 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
                 <a className="font-medium underline" href="/cassa/giornata">Apri cassa del giorno</a>
               </div>
             )}
+            {azione === "fattura" && gia && (
+              <div className="rounded-md border-2 border-emerald-400 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+                <div className="font-semibold">Già pagato: {MOD_L[f.modalita] || gia.modalita_label} · {eur(gia.importo)} · {gia.data ? new Date(`${gia.data.slice(0, 10)}T12:00:00Z`).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Rome" }) : "data non registrata"}</div>
+                {gia.riferimento && <div className="break-all text-xs">Rif. {gia.riferimento}</div>}
+                <div className="text-xs">La fattura nasce quietanzata con questo pagamento: non serve scegliere il metodo.{" "}
+                  {!correggi && <button type="button" className="font-medium underline" onClick={() => setCorreggi(true)}>Correggi il metodo</button>}
+                </div>
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               {azione === "acconto" && <Input className="h-9 w-32 border-2 text-right font-semibold" inputMode="decimal" placeholder={`€ max ${eur(d.residuo)}`} value={f.importo} onChange={(e) => setF({ ...f, importo: e.target.value })} />}
+              {(!(azione === "fattura" && gia) || correggi) && (
               <select className={campo} value={f.modalita} onChange={(e) => setF({ ...f, modalita: e.target.value })}>
                 {MOD.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-              </select>
+              </select>)}
               {azione === "acconto" && (
                 <select className={campo} value={f.certificato} onChange={(e) => setF({ ...f, certificato: e.target.value as "scontrino" | "fattura" })}>
                   <option value="scontrino">con scontrino</option><option value="fattura">con fattura d&apos;acconto</option>
@@ -395,11 +417,11 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
               )}
               {((azione === "acconto" && f.certificato === "scontrino") || azione === "scontrino") &&
                 <Input className="h-9 w-32" placeholder="N. scontrino *" value={f.numero} onChange={(e) => setF({ ...f, numero: e.target.value })} />}
-              {azione === "fattura" && <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={f.pagata} onChange={(e) => setF({ ...f, pagata: e.target.checked })} />già pagata (incasso di oggi)</label>}
-              <Button disabled={busy || !operatore} onClick={() => conferma()}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}Conferma</Button>
+              {azione === "fattura" && !gia && <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={f.pagata} onChange={(e) => setF({ ...f, pagata: e.target.checked })} />già pagata (incasso di oggi)</label>}
+              <Button disabled={busy || !operatore} onClick={() => conferma()}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}{azione === "fattura" && gia ? "Crea la fattura già pagata" : "Conferma"}</Button>
               <Button variant="ghost" onClick={() => setAzione("")}>Chiudi</Button>
             </div>
-            {(() => {
+            {!(azione === "fattura" && gia) && (() => {
               // incasso col POS SumUp: l'importo va sul terminale scelto, a pagamento riuscito si registra con «POS SumUp»
               const imp = azione === "acconto" ? (parseDec(f.importo) ?? 0) : d.residuo;
               const serveNumero = (azione === "acconto" && f.certificato === "scontrino") || azione === "scontrino";

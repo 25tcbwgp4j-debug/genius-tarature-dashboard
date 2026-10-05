@@ -18,9 +18,10 @@ export function testoPagamento(st: StatoPagamentoSessione | null): { breve: stri
   const doc = f ? (f.numero ? `fattura ${f.numero}` : "bozza di fattura") : null;
   if (p.pagata) {
     const come = p.modalita_label ? ` con ${p.modalita_label}` : "";
+    const rif = p.riferimento ? ` · rif. ${p.riferimento}` : "";
     return {
-      breve: `Pagata${p.pagato_il ? ` il ${dataIt(p.pagato_il)}` : ""}`,
-      lungo: `Pagata${p.pagato_il ? ` il ${dataIt(p.pagato_il)}` : ""}${come}${doc ? ` (${doc})` : " — fattura non ancora fatta"}`,
+      breve: `Pagata${p.pagato_il ? ` il ${dataIt(p.pagato_il)}` : ""}${p.modalita_label ? ` · ${p.modalita_label.charAt(0).toUpperCase()}${p.modalita_label.slice(1)}` : ""}`,
+      lungo: `Pagata${p.pagato_il ? ` il ${dataIt(p.pagato_il)}` : ""}${come}${rif}${doc ? ` (${doc})` : " — fattura non ancora fatta"}`,
       colore: "bg-emerald-100 text-emerald-800 border-emerald-300",
     };
   }
