@@ -33,7 +33,7 @@ import Link from "next/link";
 import { ivaMargine } from "@/app/fatturazione/util";
 import {
   fetchAPI, cassaAnnulla, cassaGiornata, cassaRecupero, docDettaglio, docRitira, cassaFattura, cassaRiprova, cassaScontrini, cassaScontrino, magPerCodice, magProdotti, proformaSessioneStato,
-  type PagamentoScontrino, type Prodotto, type RigaCassa, type Scontrino,
+  type PagamentoScontrino, type Prodotto, type RigaCassa, type Scontrino, PLU_RT_NOMI,
 } from "@/lib/api";
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
@@ -189,7 +189,8 @@ export default function CassaPage() {
       // articolo usato / in conto vendita: la riga nasce in regime del margine (costo = prezzo di acquisto o da girare al cliente)
       const reg = p.regime_iva === "margine" ? { regime: "margine" as const, natura: "N5", aliquota: 0, costo_acquisto: Number(p.costo) || null }
         : p.regime_iva === "esente" ? { regime: "esente" as const, natura: "N4", aliquota: 0 } : {};
-      return [...c, { prodotto_id: p.id, descrizione: p.descrizione, quantita: 1, prezzo: Number(p.prezzo), aliquota: Number(p.aliquota), giacenza: Number(p.giacenza), ...reg }];
+      return [...c, { prodotto_id: p.id, descrizione: p.descrizione, quantita: 1, prezzo: Number(p.prezzo), aliquota: Number(p.aliquota), giacenza: Number(p.giacenza),
+                      plu_rt: p.plu_rt ?? null, ...reg }];
     });
     setQ(""); setTrovati([]);
   }, []);
@@ -337,6 +338,8 @@ export default function CassaPage() {
                     <Input className="h-8 min-w-[12rem]" maxLength={200} value={r.descrizione} onChange={(e) => setR(i, "descrizione", e.target.value)}
                       onBlur={(e) => { if (!e.target.value.trim()) setR(i, "descrizione", "Articolo"); }} />
                     {r.giacenza !== undefined && r.quantita > r.giacenza && <div className="text-xs text-amber-600">giacenza {r.giacenza}</div>}
+                    {/* PLU del registratore: sullo scontrino il nome dell'articolo invece di «REPARTO 01» (solo 22%) */}
+                    {r.plu_rt && PLU_RT_NOMI[r.plu_rt] && regimeCassa(r) === "22" && <div className="text-xs text-muted-foreground">sullo scontrino: {PLU_RT_NOMI[r.plu_rt]}</div>}
                     {regimeCassa(r) === "margine" && (() => {
                       const m = ivaMargine(r.quantita * r.prezzo * (1 - (r.sconto || 0) / 100), r.costo_acquisto == null ? null : r.costo_acquisto * r.quantita);
                       return (

@@ -1329,12 +1329,18 @@ export interface Prodotto {
   attivita?: 'tarature' | 'apple' | null;
   categoria_merce?: CategoriaMerce | null; modello?: string | null; fornitore_id?: string | null; fornitore_nome?: string | null;
   serializzato?: boolean; sottocategoria?: string | null;
+  /** PLU del registratore (05/10/2026): sullo scontrino stampa il nome (1 CUFFIE, 2 ALIMENTATORE 20W, 3 CAVO USB-C, 4 CAVO LIGHTNING, 5 SCHEDA ASSISTENZA) */
+  plu_rt?: number | null;
   /** letto con lo scanner un seriale/IMEI: il pezzo già scelto */
   pezzo?: Pezzo;
 }
 export interface RigaCassa { prodotto_id?: string | null; /** pezzo serializzato venduto (iPhone, Mac…) */ pezzo_id?: string | null; descrizione: string; quantita: number; prezzo: number; aliquota: number; sconto?: number;
   /** regime IVA della riga: margine (N5) o esente (N4/N3.x); senza = aliquota */
-  regime?: 'margine' | 'esente' | null; natura?: string | null; costo_acquisto?: number | null }
+  regime?: 'margine' | 'esente' | null; natura?: string | null; costo_acquisto?: number | null;
+  /** PLU del registratore dell'articolo (solo righe 22%): lo decide il server dal prodotto, qui serve a mostrarlo */
+  plu_rt?: number | null }
+/** nome stampato sullo scontrino per ogni PLU del registratore (programmati il 05/10/2026, P220) */
+export const PLU_RT_NOMI: Record<number, string> = { 1: 'CUFFIE', 2: 'ALIMENTATORE 20W', 3: 'CAVO USB-C', 4: 'CAVO LIGHTNING', 5: 'SCHEDA ASSISTENZA' };
 export interface PagamentoScontrino { modalita: string; importo: number; consegnato?: number; pos_incasso_id?: string; transaction_code?: string | null; riferimento?: string;
   /** bonifico arrivato sul conto (incassi.id): la riga del registro pagamenti lo collega (05/10/2026) */ bonifico_id?: string }
 export interface Scontrino {
