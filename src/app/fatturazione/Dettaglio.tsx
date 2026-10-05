@@ -16,6 +16,7 @@ import { SceltaAttivita } from "@/components/attivita";
 import { CaricoMagazzino } from "./CaricoMagazzino";
 import { usePermessi as usePermessiAtt } from "@/components/permessi";
 import { cambiaAttivita } from "@/lib/api";
+import { SpedisciDocumento } from "@/components/SpedisciDocumento";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
 import { Incassa, NOMI_MODALITA } from "@/components/Incassa";
 import { apriConfermaBonifico, useBonificoDelDocumento } from "@/components/BonificiAvviso";
@@ -140,6 +141,8 @@ export function Dettaglio({
                 <SceltaAttivita value={f.attivita} disabled={!!busy || !(["bozza", "errore", "scartata"].includes(f.stato) || titolare)}
                   onChange={(a) => {
                     if (a === f.attivita) return;
+                    // fattura già numerata/inviata (05/10/2026): solo l'etichetta interna, con conferma
+                    if (!["bozza", "errore", "scartata"].includes(f.stato) && !confirm(`Fattura ${f.numero || ""} già inviata allo SdI: spostarla in ${a === "apple" ? "Apple" : "Tarature"}?\n\nCambia solo l'ETICHETTA interna: la numerazione è unica e l'XML non cambia.`)) return;
                     setBusy("attivita");
                     cambiaAttivita("fatture", f.id, a).then(() => { carica(); onChanged(); })
                       .catch((e) => toast.error((e as Error).message)).finally(() => setBusy(""));
@@ -227,6 +230,8 @@ export function Dettaglio({
               </Button>
             )}
           </div>
+          {/* «Spedisci» dalla fattura (05/10/2026): spedizione libera già compilata col cliente e la divisione della fattura */}
+          {emessa && f.societa === "genius" && <SpedisciDocumento link={{ fattura_id: f.id }} />}
 
           {conv && (
             <div className="space-y-2 rounded-lg border border-primary/40 p-3">

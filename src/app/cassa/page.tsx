@@ -21,6 +21,7 @@ import { AnnullaEFattura } from "@/components/AnnullaEFattura";
 import { Incassa, NOMI_MODALITA } from "@/components/Incassa";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
+import { SpedisciDocumento } from "@/components/SpedisciDocumento";
 import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
 import { SceltaPezzo, rigaDaPezzo } from "@/components/SceltaPezzo";
 import { toast } from "sonner";
@@ -427,6 +428,7 @@ export default function CassaPage() {
                   <span className="flex gap-1">
                     {(s.stato === "errore" || s.stato === "simulato") && <Button size="xs" variant="ghost" onClick={() => cassaRiprova(s.id).then(ricarica).catch(toastErrore)}><RotateCcw /> Riprova</Button>}
                     {["da_stampare", "errore", "simulato"].includes(s.stato) && <Button size="xs" variant="ghost" onClick={() => { if (confirm("Annullare lo scontrino e rimettere in giacenza gli articoli?")) cassaAnnulla(s.id).then(ricarica).catch(toastErrore); }}>Annulla</Button>}
+                    {doc === "vendita" && ["emesso", "in_stampa"].includes(s.stato) && <SpedisciDocumento link={{ scontrino_id: s.id }} soloPulsante />}
                     {stornabile && <Button size="xs" variant="ghost" className="text-red-600" title="Reso (anche parziale) o annullo di uno scontrino già emesso"
                       onClick={() => setStorno(s)}><Undo2 /> Storno</Button>}
                     {!negativo && (s.credito_residuo || 0) > 0.005 && ["emesso", "in_stampa", "simulato"].includes(s.stato) &&
