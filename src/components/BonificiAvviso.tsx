@@ -400,7 +400,10 @@ function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
   useEffect(() => {
     const apri = () => setGrande(true);
     window.addEventListener(APRI, apri);
-    return () => window.removeEventListener(APRI, apri);
+    // Esc riduce la finestra della conferma (non resta mai un velo che blocca la pagina)
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setGrande(false); };
+    window.addEventListener("keydown", esc);
+    return () => { window.removeEventListener(APRI, apri); window.removeEventListener("keydown", esc); };
   }, []);
   if (!pre) return null;
   const b = pre.bonifico, p = b.proposta_accettata!, pg = pre.pagamento, doc = pre.documento, cf = pre.confronto;
@@ -419,7 +422,12 @@ function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
       onFine();
       aggiorna();
       if (r.fattura_id) router.push(`/fatturazione?id=${r.fattura_id}`);
-      else window.location.reload();
+      else {
+        // ricarica senza ?bonifico= (05/10/2026): la conferma è fatta, non deve ripresentarsi né bloccare il pannello
+        const u = new URL(window.location.href);
+        u.searchParams.delete("bonifico");
+        window.location.replace(u.toString());
+      }
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
   async function nonCorrisponde() {

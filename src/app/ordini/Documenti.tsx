@@ -314,6 +314,15 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
     docDettaglio(id).then((r) => { setD(r); setErrore(""); }).catch((e: Error) => setErrore(e.message || "Errore"));
   }, [id]);
   useEffect(() => { carica(); }, [carica]);
+  // Esc chiude il pannello (se non c'è una finestra sopra, es. la conferma del bonifico)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      onChiudi();
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onChiudi]);
   // bonifico arrivato e abbinato a questo documento (05/10/2026, caso Esposito PF 10/2026): le conversioni aprono la
   // finestra PRECOMPILATA col bonifico (fattura o scontrino già pagati), non la scelta del metodo; con «Correggi» si usa
   // il pannello qui sotto, col bonifico come metodo proposto (mai contanti)
@@ -717,9 +726,19 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
   }
   // si apre da link: /ordini?id=<documento> (letto con useSearchParams: niente differenze server/client)
   const [apertoLocale, setAperto] = useState<string | null>(null);
+  // 05/10/2026 (PF 10/2026 bloccato dopo «Emetti scontrino già pagato con bonifico»): aperto da link ?id=…, la X non
+  // chiudeva perché router.replace(base) su Next 16 non aggiornava l'indirizzo e l'id del link riapriva il pannello.
+  // Il link chiuso si ricorda qui e l'indirizzo si pulisce con history.replaceState (Next lo sincronizza).
+  const [linkChiuso, setLinkChiuso] = useState<string | null>(null);
   const idLink = sp.get("id");
-  const aperto = apertoLocale ?? idLink;
-  const chiudiDettaglio = () => { setAperto(null); if (idLink) router.replace(base); };
+  const aperto = apertoLocale ?? (idLink && idLink !== linkChiuso ? idLink : null);
+  const chiudiDettaglio = () => {
+    setAperto(null);
+    if (idLink) {
+      setLinkChiuso(idLink);
+      try { window.history.replaceState(null, "", base); } catch { router.replace(base); }
+    }
+  };
 
   const carica = useCallback(() => {
     const ordini = tipo === "ordine";
