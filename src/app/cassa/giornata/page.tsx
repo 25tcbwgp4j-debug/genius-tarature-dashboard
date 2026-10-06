@@ -43,7 +43,8 @@ const TIPI_RIGA: [string, string][] = [
   ["scontrino", "Scontrino (battuto in cassa)"], ["storno", "Storno scontrino (reso)"], ["annullo", "Annullo scontrino"], ["acconto", "Acconto (solo se NON registrato in Ordini)"],
   ["reso", "Rimborso in contanti"], ["fattura", "Fattura fuori dashboard"], ["altro", "Altro"],
 ];
-const TIPI_PRELIEVO: Record<string, string> = { eccesso: "Troppi contanti in cassa", spesa: "Spesa", altro: "Altro" };
+const TIPI_PRELIEVO: Record<string, string> = { eccesso: "Troppi contanti in cassa", spesa: "Spesa", altro: "Altro",
+  versamento: "Versamento in cassa (monete/banconote da fuori)" };
 const tondo = (v: number) => Math.round(v * 100) / 100;
 const FMT_DATE = new Map<string, Intl.DateTimeFormat>();
 const dataIt = (g: string, o?: Intl.DateTimeFormatOptions) => {
@@ -349,7 +350,7 @@ export default function CassaGiornataPage() {
   }
   function aggiungiPrelievo() {
     const imp = parseDec(prel.importo);
-    if (imp === null || Number.isNaN(imp) || imp <= 0) { toast.error("Scrivi l'importo del prelievo (es. 50 o 12,50)"); return; }
+    if (imp === null || Number.isNaN(imp) || imp <= 0) { toast.error(`Scrivi l'importo del ${prel.tipo === "versamento" ? "versamento" : "prelievo"} (es. 50 o 12,50)`); return; }
     return azione("prelievo", async () => {
       applica(await cassaGiornataSalva(giorno, { prelievi: [...(bozza?.prelievi || []), { importo: imp, nota: prel.nota.trim(), tipo: prel.tipo }] }));
       setPrel((x) => ({ importo: "", tipo: x.tipo, nota: "" }));
@@ -357,7 +358,7 @@ export default function CassaGiornataPage() {
   }
   function eliminaPrelievo(i: number) {
     const p = bozza?.prelievi[i];
-    if (!p || !confirm(`Eliminare il prelievo di ${eur(p.importo)}${p.nota ? ` (${p.nota})` : ""}?`)) return;
+    if (!p || !confirm(`Eliminare il ${p.tipo === "versamento" ? "versamento" : "prelievo"} di ${eur(p.importo)}${p.nota ? ` (${p.nota})` : ""}?`)) return;
     return salvaPrelievi(bozza.prelievi.filter((_, j) => j !== i));
   }
 
@@ -816,13 +817,14 @@ export default function CassaGiornataPage() {
 
         {/* PRELIEVI */}
         <Card className="space-y-2 p-3">
-          <div className="flex items-baseline justify-between"><span className="font-semibold">Prelievi di cassa</span><span className="font-semibold tabular-nums">{eur(rp.prelievi)}</span></div>
+          <div className="flex items-baseline justify-between gap-2"><span className="font-semibold">Prelievi e versamenti di cassa</span>
+            <span className="font-semibold tabular-nums">− {eur(rp.prelievi)}{rp.versamenti ? <span className="text-emerald-700"> · + {eur(rp.versamenti)}</span> : null}</span></div>
           {(g.prelievi || []).map((p, i) => (
             <div key={i} className="flex items-center gap-2 text-sm">
-              <span className="w-24 text-right font-medium tabular-nums">{eur(p.importo)}</span>
+              <span className={`w-24 text-right font-medium tabular-nums ${p.tipo === "versamento" ? "text-emerald-700" : ""}`}>{p.tipo === "versamento" ? "+ " : "− "}{eur(p.importo)}</span>
               <span className="rounded bg-muted px-1.5 text-xs">{TIPI_PRELIEVO[p.tipo || "altro"] || p.tipo}</span>
               <span className="flex-1 text-muted-foreground">{p.nota}</span>
-              {!chiusa && <button className="text-muted-foreground hover:text-red-600" title="Elimina prelievo"
+              {!chiusa && <button className="text-muted-foreground hover:text-red-600" title="Elimina"
                 onClick={() => eliminaPrelievo(i)}><Trash2 className="size-4" /></button>}
             </div>
           ))}
@@ -833,10 +835,10 @@ export default function CassaGiornataPage() {
               <select className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={prel.tipo} onChange={(e) => setPrel({ ...prel, tipo: e.target.value })}>
                 {Object.entries(TIPI_PRELIEVO).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
-              <Input className="h-9 min-w-[180px] flex-1" placeholder="motivo (es. versati in banca, spesa cinesi…)" value={prel.nota}
+              <Input className="h-9 min-w-[180px] flex-1" placeholder={prel.tipo === "versamento" ? "es. 20 monete da 1 € per il resto" : "motivo (es. versati in banca, spesa cinesi…)"} value={prel.nota}
                 onChange={(e) => setPrel({ ...prel, nota: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); aggiungiPrelievo(); } }} />
               <Button size="sm" onClick={aggiungiPrelievo} disabled={!!busy}>
-                {busy === "prelievo" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}Aggiungi prelievo
+                {busy === "prelievo" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Plus className="mr-1 size-4" />}{prel.tipo === "versamento" ? "Aggiungi versamento" : "Aggiungi prelievo"}
               </Button>
             </div>
           )}
@@ -906,6 +908,7 @@ export default function CassaGiornataPage() {
               <div className="flex justify-between"><span>Mattina</span><span>{eur(rp.apertura)}</span></div>
               <div className="flex justify-between"><span>+ incassi in contanti</span><span>{eur(f.totali.contanti)}</span></div>
               <div className="flex justify-between"><span>− prelievi</span><span>{eur(rp.prelievi)}</span></div>
+              {!!rp.versamenti && <div className="flex justify-between"><span>+ versamenti in cassa</span><span>{eur(rp.versamenti)}</span></div>}
               <div className="flex justify-between border-t pt-1 font-semibold"><span>= devono esserci</span><span>{eur(rp.chiusura_teorica)}</span></div>
               <div className="flex justify-between"><span>contati la sera</span><span>{eur(rp.chiusura_contata)}</span></div>
               <div className={`flex justify-between border-t pt-1 text-lg font-bold ${seraVuota ? "text-muted-foreground" : Math.abs(diffContanti) < 0.05 ? "text-emerald-700" : "text-red-700"}`}>

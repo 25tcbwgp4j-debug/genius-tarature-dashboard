@@ -1411,7 +1411,7 @@ export interface FoglioCassa {
   };
   righe: RigaGiornata[]; totali: Record<'contanti' | 'pos' | 'stripe' | 'bonifico' | 'paypal', number>; totale_giorno: number;
   riepilogo: {
-    apertura: number; prelievi: number; chiusura_teorica: number; chiusura_contata: number; pos_terminale: number | null; pos_da_sumup: number | null;
+    apertura: number; prelievi: number; versamenti?: number; chiusura_teorica: number; chiusura_contata: number; pos_terminale: number | null; pos_da_sumup: number | null;
     fatture_n: number; fatture_totale: number; fatture_prec_totale: number; scontrini_n: number; scontrini_totale: number; altro_totale: number;
     acconti_n: number; acconti_totale: number; note_credito_n: number; note_credito_totale: number; rimborsi_contanti: number; storni_totale: number;
     reintegro: number; cassa_per_domani: number; apertura_attesa: number | null; apertura_attesa_tagli: Tagli | null; apertura_attesa_da: string | null;
