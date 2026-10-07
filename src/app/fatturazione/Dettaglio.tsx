@@ -49,6 +49,8 @@ export function Dettaglio({
   const [invio, setInvio] = useState<"" | "email" | "whatsapp">("");
   const [dest, setDest] = useState("");
   const [msgInvio, setMsgInvio] = useState("");
+  // ultimo link di pagamento con carta creato qui (07/10/2026): finisce nella copia di cortesia delle fatture da pagare
+  const [linkCarta, setLinkCarta] = useState("");
   const [errore, setErrore] = useState("");
   const [conv, setConv] = useState<{ numero: string; modalita: string } | null>(null);   // conversione in scontrino
   const { admin: titolare } = usePermessiAtt();
@@ -223,10 +225,16 @@ export function Dettaglio({
                 <RotateCcw /> Nota di credito
               </Button>
             )}
+            {/* Duplica (07/10/2026): nuova bozza con stesso cliente, righe, IVA, causale, note e pagamento —
+                senza numero, SdI, pagamenti, scontrino né acconti. Poi si invia col solito flusso (prima il pagamento, poi lo SdI). */}
             {emessa && (
-              <Button size="sm" variant="outline" disabled={!!busy || !operatore}
-                onClick={() => azione("dup", () => fattDuplica(f.id, operatore), (r) => { toast.success("Copia pronta: modificala e inviala"); onEdit(r); })}>
-                <Copy /> Copia in nuova fattura
+              <Button size="sm" variant="secondary" disabled={!!busy}
+                title="Crea una nuova bozza identica (stesso cliente e righe, data di oggi, senza numero né pagamenti)"
+                onClick={() => {
+                  if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO) per duplicare"); return; }
+                  azione("dup", () => fattDuplica(f.id, operatore), (r) => { toast.success("Duplicata: nuova bozza pronta, controllala e inviala"); onEdit(r); });
+                }}>
+                {busy === "dup" ? <Loader2 className="animate-spin" /> : <Copy />} Duplica fattura
               </Button>
             )}
             {f.stato === "bozza" && !f.numero && (
@@ -261,6 +269,11 @@ export function Dettaglio({
             <div className="space-y-2 rounded-lg border border-primary/40 p-3">
               <div className="text-sm font-medium">
                 {invio === "email" ? "Invia la copia di cortesia per email (PDF allegato)" : "Invia sul WhatsApp dello staff (link al PDF)"}
+                {!pagata && f.tipo_documento !== "TD04" && (
+                  <div className="text-xs font-normal text-muted-foreground">
+                    Da pagare: il messaggio indica importo residuo, scadenza ed estremi del bonifico{linkCarta ? " + il link di pagamento con carta" : ""}.
+                  </div>
+                )}
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 <input className="h-8 rounded-md border border-input bg-background px-2 text-sm"
@@ -271,7 +284,8 @@ export function Dettaglio({
               <div className="flex gap-2">
                 <Button size="sm" disabled={!!busy || !dest}
                   onClick={() => azione("invio", () => fattInvia(f.id, invio === "email"
-                    ? { canale: "email", email: dest, messaggio: msgInvio } : { canale: "whatsapp", telefono: dest, messaggio: msgInvio }),
+                    ? { canale: "email", email: dest, messaggio: msgInvio, link_pagamento: linkCarta || undefined }
+                    : { canale: "whatsapp", telefono: dest, messaggio: msgInvio, link_pagamento: linkCarta || undefined }),
                   (r: { a: string; canale: string }) => { toast.success(r.canale === "email" ? `Fattura inviata a ${r.a}` : `Messaggio in coda sul WhatsApp dello staff per ${r.a}`); setInvio(""); })}>
                   {busy === "invio" ? <Loader2 className="animate-spin" /> : <Send />} Invia
                 </Button>
@@ -419,6 +433,7 @@ export function Dettaglio({
                           azione("stripe", () => fattLinkStripe(f.id), (r) => {
                             if (!r.url) return;
                             aperto = true;
+                            setLinkCarta(r.url);
                             navigator.clipboard?.writeText(r.url).catch(() => undefined);
                             toast.success("Link di pagamento copiato (valido 24 ore)");
                             if (w) w.location.href = r.url; else window.open(r.url, "_blank");

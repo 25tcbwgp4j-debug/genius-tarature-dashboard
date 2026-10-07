@@ -1251,7 +1251,7 @@ export async function fattResocontoSalta(body: { societa: string; anagrafica_id:
   return fetchAPI('/api/fatturazione/resoconti/salta', { method: 'POST', body: JSON.stringify(body) });
 }
 export function fattUrlPdf(id: string, download = false) { return `${API_PROXY}/api/fatturazione/fatture/${id}/pdf${download ? '?download=true' : ''}`; }
-export async function fattInvia(id: string, body: { canale: 'email' | 'whatsapp'; email?: string; telefono?: string; messaggio?: string }) {
+export async function fattInvia(id: string, body: { canale: 'email' | 'whatsapp'; email?: string; telefono?: string; messaggio?: string; link_pagamento?: string }) {
   return fetchAPI(`/api/fatturazione/fatture/${id}/invia`, { method: 'POST', body: JSON.stringify(body) });
 }
 export interface FattVoceCatalogo { gruppo: string; codice: string | null; descrizione: string; prezzo_ivato: number | null; aliquota: number;
