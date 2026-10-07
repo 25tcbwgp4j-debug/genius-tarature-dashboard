@@ -1,10 +1,15 @@
 "use client";
 
+// Destinatario del rapporto — 07/10/2026 (Christian): è un FLAG dentro la scheda del cliente,
+// «Il destinatario del rapporto è diverso da chi paga».
+// Spento = destinatario uguale a chi paga, nessun campo a video. Acceso = si apre il blocco del destinatario
+// (ricerca in anagrafica o inserimento manuale). Se la sessione ha già un destinatario diverso il flag nasce acceso
+// e si vede il riepilogo, con «Modifica destinatario». Colonne usate: recipient_* di calibration_sessions (esistenti).
+
 import { useState, useEffect } from "react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronUp, Loader2, Save, Search, Users, X } from "lucide-react";
+import { Loader2, Save, Search, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { searchCustomers, updateSession } from "@/lib/api";
 
@@ -66,11 +71,28 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
     province: session.recipient_province || "",
   });
   const [saving, setSaving] = useState(false);
-  // 02/10/2026: di default una sola riga riassuntiva; il modulo si apre solo cliccando (Christian)
+  // modulo aperto: subito se si accende il flag su una sessione senza destinatario salvato, altrimenti con «Modifica»
   const [aperto, setAperto] = useState(false);
-  const riepilogo = session.recipient_different
-    ? `${session.recipient_company_name || "destinatario diverso"}${session.recipient_vat_number ? ` · P.IVA ${session.recipient_vat_number}` : ""}`
-    : `uguale al cliente: ${customer.company_name || "—"}`;
+  const salvato = !!session.recipient_different;
+  const indirizzoDest = [session.recipient_address, [session.recipient_zip_code, session.recipient_city].filter(Boolean).join(" "),
+    session.recipient_province ? `(${session.recipient_province})` : ""].filter(Boolean).join(", ");
+
+  // Flag: acceso → apre il blocco; spento su una sessione che aveva il destinatario → torna uguale a chi paga (salva subito)
+  const cambiaFlag = async (acceso: boolean) => {
+    if (acceso) { setEnabled(true); setAperto(true); return; }
+    if (!salvato) { setEnabled(false); setAperto(false); return; }
+    if (!confirm("Il destinatario del rapporto torna uguale al cliente che paga?\n\nRicorda di rigenerare i rapporti se erano già stati fatti.")) return;
+    setSaving(true);
+    try {
+      await updateSession(sessionId, { recipient_different: false });
+      toast.success("Destinatario riportato a uguale al cliente");
+      setEnabled(false);
+      setAperto(false);
+      await onSaved();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Errore salvataggio destinatario");
+    } finally { setSaving(false); }
+  };
 
   useEffect(() => {
     if (!query || query.length < 2) { setResults([]); return; }
@@ -184,42 +206,37 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
   };
 
   return (
-    <Card className="gap-0 p-3 sm:p-4">
-      {/* Riga riassuntiva: sempre visibile. Il modulo sotto si apre con il pulsante. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+    <div>
+      {/* FLAG: sempre visibile, unica riga quando è spento */}
+      <label className="flex min-h-11 cursor-pointer select-none items-center gap-2">
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={saving}
+          onChange={(e) => cambiaFlag(e.target.checked)}
+          className="h-5 w-5 shrink-0 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+        />
         <Users className="size-4 shrink-0 text-purple-600" />
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Destinatario del rapporto</span>
-        <span className={`text-sm ${session.recipient_different ? "font-semibold text-purple-900" : "text-gray-700"}`}>{riepilogo}</span>
-        <button type="button" onClick={() => setAperto((v) => !v)} aria-expanded={aperto}
-          className="ml-auto flex h-11 items-center gap-1 rounded-lg border border-gray-200 px-3 text-xs text-gray-700 hover:bg-gray-50">
-          {aperto ? <>Chiudi <ChevronUp className="size-3.5" /></> : <>{session.recipient_different ? "Modifica" : "Diverso da chi paga?"} <ChevronDown className="size-3.5" /></>}
-        </button>
-      </div>
+        <span className="text-sm font-medium text-gray-800">Il destinatario del rapporto è diverso da chi paga</span>
+        {!enabled && <span className="hidden text-xs text-gray-500 sm:inline">— ora il rapporto va a {customer.company_name || "chi paga"}</span>}
+      </label>
 
-      {aperto && (
-      <div className="mt-3 space-y-3 border-t pt-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-gray-500">
-          Default: stesso cliente. Spunta se il proprietario degli strumenti e&apos; diverso da chi paga.
-        </p>
-        <label className="inline-flex h-9 cursor-pointer select-none items-center gap-2">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-            className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-          />
-          <span className="text-sm font-medium text-gray-700">Destinatario diverso</span>
-        </label>
-      </div>
-
-      {!enabled ? (
-        <div className="text-sm text-gray-500 bg-gray-50 rounded p-3">
-          Il rapporto di taratura riportera&apos; cliente e destinatario uguali a:
-          <strong className="ml-1">{customer.company_name}</strong>
+      {/* Acceso e già salvato: riepilogo del destinatario */}
+      {enabled && salvato && !aperto && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-purple-200 bg-purple-50 p-2 text-sm">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-purple-900">{session.recipient_company_name || "Destinatario dall'anagrafica"}</p>
+            <p className="text-xs text-purple-800">
+              {[session.recipient_vat_number && `P.IVA ${session.recipient_vat_number}`, session.recipient_tax_id && `CF ${session.recipient_tax_id}`, indirizzoDest]
+                .filter(Boolean).join(" · ") || "—"}
+            </p>
+          </div>
+          <Button variant="outline" className="h-11" onClick={() => setAperto(true)}>Modifica destinatario</Button>
         </div>
-      ) : (
-        <div className="space-y-4">
+      )}
+
+      {enabled && aperto && (
+        <div className="mt-2 space-y-3 rounded-md border border-purple-200 bg-purple-50/40 p-3">
           {/* Tabs modalita' */}
           <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
             <button
@@ -373,17 +390,19 @@ export function RecipientPanel({ sessionId, session, customer, onSaved }: Props)
               </div>
             </div>
           )}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" className="h-11" disabled={saving}
+              onClick={() => { if (salvato) setAperto(false); else { setEnabled(false); setAperto(false); } }}>
+              <X className="w-4 h-4 mr-1" /> Annulla
+            </Button>
+            <Button onClick={save} disabled={saving} className="h-11">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+              Salva destinatario
+            </Button>
+          </div>
         </div>
       )}
-
-      <div className="flex justify-end">
-        <Button onClick={save} disabled={saving} className="h-11">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
-          Salva destinatario
-        </Button>
-      </div>
-      </div>
-      )}
-    </Card>
+    </div>
   );
 }

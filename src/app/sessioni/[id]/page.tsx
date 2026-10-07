@@ -70,6 +70,7 @@ import { ShipmentsPanel } from "./ShipmentsPanel";
 import { FatturaPanel, ProformaDialog } from "./FatturaPanel";
 import { SpedizioneSessione } from "./SpedizioneSessione";
 import { ProntoProgrammato } from "./ProntoProgrammato";
+import { NOMI_OPERATORI, OPERATORI_TARATURE } from "@/components/Operatore";
 
 interface InstrumentType {
   id: string;
@@ -285,17 +286,19 @@ export default function SessionDetail() {
   }, [sessionId]);
   useEffect(() => { caricaStatoPag(); }, [caricaStatoPag, fatturaAggiorna]);
 
-  useEffect(() => {
-    let vivo = true;
-    proformaSessioneStato(sessionId).then((r) => vivo && setPfDoc(r.documento)).catch(() => undefined);
-    return () => { vivo = false; };
-  }, [sessionId, fatturaAggiorna]);
+  // Pro forma della sessione: ricaricato all'apertura, dopo ogni azione e SUBITO dopo la preparazione
+  // (07/10/2026: prima «Vedi»/«Apri il pro forma» restavano spenti finché non si ricaricava la pagina)
+  const caricaPf = useCallback(() => {
+    return proformaSessioneStato(sessionId).then((r) => setPfDoc(r.documento)).catch(() => undefined);
+  }, [sessionId]);
+  useEffect(() => { caricaPf(); }, [caricaPf, fatturaAggiorna]);
 
   const loadSession = async () => {
     try {
       const data = await getSession(sessionId);
       setSession(data);
       caricaStatoPag();
+      caricaPf();
     } catch {
       toast.error("Errore nel caricamento della sessione");
     } finally {
@@ -835,14 +838,21 @@ export default function SessionDetail() {
       {editingSession && (
         <Card className="p-4 bg-blue-50 border-blue-200">
           <h4 className="font-semibold mb-2">Modifica sessione</h4>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className="text-xs text-gray-500">Operatore</label>
-              <Input
+              {/* solo Christian o Dumy (07/10/2026); un valore storico diverso resta visibile finché non si cambia */}
+              <select
+                className="w-full h-8 text-sm border rounded px-2"
                 value={editSessionData?.operator || ""}
                 onChange={(e) => setEditSessionData({ ...editSessionData, operator: e.target.value })}
-                className="h-8 text-sm"
-              />
+              >
+                <option value="">—</option>
+                {OPERATORI_TARATURE.map((o) => <option key={o} value={o}>{NOMI_OPERATORI[o] || o}</option>)}
+                {editSessionData?.operator && !(OPERATORI_TARATURE as readonly string[]).includes(editSessionData.operator) && (
+                  <option value={editSessionData.operator}>{editSessionData.operator}</option>
+                )}
+              </select>
             </div>
             <div>
               <label className="text-xs text-gray-500">Stato</label>
@@ -887,21 +897,23 @@ export default function SessionDetail() {
         previewLoading={previewLoading}
         apriAnteprimaProforma={apriAnteprimaProforma}
         apriDialogProforma={() => { setPfDopo(null); setDialogPf(true); }}
+        pfDoc={pfDoc}
         currentStep={currentStep}
         statoPag={statoPag}
         onRicarica={loadSession}
       />
 
-      {/* Cliente (chi paga): una riga, dettagli a richiesta */}
-      <ClienteCard sessionId={sessionId} customer={customer} onChanged={loadSession} termini={statoPag?.termini} />
-
-      {/* Destinatario diverso (proprietario strumento) */}
-      <RecipientPanel
-        sessionId={sessionId}
-        session={session}
-        customer={customer}
-        onSaved={loadSession}
-      />
+      {/* Cliente (chi paga): riepilogo anagrafico completo, dati mancanti per fatturare in rosso;
+          dentro, il flag «Il destinatario del rapporto è diverso da chi paga» (07/10/2026) */}
+      <ClienteCard sessionId={sessionId} customer={customer} onChanged={loadSession} termini={statoPag?.termini}>
+        <RecipientPanel
+          key={[session.recipient_different, session.recipient_customer_id, session.recipient_company_name].join("|")}
+          sessionId={sessionId}
+          session={session}
+          customer={customer}
+          onSaved={loadSession}
+        />
+      </ClienteCard>
 
 
       {/* Storico strumenti cliente - collapsible */}
@@ -1255,7 +1267,8 @@ export default function SessionDetail() {
       </div>
 
       {/* === FATTURA ELETTRONICA (Openapi SDI) === */}
-      <FatturaPanel sessionId={sessionId} aggiorna={fatturaAggiorna} onCambio={loadSession} />
+      <FatturaPanel sessionId={sessionId} aggiorna={fatturaAggiorna} onCambio={loadSession}
+        onApriProforma={() => { setPfDopo(null); setDialogPf(true); }} />
 
       {dialogPf && (
         <ProformaDialog
@@ -1263,6 +1276,7 @@ export default function SessionDetail() {
           onChiudi={() => { setDialogPf(false); setPfDopo(null); }}
           onCreato={() => {
             setDialogPf(false);
+            caricaPf();   // «Vedi» si accende subito, senza ricaricare la pagina
             setFatturaAggiorna((n) => n + 1);
             loadSession();
             const ch = pfDopo;
@@ -1292,7 +1306,7 @@ export default function SessionDetail() {
           </div>
           <div>
             <span className="text-gray-500">Operatore:</span>
-            <p>{session.operator || "N/D"}</p>
+            <p>{NOMI_OPERATORI[session.operator as keyof typeof NOMI_OPERATORI] || session.operator || "N/D"}</p>
           </div>
           <div>
             <span className="text-gray-500">Note:</span>

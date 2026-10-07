@@ -29,6 +29,12 @@ interface Props {
     discount_percent?: number | string | null;
   };
   onSaved: () => void | Promise<void>;
+  /** testo del pulsante (default «Modifica cliente») */
+  etichetta?: string;
+  /** classi extra del pulsante (es. rosso per «Completa i dati mancanti») */
+  className?: string;
+  /** campi da evidenziare in rosso nel modulo (dati obbligatori per fatturare che mancano) */
+  mancanti?: string[];
 }
 
 const FIELDS: Array<{ key: string; label: string; colSpan?: number }> = [
@@ -51,7 +57,7 @@ const FIELDS: Array<{ key: string; label: string; colSpan?: number }> = [
   { key: "discount_percent", label: "Sconto %" },
 ];
 
-export function EditCustomerDialog({ customer, onSaved }: Props) {
+export function EditCustomerDialog({ customer, onSaved, etichetta = "Modifica cliente", className = "", mancanti = [] }: Props) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
@@ -107,8 +113,8 @@ export function EditCustomerDialog({ customer, onSaved }: Props) {
 
   return (
     <>
-      <Button variant="outline" className="h-11" onClick={handleOpen}>
-        <Pencil className="w-4 h-4 mr-1" /> Modifica cliente
+      <Button variant="outline" className={`h-11 ${className}`} onClick={handleOpen}>
+        <Pencil className="w-4 h-4 mr-1" /> {etichetta}
       </Button>
 
       {open && (
@@ -126,18 +132,26 @@ export function EditCustomerDialog({ customer, onSaved }: Props) {
               Le modifiche verranno salvate direttamente nell&apos;anagrafica clienti.
             </p>
 
-            <div className="grid grid-cols-4 gap-3">
-              {FIELDS.map((f) => (
+            {mancanti.length > 0 && (
+              <p className="rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs text-red-800">
+                In rosso i dati che servono per fatturare (P.IVA o CF · SDI o PEC · indirizzo · CAP · comune).
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {FIELDS.map((f) => {
+                const manca = mancanti.includes(f.key) && !String(form[f.key] || "").trim();
+                return (
                 <div key={f.key} className={f.colSpan === 2 ? "col-span-2" : ""}>
-                  <label className="text-xs text-gray-500">{f.label}</label>
+                  <label className={`text-xs ${manca ? "font-semibold text-red-700" : "text-gray-500"}`}>{f.label}{manca ? " — manca" : ""}</label>
                   <Input
                     value={form[f.key] || ""}
                     onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
-                    className="h-8 text-sm"
+                    className={`h-9 text-sm ${manca ? "border-red-500 bg-red-50" : ""}`}
                     placeholder={f.label}
                   />
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t">

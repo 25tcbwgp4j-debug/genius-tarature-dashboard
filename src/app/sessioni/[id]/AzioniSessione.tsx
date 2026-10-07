@@ -4,12 +4,16 @@
 // alti 80 px con molto bianco intorno; ora ogni azione è un riquadro con titolo, data dell'ultimo invio e
 // pulsanti alti 44 px (bersaglio minimo per il dito su iPad e iPhone). Le funzioni sono le stesse di prima:
 // registrazione (email/WhatsApp), pronti al ritiro, pro forma, genera rapporti, riconsegna, pagamento, Stripe.
+// 07/10/2026 (Christian): in prima fila «Pro forma» (EMAIL · WHATSAPP · Vedi · Prepara pro forma di fattura ·
+// Converti in scontrino) e «Rapporti di taratura» con accanto la scelta di chi li fa (solo Christian o Dumy).
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Euro, FileOutput, Loader2, Mail, MessageCircle, PackageCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Eye, Euro, FileOutput, FileSpreadsheet, Loader2, Mail, MessageCircle, PackageCheck, ShoppingCart } from "lucide-react";
+import { NOMI_OPERATORI, OPERATORI_TARATURE, SceltaOperatore, useOperatore, type Operatore } from "@/components/Operatore";
 import { toast } from "sonner";
-import { generateRdts, markDelivered, markSessionPaid, notifyReady, registerComplete, type StatoPagamentoSessione } from "@/lib/api";
+import { generateRdts, markDelivered, markSessionPaid, notifyReady, registerComplete, updateSession, type ProformaSessioneStato, type StatoPagamentoSessione } from "@/lib/api";
 import { testoPagamento } from "./PagamentoStato";
 import { IncassoSessione } from "./IncassoSessione";
 
@@ -25,6 +29,8 @@ interface Props {
   previewLoading: boolean;
   apriAnteprimaProforma: (ch: "email" | "whatsapp") => void;
   apriDialogProforma: () => void;
+  /** pro forma (documento PF) della sessione: c'è → «Vedi» attivo, «Prepara» spento */
+  pfDoc?: ProformaSessioneStato["documento"];
   currentStep: number;
   /** stato del pagamento dalla fattura collegata (fonte di verità, 03/10/2026) */
   statoPag?: StatoPagamentoSessione | null;
@@ -82,8 +88,14 @@ function Canali({ email, whatsapp, disabled, busy }: {
 }
 
 export function AzioniSessione({ sessionId, session, instruments, actionLoading, setActionLoading, handleAction,
-  previewLoading, apriAnteprimaProforma, apriDialogProforma, currentStep, statoPag, onRicarica }: Props) {
+  previewLoading, apriAnteprimaProforma, apriDialogProforma, pfDoc, currentStep, statoPag, onRicarica }: Props) {
+  const router = useRouter();
   const occupato = actionLoading !== null;
+  // chi sta facendo l'operazione: sulla pagina sessione solo Christian (CHR) o Dumy (DUMY), ricordato sul dispositivo
+  const [opDispositivo, setOperatore] = useOperatore();
+  const operatore = (OPERATORI_TARATURE as readonly Operatore[]).includes(opDispositivo as Operatore) ? (opDispositivo as Operatore) : "";
+  const pf = pfDoc || null;
+  const pfConvertito = pf?.stato === "convertito";
   const ultimoRdt = instruments.map((i) => i.rdt_generated_at || "").filter(Boolean).sort().pop();
   // con la fattura vale la fattura: è lei che dice se è pagata (la sessione si allinea da sola)
   const fattura = statoPag?.fattura || null;
@@ -103,6 +115,55 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
         <span className="text-[11px] text-gray-500">comunicazioni al cliente · rapporti · pagamento · chiusura</span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {/* PRO FORMA (prima fila, largo due colonne): invio + Vedi + Prepara + Scontrino */}
+        <div className="sm:col-span-2 [&>div]:h-full">
+        <Gruppo titolo="Pro forma" sotto={<>
+          {pf ? <>Pro forma <b>{pf.sigla}</b>{pf.totale != null ? ` · ${Number(pf.totale).toLocaleString("it-IT", { style: "currency", currency: "EUR" })}` : ""}{pfConvertito ? ` · convertito${pf.convertito_in?.tipo === "scontrino" ? " in scontrino" : " in fattura"}` : ""} · </> : "Nessun pro forma ancora · "}
+          Spedizione: {spedizione} ·{" "}
+          <button type="button" className="underline" onClick={() => document.getElementById("spedizioni")?.scrollIntoView({ behavior: "smooth" })}>modifica</button>
+        </>}>
+          <div className="grid grid-cols-1 gap-1.5 md:grid-cols-[2fr_3fr]">
+            <Canali disabled={occupato || previewLoading}
+              busy={previewLoading ? null : actionLoading === "proforma_email" ? "email" : actionLoading === "proforma_wa" ? "whatsapp" : null}
+              email={{ ts: session.proforma_email_at, cls: "bg-orange-600 hover:bg-orange-700", onClick: () => apriAnteprimaProforma("email") }}
+              whatsapp={{ ts: session.proforma_whatsapp_at, cls: "bg-orange-700 hover:bg-orange-800", onClick: () => apriAnteprimaProforma("whatsapp") }}
+            />
+            <div className="grid grid-cols-3 gap-1.5 [&_button]:h-11 [&_button]:whitespace-normal [&_button]:px-1.5 [&_button]:text-[11px] [&_button]:leading-tight">
+              <Button variant="outline" disabled={!pf} onClick={apriDialogProforma}
+                title={pf ? `Vedi il pro forma ${pf.sigla}` : "Si attiva quando il pro forma è stato preparato"}>
+                <Eye className="size-4 shrink-0" /> Vedi
+              </Button>
+              <Button variant="outline" disabled={occupato || !!pf || !!fattura} onClick={apriDialogProforma}
+                className="border-orange-300 text-orange-800 hover:bg-orange-50"
+                title={pf ? `Il pro forma ${pf.sigla} c'è già` : fattura ? "La sessione ha già la fattura" : "Anteprima del pro forma con le righe della fattura; si crea solo se confermi"}>
+                <FileSpreadsheet className="size-4 shrink-0" /> {pf ? "Pro forma pronto" : "Prepara pro forma di fattura"}
+              </Button>
+              <Button variant="outline" disabled={occupato || !!fattura || pfConvertito}
+                title={fattura ? "La sessione ha già la fattura" : "Caso raro: il cliente non vuole la fattura. Apre lo Scontrino (registratore) con le righe della sessione"}
+                onClick={() => { if (confirm("Il cliente non vuole la fattura?\n\nApro lo Scontrino (registratore) con le righe di questa sessione: lì scegli operatore e pagamento.")) router.push(`/cassa?sessione=${sessionId}`); }}>
+                <ShoppingCart className="size-4 shrink-0" /> Converti in scontrino
+              </Button>
+            </div>
+          </div>
+        </Gruppo>
+        </div>
+
+        {/* RAPPORTI: accanto a «Genera rapporti» si sceglie chi li sta facendo (salvato come operatore della sessione) */}
+        <Gruppo titolo="Rapporti di taratura" sotto="Vanno generati prima delle etichette e del pronto">
+          <SceltaOperatore value={operatore} onChange={setOperatore} compatto opzioni={OPERATORI_TARATURE} nomi={NOMI_OPERATORI} className="p-1.5" />
+          <Button className="h-11 w-full bg-purple-600 text-xs font-bold text-white hover:bg-purple-700" disabled={occupato}
+            onClick={() => {
+              if (!operatore) { toast.error("Scegli chi sta generando i rapporti: Christian o Dumy"); return; }
+              handleAction("rdts", async () => {
+                if (session.operator !== operatore) await updateSession(sessionId, { operator: operatore });
+                return generateRdts(sessionId);
+              }, `Rapporti di taratura generati (${NOMI_OPERATORI[operatore] || operatore})!`);
+            }}>
+            {actionLoading === "rdts" ? <Loader2 className="size-4 animate-spin" /> : <FileOutput className="size-4" />} GENERA RAPPORTI
+          </Button>
+          <Quando ts={ultimoRdt} />
+        </Gruppo>
+
         <Gruppo titolo="Registrazione completata" sotto="Ricevuta di ingresso al cliente">
           <Canali disabled={occupato}
             busy={actionLoading === "register_email" ? "email" : actionLoading === "register_wa" ? "whatsapp" : null}
@@ -129,27 +190,6 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
               handleAction("ready_wa", () => notifyReady(sessionId, "whatsapp"), "Template WhatsApp pronti al ritiro inviato");
             } }}
           />
-        </Gruppo>
-
-        <Gruppo titolo="Pro forma" sotto={<>
-          Spedizione: {spedizione} ·{" "}
-          <button type="button" className="underline" onClick={() => document.getElementById("spedizioni")?.scrollIntoView({ behavior: "smooth" })}>modifica</button>
-          {" · "}
-          <button type="button" className="underline" onClick={apriDialogProforma}>anteprima pro forma</button>
-        </>}>
-          <Canali disabled={occupato || previewLoading}
-            busy={previewLoading ? null : actionLoading === "proforma_email" ? "email" : actionLoading === "proforma_wa" ? "whatsapp" : null}
-            email={{ ts: session.proforma_email_at, cls: "bg-orange-600 hover:bg-orange-700", onClick: () => apriAnteprimaProforma("email") }}
-            whatsapp={{ ts: session.proforma_whatsapp_at, cls: "bg-orange-700 hover:bg-orange-800", onClick: () => apriAnteprimaProforma("whatsapp") }}
-          />
-        </Gruppo>
-
-        <Gruppo titolo="Rapporti di taratura" sotto="Vanno generati prima delle etichette e del pronto">
-          <Button className="h-11 w-full bg-purple-600 text-xs font-bold text-white hover:bg-purple-700" disabled={occupato}
-            onClick={() => handleAction("rdts", () => generateRdts(sessionId), "Rapporti di taratura generati!")}>
-            {actionLoading === "rdts" ? <Loader2 className="size-4 animate-spin" /> : <FileOutput className="size-4" />} GENERA RAPPORTI
-          </Button>
-          <Quando ts={ultimoRdt} />
         </Gruppo>
 
         <Gruppo titolo="Pagamento" sotto={<>

@@ -2,9 +2,10 @@
 
 // Fattura della sessione di taratura (GENIUS LAB) — regole di Christian del 01/10/2026:
 // - dalla sessione NON si emette e non si invia MAI la fattura allo SdI;
-// - «Prepara bozza da controllare»: bozza dalla sessione, o DAL pro forma se c'è (il pro forma diventa «convertito»),
-//   poi si va da soli in Fatturazione sul dettaglio della bozza (pagamento, operatore, emissione). Se la bozza c'è già si apre quella;
-// - «Converti in scontrino» (il cliente non vuole la fattura): pagina Scontrino precompilata con le righe della sessione;
+// - 07/10/2026 (Christian): «Prepara pro forma di fattura» e «Converti in scontrino» stanno IN ALTO, nel riquadro
+//   «Pro forma» delle Azioni; la fattura nasce dal pro forma («Converti in fattura» sulla scheda del pro forma).
+//   Qui resta solo il link discreto «fattura diretta senza pro forma» (ex «Prepara bozza da controllare»): bozza dalla
+//   sessione, o DAL pro forma se c'è, poi si va in Fatturazione; propone anche di collegare una fattura già fatta in SimplyFatt;
 // - un solo pro forma per sessione; pro forma via email / WhatsApp con i pulsanti PROFORMA qui sopra;
 // - pagamento arrivato (verifica pagamenti) e avviso «DA SPEDIRE» se la riconsegna va fatta col corriere.
 
@@ -12,9 +13,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Banknote, ExternalLink, FileEdit, FileSpreadsheet, FileText, Loader2, Receipt, ShoppingCart, Truck } from "lucide-react";
+import { Banknote, ExternalLink, FileSpreadsheet, FileText, Loader2, Receipt, Truck } from "lucide-react";
 import { toast } from "sonner";
-import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
+import { BadgeOperatore, NOMI_OPERATORI, OPERATORI_TARATURE, SceltaOperatore, useOperatore, type Operatore } from "@/components/Operatore";
 import {
   fattCollegaSessione, fattDaSessione, fattStatoSessione, getDocumentoPdfUrl, getProformaAnteprimaPdfUrl, incSessione, proformaSessioneCrea, proformaSessioneStato,
   type ApiError, type DaSpedire, type ProformaSessioneStato, type StatoPagamentoSessione,
@@ -35,7 +36,9 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
   const [st, setSt] = useState<ProformaSessioneStato | null>(null);
   const [errore, setErrore] = useState("");
   const [busy, setBusy] = useState(false);
-  const [operatore, setOperatore] = useOperatore();
+  const [opDispositivo, setOperatore] = useOperatore();
+  // pagina sessione Tarature: solo Christian (CHR) o Dumy (DUMY)
+  const operatore = (OPERATORI_TARATURE as readonly Operatore[]).includes(opDispositivo as Operatore) ? opDispositivo : "";
   useEffect(() => { proformaSessioneStato(sessionId).then(setSt).catch((e: Error) => setErrore(e.message)); }, [sessionId]);
   const doc = st?.documento;
   const v = doc ? { righe: doc.righe_calcolate, imponibile: doc.imponibile, iva: doc.iva, totale: doc.totale } : st?.anteprima
@@ -46,7 +49,7 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
   const [creato, setCreato] = useState(false);
   async function conferma() {
     if (inCorso.current || creato) return;
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli chi sta facendo l'operazione: Christian o Dumy"); return; }
     inCorso.current = true;
     setBusy(true);
     try {
@@ -83,7 +86,7 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
             </>
           )}
         </div>
-        {!doc && <div className="border-t px-5 pt-3"><SceltaOperatore value={operatore} onChange={setOperatore} compatto /></div>}
+        {!doc && <div className="border-t px-5 pt-3"><SceltaOperatore value={operatore} onChange={setOperatore} compatto opzioni={OPERATORI_TARATURE} nomi={NOMI_OPERATORI} /></div>}
         <div className="flex gap-2 border-t bg-muted/40 px-5 py-3">
           <Button variant="outline" className="flex-1" onClick={onChiudi}>Chiudi</Button>
           {doc ? (
@@ -98,14 +101,18 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
   );
 }
 
-export function FatturaPanel({ sessionId, aggiorna = 0, onCambio }: { sessionId: string; aggiorna?: number; onCambio?: () => void }) {
+export function FatturaPanel({ sessionId, aggiorna = 0, onCambio, onApriProforma }: {
+  sessionId: string; aggiorna?: number; onCambio?: () => void;
+  /** apre l'anteprima del pro forma (il dialogo vive nella pagina della sessione) */
+  onApriProforma?: () => void;
+}) {
   const router = useRouter();
-  const [dialogPf, setDialogPf] = useState(false);
   const [pf, setPf] = useState<ProformaSessioneStato["documento"]>(null);
   const [st, setSt] = useState<Stato | null>(null);
   const [busy, setBusy] = useState("");
   const inCorso = useRef(false);
-  const [operatore, setOperatore] = useOperatore();
+  const [opDispositivo] = useOperatore();
+  const operatore = (OPERATORI_TARATURE as readonly Operatore[]).includes(opDispositivo as Operatore) ? opDispositivo : "";
   const [inc, setInc] = useState<{ incassi: { id: string; fonte: string; data: string; importo: number; ordinante: string | null; esito: string | null }[]; da_spedire: DaSpedire | null } | null>(null);
 
   const carica = useCallback(() => {
@@ -125,7 +132,7 @@ export function FatturaPanel({ sessionId, aggiorna = 0, onCambio }: { sessionId:
   const aggiornaTutto = useCallback(() => { carica(); onCambio?.(); }, [carica, onCambio]);
 
   async function bozza(forza = false) {
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli chi sta facendo l'operazione (Christian o Dumy) in alto, accanto a «Genera rapporti»"); return; }
     if (inCorso.current && !forza) return;
     inCorso.current = true;
     setBusy("bozza");
@@ -164,7 +171,7 @@ export function FatturaPanel({ sessionId, aggiorna = 0, onCambio }: { sessionId:
         <div className="font-medium">Fattura</div>
         <div className="ml-auto flex flex-wrap gap-1.5 text-xs">
           {pf ? (
-            <button className="rounded bg-orange-500/15 px-1.5 py-0.5 text-orange-800 underline-offset-2 hover:underline dark:text-orange-200" onClick={() => setDialogPf(true)}>
+            <button className="rounded bg-orange-500/15 px-1.5 py-0.5 text-orange-800 underline-offset-2 hover:underline dark:text-orange-200" onClick={() => onApriProforma?.()}>
               Pro forma {pf.sigla} · {eur(pf.totale)}{pf.stato === "convertito" ? ` · convertito${pf.convertito_in?.tipo === "scontrino" ? " in scontrino" : " in fattura"}` : ""}</button>
           ) : st?.proforma && <span className="rounded bg-muted px-1.5 py-0.5">Pro forma {st.proforma.proforma_number} · {eur(st.proforma.total)}</span>}
           {tp && <span className={`rounded border px-1.5 py-0.5 ${tp.colore}`}>{tp.breve}</span>}
@@ -219,35 +226,30 @@ export function FatturaPanel({ sessionId, aggiorna = 0, onCambio }: { sessionId:
       ) : (
         <>
           <p className="text-sm text-muted-foreground">
-            <b>Nessuna fattura collegata.</b> «Prepara bozza» crea la fattura da controllare{pfAperto ? <> (dal pro forma <b>{pfAperto.sigla}</b>)</> : null}
-            e ti porta in Fatturazione per l&apos;emissione allo SdI. Se la fattura è già stata fatta (es. in SimplyFatt) te la propone da collegare.
+            <b>Nessuna fattura collegata.</b>{" "}
+            {pfAperto
+              ? <>La fattura nasce dal pro forma <b>{pfAperto.sigla}</b>: aprilo e premi «Converti in fattura».</>
+              : <>Prepara il pro forma in alto (riquadro «Pro forma»), poi dal pro forma «Converti in fattura»; se il cliente non vuole la fattura, «Converti in scontrino».</>}
             {tp ? <> Pagamento: <b>{tp.lungo}</b>.</> : null}
           </p>
-          {/* Il pulsante verde «Apri il pro forma e convertilo in fattura» sta in ALTO nella scheda sessione
-              (sotto «Scarica rapporti», sopra le Azioni) dal 02/10/2026: qui resta solo il richiamo. */}
-          {pfAperto && (
-            <button type="button" className="text-left text-sm text-emerald-700 underline underline-offset-2"
-              onClick={() => router.push(`/proforma?id=${pfAperto.id}`)}>
-              Pro forma {pfAperto.sigla} pronto: aprilo e convertilo in fattura (pulsante verde in alto)
-            </button>
-          )}
-          <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
-          <div className="flex flex-wrap gap-2">
-            <Button variant={pfAperto ? "outline" : "default"} onClick={() => bozza()} disabled={!!busy || !operatore}>
-              {busy === "bozza" ? <Loader2 className="animate-spin" /> : <FileEdit />} Prepara bozza da controllare</Button>
-            {!pf && (
-              <Button variant="outline" onClick={() => setDialogPf(true)} disabled={!!busy}
-                title="Anteprima del pro forma con le righe della fattura; si crea solo se confermi">
-                <FileSpreadsheet /> Prepara pro forma di fattura</Button>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            {pfAperto && (
+              <button type="button" className="font-medium text-emerald-700 underline underline-offset-2"
+                onClick={() => router.push(`/proforma?id=${pfAperto.id}`)}>
+                Apri il pro forma {pfAperto.sigla} e convertilo in fattura
+              </button>
             )}
-            <Button variant="outline" disabled={!!busy}
-              title="Caso raro: il cliente non vuole la fattura. Apre lo Scontrino (registratore) con le righe della sessione"
-              onClick={() => { if (confirm("Il cliente non vuole la fattura?\n\nApro lo Scontrino (registratore) con le righe di questa sessione: lì scegli operatore e pagamento.")) router.push(`/cassa?sessione=${sessionId}`); }}>
-              <ShoppingCart /> Converti in scontrino</Button>
+            {/* ex «Prepara bozza da controllare»: resta come via di riserva (fattura senza pro forma o fattura già fatta
+                in SimplyFatt da collegare), non più tra i pulsanti principali */}
+            <button type="button" className="text-xs text-muted-foreground underline underline-offset-2 disabled:opacity-50"
+              disabled={!!busy}
+              title={operatore ? "Crea la bozza di fattura direttamente dalla sessione e apre Fatturazione" : "Scegli prima chi sta facendo l'operazione (in alto, accanto a «Genera rapporti»)"}
+              onClick={() => bozza()}>
+              {busy === "bozza" ? "Preparo la bozza…" : "Fattura diretta senza pro forma (o collega una fattura già fatta)"}
+            </button>
           </div>
         </>
       )}
-      {dialogPf && <ProformaDialog sessionId={sessionId} onChiudi={() => setDialogPf(false)} onCreato={() => { setDialogPf(false); aggiornaTutto(); }} />}
     </Card>
   );
 }
