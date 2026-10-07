@@ -10,6 +10,7 @@ import { PermessiProvider } from "@/components/permessi";
 import { AutorizzazioneDialog } from "@/components/AutorizzazioneDialog";
 import { GuardiaTitolare } from "@/components/RiservatoTitolare";
 import { BonificiAvviso } from "@/components/BonificiAvviso";
+import { StripeAvviso } from "@/components/StripeAvviso";
 import { AttivitaProvider } from "@/components/attivita";
 
 const geist = Geist({
@@ -78,6 +79,8 @@ export default function RootLayout({
             <AutorizzazioneDialog />
             {/* bonifici arrivati sul conto SumUp: pulsante rosso su ogni pagina (02/10/2026) */}
             <BonificiAvviso />
+            {/* pagamenti Stripe ricevuti (riconciliati da soli o NON abbinati): stesso stile, sopra i bonifici (07/10/2026) */}
+            <StripeAvviso />
            </AttivitaProvider>
           </PermessiProvider>
           <Toaster richColors position="top-right" />
