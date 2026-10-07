@@ -30,6 +30,8 @@ interface Props {
   apriDialogProforma: () => void;
   /** pro forma (documento PF) della sessione: c'è → «Vedi» attivo, «Prepara» spento */
   pfDoc?: ProformaSessioneStato["documento"];
+  /** avviso bloccante se la registrazione non è stata completata: poi() parte solo dopo la scelta */
+  controllaRegistrazione?: (azione: string, poi: () => void) => void;
   currentStep: number;
   /** stato del pagamento dalla fattura collegata (fonte di verità, 03/10/2026) */
   statoPag?: StatoPagamentoSessione | null;
@@ -87,7 +89,7 @@ function Canali({ email, whatsapp, disabled, busy }: {
 }
 
 export function AzioniSessione({ sessionId, session, instruments, actionLoading, setActionLoading, handleAction,
-  previewLoading, apriAnteprimaProforma, apriDialogProforma, pfDoc, currentStep, statoPag, onRicarica }: Props) {
+  previewLoading, apriAnteprimaProforma, apriDialogProforma, pfDoc, controllaRegistrazione = (_a, poi) => poi(), currentStep, statoPag, onRicarica }: Props) {
   const occupato = actionLoading !== null;
   // chi sta facendo l'operazione: sulla pagina sessione solo Christian (CHR) o Dumy (DUMY), ricordato sul dispositivo
   const [opDispositivo, setOperatore] = useOperatore();
@@ -140,10 +142,10 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
           <Button className="h-11 w-full bg-purple-600 text-xs font-bold text-white hover:bg-purple-700" disabled={occupato}
             onClick={() => {
               if (!operatore) { toast.error("Scegli chi sta generando i rapporti: Christian o Dumy"); return; }
-              handleAction("rdts", async () => {
+              controllaRegistrazione("generare i rapporti di taratura", () => handleAction("rdts", async () => {
                 if (session.operator !== operatore) await updateSession(sessionId, { operator: operatore });
                 return generateRdts(sessionId);
-              }, `Rapporti di taratura generati (${NOMI_OPERATORI[operatore] || operatore})!`);
+              }, `Rapporti di taratura generati (${NOMI_OPERATORI[operatore] || operatore})!`));
             }}>
             {actionLoading === "rdts" ? <Loader2 className="size-4 animate-spin" /> : <FileOutput className="size-4" />} GENERA RAPPORTI
           </Button>
@@ -155,7 +157,7 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
           <BloccoProforma sessionId={sessionId} session={session} pfDoc={pfDoc} statoPag={statoPag}
             actionLoading={actionLoading} setActionLoading={setActionLoading} handleAction={handleAction}
             previewLoading={previewLoading} apriAnteprimaProforma={apriAnteprimaProforma} apriDialogProforma={apriDialogProforma}
-            onRicarica={onRicarica} />
+            onRicarica={onRicarica} controllaRegistrazione={controllaRegistrazione} />
         </div>
 
         {/* ULTIMO: chiusura, compatta in una riga */}

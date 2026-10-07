@@ -62,10 +62,12 @@ interface Props {
   apriAnteprimaProforma: (ch: "email" | "whatsapp") => void;
   apriDialogProforma: () => void;
   onRicarica?: () => void;
+  /** avviso «registrazione non completata» prima di prepara/converti */
+  controllaRegistrazione?: (azione: string, poi: () => void) => void;
 }
 
 export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoading, setActionLoading, handleAction,
-  previewLoading, apriAnteprimaProforma, apriDialogProforma, onRicarica }: Props) {
+  previewLoading, apriAnteprimaProforma, apriDialogProforma, onRicarica, controllaRegistrazione = (_a, poi) => poi() }: Props) {
   const router = useRouter();
   const occupato = actionLoading !== null;
   const pf = pfDoc || null;
@@ -212,26 +214,26 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
             </div>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
-            <Button variant="outline" disabled={occupato || !!pf || !!fattura} onClick={apriDialogProforma}
+            <Button variant="outline" disabled={occupato || !!pf || !!fattura} onClick={() => controllaRegistrazione("preparare il pro forma di fattura", apriDialogProforma)}
               className={`${btn} border-orange-300 text-orange-800 hover:bg-orange-50`}
               title={pf ? `Il pro forma ${pf.sigla} c'è già` : fattura ? "La sessione ha già la fattura" : "Anteprima del pro forma con le righe della fattura; si crea solo se confermi"}>
               <FileSpreadsheet className="size-4 shrink-0" /> {pf ? "Pro forma pronto" : "Prepara pro forma di fattura"}
             </Button>
-            <Button disabled={!pfAperto || !!fattura} onClick={() => pfAperto && router.push(`/proforma?id=${pfAperto.id}`)}
+            <Button disabled={!pfAperto || !!fattura} onClick={() => pfAperto && controllaRegistrazione("convertire il pro forma in fattura", () => router.push(`/proforma?id=${pfAperto.id}`))}
               className={`${btn} bg-emerald-600 font-semibold text-white hover:bg-emerald-700`}
               title={fattura ? "La fattura c'è già" : pfAperto ? `Apre il pro forma ${pfAperto.sigla}: lì «Converti in fattura»` : "Prima prepara il pro forma"}>
               <FileOutput className="size-4 shrink-0" /> Converti in fattura
             </Button>
             <Button variant="outline" disabled={occupato || !!fattura || pf?.stato === "convertito"} className={btn}
               title={fattura ? "La sessione ha già la fattura" : "Caso raro: il cliente non vuole la fattura. Apre lo Scontrino (registratore) con le righe della sessione"}
-              onClick={() => { if (confirm("Il cliente non vuole la fattura?\n\nApro lo Scontrino (registratore) con le righe di questa sessione: lì scegli operatore e pagamento.")) router.push(`/cassa?sessione=${sessionId}`); }}>
+              onClick={() => controllaRegistrazione("convertire in scontrino", () => { if (confirm("Il cliente non vuole la fattura?\n\nApro lo Scontrino (registratore) con le righe di questa sessione: lì scegli operatore e pagamento.")) router.push(`/cassa?sessione=${sessionId}`); })}>
               <ShoppingCart className="size-4 shrink-0" /> Converti in scontrino
             </Button>
           </div>
           {!fattura && !pfInScontrino && (
             <button type="button" className="self-start text-[11px] text-gray-500 underline underline-offset-2 disabled:opacity-50" disabled={busy}
               title={operatore ? "Crea la bozza di fattura direttamente dalla sessione e apre Fatturazione" : "Scegli prima chi sta facendo l'operazione (in alto, accanto a «Genera rapporti»)"}
-              onClick={() => bozza()}>
+              onClick={() => controllaRegistrazione("preparare la fattura diretta", () => bozza())}>
               {busy ? "Preparo la bozza…" : "Fattura diretta senza pro forma (o collega una fattura già fatta)"}
             </button>
           )}

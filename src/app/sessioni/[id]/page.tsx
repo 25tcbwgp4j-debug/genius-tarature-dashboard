@@ -31,6 +31,7 @@ import {
   strumentiArrivati,
   mettiInAttesaStrumenti,
   fattStatoSessione,
+  registerComplete,
   type StatoPagamentoSessione,
 } from "@/lib/api";
 import { toast } from "sonner";
@@ -69,7 +70,7 @@ import { ShipmentsPanel } from "./ShipmentsPanel";
 import { ProformaDialog } from "./FatturaPanel";
 import { SpedizioneSessione } from "./SpedizioneSessione";
 import { ProntoProgrammato } from "./ProntoProgrammato";
-import { NOMI_OPERATORI, OPERATORI_TARATURE } from "@/components/Operatore";
+import { NOMI_OPERATORI, OPERATORI_TARATURE, useOperatore, type Operatore } from "@/components/Operatore";
 
 interface InstrumentType {
   id: string;
@@ -537,6 +538,56 @@ export default function SessionDetail() {
     }
   };
 
+  // REGISTRAZIONE NON COMPLETATA (07/10/2026, caso sess. 194 M.P. TERMOIMPIANTI): rapporti, etichette e pro forma fatti
+  // ma il cliente non aveva mai ricevuto la conferma di registrazione. Prima di Genera rapporti / Prepara pro forma /
+  // Converti in fattura o scontrino compare un avviso bloccante: «Completa la registrazione» (invia mail + WhatsApp
+  // e prosegue) oppure «Vai avanti senza completare» (prosegue e lo scrive nelle note della sessione con operatore e ora).
+  const [avvisoReg, setAvvisoReg] = useState<{ azione: string; poi: () => void } | null>(null);
+  const [regBusy, setRegBusy] = useState<"" | "completa" | "avanti">("");
+  const [opDispositivo] = useOperatore();
+  const opNota = (OPERATORI_TARATURE as readonly Operatore[]).includes(opDispositivo as Operatore) ? opDispositivo : "operatore non scelto";
+  const registrazioneMancante = !!session && (
+    ["registrazione", "attesa_strumenti"].includes(session.status)
+    || (session.status !== "completata" && !session.registered_at && !session.receipt_email_at && !session.receipt_whatsapp_at)
+  );
+  const controllaRegistrazione = (azione: string, poi: () => void) => {
+    if (!registrazioneMancante) { poi(); return; }
+    setAvvisoReg({ azione, poi });
+  };
+  const completaRegistrazioneEProsegui = async () => {
+    if (!avvisoReg) return;
+    setRegBusy("completa");
+    try {
+      const res = await registerComplete(sessionId, "both") as { notifications?: { email?: { error?: string } | unknown; whatsapp?: { ok?: boolean; error?: string } | unknown } };
+      const em = res?.notifications?.email as { error?: string } | undefined;
+      const wa = res?.notifications?.whatsapp as { ok?: boolean; error?: string } | undefined;
+      if (em && typeof em === "object" && em.error) toast.error(`Email registrazione NON inviata: ${String(em.error).slice(0, 200)}`);
+      if (wa && typeof wa === "object" && wa.error) toast.error(`WhatsApp registrazione: ${String(wa.error).slice(0, 200)}`);
+      toast.success("Registrazione completata: conferma inviata al cliente");
+      const poi = avvisoReg.poi;
+      setAvvisoReg(null);
+      await loadSession();
+      poi();
+    } catch (e) {
+      toast.error("Registrazione non completata: " + (e as Error).message);
+    } finally { setRegBusy(""); }
+  };
+  const avantiSenzaRegistrazione = async () => {
+    if (!avvisoReg) return;
+    setRegBusy("avanti");
+    try {
+      const ora = new Date().toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
+      const riga = `[${ora} · ${opNota}] ${avvisoReg.azione} SENZA completare la registrazione (il cliente non ha ricevuto la conferma via mail e WhatsApp)`;
+      await updateSession(sessionId, { notes: session.notes ? `${session.notes}\n${riga}` : riga });
+      const poi = avvisoReg.poi;
+      setAvvisoReg(null);
+      await loadSession();
+      poi();
+    } catch (e) {
+      toast.error("Non riesco a salvare la nota: " + (e as Error).message);
+    } finally { setRegBusy(""); }
+  };
+
   const handleDeleteSession = async () => {
     if (!confirm("Sei sicuro di voler eliminare questa sessione e tutti i suoi strumenti?")) return;
     setActionLoading("delete");
@@ -887,6 +938,7 @@ export default function SessionDetail() {
         apriAnteprimaProforma={apriAnteprimaProforma}
         apriDialogProforma={() => { setPfDopo(null); setDialogPf(true); }}
         pfDoc={pfDoc}
+        controllaRegistrazione={controllaRegistrazione}
         currentStep={currentStep}
         statoPag={statoPag}
         onRicarica={loadSession}
@@ -1256,6 +1308,32 @@ export default function SessionDetail() {
       </div>
 
       {/* La sezione «Fattura» in fondo non c'è più (07/10/2026): tutto è nel blocco Pro forma · fattura · pagamento delle Azioni */}
+
+      {avvisoReg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !regBusy && setAvvisoReg(null)}>
+          <div className="w-full max-w-md overflow-hidden rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="border-b-4 border-red-500 bg-red-50 px-5 py-4">
+              <h3 className="flex items-center gap-2 text-lg font-bold text-red-800"><AlertCircle className="size-5 shrink-0" /> Registrazione non completata</h3>
+              <p className="mt-1 text-sm text-red-900">
+                La registrazione non è stata completata: il cliente non ha ricevuto la conferma via mail e WhatsApp.
+              </p>
+              <p className="mt-1 text-xs text-red-800">Stai per: <b>{avvisoReg.azione}</b></p>
+            </div>
+            <div className="flex flex-col gap-2 px-5 py-4">
+              <Button className="h-12 bg-sky-600 text-white hover:bg-sky-700" disabled={!!regBusy} onClick={completaRegistrazioneEProsegui}>
+                {regBusy === "completa" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Send className="mr-1 size-4" />}
+                Completa la registrazione (mail + WhatsApp) e prosegui
+              </Button>
+              <Button variant="outline" className="h-12 border-amber-400 text-amber-800 hover:bg-amber-50" disabled={!!regBusy} onClick={avantiSenzaRegistrazione}>
+                {regBusy === "avanti" ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
+                Vai avanti senza completare
+              </Button>
+              <p className="text-[11px] text-gray-500">«Vai avanti» lo scrive nelle note della sessione con operatore ({opNota}) e ora.</p>
+              <Button variant="ghost" className="h-10" disabled={!!regBusy} onClick={() => setAvvisoReg(null)}>Annulla</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {dialogPf && (
         <ProformaDialog
