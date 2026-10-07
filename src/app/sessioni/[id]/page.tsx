@@ -57,7 +57,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Truck,
-  ExternalLink,
   Lock,
 } from "lucide-react";
 import { STATUS_CONFIG, getStatusConfig, getPaymentConfig } from "@/lib/constants";
@@ -67,7 +66,7 @@ import { AvvisiPagamento, testoPagamento } from "./PagamentoStato";
 import { AzioniSessione } from "./AzioniSessione";
 import { AcquisisciFoto } from "./AcquisisciFoto";
 import { ShipmentsPanel } from "./ShipmentsPanel";
-import { FatturaPanel, ProformaDialog } from "./FatturaPanel";
+import { ProformaDialog } from "./FatturaPanel";
 import { SpedizioneSessione } from "./SpedizioneSessione";
 import { ProntoProgrammato } from "./ProntoProgrammato";
 import { NOMI_OPERATORI, OPERATORI_TARATURE } from "@/components/Operatore";
@@ -231,7 +230,6 @@ export default function SessionDetail() {
   // Pro forma (documento PF) della sessione: se è aperto, il pulsante verde «Apri e convertilo in fattura»
   // sta in alto, sotto i pulsanti di stampa (Christian 02/10/2026)
   const [pfDoc, setPfDoc] = useState<ProformaSessioneStato["documento"]>(null);
-  const pfAperto = pfDoc && pfDoc.stato === "aperto" ? pfDoc : null;
   // Stampa diretta: agente di stampa sul Mac del banco acceso?
   const [agenteStampa, setAgenteStampa] = useState<boolean | null>(null);
   // Preview proforma modal — mostra anteprima totali (con/senza spedizione) PRIMA dell'invio
@@ -877,15 +875,6 @@ export default function SessionDetail() {
           </div>
         </Card>
       )}
-      {/* Pro forma già preparato (Christian 02/10/2026): il pulsante verde sta QUI, sotto «Scarica rapporti» e sopra
-          le Azioni, non in fondo alla pagina. Dalla scheda del pro forma si fa «Converti in fattura». */}
-      {pfAperto && (
-        <Button size="lg" className="h-auto min-h-12 w-full justify-center whitespace-normal bg-emerald-600 px-4 py-3 text-base font-semibold text-white hover:bg-emerald-700"
-          onClick={() => router.push(`/proforma?id=${pfAperto.id}`)}>
-          <ExternalLink className="mr-2 size-5 shrink-0" />Apri il pro forma {pfAperto.sigla} e convertilo in fattura
-        </Button>
-      )}
-
       {/* AZIONI (compatte, 02/10/2026): sopra al cliente e al destinatario del rapporto */}
       <AzioniSessione
         sessionId={sessionId}
@@ -1266,9 +1255,7 @@ export default function SessionDetail() {
         <ShipmentsPanel sessionId={sessionId} session={session} onSessioneAggiornata={() => { loadSession(); setFatturaAggiorna((n) => n + 1); }} />
       </div>
 
-      {/* === FATTURA ELETTRONICA (Openapi SDI) === */}
-      <FatturaPanel sessionId={sessionId} aggiorna={fatturaAggiorna} onCambio={loadSession}
-        onApriProforma={() => { setPfDopo(null); setDialogPf(true); }} />
+      {/* La sezione «Fattura» in fondo non c'è più (07/10/2026): tutto è nel blocco Pro forma · fattura · pagamento delle Azioni */}
 
       {dialogPf && (
         <ProformaDialog
