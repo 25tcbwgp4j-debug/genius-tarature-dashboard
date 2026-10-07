@@ -4,9 +4,9 @@
 // alti 80 px con molto bianco intorno; ora ogni azione è un riquadro con titolo, data dell'ultimo invio e
 // pulsanti alti 44 px (bersaglio minimo per il dito su iPad e iPhone). Le funzioni sono le stesse di prima:
 // registrazione (email/WhatsApp), pronti al ritiro, pro forma, genera rapporti, riconsegna, pagamento, Stripe.
-// 07/10/2026 (Christian, 2° giro): prima fila Registrazione · Pronti al ritiro · Rapporti di taratura (con la scelta
-// Christian/Dumy accanto a GENERA RAPPORTI); sotto il blocco unico Pro forma · fattura · pagamento (BloccoProforma);
-// ultimo la chiusura «Strumenti riconsegnati», compatta. Il riquadro «Pagamento» separato non c'è più.
+// 07/10/2026 (Christian, 3° giro): riga 1 Registrazione · Pronti al ritiro · Rapporti (stato) · Chi sta facendo
+// l'operazione (Christian/Dumy); riga 2 GENERA RAPPORTI | STRUMENTI RICONSEGNATI; poi il blocco unico
+// Pro forma · fattura · pagamento (BloccoProforma). Il riquadro «Pagamento» separato non c'è più.
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,7 +21,7 @@ type Sess = Record<string, any>;  // eslint-disable-line @typescript-eslint/no-e
 interface Props {
   sessionId: string;
   session: Sess;
-  instruments: { rdt_generated_at?: string | null }[];
+  instruments: { rdt_generated_at?: string | null; rdt_number?: string | null; external_processing?: boolean | null }[];
   actionLoading: string | null;
   setActionLoading: (v: string | null) => void;
   handleAction: (action: string, fn: () => Promise<unknown>, successMsg: string) => Promise<void>;
@@ -56,7 +56,7 @@ function Quando({ ts }: { ts: string | null | undefined }) {
 
 function Gruppo({ titolo, sotto, children }: { titolo: string; sotto?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg border border-gray-200 bg-white p-2.5">
+    <div className="flex flex-col gap-1 rounded-lg border border-gray-200 bg-white p-2">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">{titolo}</p>
       {children}
       {sotto && <div className="text-[10px] leading-tight text-gray-500">{sotto}</div>}
@@ -73,13 +73,13 @@ function Canali({ email, whatsapp, disabled, busy }: {
   return (
     <div className="grid grid-cols-2 gap-1.5">
       <div>
-        <Button className={`h-11 w-full text-xs font-bold text-white ${email.cls}`} disabled={disabled} onClick={email.onClick}>
+        <Button className={`h-10 w-full text-xs font-bold text-white ${email.cls}`} disabled={disabled} onClick={email.onClick}>
           {busy === "email" ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />} EMAIL
         </Button>
         <Quando ts={email.ts} />
       </div>
       <div>
-        <Button className={`h-11 w-full text-xs font-bold text-white ${whatsapp.cls}`} disabled={disabled} onClick={whatsapp.onClick}>
+        <Button className={`h-10 w-full text-xs font-bold text-white ${whatsapp.cls}`} disabled={disabled} onClick={whatsapp.onClick}>
           {busy === "whatsapp" ? <Loader2 className="size-4 animate-spin" /> : <MessageCircle className="size-4" />} WHATSAPP
         </Button>
         <Quando ts={whatsapp.ts} />
@@ -99,6 +99,9 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
   const fattura = statoPag?.fattura || null;
   const isPaid = statoPag?.pagamento ? statoPag.pagamento.pagata : session.payment_status === "pagato";
   const differito = statoPag?.pagamento?.termine === "differito";
+  // stato rapporti: quanti strumenti da tarare (esclusi «NON lo tariamo noi») hanno già il numero RDT
+  const daTarare = instruments.filter((i) => !i.external_processing);
+  const conRdt = daTarare.filter((i) => !!i.rdt_number).length;
 
   return (
     <Card className="p-3 sm:p-4">
@@ -106,9 +109,12 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
         <h3 className="text-base font-semibold">Azioni</h3>
         <span className="text-[11px] text-gray-500">comunicazioni al cliente · rapporti · pro forma, fattura e pagamento · chiusura</span>
       </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-        {/* PRIMA FILA (07/10/2026, 2° giro): registrazione · pronto · rapporti */}
-        <Gruppo titolo="Registrazione completata" sotto="Ricevuta di ingresso al cliente">
+      {/* Layout 07/10/2026 (Christian, 3° giro): riquadri BASSI e larghi.
+          Riga 1: Registrazione · Pronti al ritiro · Rapporti (stato) · Chi sta facendo l'operazione.
+          Riga 2: GENERA RAPPORTI a sinistra · STRUMENTI RICONSEGNATI a destra.
+          Poi il blocco unico Pro forma · fattura · pagamento. Su telefono le righe vanno a capo una sotto l'altra. */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <Gruppo titolo="Registrazione completata">
           <Canali disabled={occupato}
             busy={actionLoading === "register_email" ? "email" : actionLoading === "register_wa" ? "whatsapp" : null}
             email={{ ts: session.receipt_email_at, cls: "bg-sky-600 hover:bg-sky-700", onClick: () => {
@@ -122,7 +128,7 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
           />
         </Gruppo>
 
-        <Gruppo titolo="Pronti al ritiro" sotto="Avviso al cliente che gli strumenti sono pronti">
+        <Gruppo titolo="Pronti al ritiro">
           <Canali disabled={occupato}
             busy={actionLoading === "ready_email" ? "email" : actionLoading === "ready_wa" ? "whatsapp" : null}
             email={{ ts: session.ready_email_at, cls: "bg-green-600 hover:bg-green-700", onClick: () => {
@@ -136,47 +142,59 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
           />
         </Gruppo>
 
-        {/* RAPPORTI: accanto a «Genera rapporti» si sceglie chi li sta facendo (salvato come operatore della sessione) */}
-        <Gruppo titolo="Rapporti di taratura" sotto="Vanno generati prima delle etichette e del pronto">
-          <SceltaOperatore value={operatore} onChange={setOperatore} compatto opzioni={OPERATORI_TARATURE} nomi={NOMI_OPERATORI} className="p-1.5" />
-          <Button className="h-11 w-full bg-purple-600 text-xs font-bold text-white hover:bg-purple-700" disabled={occupato}
-            onClick={() => {
-              if (!operatore) { toast.error("Scegli chi sta generando i rapporti: Christian o Dumy"); return; }
-              controllaRegistrazione("generare i rapporti di taratura", () => handleAction("rdts", async () => {
-                if (session.operator !== operatore) await updateSession(sessionId, { operator: operatore });
-                return generateRdts(sessionId);
-              }, `Rapporti di taratura generati (${NOMI_OPERATORI[operatore] || operatore})!`));
-            }}>
-            {actionLoading === "rdts" ? <Loader2 className="size-4 animate-spin" /> : <FileOutput className="size-4" />} GENERA RAPPORTI
-          </Button>
+        <Gruppo titolo="Rapporti di taratura">
+          <div className={`flex h-10 items-center rounded-md border px-2 text-xs ${daTarare.length && conRdt === daTarare.length
+            ? "border-emerald-300 bg-emerald-50 text-emerald-800" : conRdt ? "border-amber-300 bg-amber-50 text-amber-900" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
+            {daTarare.length === 0 ? "Nessuno strumento da tarare"
+              : conRdt === daTarare.length ? `✓ Generati: ${conRdt} su ${daTarare.length}`
+              : conRdt ? `Generati ${conRdt} su ${daTarare.length}: mancano ${daTarare.length - conRdt}` : `Da generare (${daTarare.length})`}
+          </div>
           <Quando ts={ultimoRdt} />
         </Gruppo>
 
-        {/* SECONDA FILA: pro forma + fattura + pagamento in un unico blocco (sostituisce «Pagamento» e la sezione «Fattura») */}
-        <div className="sm:col-span-2 xl:col-span-3">
-          <BloccoProforma sessionId={sessionId} session={session} pfDoc={pfDoc} statoPag={statoPag}
-            actionLoading={actionLoading} setActionLoading={setActionLoading} handleAction={handleAction}
-            previewLoading={previewLoading} apriAnteprimaProforma={apriAnteprimaProforma} apriDialogProforma={apriDialogProforma}
-            onRicarica={onRicarica} controllaRegistrazione={controllaRegistrazione} />
-        </div>
-
-        {/* ULTIMO: chiusura, compatta in una riga */}
-        <div className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-2.5 sm:col-span-2 sm:flex-row sm:items-center xl:col-span-3">
-          <Button className="h-11 bg-gray-700 px-4 text-xs font-bold text-white hover:bg-gray-800 sm:w-auto" disabled={occupato}
-            onClick={() => {
-              // riconsegna senza pagamento (immediato): di solito pagano e poi ritirano (03/10/2026)
-              if (!isPaid && !differito && session.payment_status !== "non_richiesto"
-                && !confirm(`⚠️ Il pagamento non risulta arrivato${fattura?.numero ? ` (fattura ${fattura.numero} da pagare)` : ""}.\nDi solito pagano e poi ritirano.\n\nOK = riconsegno lo stesso`)) return;
-              if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati? (operazione interna, nessuna comunicazione al cliente)")) return;
-              handleAction("delivered", () => markDelivered(sessionId), "Sessione completata! Strumenti riconsegnati.");
-            }}>
-            {actionLoading === "delivered" ? <Loader2 className="size-4 animate-spin" /> : <PackageCheck className="size-4" />} STRUMENTI RICONSEGNATI
-          </Button>
-          <p className="text-[11px] leading-tight text-gray-500">
-            {session.delivered_at ? <b className="text-gray-700">✓ Riconsegnati {breve(session.delivered_at)} · </b> : null}
-            Chiusura: operazione interna, nessun messaggio al cliente, scadenzario +365 gg
+        <Gruppo titolo="Chi sta facendo l'operazione">
+          <SceltaOperatore value={operatore} onChange={setOperatore} compatto opzioni={OPERATORI_TARATURE} nomi={NOMI_OPERATORI}
+            className="border-0 bg-transparent p-0 dark:bg-transparent [&>div:first-child]:hidden [&_button]:h-10" />
+          <p className={`h-3.5 text-center text-[10px] leading-none ${operatore ? "text-emerald-700" : "font-semibold text-red-600"}`}>
+            {operatore ? `Operatore: ${NOMI_OPERATORI[operatore] || operatore}` : "Scegli chi sta lavorando"}
           </p>
-        </div>
+        </Gruppo>
+      </div>
+
+      {/* Riga 2: le due azioni interne, larghe e basse */}
+      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Button className="h-11 w-full bg-purple-600 text-xs font-bold text-white hover:bg-purple-700" disabled={occupato}
+          title="Genera i rapporti di taratura; l'operatore scelto sopra viene salvato sulla sessione"
+          onClick={() => {
+            if (!operatore) { toast.error("Scegli chi sta generando i rapporti: Christian o Dumy"); return; }
+            controllaRegistrazione("generare i rapporti di taratura", () => handleAction("rdts", async () => {
+              if (session.operator !== operatore) await updateSession(sessionId, { operator: operatore });
+              return generateRdts(sessionId);
+            }, `Rapporti di taratura generati (${NOMI_OPERATORI[operatore] || operatore})!`));
+          }}>
+          {actionLoading === "rdts" ? <Loader2 className="size-4 animate-spin" /> : <FileOutput className="size-4" />} GENERA RAPPORTI
+          {operatore ? <span className="font-normal opacity-90">· {NOMI_OPERATORI[operatore] || operatore}</span> : null}
+        </Button>
+        <Button className="h-11 w-full bg-gray-700 text-xs font-bold text-white hover:bg-gray-800" disabled={occupato}
+          title="Operazione interna: nessun messaggio al cliente, scadenzario +365 gg"
+          onClick={() => {
+            // riconsegna senza pagamento (immediato): di solito pagano e poi ritirano (03/10/2026)
+            if (!isPaid && !differito && session.payment_status !== "non_richiesto"
+              && !confirm(`⚠️ Il pagamento non risulta arrivato${fattura?.numero ? ` (fattura ${fattura.numero} da pagare)` : ""}.\nDi solito pagano e poi ritirano.\n\nOK = riconsegno lo stesso`)) return;
+            if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati? (operazione interna, nessuna comunicazione al cliente)")) return;
+            handleAction("delivered", () => markDelivered(sessionId), "Sessione completata! Strumenti riconsegnati.");
+          }}>
+          {actionLoading === "delivered" ? <Loader2 className="size-4 animate-spin" /> : <PackageCheck className="size-4" />} STRUMENTI RICONSEGNATI
+          {session.delivered_at ? <span className="font-normal opacity-90">· ✓ {breve(session.delivered_at)}</span> : null}
+        </Button>
+      </div>
+
+      {/* Poi il blocco unico pro forma + fattura + pagamento (con scontrino) */}
+      <div className="mt-2">
+        <BloccoProforma sessionId={sessionId} session={session} pfDoc={pfDoc} statoPag={statoPag}
+          actionLoading={actionLoading} setActionLoading={setActionLoading} handleAction={handleAction}
+          previewLoading={previewLoading} apriAnteprimaProforma={apriAnteprimaProforma} apriDialogProforma={apriDialogProforma}
+          onRicarica={onRicarica} controllaRegistrazione={controllaRegistrazione} />
       </div>
 
       {/* Linea del tempo, in una riga */}
