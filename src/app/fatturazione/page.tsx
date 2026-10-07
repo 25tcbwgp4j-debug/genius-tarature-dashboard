@@ -57,6 +57,7 @@ function Pagina() {
   // sotto-ricerca nelle righe delle fatture già filtrate (07/10/2026): articolo, descrizione, codice, seriale…
   const [qRighe, setQRighe] = useState("");
   const [storico, setStorico] = useState<FattStoricoPrezzo[] | null>(null);
+  const [troncato, setTroncato] = useState(false);
   const [righe, setRighe] = useState<Fattura[]>([]);
   const [esiti, setEsiti] = useState<Esito[]>([]);
   const [rie, setRie] = useState<Riepilogo | null>(null);
@@ -116,6 +117,7 @@ function Pagina() {
           a: conPeriodo ? per.al : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimo}` : "" });
         const oggiIso = oggiRoma();
         setStorico(r.storico_prezzi ?? null);
+        setTroncato(!!r.troncato);
         setRighe((r.fatture || []).filter((f: Fattura) => !soloScadute || (f.pagamento_stato !== "pagata" && f.tipo_documento !== "TD04" && (f.scadenza || f.data || "") < oggiIso)));
         setSel({});
         // aperta la scheda Ricevute: le nuove restano evidenziate in questa vista, il badge si azzera
@@ -389,7 +391,8 @@ function Pagina() {
 
       {!loading && (tab === "emessa" || tab === "ricevuta") && !!qRighe.trim() && storico && (
         <StoricoPrezzi voci={storico} parole={paroleRicerca(qRighe)} onApri={(id) => setAperta(id)}
-          limitato={periodo === "tutto" && anno ? `solo ${anno}${mese ? ` mese ${mese}` : ""} — scegli «Tutti gli anni» per lo storico completo` : undefined} />
+          limitato={[troncato ? "risultati troncati: restringi cliente o periodo" : "",
+            periodo === "tutto" && anno ? `solo ${anno}${mese ? ` mese ${mese}` : ""} — scegli «Tutti gli anni» per lo storico completo` : ""].filter(Boolean).join(" · ") || undefined} />
       )}
 
       {!loading && (tab === "emessa" || tab === "ricevuta") && (
