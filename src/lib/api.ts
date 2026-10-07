@@ -992,7 +992,20 @@ export interface FattControparte {
   indirizzo?: string; civico?: string; cap?: string; comune?: string; provincia?: string;
   paese?: string; email?: string; telefono?: string;
 }
+/** Riga di fattura trovata dalla sotto-ricerca «Cerca dentro le fatture» (07/10/2026). */
+export interface FattRigaTrovata {
+  indice: number; descrizione: string; codice?: string | null; seriale?: string | null; note?: string | null;
+  quantita: number; prezzo_unitario: number | null; prezzo_unitario_ivato: number | null; sconto: number;
+  aliquota: number; natura?: string | null; totale_riga: number | null; totale_riga_ivato: number | null;
+}
+/** Voce dello «storico prezzi» (righe trovate, dalla più recente). */
+export interface FattStoricoPrezzo {
+  fattura_id: string; numero: string | null; data: string | null; tipo_documento: string; controparte_nome: string | null;
+  descrizione: string; quantita: number; prezzo_unitario: number | null; prezzo_unitario_ivato: number | null;
+  sconto: number; aliquota: number; natura?: string | null;
+}
 export interface Fattura {
+  righe_trovate?: FattRigaTrovata[];
   recapiti?: { email: string; telefono: string };
   id: string; societa: FattSocieta; direzione: 'emessa' | 'ricevuta'; tipo_documento: string;
   numero: string | null; data: string | null; controparte_nome: string | null;

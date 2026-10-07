@@ -4,12 +4,12 @@
 // incassi (contanti, POS SumUp, carta Stripe, bonifico). Trasmissione tramite Openapi.
 
 import { BadgeOperatore } from "@/components/Operatore";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Banknote, Download, FileText, Loader2, Plus, RefreshCw, RotateCcw, Search, Send, Truck, Wallet } from "lucide-react";
+import { Banknote, Download, FileText, ListFilter, Loader2, Plus, RefreshCw, RotateCcw, Search, Send, Truck, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   fattConfig, fattElenco, fattPagamentoMultiplo, fattUrlExport, type FattModalita, fattEsiti, fattRiepilogo, fattSincronizza, fattRicevuteStato, fattRicevuteViste, type FattRicevuteStato,
@@ -27,6 +27,8 @@ import { usePermessi } from "@/components/permessi";
 import { BadgeAttivita, FiltroAttivita } from "@/components/attivita";
 import type { FattAnagrafica } from "@/lib/api";
 import { Dettaglio } from "./Dettaglio";
+import { RigheTrovate, StoricoPrezzi, paroleRicerca } from "./RicercaRighe";
+import type { FattStoricoPrezzo } from "@/lib/api";
 import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
 import { annoRoma, oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
@@ -52,6 +54,9 @@ function Pagina() {
   const [stato, setStato] = useState("");
   const [pagamento, setPagamento] = useState("");
   const [q, setQ] = useState("");
+  // sotto-ricerca nelle righe delle fatture già filtrate (07/10/2026): articolo, descrizione, codice, seriale…
+  const [qRighe, setQRighe] = useState("");
+  const [storico, setStorico] = useState<FattStoricoPrezzo[] | null>(null);
   const [righe, setRighe] = useState<Fattura[]>([]);
   const [esiti, setEsiti] = useState<Esito[]>([]);
   const [rie, setRie] = useState<Riepilogo | null>(null);
@@ -106,10 +111,11 @@ function Pagina() {
       } else if (tab === "emessa" || tab === "ricevuta") {
         const ultimo = mese ? new Date(anno || annoRoma(), mese, 0).getDate() : 0;
         const conPeriodo = periodo !== "tutto";
-        const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q, attivita: attivitaF, anno: anno && !conPeriodo ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
+        const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q, q_righe: qRighe.trim(), attivita: attivitaF, anno: anno && !conPeriodo ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
           da: conPeriodo ? per.dal : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-01` : "",
           a: conPeriodo ? per.al : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimo}` : "" });
         const oggiIso = oggiRoma();
+        setStorico(r.storico_prezzi ?? null);
         setRighe((r.fatture || []).filter((f: Fattura) => !soloScadute || (f.pagamento_stato !== "pagata" && f.tipo_documento !== "TD04" && (f.scadenza || f.data || "") < oggiIso)));
         setSel({});
         // aperta la scheda Ricevute: le nuove restano evidenziate in questa vista, il badge si azzera
@@ -124,12 +130,12 @@ function Pagina() {
     } finally {
       setLoading(false);
     }
-  }, [tab, societa, stato, pagamento, q, attivitaF, anno, prove, mese, periodo, per.dal, per.al, soloScadute, caricaRicStato]);
+  }, [tab, societa, stato, pagamento, q, qRighe, attivitaF, anno, prove, mese, periodo, per.dal, per.al, soloScadute, caricaRicStato]);
 
   useEffect(() => {
-    const t = setTimeout(carica, q ? 300 : 0);
+    const t = setTimeout(carica, q || qRighe ? 300 : 0);
     return () => clearTimeout(t);
-  }, [carica, q]);
+  }, [carica, q, qRighe]);
 
   async function sincronizza() {
     setSync(true);
@@ -151,12 +157,12 @@ function Pagina() {
 
   /** Azzera: torna alla pagina base della fatturazione (nessun filtro, anno in corso, fatture emesse). */
   function azzera() {
-    setTab("emessa"); setStato(""); setPagamento(""); setQ(""); setMese(0); setProve(false); setSel({});
+    setTab("emessa"); setStato(""); setPagamento(""); setQ(""); setQRighe(""); setMese(0); setProve(false); setSel({});
     setPeriodo("tutto"); setPGiorno(""); setPDal(""); setPAl(""); setSoloScadute(false); setCercaCrediti("");
     setAnno(annoRoma()); setSocieta(""); setAttivitaF("");
     if (sp.toString()) router.replace("/fatturazione");
   }
-  const filtriAttivi = !!(stato || pagamento || q || mese || prove || periodo !== "tutto" || soloScadute || societa || attivitaF || anno !== annoRoma() || tab !== "emessa");
+  const filtriAttivi = !!(stato || pagamento || q || qRighe || mese || prove || periodo !== "tutto" || soloScadute || societa || attivitaF || anno !== annoRoma() || tab !== "emessa");
 
   function chiudiDettaglio() {
     setAperta(null);
@@ -318,6 +324,17 @@ function Pagina() {
               <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
               <Input className="h-8 w-56 pl-8" placeholder="Cliente, numero, P.IVA…" value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
+            <div className="relative w-full sm:w-72" title="Cerca nelle righe delle fatture già selezionate (cliente, periodo, filtri): tutte le parole, senza badare a maiuscole e accenti">
+              <ListFilter className="absolute left-2 top-2 size-4 text-muted-foreground" />
+              <Input className="h-8 w-full pl-8 pr-8" placeholder="Cerca dentro le fatture (articolo, descrizione, codice…)"
+                value={qRighe} onChange={(e) => setQRighe(e.target.value)} />
+              {qRighe && (
+                <button type="button" className="absolute right-1.5 top-1.5 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => setQRighe("")} title="Svuota la ricerca nelle righe" aria-label="Svuota la ricerca nelle righe">
+                  <X className="size-4" />
+                </button>
+              )}
+            </div>
             <select className={sel_cls} value={stato} onChange={(e) => setStato(e.target.value)}>
               <option value="">Tutti gli stati</option>
               {Object.entries(STATI).filter(([k]) => tab === "ricevuta" ? k === "ricevuta" : k !== "ricevuta")
@@ -370,6 +387,11 @@ function Pagina() {
         </Card>
       )}
 
+      {!loading && (tab === "emessa" || tab === "ricevuta") && !!qRighe.trim() && storico && (
+        <StoricoPrezzi voci={storico} parole={paroleRicerca(qRighe)} onApri={(id) => setAperta(id)}
+          limitato={periodo === "tutto" && anno ? `solo ${anno}${mese ? ` mese ${mese}` : ""} — scegli «Tutti gli anni» per lo storico completo` : undefined} />
+      )}
+
       {!loading && (tab === "emessa" || tab === "ricevuta") && (
         <Card className="overflow-x-auto p-0">
           <table className="w-full text-sm">
@@ -390,8 +412,10 @@ function Pagina() {
                 const st = STATI[f.stato] || { label: f.stato, cls: "bg-muted" };
                 const nc = f.tipo_documento === "TD04";
                 const scaduta = f.pagamento_stato !== "pagata" && f.scadenza && f.scadenza < oggiRoma();
+                const trovate = qRighe.trim() && f.righe_trovate?.length ? f.righe_trovate : null;
                 return (
-                  <tr key={f.id} className="cursor-pointer border-b last:border-0 hover:bg-muted/50" onClick={() => setAperta(f.id)}>
+                  <Fragment key={f.id}>
+                  <tr className={`cursor-pointer hover:bg-muted/50 ${trovate ? "" : "border-b last:border-0"}`} onClick={() => setAperta(f.id)}>
                     <td className="p-2" onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={!!sel[f.id]} onChange={(e) => setSel((p) => ({ ...p, [f.id]: e.target.checked }))} />
                     </td>
@@ -426,11 +450,22 @@ function Pagina() {
                     </td>
                     {tab === "emessa" && <td className="p-2"><BadgeOperatore op={f.operatore} /></td>}
                   </tr>
+                  {trovate && (
+                    <tr className="cursor-pointer border-b last:border-0 hover:bg-muted/30" onClick={() => setAperta(f.id)}>
+                      <td />
+                      <td colSpan={9} className="px-2 pb-2 pt-0">
+                        <div className="sticky left-2 max-w-[calc(100vw-3rem)] md:max-w-none">
+                          <RigheTrovate righe={trovate} parole={paroleRicerca(qRighe)} nc={nc} />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
               {!righe.length && (
                 <tr><td colSpan={10} className="p-8 text-center text-muted-foreground">
-                  {tab === "emessa" ? "Nessuna fattura emessa con questi filtri" : "Nessuna fattura ricevuta: arrivano da sole dallo SdI quando i fornitori usano il nostro codice destinatario"}
+                  {qRighe.trim() ? `Nessuna riga contiene «${qRighe.trim()}» nelle fatture selezionate${anno && periodo === "tutto" ? ` (anno ${anno}: prova «Tutti gli anni»)` : ""}` : tab === "emessa" ? "Nessuna fattura emessa con questi filtri" : "Nessuna fattura ricevuta: arrivano da sole dallo SdI quando i fornitori usano il nostro codice destinatario"}
                 </td></tr>
               )}
             </tbody>
