@@ -9,15 +9,34 @@ import { Camera, ScanBarcode, X } from "lucide-react";
 
 type Detector = { detect: (src: HTMLVideoElement) => Promise<{ rawValue: string }[]> };
 
-export function ScannerInput({ onCodice, placeholder = "Spara il codice a barre o scrivilo e premi Invio" }: {
+export type AnteprimaCodice = { titolo: string; dettaglio?: string } | null;
+
+export function ScannerInput({ onCodice, anteprima, placeholder = "Spara il codice a barre o scrivilo e premi Invio" }: {
   onCodice: (c: string) => void; placeholder?: string;
+  /** 08/10/2026: mentre si spara/scrive il codice, mostra subito l'articolo trovato (null = non trovato); Invio conferma */
+  anteprima?: (c: string) => Promise<AnteprimaCodice>;
 }) {
   const [v, setV] = useState("");
+  const [prev, setPrev] = useState<{ codice: string; esito: AnteprimaCodice | "cerco" } | null>(null);
   const [cam, setCam] = useState(false);
   const inp = useRef<HTMLInputElement>(null);
   const video = useRef<HTMLVideoElement>(null);
 
   useEffect(() => { inp.current?.focus(); }, []);
+
+  // anteprima automatica: 250 ms dopo l'ultimo carattere (lo scanner scrive tutto in pochi ms), senza premere Invio
+  useEffect(() => {
+    const c = v.trim();
+    if (!anteprima || c.length < 4) { setPrev(null); return; }
+    let annullato = false;
+    const t = setTimeout(async () => {
+      setPrev({ codice: c, esito: "cerco" });
+      let esito: AnteprimaCodice = null;
+      try { esito = await anteprima(c); } catch { esito = null; }
+      if (!annullato) setPrev({ codice: c, esito });
+    }, 250);
+    return () => { annullato = true; clearTimeout(t); };
+  }, [v, anteprima]);
 
   useEffect(() => {
     if (!cam) return;
@@ -51,7 +70,7 @@ export function ScannerInput({ onCodice, placeholder = "Spara il codice a barre 
           <ScanBarcode className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
           <input ref={inp} value={v} onChange={(e) => setV(e.target.value)} placeholder={placeholder}
             className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
-            onKeyDown={(e) => { if (e.key === "Enter" && v.trim()) { onCodice(v.trim()); setV(""); } }} />
+            onKeyDown={(e) => { if (e.key === "Enter" && v.trim()) { onCodice(v.trim()); setV(""); setPrev(null); } }} />
         </div>
         <Button variant="outline" title="Leggi con la fotocamera" onClick={() => {
           if (!cam && !(window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector) {
@@ -60,6 +79,15 @@ export function ScannerInput({ onCodice, placeholder = "Spara il codice a barre 
           setCam((c) => !c);
         }}>{cam ? <X /> : <Camera />}</Button>
       </div>
+      {prev && (
+        <div className={`rounded-md border px-3 py-2 text-sm ${prev.esito === "cerco" ? "text-muted-foreground"
+          : prev.esito ? "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950" : "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"}`}>
+          {prev.esito === "cerco" ? "Cerco l'articolo…"
+            : prev.esito ? <><span className="font-semibold">{prev.esito.titolo}</span>{prev.esito.dettaglio ? <span className="ml-2 text-muted-foreground">{prev.esito.dettaglio}</span> : null}
+                <span className="ml-2 text-xs text-emerald-700 dark:text-emerald-300">· premi Invio per aggiungere</span></>
+            : <>Nessun articolo con il codice «{prev.codice}»: prova la ricerca per nome qui sotto</>}
+        </div>
+      )}
       {cam && <video ref={video} className="max-h-56 w-full rounded-md bg-black object-cover" muted playsInline />}
     </div>
   );

@@ -230,6 +230,15 @@ export default function CassaPage() {
     try { aggiungi(await magPerCodice(codice)); } catch (e) { toast.error((e as Error).message); }
   }, [aggiungi]);
 
+  // anteprima mentre si spara il codice (prima di Invio): nome, prezzo e giacenza dell'articolo, o «non trovato»
+  const anteprimaCodice = useCallback(async (c: string) => {
+    try {
+      const p = await magPerCodice(c);
+      const giac = p.gestisce_giacenza ? ` · giacenza ${Number(p.giacenza)}` : "";
+      return { titolo: p.descrizione, dettaglio: `${eur(Number(p.prezzo ?? 0))}${giac}` };
+    } catch { return null; }
+  }, []);
+
   const tot = Math.round(carrello.reduce((s, r) => s + r.quantita * r.prezzo * (1 - (r.sconto || 0) / 100), 0) * 100) / 100;
   // incasso di un ordine: il carrello non può superare quanto resta da pagare (prima che il cliente paghi col POS)
   const oltreOrdine = !!ordine && tot > ordine.max + 0.001;
@@ -357,7 +366,7 @@ export default function CassaPage() {
             </div>
           </div>
         )}
-        <ScannerInput onCodice={scansiona} />
+        <ScannerInput onCodice={scansiona} anteprima={anteprimaCodice} />
         <div className="relative">
           <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
           <Input className="h-8 pl-8" placeholder="…oppure cerca l'articolo per nome" value={q} onChange={(e) => setQ(e.target.value)} />
