@@ -1458,6 +1458,15 @@ export async function magCrea(body: Partial<Prodotto> & { giacenza_iniziale?: nu
 export async function magModifica(id: string, body: Partial<Prodotto>): Promise<Prodotto> {
   return fetchAPI(`/api/magazzino/prodotti/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
+/** Etichette di magazzino 50x22 mm sulla Brother del banco (stessa coda delle etichette di taratura, 08/10/2026).
+ *  Gli articoli senza codice a barre ricevono prima un EAN-13 interno «20…». */
+export type EsitoStampaEtichette = { ok: boolean; etichette: number; articoli: number; agente_attivo: boolean; lavori: string[];
+  pdf: string[]; barcode_assegnati: { id: string; descrizione: string; barcode: string }[] };
+export async function magStampaEtichette(righe: { id: string; copie: number }[], soloPdf = false): Promise<EsitoStampaEtichette> {
+  return fetchAPI('/api/magazzino/etichette/stampa', { method: 'POST', body: JSON.stringify({ righe, solo_pdf: soloPdf }) });
+}
+/** percorso restituito dal backend («/api/magazzino/etichette.pdf?r=…») → URL apribile dal browser (proxy) */
+export function magUrlEtichettePdf(percorso: string) { return `${API_PROXY}${percorso}`; }
 export async function magMovimento(id: string, body: { tipo: string; quantita: number; causale?: string; costo?: number }) {
   return fetchAPI(`/api/magazzino/prodotti/${id}/movimento`, { method: 'POST', body: JSON.stringify(body) });
 }
@@ -1708,7 +1717,7 @@ export async function magImportTesto(testo: string): Promise<{ righe: Riconoscim
   return fetchAPI('/api/magazzino/import-testo', { method: 'POST', body: JSON.stringify({ testo }) });
 }
 export async function magCaricoLotto(body: { modo: 'carico' | 'inventario'; causale?: string; righe: { barcode: string; quantita: number; descrizione?: string; marca?: string | null; prezzo?: number; costo?: number; aliquota?: number }[] }):
-  Promise<{ esiti: { barcode: string; ok: boolean; errore?: string; creato?: boolean; descrizione?: string; giacenza?: number }[]; ok: number; errori: number }> {
+  Promise<{ esiti: { barcode: string; ok: boolean; errore?: string; creato?: boolean; prodotto_id?: string; descrizione?: string; giacenza?: number }[]; ok: number; errori: number }> {
   return fetchAPI('/api/magazzino/carico-lotto', { method: 'POST', body: JSON.stringify(body) });
 }
 

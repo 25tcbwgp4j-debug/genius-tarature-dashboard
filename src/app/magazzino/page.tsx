@@ -3,6 +3,8 @@
 // MAGAZZINO (GENIUS LAB): articoli con codice a barre, carico con lo scanner, giacenze, movimenti,
 // etichette stampabili con il codice a barre per gli articoli che non l'hanno.
 // 08/10/2026: organizzazione professionale — categorie a 2 livelli, filtri di giacenza, riepilogo, export.
+// 08/10/2026: «Stampa etichetta» (riga, scheda, selezione multipla, dopo il carico e dopo «Nuovo articolo»): etichetta
+// 50x22 mm sulla Brother del banco con lo stesso sistema delle etichette di taratura (vedi StampaEtichette.tsx).
 
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -23,12 +25,19 @@ import { type ApiError, magCrea, magModifica, magMovimento, magPerCodice, magPro
   magElenco, magSposta, magTassonomia, magUrlExport } from "@/lib/api";
 import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita } from "@/components/attivita";
 import { PezziArticolo } from "./PezziArticolo";
+import { StampaEtichette, type VoceEtichetta } from "./StampaEtichette";
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
 
 function Barcode({ value }: { value: string }) {
   const ref = useRef<SVGSVGElement>(null);
-  useEffect(() => { if (ref.current && value) { try { JsBarcode(ref.current, value, { format: "CODE128", height: 40, fontSize: 12, margin: 0 }); } catch { /* codice non valido */ } } }, [value]);
+  useEffect(() => {
+    if (!ref.current || !value) return;
+    // EAN-13 (anche il nostro interno «20…») come sull'etichetta; il resto in Code128
+    const formato = /^\d{13}$/.test(value) ? "EAN13" : /^\d{12}$/.test(value) ? "UPC" : "CODE128";
+    try { JsBarcode(ref.current, value, { format: formato, height: 40, fontSize: 12, margin: 0 }); }
+    catch { try { JsBarcode(ref.current, value, { format: "CODE128", height: 40, fontSize: 12, margin: 0 }); } catch { /* codice non valido */ } }
+  }, [value]);
   return <svg ref={ref} />;
 }
 
@@ -91,6 +100,8 @@ function Magazzino() {
   const [sposta, setSposta] = useState(false);
   const [caricoQta, setCaricoQta] = useState(1);
   const [espansa, setEspansa] = useState<string>("");
+  const [etichette, setEtichette] = useState<{ voci: VoceEtichetta[]; titolo?: string } | null>(null);
+  const stampaEtichetta = (p: Prodotto, copie = 1, titolo?: string) => setEtichette({ voci: [{ p, copie }], titolo });
   // 02/10/2026: anche l'operatore usa il magazzino (articoli, carico, scarico); rettifica e inventario
   // gli chiedono l'autorizzazione dell'amministratore (dialogo globale). Backend vecchio: puo.magazzino_modifica=false.
   const { permessi, caricato } = usePermessi();
@@ -124,7 +135,7 @@ function Magazzino() {
     }
     setDaCaricare({ p, qta: String(caricoQta || 1) });
   }, [caricoQta, attSelettore]);
-  async function confermaCarico() {
+  async function confermaCarico(conEtichette = false) {
     if (!daCaricare || caricando) return;
     const n = Number(daCaricare.qta.replace(",", "."));
     if (!Number.isFinite(n) || n <= 0) { toast.error("Scrivi quanti pezzi carichi (più di 0)"); return; }
@@ -132,6 +143,7 @@ function Magazzino() {
     try {
       const r = await magMovimento(daCaricare.p.id, { tipo: "carico", quantita: n, causale: "Carico con scanner" });
       toast.success(`${daCaricare.p.descrizione}: +${n} → giacenza ${r.giacenza}`);
+      if (conEtichette) stampaEtichetta(daCaricare.p, n, `Etichette per i ${n} pezzi caricati`);
       setDaCaricare(null);
       carica();
     } catch (e) { toastErrore(e); } finally { setCaricando(false); }
@@ -142,7 +154,13 @@ function Magazzino() {
     if (creando) return;
     if (!nuovo?.descrizione?.trim()) { toast.error("Serve la descrizione"); return; }
     setCreando(true);
-    try { const p = await magCrea(nuovo); toast.success(`Creato ${p.descrizione} (${p.barcode})`); setNuovo(null); carica(); }
+    try {
+      const p = await magCrea(nuovo);
+      toast.success(`Creato ${p.descrizione} (${p.barcode})`);
+      setNuovo(null); carica();
+      // subito la proposta di stampa: copie = pezzi caricati (modificabile)
+      if (!p.serializzato) stampaEtichetta(p, Math.max(1, Math.round(Number(nuovo.giacenza_iniziale) || 1)), "Articolo creato: stampi l'etichetta?");
+    }
     catch (e) { toastErrore(e); } finally { setCreando(false); }
   }
   const apri = (id: string) => magProdotto(id).then(setAperto).catch(toastErrore);
@@ -167,7 +185,6 @@ function Magazzino() {
   );
   const tuttiSelezionati = righe.length > 0 && righe.every((p) => sel.has(p.id));
   const toggle = (p: Prodotto, on: boolean) => setSel((m) => { const n = new Map(m); if (on) n.set(p.id, p); else n.delete(p.id); return n; });
-  const etichette = Array.from(sel.values());
   const da = (filtri.offset || 0);
 
   return (
@@ -279,7 +296,7 @@ function Magazzino() {
             <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm print:hidden">
               <b>{sel.size} selezionati</b>
               {puoModificare && <Button size="sm" onClick={() => setSposta(true)}><FolderInput /> Sposta in categoria</Button>}
-              <Button size="sm" variant="outline" onClick={() => window.print()}><Printer /> Stampa {sel.size} etichette</Button>
+              {puoModificare && <Button size="sm" variant="outline" onClick={() => setEtichette({ voci: Array.from(sel.values()).map((p) => ({ p, copie: 1 })) })}><Printer /> Stampa etichette</Button>}
               <Button size="sm" variant="ghost" onClick={() => setSel(new Map())}><X /> Deseleziona</Button>
             </div>
           )}
@@ -296,7 +313,7 @@ function Magazzino() {
                 <Th col="prezzo" className="hidden text-right sm:table-cell">Prezzo</Th>
                 <Th col="valore" className="hidden text-right md:table-cell">Valore</Th>
                 <Th col="ultimo_movimento" className="hidden text-right lg:table-cell">Ultimo mov.</Th>
-                {puoModificare && <th className="w-8 p-2" />}
+                {puoModificare && <th className="w-16 p-2" />}
               </tr></thead>
               <tbody>
                 {loading && !righe.length && <tr><td colSpan={9} className="p-8 text-center"><Loader2 className="mx-auto animate-spin" /></td></tr>}
@@ -319,7 +336,9 @@ function Magazzino() {
                       <td className="hidden p-2 text-right tabular-nums md:table-cell">{merce && g > 0 ? eur(Number(p.valore_vendita ?? g * Number(p.prezzo))) : "—"}</td>
                       <td className="hidden p-2 text-right text-xs tabular-nums text-muted-foreground lg:table-cell">{data(p.ultimo_movimento_at)}</td>
                       {puoModificare && <td className="p-2" onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon-sm" title="Modifica rapida: categoria e scorta minima" onClick={() => setRapida(p)}><Pencil /></Button></td>}
+                        <div className="flex justify-end">
+                          <Button variant="ghost" size="icon-sm" title="Stampa etichetta (codice a barre e prezzo)" onClick={() => stampaEtichetta(p)}><Printer /></Button>
+                          <Button variant="ghost" size="icon-sm" title="Modifica rapida: categoria e scorta minima" onClick={() => setRapida(p)}><Pencil /></Button></div></td>}
                     </tr>
                   );
                 })}
@@ -339,17 +358,6 @@ function Magazzino() {
         </div>
       </div>
 
-      {/* etichette: visibili solo in stampa */}
-      <div className="hidden print:grid print:grid-cols-3 print:gap-4">
-        {etichette.map((p) => (
-          <div key={p.id} className="break-inside-avoid border p-2 text-center text-xs">
-            <div className="font-semibold">{p.descrizione.slice(0, 40)}</div>
-            <Barcode value={p.barcode || p.codice || p.id.slice(0, 8)} />
-            <div className="text-sm font-bold">{eur(Number(p.prezzo))}</div>
-          </div>
-        ))}
-      </div>
-
         {daCaricare && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !caricando && setDaCaricare(null)}>
             <Card className="w-full max-w-sm space-y-3 p-4" onClick={(e) => e.stopPropagation()}>
@@ -365,10 +373,15 @@ function Magazzino() {
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confermaCarico(); } if (e.key === "Escape") setDaCaricare(null); }} />
               </label>
               {Number(daCaricare.qta.replace(",", ".")) > 0 && <div className="text-xs text-muted-foreground">Dopo il carico: {Number(daCaricare.p.giacenza || 0) + Number(daCaricare.qta.replace(",", "."))}</div>}
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" className="h-11" disabled={caricando} onClick={() => setDaCaricare(null)}>Annulla (non carico)</Button>
-                <Button className="h-11" disabled={caricando} onClick={confermaCarico}>{caricando ? <Loader2 className="size-4 animate-spin" /> : <PackagePlus className="size-4" />} Carica</Button>
+                <Button variant="outline" className="h-11" disabled={caricando} title="Carica e poi stampa un'etichetta per ogni pezzo (quantità modificabile)"
+                  onClick={() => confermaCarico(true)}><Printer className="size-4" /> Carica + etichette</Button>
+                <Button className="h-11" disabled={caricando} onClick={() => confermaCarico()}>{caricando ? <Loader2 className="size-4 animate-spin" /> : <PackagePlus className="size-4" />} Carica</Button>
               </div>
+              <button type="button" className="text-xs text-muted-foreground underline" disabled={caricando}
+                onClick={() => { const p = daCaricare.p; setDaCaricare(null); stampaEtichetta(p, Math.max(1, Math.round(Number(daCaricare.qta.replace(",", ".")) || 1))); }}>
+                Solo etichette, senza caricare</button>
             </Card>
           </div>
         )}
@@ -377,8 +390,11 @@ function Magazzino() {
         onFatto={() => { setSposta(false); setSel(new Map()); carica(); }} />}
       {(nuovo || aperto) && (
         <Scheda p={aperto} nuovo={nuovo} setNuovo={setNuovo} onClose={() => { setAperto(null); setNuovo(null); }} onSalvaNuovo={salvaNuovo} creando={creando}
-          onCambiato={(p) => { carica(); if (p) apri(p.id); }} campo={campo} solaLettura={!puoModificare} tasso={tasso} />
+          onCambiato={(p) => { carica(); if (p) apri(p.id); }} campo={campo} solaLettura={!puoModificare} tasso={tasso}
+          onStampa={(p) => stampaEtichetta(p)} />
       )}
+      {etichette && <StampaEtichette voci={etichette.voci} titolo={etichette.titolo} onClose={() => setEtichette(null)}
+        onStampato={() => { carica(); if (aperto) apri(aperto.id); }} />}
     </div>
   );
 }
@@ -477,8 +493,8 @@ function SpostaInCategoria({ ids, tasso, onClose, onFatto }: { ids: string[]; ta
   );
 }
 
-function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, creando, solaLettura, tasso }: {
-  tasso: Record<string, string[]>;
+function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, creando, solaLettura, tasso, onStampa }: {
+  tasso: Record<string, string[]>; onStampa: (p: Prodotto) => void;
   p: Prodotto | null; nuovo: (Partial<Prodotto> & { giacenza_iniziale?: number }) | null; creando: boolean; solaLettura: boolean;
   setNuovo: (n: Partial<Prodotto> & { giacenza_iniziale?: number }) => void; onClose: () => void; onSalvaNuovo: () => void;
   onCambiato: (p: Prodotto | null) => void; campo: string;
@@ -491,7 +507,7 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, 
   const [testi, setTesti] = useState<Record<string, string>>({});
   const dati = nuovo || f;
   const set = (k: keyof Prodotto | "giacenza_iniziale", v: string | number | boolean | null) => nuovo ? setNuovo({ ...nuovo, [k]: v }) : setF((x) => ({ ...x, [k]: v }));
-  const CAMPI: [keyof Prodotto, string, string][] = [["descrizione", "Descrizione", "text"], ["barcode", "Codice a barre (vuoto = interno)", "text"],
+  const CAMPI: [keyof Prodotto, string, string][] = [["descrizione", "Descrizione", "text"], ["barcode", "Codice a barre (vuoto = EAN interno generato)", "text"],
     ["codice", "Codice articolo", "text"], ["marca", "Marca", "text"], ["modello", "Modello / compatibilità", "text"],
     ["ubicazione", "Ubicazione", "text"], ["fornitore_nome", "Fornitore predefinito", "text"],
     ["prezzo", "Prezzo di vendita IVA incl.", "number"], ["aliquota", "IVA %", "number"], ["costo", "Costo d'acquisto", "number"], ["scorta_minima", "Scorta minima", "number"]];
@@ -552,7 +568,9 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, 
         </div>
         {nuovo ? <Button onClick={onSalvaNuovo} disabled={creando}>{creando ? <Loader2 className="animate-spin" /> : <Save />} Crea articolo</Button> : (
           <>
-            <div className="flex gap-2">{!solaLettura && <Button onClick={salva} disabled={!!busy}>{busy === "salva" ? <Loader2 className="animate-spin" /> : <Save />} Salva</Button>}
+            <div className="flex flex-wrap items-start gap-2">{!solaLettura && <Button onClick={salva} disabled={!!busy}>{busy === "salva" ? <Loader2 className="animate-spin" /> : <Save />} Salva</Button>}
+              {!solaLettura && p && <Button variant="outline" onClick={() => onStampa(p)} title="Etichetta 50x22 mm sulla Brother del banco">
+                <Printer /> Stampa etichetta</Button>}
               {p?.barcode && <div className="rounded border p-2"><Barcode value={p.barcode} /></div>}</div>
             {p?.serializzato && <PezziArticolo prodotto={p} solaLettura={solaLettura} onCambiato={() => onCambiato(p)} />}
             {solaLettura ? <div className="text-sm">Giacenza attuale <b>{Number(p?.giacenza)}</b></div> : p?.serializzato ? null : <Card className="space-y-2 p-3">

@@ -4,18 +4,20 @@
 // Si spara il codice a barre: se l'articolo è in magazzino si somma la quantità, se no lo si riconosce online
 // (banche dati + ricerca web) e si completa descrizione e prezzo. Oppure si importa un file di testo con una riga
 // per articolo «BARCODE QUANTITÀ». In modalità INVENTARIO la quantità è quella contata e sostituisce la giacenza.
+// 08/10/2026: dopo il carico «Stampa etichette» dei pezzi caricati (Brother del banco, come le etichette di taratura).
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, ClipboardCheck, FileUp, Loader2, PackagePlus, Trash2 } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, FileUp, Loader2, PackagePlus, Printer, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
 import { magCaricoLotto, magImportTesto, magRiconosci, type Riconoscimento } from "@/lib/api";
 import { dec0, parseDec } from "@/components/DecInput";
 import { toastErrore } from "@/lib/errori";
+import { StampaEtichette, type VoceEtichetta } from "../StampaEtichette";
 
 type Riga = {
   barcode: string; quantita: number; stato: "magazzino" | "online" | "sconosciuto" | "in_ricerca";
@@ -43,6 +45,9 @@ export default function CaricoMagazzinoPage() {
   const righeRef = useRef<Riga[]>([]);
   useEffect(() => { righeRef.current = righe; }, [righe]);
   const lock = useRef(false);
+  // pezzi appena caricati: si propone la stampa delle etichette (copie = pezzi, modificabili)
+  const [caricati, setCaricati] = useState<VoceEtichetta[]>([]);
+  const [stampa, setStampa] = useState(false);
 
   const aggiorna = (i: number, p: Partial<Riga>) => setRighe((rr) => rr.map((r, j) => (j === i ? { ...r, ...p } : r)));
 
@@ -104,8 +109,18 @@ export default function CaricoMagazzinoPage() {
     lock.current = true;
     setBusy("registra");
     try {
+      const elenco = righe;
       const r = await magCaricoLotto({ modo, righe: righe.map((x) => ({ barcode: x.barcode, quantita: x.quantita, descrizione: x.descrizione,
         marca: x.marca || null, prezzo: parseDec(x.prezzo) ?? undefined, costo: parseDec(x.costo) ?? undefined })) });
+      if (modo === "carico") {
+        const voci: VoceEtichetta[] = [];
+        for (const e of r.esiti) {
+          const x = elenco.find((y) => y.barcode === e.barcode);
+          if (e.ok && e.prodotto_id && x) voci.push({ p: { id: e.prodotto_id, descrizione: e.descrizione || x.descrizione, barcode: x.barcode,
+            prezzo: parseDec(x.prezzo) ?? 0 }, copie: x.quantita });
+        }
+        setCaricati(voci);
+      }
       if (r.errori) {
         const ko = new Set(r.esiti.filter((e) => !e.ok).map((e) => e.barcode));
         setRighe((rr) => rr.filter((x) => ko.has(x.barcode)));
@@ -159,6 +174,16 @@ export default function CaricoMagazzinoPage() {
           <Button variant="outline" onClick={() => importa(testo)} disabled={!testo.trim() || busy === "import"}>Leggi</Button>
         </div>
       </Card>
+
+      {caricati.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm dark:bg-emerald-950/30">
+          <span>Caricati {caricati.length} articoli ({caricati.reduce((s, v) => s + v.copie, 0)} pezzi): servono le etichette col codice a barre?</span>
+          <Button size="sm" className="ml-auto" onClick={() => setStampa(true)}><Printer className="mr-1 size-4" />Stampa etichette</Button>
+          <Button size="sm" variant="ghost" onClick={() => setCaricati([])}><X className="size-4" /></Button>
+        </div>
+      )}
+      {stampa && <StampaEtichette voci={caricati} titolo="Etichette dei pezzi caricati" onClose={() => setStampa(false)}
+        onStampato={(anteprima) => { if (!anteprima) setCaricati([]); }} />}
 
       <Card className="overflow-x-auto p-0">
         <table className="w-full min-w-[820px] text-sm">
