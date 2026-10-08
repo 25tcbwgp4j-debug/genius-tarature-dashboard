@@ -81,8 +81,21 @@ export const bonStato = (): Promise<BonStato> => fetchAPI("/api/bonifici/stato")
 export const bonElenco = (): Promise<BonStato & { bonifici: Bonifico[]; controlli: BonControllo[] }> => fetchAPI("/api/bonifici");
 export const bonDettaglio = (id: string): Promise<{ bonifico: Bonifico }> => fetchAPI(`/api/bonifici/${id}`);
 export const bonCerca = (q: string): Promise<{ documenti: BonProposta[] }> => fetchAPI(`/api/bonifici/cerca?q=${encodeURIComponent(q)}`);
-export const bonAccetta = (id: string, proposta: BonProposta, manuale = false): Promise<{ url: string; bonifico: Bonifico }> =>
-  fetchAPI(`/api/bonifici/${id}/accetta`, { method: "POST", body: JSON.stringify({ proposta, manuale }) });
+/** conferma=true: l'operatore ha visto l'avviso (bonifico più grande della fattura, somma diversa, clienti diversi). */
+export const bonAccetta = (id: string, proposta: BonProposta, manuale = false, conferma = false): Promise<{ url: string; bonifico: Bonifico }> =>
+  fetchAPI(`/api/bonifici/${id}/accetta`, { method: "POST", body: JSON.stringify({ proposta, manuale, conferma }) });
+/** Più fatture scelte a mano per un bonifico (08/10/2026, caso CFS GROUP): il server le valida (≤ 20, emesse, non pagate). */
+export const bonAccettaFatture = (id: string, ids: string[], conferma = false): Promise<{ url: string; bonifico: Bonifico }> =>
+  fetchAPI(`/api/bonifici/${id}/accetta`, { method: "POST", body: JSON.stringify({ ids, conferma }) });
+/** Testo dell'avviso quando il bonifico supera il documento scelto (null = nessun avviso). */
+export function avvisoEccedenza(b: Pick<Bonifico, "importo">, p: Pick<BonProposta, "tipo" | "numero" | "importo">): string | null {
+  if (!["fattura", "bozza", "fatture"].includes(p.tipo)) return null;
+  const imp = Number(b.importo), doc = Number(p.importo);
+  if (!(imp > doc + 0.005)) return null;
+  const e = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v);
+  const cosa = p.tipo === "fatture" ? `le fatture ${p.numero ?? ""} sono` : `la fattura ${p.numero ?? ""} è`;
+  return `Il bonifico è ${e(imp)} ma ${cosa} ${e(doc)}: restano ${e(Math.round((imp - doc) * 100) / 100)} — scegli anche altre fatture o gestisci l'eccedenza`;
+}
 export const bonAnnullaAccettazione = (id: string) => fetchAPI(`/api/bonifici/${id}/annulla-accettazione`, { method: "POST", body: "{}" });
 export const bonIgnora = (id: string, motivo: string) =>
   fetchAPI(`/api/bonifici/${id}/ignora`, { method: "POST", body: JSON.stringify({ motivo }) });

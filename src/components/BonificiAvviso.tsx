@@ -19,7 +19,7 @@ import { usePermessi } from "@/components/permessi";
 import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 import {
-  NOME_TIPO, bonAccetta, bonAnnullaAccettazione, bonConferma, bonDettaglio, bonElenco, bonIgnora, bonPrecompilato, bonStato,
+  NOME_TIPO, avvisoEccedenza, bonAccetta, bonAccettaFatture, bonAnnullaAccettazione, bonConferma, bonDettaglio, bonElenco, bonIgnora, bonPrecompilato, bonStato,
   type BonAzione, type BonControllo, type BonPrecompilato, type BonProposta, type BonStato, type Bonifico,
 } from "@/lib/bonifici";
 
@@ -132,16 +132,92 @@ function Pannello({ onClose }: { onClose: () => void }) {
   const carica = useCallback(() => { bonElenco().then(setDati).catch((e) => toastErrore(e)); }, []);
   useEffect(() => { carica(); }, [carica]);
 
-  async function accetta(b: Bonifico, p: BonProposta, manuale = false) {
+  async function accetta(b: Bonifico, p: BonProposta, manuale = false, giaConfermato = false) {
+    // 08/10/2026 (CFS GROUP 315,12 € → solo la fattura 777 da 118,58 €): mai un abbinamento parziale in silenzio
+    let conferma = giaConfermato;
+    if (!conferma) {
+      const ecc = avvisoEccedenza(b, p);
+      const diversa = p.tipo === "fatture" && Math.abs(Number(p.importo) - Number(b.importo)) > 0.005;
+      if (ecc || diversa) {
+        const testo = ecc || `Il bonifico è ${eur(b.importo)} ma le fatture ${p.numero ?? ""} sono ${eur(p.importo)}: l'ultima resterà pagata in parte.`;
+        if (!window.confirm(`${testo}\n\nOK = accetta comunque · Annulla = scegli altre fatture (spunta le caselle)`)) return;
+        conferma = true;
+      }
+    }
     setBusy(b.id);
     try {
-      const r = await bonAccetta(b.id, p, manuale);
+      const r = await bonAccetta(b.id, p, manuale, conferma);
       salvaCorreggi(null);
       salvaInVerifica(b.id);
       aggiorna();
       onClose();
       router.push(r.url);
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
+  }
+  /** Fatture spuntate a mano per un bonifico (proposte singole o trovate con «Cerca»). */
+  const [spunta, setSpunta] = useState<Record<string, BonProposta[]>>({});
+  function spunta1(b: Bonifico, p: BonProposta, si: boolean) {
+    setSpunta((s) => {
+      const l = (s[b.id] || []).filter((x) => x.id !== p.id);
+      return { ...s, [b.id]: si ? [...l, p] : l };
+    });
+  }
+  async function accettaSpuntate(b: Bonifico) {
+    const l = spunta[b.id] || [];
+    if (!l.length) return;
+    const tot = Math.round(l.reduce((t, x) => t + Number(x.importo), 0) * 100) / 100;
+    const diff = Math.round((Number(b.importo) - tot) * 100) / 100;
+    let conferma = false;
+    if (Math.abs(diff) > 0.005) {
+      const testo = diff > 0
+        ? `Il bonifico è ${eur(b.importo)} ma le fatture scelte sono ${eur(tot)}: restano ${eur(diff)} — scegli anche altre fatture o gestisci l'eccedenza.`
+        : `Il bonifico è ${eur(b.importo)} ma le fatture scelte sono ${eur(tot)}: ${eur(-diff)} resteranno da incassare sull'ultima fattura.`;
+      if (!window.confirm(`${testo}\n\nIl bonifico si divide sulle fatture nell'ordine in cui le hai spuntate. Procedere?`)) return;
+      conferma = true;
+    }
+    const nomi = new Set(l.map((x) => (x.nome || "").trim().toLowerCase()));
+    if (!conferma && nomi.size > 1) {
+      if (!window.confirm(`Le fatture scelte sono di clienti diversi (${[...nomi].join(", ")}). Il bonifico le paga davvero tutte?`)) return;
+      conferma = true;
+    }
+    setBusy(b.id);
+    try {
+      const r = await bonAccettaFatture(b.id, l.map((x) => x.id!).filter(Boolean), conferma);
+      setSpunta((s) => ({ ...s, [b.id]: [] }));
+      salvaCorreggi(null);
+      salvaInVerifica(b.id);
+      aggiorna();
+      onClose();
+      router.push(r.url);
+    } catch (e) { toastErrore(e); } finally { setBusy(""); }
+  }
+  /** Spunta di una fattura: solo fatture emesse (non bozze) e solo se nessuna proposta da sola copre l'importo. */
+  const spuntabile = (b: Bonifico, p: BonProposta) => p.tipo === "fattura" && !!p.id
+    && !(b.proposte || []).some((x) => Math.abs(Number(x.importo) - Number(b.importo)) < 0.01 && !x.avviso);
+  function casella(b: Bonifico, p: BonProposta) {
+    if (!spuntabile(b, p)) return null;
+    return (
+      <input type="checkbox" className="size-4 self-center" title="Spunta più fatture pagate con questo bonifico"
+        checked={(spunta[b.id] || []).some((x) => x.id === p.id)} onChange={(e) => spunta1(b, p, e.target.checked)} />
+    );
+  }
+  function barraSpuntate(b: Bonifico) {
+    const l = spunta[b.id] || [];
+    if (!l.length) return null;
+    const tot = Math.round(l.reduce((t, x) => t + Number(x.importo), 0) * 100) / 100;
+    const diff = Math.round((Number(b.importo) - tot) * 100) / 100;
+    const pari = Math.abs(diff) <= 0.005;
+    return (
+      <div className={`flex flex-wrap items-center gap-2 rounded-md border-2 p-2 text-sm ${pari ? "border-emerald-500 bg-emerald-500/10" : "border-amber-400 bg-amber-500/10"}`}>
+        <div className="min-w-0 flex-1">
+          <b>{l.length} fatture scelte</b> ({l.map((x) => x.numero).join(", ")}) · totale <b className="tabular-nums">{eur(tot)}</b> su bonifico <b className="tabular-nums">{eur(b.importo)}</b>
+          <div className="text-xs">{pari ? "Il totale coincide con il bonifico." : diff > 0 ? `Restano ${eur(diff)} del bonifico: spunta anche altre fatture o gestisci l'eccedenza.` : `Le fatture superano il bonifico di ${eur(-diff)}: l'ultima resterà pagata in parte.`}</div>
+        </div>
+        <Button size="xs" disabled={busy === b.id} variant={pari ? "default" : "outline"} onClick={() => accettaSpuntate(b)}>
+          <Check /> {pari ? "Accetta le fatture scelte" : "Accetta con differenza…"}</Button>
+        <button type="button" className="text-xs underline" onClick={() => setSpunta((s) => ({ ...s, [b.id]: [] }))}>togli</button>
+      </div>
+    );
   }
   async function ignora(b: Bonifico) {
     const motivo = window.prompt(`Ignorare il bonifico di ${eur(b.importo)} da ${b.ordinante || "—"}?\nScrivi il motivo (es. giroconto, rimborso fornitore, scheda assistenza Genius gestita fuori dashboard):`);
@@ -258,7 +334,7 @@ function Pannello({ onClose }: { onClose: () => void }) {
               {b.proposta_accettata ? (
                 <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-400/50 bg-amber-500/10 p-2 text-sm">
                   <span>In verifica: <b>{NOME_TIPO[b.proposta_accettata.tipo]} {b.proposta_accettata.numero}</b> {b.proposta_accettata.nome}</span>
-                  <Button size="xs" disabled={busy === b.id} onClick={() => accetta(b, b.proposta_accettata!, !!b.proposta_accettata!.manuale)}>
+                  <Button size="xs" disabled={busy === b.id} onClick={() => accetta(b, b.proposta_accettata!, !!b.proposta_accettata!.manuale, true)}>
                     <ExternalLink /> Apri e conferma</Button>
                   <Button size="xs" variant="ghost" disabled={busy === b.id} onClick={() => annulla(b)}>Annulla abbinamento</Button>
                 </div>
@@ -266,6 +342,7 @@ function Pannello({ onClose }: { onClose: () => void }) {
                 <>
                   {b.proposte?.length ? b.proposte.map((p, i) => (
                     <div key={i} className={`flex flex-wrap items-center gap-2 rounded-md p-2 text-sm ${p.avviso ? "border border-amber-300 bg-amber-500/5" : i === 0 && (p.punti || 0) >= 90 ? "bg-emerald-500/10" : "bg-muted/40"}`}>
+                      {casella(b, p)}
                       <div className="min-w-0 flex-1">
                         <b>{NOME_TIPO[p.tipo]} {p.numero}</b> · {p.nome} · {eur(p.importo)}
                         <span className={`ml-2 rounded px-1 text-[10px] font-semibold ${(p.punti || 0) >= 90 ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100"}`}>{p.punti}</span>
@@ -279,6 +356,10 @@ function Pannello({ onClose }: { onClose: () => void }) {
                       <AlertTriangle className="size-4" /> Nessun documento riconosciuto da solo: abbinalo a mano o ignoralo
                     </div>
                   )}
+                  {(b.proposte || []).some((p) => spuntabile(b, p)) && !(spunta[b.id] || []).length && (
+                    <div className="text-xs text-muted-foreground">Nessuna proposta copre da sola {eur(b.importo)}: spunta più fatture (anche dalla ricerca) e accettale insieme.</div>
+                  )}
+                  {barraSpuntate(b)}
                   {azioniCrea(quali(b), busy === b.id)}
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-xs text-muted-foreground">Abbina a</span>
@@ -299,6 +380,7 @@ function Pannello({ onClose }: { onClose: () => void }) {
                       {!trovati[b.id].length && <div className="text-xs text-muted-foreground">Nessun documento da incassare trovato.</div>}
                       {trovati[b.id].map((p, i) => (
                         <div key={i} className="flex flex-wrap items-center gap-2 rounded border px-2 py-1 text-xs">
+                          {casella(b, p)}
                           <span className="flex-1"><b>{NOME_TIPO[p.tipo]} {p.numero}</b> · {p.nome} · {eur(p.importo)} · {giorno(p.data)}</span>
                           <Button size="xs" variant="outline" disabled={busy === b.id} onClick={() => accetta(b, p, true)}>Abbina</Button>
                         </div>
@@ -411,6 +493,7 @@ function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
 
   async function conferma(azione: BonAzione) {
     if (!operatore) { toast.error("Scegli l'operatore prima di confermare"); return; }
+    if (cf.esito === "eccedenza" && !window.confirm(`${cf.testo}\n\nConfermi l'incasso? L'eccedenza di ${eur(cf.eccedenza)} resta da gestire.`)) return;
     setBusy(azione);
     try {
       const conSdi = sdi && (azione === "fattura" || azione === "ordine" || (azione === "quietanza" && p.tipo === "bozza"));
