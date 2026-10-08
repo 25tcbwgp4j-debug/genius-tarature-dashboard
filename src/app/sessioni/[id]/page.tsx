@@ -1315,6 +1315,7 @@ export default function SessionDetail() {
         sessionId={sessionId}
         haRapporti={(instruments || []).some((i: { rdt_number?: string | null }) => !!i.rdt_number)}
         versione={[session.pronto_prog_stato, session.pronto_prog_at, session.ready_email_at, session.ready_whatsapp_at,
+          session.return_by_customer, session.shipping_by_customer, session.shipping_included, session.return_by_courier,
           (instruments || []).filter((i: { rdt_number?: string | null }) => !!i.rdt_number).length].join("|")}
         onAggiornato={loadSession}
       />
@@ -1322,7 +1323,7 @@ export default function SessionDetail() {
       {/* === SPEDIZIONI UPS: ritiro dal cliente e riconsegna === */}
       <div id="spedizioni" className="scroll-mt-4 space-y-4">
         <SpedizioneSessione
-          key={[session.arrived_by_courier, session.return_by_courier, session.shipping_by_customer, session.shipping_included, session.shipping_amount_gross, session.shipping_label].join("|")}
+          key={[session.arrived_by_courier, session.return_by_courier, session.shipping_by_customer, session.return_by_customer, session.shipping_included, session.shipping_amount_gross, session.shipping_label].join("|")}
           sessionId={sessionId} session={session} onSalvato={() => { loadSession(); setFatturaAggiorna((n) => n + 1); }} />
         <ShipmentsPanel sessionId={sessionId} session={session} onSessioneAggiornata={() => { loadSession(); setFatturaAggiorna((n) => n + 1); }} />
       </div>

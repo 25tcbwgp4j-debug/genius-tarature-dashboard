@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 import { dataIt, testoPagamento } from "./PagamentoStato";
 import { IncassoSessione } from "./IncassoSessione";
+import { EtichettaRitorno } from "./EtichettaRitorno";
 
 type Sess = Record<string, any>;  // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -84,6 +85,8 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
   const tp = testoPagamento(statoPag || null);
   const spedizione = session.shipping_by_customer
     ? "a carico del cliente (0 €)"
+    : session.return_by_customer
+      ? `ritorno a carico del cliente (sua etichetta)${session.shipping_included && Number(session.shipping_amount_gross) > 0 ? ` · ${Number(session.shipping_amount_gross).toFixed(2).replace(".", ",")} € in fattura` : ""}`
     : session.shipping_included && Number(session.shipping_amount_gross) > 0
       ? `${Number(session.shipping_amount_gross).toFixed(2).replace(".", ",")} €`
       : "nessuna";
@@ -196,6 +199,8 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
       {/* STATO in un unico posto */}
       <dl className="space-y-1 rounded-md border border-gray-200 bg-white p-2">
         <Riga k="Pro forma">
+          <span className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+          <span className="min-w-0">
           {pf ? (
             <>
               <b>{pf.sigla}</b> del {dataIt(pf.data)} · <b>{eur(pf.totale)}</b>
@@ -205,6 +210,10 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
           ) : statoPag?.proforma ? (
             <span className="text-gray-700">vecchio pro forma {statoPag.proforma.proforma_number} · {eur(statoPag.proforma.total)}</span>
           ) : <span className="text-gray-400">non ancora preparato</span>}
+          </span>
+          {/* 08/10/2026: ritorno a carico del cliente → strumenti pronti, chiedi l'etichetta del suo corriere */}
+          <EtichettaRitorno sessionId={sessionId} session={session} onFatto={onRicarica} />
+          </span>
         </Riga>
         <Riga k="Fattura">
           {fattura ? (

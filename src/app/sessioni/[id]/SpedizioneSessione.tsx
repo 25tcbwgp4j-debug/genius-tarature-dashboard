@@ -29,6 +29,8 @@ export interface SessioneSpedizione {
   arrived_by_courier?: boolean | null;
   return_by_courier?: boolean | null;
   shipping_by_customer?: boolean | null;
+  /** 08/10/2026: solo il RITORNO a carico del cliente (ci manda l'etichetta del suo corriere) */
+  return_by_customer?: boolean | null;
 }
 
 export const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
@@ -71,18 +73,20 @@ export function SpedizioneSessione({ sessionId, session, onSalvato }: { sessionI
   const [arrivato, setArrivato] = useState(!!session.arrived_by_courier);
   const [rispedire, setRispedire] = useState(!!session.return_by_courier);
   const [carico, setCarico] = useState(!!session.shipping_by_customer);
+  const [ritornoCliente, setRitornoCliente] = useState(!!session.return_by_customer);
   const [costo, setCosto] = useState<Costo>(costoDaSessione(session));
   const [busy, setBusy] = useState(false);
 
   const salvato = costoDaSessione(session);
   const modificato = arrivato !== !!session.arrived_by_courier || rispedire !== !!session.return_by_courier || carico !== !!session.shipping_by_customer
+    || ritornoCliente !== !!session.return_by_customer
     || (!carico && (costo.incluso !== salvato.incluso || (costo.incluso && (Math.abs(costo.importo - salvato.importo) > 0.005 || costo.etichetta !== salvato.etichetta))));
 
   async function salva() {
     setBusy(true);
     try {
       await updateSession(sessionId, {
-        arrived_by_courier: arrivato, return_by_courier: rispedire, shipping_by_customer: carico,
+        arrived_by_courier: arrivato, return_by_courier: rispedire, shipping_by_customer: carico, return_by_customer: ritornoCliente,
         shipping_included: !carico && costo.incluso, shipping_amount_gross: !carico && costo.incluso ? costo.importo : 0,
         shipping_label: costo.etichetta || ETICHETTA_LIBERA,
       });
@@ -110,7 +114,16 @@ export function SpedizioneSessione({ sessionId, session, onSalvato }: { sessionI
           <input type="checkbox" checked={carico} onChange={(e) => setCarico(e.target.checked)} />
           Spedizione a carico del cliente <span className="text-muted-foreground">(ritiro e consegna con il SUO corriere)</span>
         </label>
+        <label className="flex cursor-pointer items-center gap-1.5"
+          title={carico ? "Compreso in «Spedizione a carico del cliente» (andata e ritorno)" : "A lavoro finito si chiede al cliente l'etichetta del suo corriere da attaccare al collo"}>
+          <input type="checkbox" checked={ritornoCliente || carico} disabled={carico} onChange={(e) => setRitornoCliente(e.target.checked)} />
+          Ritorno a carico del cliente <span className="text-muted-foreground">(ci manda l&apos;etichetta)</span>
+        </label>
       </div>
+      {ritornoCliente && !carico && (
+        <p className="rounded-md bg-amber-500/10 p-2 text-xs">Ritorno col corriere del cliente: a lavoro finito «Pronto per la spedizione – chiedi etichetta» (riquadro Pro forma) e il pronto programmato chiedono l&apos;etichetta in PDF.
+          {costo.incluso ? " Il costo qui sotto resta in fattura: toglilo se il cliente non paga nessuna spedizione a noi." : ""}</p>
+      )}
       {carico ? (
         <p className="rounded-md bg-amber-500/10 p-2 text-sm">Il cliente organizza ritiro e riconsegna con il proprio corriere: <b>costo di spedizione 0</b> in fattura e pro forma, e la ricevuta lo riporta.</p>
       ) : (

@@ -181,6 +181,7 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
             {prog.canali.map((c) => c === "email" ? `📧 ${dest.email || "—"}` : `💬 ${dest.whatsapp || "—"}`).join(" · ")}
             {prog.da ? ` · da ${prog.da}` : ""}
           </p>
+          {st.variante && <p className="text-xs font-medium text-blue-900 mt-0.5">Partirà: {st.variante.etichetta}</p>}
         </div>
         {prog.stato === "programmato" && (
           <div className="flex gap-2">
@@ -233,6 +234,7 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
           <X className="w-4 h-4" />
         </button>
       </div>
+      {st.variante && <p className="-mt-2 mb-3 text-xs font-medium text-amber-900">Partirà: {st.variante.etichetta}</p>}
 
       <div className="flex flex-wrap gap-2 mb-3">
         {([
