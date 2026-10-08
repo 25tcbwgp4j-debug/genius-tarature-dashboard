@@ -204,12 +204,13 @@ function Magazzino() {
           Consultazione: la modifica del magazzino non è abilitata per questo utente.
         </div>
       )}
-      {puoModificare && <Card className="space-y-2 p-3 print:hidden">
-        <div className="flex flex-wrap items-center gap-2 text-sm font-medium"><PackagePlus className="size-4" /> Carico con lo scanner
-          <span className="text-xs font-normal text-muted-foreground">quantità proposta (la confermi a ogni lettura)</span>
+      {/* 08/10/2026: il carico è il riquadro VERDE; la ricerca articoli è il campo AZZURRO più sotto */}
+      {puoModificare && <Card className="space-y-2 border-2 border-emerald-500 bg-emerald-50/70 p-3 print:hidden dark:bg-emerald-950/20">
+        <div className="flex flex-wrap items-center gap-2 text-sm font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300"><PackagePlus className="size-4" /> Carico di magazzino — spara qui il codice della merce che entra
+          <span className="text-xs font-normal normal-case tracking-normal text-emerald-700 dark:text-emerald-400">quantità proposta (la confermi a ogni lettura)</span>
           <input type="number" min={1} className="h-7 w-16 rounded border border-input bg-background px-1" value={caricoQta} onChange={(e) => setCaricoQta(Math.max(1, Number(e.target.value)))} />
         </div>
-        <ScannerInput onCodice={caricoScanner} autoInvio placeholder="Spara il codice dell'articolo che entra in magazzino" />
+        <ScannerInput onCodice={caricoScanner} autoInvio placeholder="Clicca qui e spara il codice: l'articolo viene CARICATO in giacenza" />
       </Card>}
 
       {/* riepilogo del filtro corrente: le caselle di giacenza sono anche scorciatoie del filtro */}
@@ -268,8 +269,10 @@ function Magazzino() {
         <div className="min-w-0 space-y-3">
           {/* barra filtri */}
           <div className="flex flex-wrap items-center gap-2 print:hidden">
-            <div className="relative w-full sm:w-72"><Search className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
-              <Input className="h-9 w-full pl-8" placeholder="Descrizione, codice, barcode, marca…" value={testo} onChange={(e) => setTesto(e.target.value)} /></div>
+            <div className="relative w-full rounded-lg border-2 border-sky-400 bg-sky-50/70 p-1.5 sm:w-80 dark:bg-sky-950/20">
+              <div className="mb-1 px-0.5 text-[11px] font-bold uppercase tracking-wide text-sky-800 dark:text-sky-300">Cerca un articolo (non carica nulla)</div>
+              <Search className="absolute left-3.5 top-[2.15rem] size-4 text-muted-foreground" />
+              <Input className="h-9 w-full bg-background pl-8" placeholder="Descrizione, codice, barcode, marca…" value={testo} onChange={(e) => setTesto(e.target.value)} /></div>
             <select className={sel8} value={filtri.categoria} aria-label="Categoria" onChange={(e) => vai({ cat: e.target.value, sub: "" })}>
               <option value="">Tutte le categorie</option>
               {categorieMenu.map((c) => <option key={c} value={c}>{nomeCat(c)} ({contaCat(c)})</option>)}

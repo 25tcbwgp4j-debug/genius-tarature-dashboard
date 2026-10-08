@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileText, Landmark, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, Wallet, X } from "lucide-react";
+import { FileText, Landmark, Loader2, Minus, Plus, Receipt, RotateCcw, ScanBarcode, Search, ShoppingCart, Trash2, Undo2, Wallet, X } from "lucide-react";
 import { CHIAVE_RIEMISSIONE, StornoDialog, type Riemissione } from "@/components/StornoDialog";
 import { AnnullaEFattura } from "@/components/AnnullaEFattura";
 import { Incassa, NOMI_MODALITA } from "@/components/Incassa";
@@ -366,10 +366,28 @@ export default function CassaPage() {
             </div>
           </div>
         )}
-        <ScannerInput onCodice={scansiona} anteprima={anteprimaCodice} />
-        <div className="relative">
-          <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
-          <Input className="h-8 pl-8" placeholder="…oppure cerca l'articolo per nome" value={q} onChange={(e) => setQ(e.target.value)} />
+        {/* 08/10/2026: due campi ben distinti — 1) scanner (verde), 2) ricerca per nome (azzurro) */}
+        <div className="rounded-lg border-2 border-emerald-500 bg-emerald-50/70 p-2 dark:bg-emerald-950/20">
+          <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+            <ScanBarcode className="size-4" /> 1 · Spara qui il codice a barre
+            <span className="font-normal normal-case tracking-normal text-emerald-700 dark:text-emerald-400">compare l&apos;articolo col prezzo, Invio lo mette nel carrello</span>
+          </div>
+          <ScannerInput onCodice={scansiona} anteprima={anteprimaCodice} placeholder="Clicca qui e spara il codice a barre" />
+        </div>
+        <div className="relative rounded-lg border-2 border-sky-400 bg-sky-50/70 p-2 dark:bg-sky-950/20">
+          <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-sky-800 dark:text-sky-300">
+            <Search className="size-4" /> 2 · Oppure cerca per nome
+            <span className="font-normal normal-case tracking-normal text-sky-700 dark:text-sky-400">scrivi (es. «cavo lightning») e clicca l&apos;articolo</span>
+          </div>
+          <Input className="h-9 bg-background" placeholder="Scrivi il nome dell'articolo…" value={q} onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              const c = q.trim();
+              if (!c) return;
+              // codice a barre finito qui per sbaglio: lo tratto come una lettura dello scanner
+              if (/^[0-9A-Za-z/()-]{6,}$/.test(c) && /\d/.test(c)) { setQ(""); setTrovati([]); scansiona(c); return; }
+              if (trovati.length === 1) aggiungi(trovati[0]);
+            }} />
           {trovati.length > 0 && (
             <div className="absolute z-10 mt-1 max-h-72 w-full overflow-y-auto rounded-md border bg-background shadow-lg">
               {trovati.map((p) => (
