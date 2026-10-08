@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { AlertTriangle } from "lucide-react";
 import { EditCustomerDialog } from "./EditCustomerDialog";
 import { ChangeCustomerDialog } from "./ChangeCustomerDialog";
+import { LinkAreaClienti } from "./LinkAreaClienti";
 import type { TerminiCliente } from "@/lib/api";
 
 type Customer = { id: string; company_name?: string } & Record<string, any>;  // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -77,6 +78,7 @@ export function ClienteCard({ sessionId, customer, onChanged, termini, children 
         <div className="grid w-full grid-cols-2 gap-1.5 sm:ml-auto sm:flex sm:w-auto sm:items-center [&>button]:min-w-0 [&>button]:px-2 [&>button]:text-xs">
           <EditCustomerDialog customer={customer} onSaved={onChanged} />
           <ChangeCustomerDialog sessionId={sessionId} currentCustomerId={customer.id} currentCustomerName={customer.company_name || ""} onChanged={onChanged} />
+          <LinkAreaClienti sessionId={sessionId} />
         </div>
       </div>
 
