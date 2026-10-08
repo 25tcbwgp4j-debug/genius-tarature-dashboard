@@ -20,8 +20,8 @@ const peso = (a: string | null | undefined, att: Attivita) => (a === att ? 0 : a
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-export function CercaArticolo({ onScelto, listino = [], placeholder = "Cerca articolo: nome, codice o spara il codice a barre…", className = "", attivita }: {
-  onScelto: (a: ArticoloScelto) => void; listino?: VoceListino[]; placeholder?: string; className?: string;
+export function CercaArticolo({ onScelto, listino = [], placeholder = "Cerca articolo: nome, codice o spara il codice a barre…", className = "", attivita, evidenziato = false }: {
+  onScelto: (a: ArticoloScelto) => void; listino?: VoceListino[]; placeholder?: string; className?: string; evidenziato?: boolean;
   /** divisione del documento (fattura); se manca vale il selettore in alto */
   attivita?: Attivita;
 }) {
@@ -83,8 +83,8 @@ export function CercaArticolo({ onScelto, listino = [], placeholder = "Cerca art
   const vuoto = q.trim().length >= 2 && !dalListino.length && !dalMagazzino.length;
   return (
     <div ref={box} className={`relative ${className}`}>
-      <Search className="pointer-events-none absolute left-2 top-2 size-4 text-muted-foreground" />
-      <Input className="h-8 pl-8" placeholder={placeholder} value={q}
+      <Search className={`pointer-events-none absolute left-2 ${evidenziato ? "top-3 size-5 text-primary" : "top-2 size-4 text-muted-foreground"}`} />
+      <Input className={evidenziato ? "h-11 border-2 border-primary pl-9 text-base font-medium shadow-sm ring-2 ring-primary/20 placeholder:text-foreground/60" : "h-8 pl-8"} placeholder={placeholder} value={q}
         onChange={(e) => { setQ(e.target.value); setAperto(true); if (e.target.value.trim().length < 2) setProd([]); }}
         onFocus={() => setAperto(true)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); invio(); } if (e.key === "Escape") setAperto(false); }} />
       {aperto && (dalListino.length > 0 || dalMagazzino.length > 0 || vuoto) && (

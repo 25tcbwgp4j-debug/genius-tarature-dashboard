@@ -342,9 +342,11 @@ export function Editor({
                   {t === "azienda" ? "Azienda" : t === "privato" ? "Privato" : "Estero"}
                 </Button>
               ))}
-              <div className="relative ml-auto w-full sm:w-72">
-                <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
-                <Input className="h-8 pl-8" placeholder="Cerca in anagrafica clienti…" value={q} onChange={(e) => setQ(e.target.value)} />
+              <div className="relative ml-auto w-full sm:w-96">
+                <Search className="pointer-events-none absolute left-2 top-3 size-5 text-primary" />
+                {/* campo principale della fattura: in evidenza e col cursore già dentro sulla fattura nuova */}
+                <Input className="h-11 border-2 border-primary pl-9 text-base font-medium shadow-sm ring-2 ring-primary/20 placeholder:text-foreground/60"
+                  placeholder="Cerca in anagrafica clienti…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus={!iniziale && !anagrafica} />
                 {trovati.length > 0 && (
                   <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-md border bg-background shadow-lg">
                     {trovati.map((x) => (
@@ -406,7 +408,7 @@ export function Editor({
               </label>
               <Button size="xs" variant="outline" className="ml-auto" onClick={() => setRighe((p) => [...p, rigaVuota(societa === "gingy" ? 10 : 22)])}><Plus /> Riga</Button>
             </div>
-            <CercaArticolo listino={catalogo} className="w-full" attivita={attivita}
+            <CercaArticolo listino={catalogo} className="w-full" attivita={attivita} evidenziato
               onScelto={(a) => aggiungiVoce({ gruppo: "", codice: a.codice || null, descrizione: a.descrizione, prezzo_ivato: a.prezzo_ivato, aliquota: a.aliquota })} />
             {catalogo.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 p-2">
