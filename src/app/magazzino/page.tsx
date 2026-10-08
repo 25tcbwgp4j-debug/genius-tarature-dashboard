@@ -14,13 +14,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowDown, ArrowUp, ArrowUpDown, Boxes, ChevronDown, ChevronRight, Download, FileSpreadsheet, FolderInput, Loader2, PackagePlus, Pencil,
-  Copy, Plus, Printer, Save, Search, Tag, X } from "lucide-react";
+  Copy, Plus, Printer, Save, Search, Tag, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
 import { dec0 } from "@/components/DecInput";
 import { toastErrore } from "@/lib/errori";
 import { usePermessi } from "@/components/permessi";
-import { type ApiError, magCrea, magModifica, magMovimento, magPerCodice, magProdotto, type Prodotto,
+import { type ApiError, magCrea, magElimina, magModifica, magMovimento, magPerCodice, magProdotto, type Prodotto,
   CATEGORIE_MERCE, type CategoriaMerce, type FiltroGiacenza, type MagFiltri, type MagRiepilogo, MAG_SENZA_CATEGORIA,
   magElenco, magSposta, magTassonomia, magUrlExport } from "@/lib/api";
 import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita } from "@/components/attivita";
@@ -104,7 +104,7 @@ function Magazzino() {
   const stampaEtichetta = (p: Prodotto, copie = 1, titolo?: string) => setEtichette({ voci: [{ p, copie }], titolo });
   // 02/10/2026: anche l'operatore usa il magazzino (articoli, carico, scarico); rettifica e inventario
   // gli chiedono l'autorizzazione dell'amministratore (dialogo globale). Backend vecchio: puo.magazzino_modifica=false.
-  const { permessi, caricato } = usePermessi();
+  const { permessi, caricato, admin } = usePermessi();
   const puoModificare = !!permessi?.puo.magazzino_modifica;
 
   useEffect(() => { magTassonomia().then((r) => setTasso(r.tassonomia)).catch(() => undefined); }, []);
@@ -392,6 +392,19 @@ function Magazzino() {
         <Scheda p={aperto} nuovo={nuovo} setNuovo={setNuovo} onClose={() => { setAperto(null); setNuovo(null); }} onSalvaNuovo={salvaNuovo} creando={creando}
           onCambiato={(p) => { carica(); if (p) apri(p.id); }} campo={campo} solaLettura={!puoModificare} tasso={tasso}
           onStampa={(p) => stampaEtichetta(p)}
+          onElimina={admin ? async (p) => {
+            if (!confirm(`Eliminare «${p.descrizione}»?\n\nSe non è mai stato usato viene cancellato; se ha movimenti, vendite o fatture viene DISATTIVATO (sparisce da elenco, ricerca e scanner, lo storico resta).`)) return;
+            try {
+              let r;
+              try { r = await magElimina(p.id); }
+              catch (e) {
+                if ((e as ApiError).status !== 409) throw e;
+                if (!confirm(`${(e as Error).message}\n\nEliminarlo lo stesso?`)) return;
+                r = await magElimina(p.id, true);
+              }
+              toast.success(r.messaggio); setAperto(null); carica();
+            } catch (e) { toastErrore(e); }
+          } : undefined}
           onDuplica={(p) => {
             // «Duplica»: nuovo articolo con gli stessi dati, SENZA codice a barre e codice (il barcode interno lo crea il gestionale)
             const { descrizione, categoria, sottocategoria, marca, modello, prezzo, aliquota, costo, unita, ubicazione, attivita,
@@ -502,8 +515,8 @@ function SpostaInCategoria({ ids, tasso, onClose, onFatto }: { ids: string[]; ta
   );
 }
 
-function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, creando, solaLettura, tasso, onStampa, onDuplica }: {
-  tasso: Record<string, string[]>; onStampa: (p: Prodotto) => void; onDuplica?: (p: Prodotto) => void;
+function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, creando, solaLettura, tasso, onStampa, onDuplica, onElimina }: {
+  tasso: Record<string, string[]>; onStampa: (p: Prodotto) => void; onDuplica?: (p: Prodotto) => void; onElimina?: (p: Prodotto) => void;
   p: Prodotto | null; nuovo: (Partial<Prodotto> & { giacenza_iniziale?: number }) | null; creando: boolean; solaLettura: boolean;
   setNuovo: (n: Partial<Prodotto> & { giacenza_iniziale?: number }) => void; onClose: () => void; onSalvaNuovo: () => void;
   onCambiato: (p: Prodotto | null) => void; campo: string;
@@ -582,6 +595,9 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, 
                 <Printer /> Stampa etichetta</Button>}
               {!solaLettura && p && onDuplica && <Button variant="outline" onClick={() => onDuplica(p)} title="Crea un articolo nuovo con gli stessi dati e un codice a barre nuovo">
                 <Copy /> Duplica</Button>}
+              {p && onElimina && <Button variant="outline" className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
+                onClick={() => onElimina(p)} title="Solo titolare: cancella se mai usato, altrimenti disattiva">
+                <Trash2 /> Elimina</Button>}
               {p?.barcode && <div className="rounded border p-2"><Barcode value={p.barcode} /></div>}</div>
             {p?.serializzato && <PezziArticolo prodotto={p} solaLettura={solaLettura} onCambiato={() => onCambiato(p)} />}
             {solaLettura ? <div className="text-sm">Giacenza attuale <b>{Number(p?.giacenza)}</b></div> : p?.serializzato ? null : <Card className="space-y-2 p-3">

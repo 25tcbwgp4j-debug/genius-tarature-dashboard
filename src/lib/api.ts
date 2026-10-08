@@ -1455,6 +1455,10 @@ export async function magProdotto(id: string): Promise<Prodotto> { return fetchA
 export async function magCrea(body: Partial<Prodotto> & { giacenza_iniziale?: number }): Promise<Prodotto> {
   return fetchAPI('/api/magazzino/prodotti', { method: 'POST', body: JSON.stringify(body) });
 }
+/** 08/10/2026 — «Elimina articolo» (solo titolare): mai usato → cancellato; usato → disattivato (lo storico resta). */
+export async function magElimina(id: string, forza = false): Promise<{ ok: boolean; esito: "cancellato" | "disattivato"; messaggio: string }> {
+  return fetchAPI(`/api/magazzino/prodotti/${id}${forza ? "?forza=true" : ""}`, { method: 'DELETE' });
+}
 export async function magModifica(id: string, body: Partial<Prodotto>): Promise<Prodotto> {
   return fetchAPI(`/api/magazzino/prodotti/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
