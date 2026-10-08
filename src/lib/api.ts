@@ -1342,6 +1342,8 @@ export interface Prodotto {
   attivita?: 'tarature' | 'apple' | null;
   categoria_merce?: CategoriaMerce | null; modello?: string | null; fornitore_id?: string | null; fornitore_nome?: string | null;
   serializzato?: boolean; sottocategoria?: string | null;
+  /** Magazzino professionale (08/10/2026): colonne calcolate dal database */
+  e_merce?: boolean; sotto_scorta?: boolean; valore_vendita?: number | null; ultimo_movimento_at?: string | null;
   /** PLU del registratore (05/10/2026): sullo scontrino stampa il nome (1 CUFFIE, 2 ALIMENTATORE 20W, 3 CAVO USB-C, 4 CAVO LIGHTNING, 5 SCHEDA ASSISTENZA) */
   plu_rt?: number | null;
   /** letto con lo scanner un seriale/IMEI: il pezzo già scelto */
@@ -1372,6 +1374,32 @@ export interface Scontrino {
 }
 export async function magProdotti(q = '', sottoScorta = false, limit = 300, attivita = '', categoriaMerce = ''): Promise<{ prodotti: Prodotto[]; totale_righe: number | null; valore_magazzino: number }> {
   return fetchAPI(`/api/magazzino/prodotti?q=${encodeURIComponent(q)}&sotto_scorta=${sottoScorta}&limit=${limit}&attivita=${attivita}&categoria_merce=${categoriaMerce}`);
+}
+/** Pagina Magazzino (08/10/2026): filtri lato server, riepilogo con albero delle categorie, sposta in categoria, export. */
+export type FiltroGiacenza = 'tutti' | 'disponibili' | 'esauriti' | 'sotto_scorta' | 'negativi';
+export interface MagFiltri {
+  q?: string; categoria?: string; sottocategoria?: string; giacenza?: FiltroGiacenza | ''; attivita?: string; marca?: string;
+  ordina?: string; verso?: 'asc' | 'desc'; limit?: number; offset?: number;
+}
+export interface MagNodo { categoria: string; articoli: number; pezzi: number; sottocategorie: { nome: string; articoli: number; pezzi: number }[] }
+export interface MagRiepilogo {
+  albero: MagNodo[]; marche: string[];
+  totali: { articoli: number; pezzi: number; valore_vendita: number; valore_costo: number; disponibili: number; esauriti: number; negativi: number; sotto_scorta: number };
+}
+export const MAG_SENZA_CATEGORIA = '__nessuna__';
+function magQuery(f: MagFiltri & Record<string, string | number | undefined>) {
+  return new URLSearchParams(Object.entries(f).filter(([, v]) => v !== undefined && v !== '' && v !== 'tutti').map(([k, v]) => [k, String(v)])).toString();
+}
+export async function magElenco(f: MagFiltri): Promise<{ prodotti: Prodotto[]; totale_righe: number | null; riepilogo: MagRiepilogo; limit: number; offset: number }> {
+  return fetchAPI(`/api/magazzino/prodotti?${magQuery({ ...f, riepilogo: 'true' })}`);
+}
+export async function magTassonomia(): Promise<{ tassonomia: Record<string, string[]> }> { return fetchAPI('/api/magazzino/tassonomia'); }
+export async function magSposta(ids: string[], categoria: string, sottocategoria: string | null): Promise<{ ok: boolean; aggiornati: number }> {
+  return fetchAPI('/api/magazzino/prodotti/sposta', { method: 'POST', body: JSON.stringify({ ids, categoria, sottocategoria }) });
+}
+export function magUrlExport(f: MagFiltri, formato: 'xlsx' | 'csv') {
+  const { q, categoria, sottocategoria, giacenza, attivita, marca } = f;
+  return `${API_PROXY}/api/magazzino/export?${magQuery({ q, categoria, sottocategoria, giacenza, attivita, marca, formato })}`;
 }
 export async function magPerCodice(codice: string): Promise<Prodotto> { return fetchAPI(`/api/magazzino/codice/${encodeURIComponent(codice)}`); }
 export async function magProdotto(id: string): Promise<Prodotto> { return fetchAPI(`/api/magazzino/prodotti/${id}`); }
