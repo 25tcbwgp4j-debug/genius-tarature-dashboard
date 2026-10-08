@@ -199,7 +199,7 @@ function Magazzino() {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 print:hidden">
         <Kpi etichetta="Articoli" valore={t ? num(t.articoli) : "…"} />
         <Kpi etichetta="Pezzi in giacenza" valore={t ? num(t.pezzi) : "…"} />
-        <Kpi etichetta="Valore a prezzo di vendita" valore={t ? eur(t.valore_vendita) : "…"} nota={t ? `a costo ${eur(t.valore_costo)}` : ""} />
+        <Kpi etichetta="Valore a prezzo di vendita" valore={t ? eur(t.valore_vendita) : "…"} nota={t && t.valore_costo > 0 ? `a costo ${eur(t.valore_costo)}` : ""} />
         <Kpi etichetta="Disponibili" valore={t ? num(t.disponibili) : "…"} attivo={filtri.giacenza === "disponibili"} onClick={() => vai({ giac: filtri.giacenza === "disponibili" ? "" : "disponibili" })} />
         <Kpi etichetta="Esauriti" valore={t ? num(t.esauriti) : "…"} tono="ambra" attivo={filtri.giacenza === "esauriti"} onClick={() => vai({ giac: filtri.giacenza === "esauriti" ? "" : "esauriti" })} />
         <Kpi etichetta="Sotto scorta minima" valore={t ? num(t.sotto_scorta) : "…"} tono="rosso" nota={t && t.negativi ? `${t.negativi} negativi` : ""} attivo={filtri.giacenza === "sotto_scorta"} onClick={() => vai({ giac: filtri.giacenza === "sotto_scorta" ? "" : "sotto_scorta" })} />
