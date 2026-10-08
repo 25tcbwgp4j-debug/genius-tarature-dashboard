@@ -529,7 +529,7 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, 
   const [testi, setTesti] = useState<Record<string, string>>({});
   const dati = nuovo || f;
   const set = (k: keyof Prodotto | "giacenza_iniziale", v: string | number | boolean | null) => nuovo ? setNuovo({ ...nuovo, [k]: v }) : setF((x) => ({ ...x, [k]: v }));
-  const CAMPI: [keyof Prodotto, string, string][] = [["descrizione", "Descrizione", "text"], ["barcode", "Codice a barre (vuoto = EAN interno generato)", "text"],
+  const CAMPI: [keyof Prodotto, string, string][] = [["descrizione", "Descrizione", "text"], ["barcode", "Codice a barre (vuoto = EAN interno; per sostituirlo scansiona qui quello della confezione e Salva)", "text"],
     ["codice", "Codice articolo", "text"], ["marca", "Marca", "text"], ["modello", "Modello / compatibilità", "text"],
     ["ubicazione", "Ubicazione", "text"], ["fornitore_nome", "Fornitore predefinito", "text"],
     ["prezzo", "Prezzo di vendita IVA incl.", "number"], ["aliquota", "IVA %", "number"], ["costo", "Costo d'acquisto", "number"], ["scorta_minima", "Scorta minima", "number"]];
