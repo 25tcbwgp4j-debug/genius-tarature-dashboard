@@ -1346,6 +1346,8 @@ export interface Prodotto {
   e_merce?: boolean; sotto_scorta?: boolean; valore_vendita?: number | null; ultimo_movimento_at?: string | null;
   /** PLU del registratore (05/10/2026): sullo scontrino stampa il nome (1 CUFFIE, 2 ALIMENTATORE 20W, 3 CAVO USB-C, 4 CAVO LIGHTNING, 5 SCHEDA ASSISTENZA) */
   plu_rt?: number | null;
+  /** codici a barre / sigle alternative (versione precedente della stessa confezione): li usano scanner e ricerca (08/10/2026) */
+  barcode_alt?: string[];
   /** letto con lo scanner un seriale/IMEI: il pezzo già scelto */
   pezzo?: Pezzo;
 }
@@ -1362,6 +1364,8 @@ export interface Scontrino {
   id: string; stato: string; righe: RigaCassa[]; totale: number; pagamenti: PagamentoScontrino[];
   /** «non riscosso»: quanto resta da recuperare (RECUPERO CREDITI) · fattura che ha sostituito lo scontrino annullato */
   credito_residuo?: number; fattura_id?: string | null; resto?: number; consegnato?: number;
+  /** scontrino della giornata fiscale ancora aperta (oggi / Z non chiusa): niente RESO sul registratore, si annulla e si riemette (08/10/2026) */
+  giornata_aperta?: boolean;
   /** «annulla scontrino e fai fattura»: a che punto è (sullo scontrino originale) */
   annulla_e_fattura?: StatoAnnullaEFattura | null;
   codice_lotteria: string | null; numero_rt: string | null; errore: string | null; risposta_rt: string | null; created_at: string;

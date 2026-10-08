@@ -67,7 +67,8 @@ export function CercaArticolo({ onScelto, listino = [], placeholder = "Cerca art
   async function invio() {
     const c = q.trim();
     if (!c) return;
-    if (/^[0-9A-Za-z-]{6,}$/.test(c) && !c.includes(" ")) {   // sembra un codice: provo il codice a barre
+    // sembra un codice: provo il codice a barre (anche la sigla Apple «MW493ZM/A» o «1PMW493ZM-A» letta dall'etichetta)
+    if (/^[0-9A-Za-z/()-]{6,}$/.test(c) && !c.includes(" ")) {
       try {
         const p = await magPerCodice(c);
         scegli({ descrizione: p.descrizione, prezzo_ivato: Number(p.prezzo), aliquota: Number(p.aliquota), prodotto_id: p.id, codice: p.codice });

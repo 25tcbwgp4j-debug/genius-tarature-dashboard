@@ -9,6 +9,8 @@
 // L'operatore incassa come sempre; lo scontrino si collega all'ordine e si torna all'ordine (con ritiro=1 lo segna ritirato).
 // /cassa?scheda=<id>: «Vendi / incassa» da una SCHEDA DI ASSISTENZA Apple: carrello con le righe della scheda; lo scontrino
 // (o la fattura) si collega alla scheda e si torna alla scheda (02/10/2026).
+// /cassa?riemetti=1 (o dal pulsante Storno): «Annulla tutto e riemetti» (08/10/2026) — lo scontrino sbagliato si annulla e il
+// carrello riparte con gli articoli che restano al cliente; il nuovo scontrino parte SOLO quando l'annullo risulta emesso.
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -16,7 +18,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileText, Landmark, Loader2, Minus, Plus, Receipt, RotateCcw, Search, ShoppingCart, Trash2, Undo2, Wallet, X } from "lucide-react";
-import { StornoDialog } from "@/components/StornoDialog";
+import { CHIAVE_RIEMISSIONE, StornoDialog, type Riemissione } from "@/components/StornoDialog";
 import { AnnullaEFattura } from "@/components/AnnullaEFattura";
 import { Incassa, NOMI_MODALITA } from "@/components/Incassa";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -63,6 +65,34 @@ export default function CassaPage() {
   const [giornoLista, setGiornoLista] = useState(oggiRoma);
   const [storno, setStorno] = useState<Scontrino | null>(null);
   const [recupero, setRecupero] = useState<Scontrino | null>(null);
+  // «Annulla tutto e riemetti»: annullo in coda + carrello con quello che resta; si emette solo ad annullo fatto
+  const [riemissione, setRiemissione] = useState<Riemissione | null>(null);
+  const [statoAnnullo, setStatoAnnullo] = useState<{ stato: string; errore: string | null } | null>(null);
+  const avviaRiemissione = useCallback((r: Riemissione) => {
+    setCarrello(r.righe.map((x) => ({ prodotto_id: x.prodotto_id ?? null, pezzo_id: x.pezzo_id ?? null, descrizione: x.descrizione, quantita: Number(x.quantita),
+      prezzo: Number(x.prezzo), aliquota: Number(x.aliquota ?? 22), sconto: Number(x.sconto || 0), regime: x.regime ?? null, natura: x.natura ?? null,
+      costo_acquisto: x.costo_acquisto ?? null, plu_rt: x.plu_rt ?? null })));
+    setRiemissione(r); setStatoAnnullo(null);
+  }, []);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("riemetti") !== "1") return;
+    try {
+      const r = sessionStorage.getItem(CHIAVE_RIEMISSIONE);
+      sessionStorage.removeItem(CHIAVE_RIEMISSIONE);
+      if (r) avviaRiemissione(JSON.parse(r) as Riemissione);
+    } catch { /* noop */ }
+  }, [avviaRiemissione]);
+  useEffect(() => {
+    if (!riemissione) return;
+    let vivo = true;
+    const leggi = () => cassaScontrini(oggiRoma()).then((r: { scontrini: Scontrino[] }) => {
+      const a = r.scontrini.find((x) => x.id === riemissione.annullo_id);
+      if (vivo && a) setStatoAnnullo({ stato: a.stato, errore: a.errore });
+    }).catch(() => undefined);
+    leggi();
+    const t = setInterval(leggi, 4000);
+    return () => { vivo = false; clearInterval(t); };
+  }, [riemissione]);
   // pagamento misto attivo solo con l'agente di cassa v2 sul server (03/10/2026)
   const [agenteV2, setAgenteV2] = useState(false);
   useEffect(() => { fetchAPI("/api/cassa/agente/stato").then((r: { v2_attivo: boolean }) => setAgenteV2(!!r.v2_attivo)).catch(() => undefined); }, []);
@@ -211,6 +241,9 @@ export default function CassaPage() {
     if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return null; }
     if (carrello.some((r) => !(r.prezzo >= 0) || Number.isNaN(r.prezzo))) { toast.error("C'è un prezzo non valido nel carrello"); return null; }
     if (ordine && tot > ordine.max + 0.001) { toast.error(`Lo scontrino supera quanto resta da pagare sull'ordine (${eur(ordine.max)})`); return null; }
+    if (riemissione && statoAnnullo?.stato !== "emesso") {
+      toast.error("Aspetta che l'annullo dello scontrino sbagliato risulti EMESSO dal registratore, poi emetti il nuovo scontrino"); return null;
+    }
     const nr = pagamenti.filter((p) => p.modalita === "non_riscosso").reduce((x, p) => x + p.importo, 0);
     if (nr > 0 && nr >= tot - 0.005 && !confirm(`Emettere lo scontrino da ${eur(tot)} come NON RISCOSSO (il cliente non paga adesso)?`)) return null;
     const come = pagamenti.map((p) => `${MOD[p.modalita] || p.modalita} ${eur(p.importo)}`).join(" + ");
@@ -223,7 +256,7 @@ export default function CassaPage() {
                              ...(!sessione && !ordine ? { attivita: att } : {}) });
       esito = { id: sc.id, descrizione: `Scontrino ${eur(tot)}${ordine ? ` (ordine ${ordine.sigla})` : ""} — ${carrello.map((r) => r.descrizione).join(", ")}`.slice(0, 280) };
       toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${come} · ${operatore})${sc.resto ? ` — RESTO ${eur(sc.resto)}` : ""}`, { duration: sc.resto ? 15000 : 5000 });
-      setCarrello([]); ricarica();
+      setCarrello([]); ricarica(); setRiemissione(null);
       if (scheda) {
         await collegaScheda({ scontrino_id: sc.id, ...(scheda.acconto ? { acconto: String(scheda.acconto) } : {}) });
         router.push(`/assistenza?id=${scheda.id}`); setScheda(null);
@@ -310,6 +343,18 @@ export default function CassaPage() {
               Scegli operatore e pagamento come per ogni scontrino: si collega da solo all&apos;ordine{ordine.ritiro ? " e l'ordine risulta ritirato" : ""}.</span>
             {oltreOrdine && <span className="w-full font-semibold text-red-700">Il carrello ({eur(tot)}) supera quanto resta da pagare ({eur(ordine.max)}): correggi l&apos;importo.</span>}
             <Link className="ml-auto underline" href={`/ordini?id=${ordine.id}`}>Torna all&apos;ordine</Link>
+          </div>
+        )}
+        {riemissione && (
+          <div className={`space-y-1 rounded-md border-2 px-3 py-2 text-sm ${statoAnnullo?.stato === "errore" ? "border-red-500 bg-red-50 text-red-900 dark:bg-red-950/30 dark:text-red-100" : "border-sky-400 bg-sky-50 text-sky-950 dark:bg-sky-950/30 dark:text-sky-100"}`}>
+            <div><b>Riemissione</b> dopo l&apos;annullo dello scontrino {riemissione.numero ? `n. ${riemissione.numero}` : ""}: nel carrello gli articoli che restano al cliente.
+              Per un cambio merce aggiungi l&apos;articolo nuovo, poi incassa.</div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              Annullo: {statoAnnullo?.stato === "emesso" ? <b className="text-emerald-700 dark:text-emerald-300">EMESSO — puoi emettere il nuovo scontrino</b>
+                : statoAnnullo?.stato === "errore" ? <b>NON RIUSCITO{statoAnnullo.errore ? ` (${statoAnnullo.errore})` : ""}: non emettere il nuovo scontrino, ricontrolla dall&apos;elenco</b>
+                : <span className="flex items-center gap-1"><Loader2 className="size-3 animate-spin" /> in corso sul registratore ({statoAnnullo ? (STATO[statoAnnullo.stato] || statoAnnullo.stato) : "in coda"})…</span>}
+              <Button size="xs" variant="ghost" className="ml-auto" onClick={() => { if (confirm("Lasciare la riemissione? Il carrello resta com'è.")) setRiemissione(null); }}><X /> Chiudi</Button>
+            </div>
           </div>
         )}
         <ScannerInput onCodice={scansiona} />
@@ -445,7 +490,7 @@ export default function CassaPage() {
                     {(s.stato === "errore" || s.stato === "simulato") && <Button size="xs" variant="ghost" onClick={() => cassaRiprova(s.id).then(ricarica).catch(toastErrore)}><RotateCcw /> Riprova</Button>}
                     {["da_stampare", "errore", "simulato"].includes(s.stato) && <Button size="xs" variant="ghost" onClick={() => { if (confirm("Annullare lo scontrino e rimettere in giacenza gli articoli?")) cassaAnnulla(s.id).then(ricarica).catch(toastErrore); }}>Annulla</Button>}
                     {doc === "vendita" && ["emesso", "in_stampa"].includes(s.stato) && <SpedisciDocumento link={{ scontrino_id: s.id }} soloPulsante />}
-                    {stornabile && <Button size="xs" variant="ghost" className="text-red-600" title="Reso (anche parziale) o annullo di uno scontrino già emesso"
+                    {stornabile && <Button size="xs" variant="ghost" className="text-red-600" title={s.giornata_aperta ? "Scontrino di oggi: annulla e riemetti (il reso si fa dopo la chiusura)" : "Reso (anche parziale) o annullo di uno scontrino già emesso"}
                       onClick={() => setStorno(s)}><Undo2 /> Storno</Button>}
                     {!negativo && (s.credito_residuo || 0) > 0.005 && ["emesso", "in_stampa", "simulato"].includes(s.stato) &&
                       <Button size="xs" variant="ghost" className="text-amber-700" title="Il cliente paga ora la parte non riscossa (RECUPERO CREDITI sul registratore)"
@@ -465,7 +510,8 @@ export default function CassaPage() {
           </div>
         </Card>
       </div>
-      <StornoDialog oggetto={storno ? { fonte: "scontrino", scontrino: storno } : null} onClose={() => setStorno(null)} onFatto={ricarica} />
+      <StornoDialog oggetto={storno ? { fonte: "scontrino", scontrino: storno } : null} onClose={() => setStorno(null)} onFatto={ricarica}
+        onRiemetti={avviaRiemissione} />
       <AnnullaEFattura scontrino={daFatturare} onClose={() => setDaFatturare(null)} onCambiato={ricarica} />
       {/* recupero del credito di uno scontrino «non riscosso»: un metodo per volta (RECUPERO CREDITI sul registratore) */}
       <Dialog open={!!recupero} onOpenChange={(o) => { if (!o) setRecupero(null); }}>
