@@ -134,7 +134,7 @@ export default function CaricoMagazzinoPage() {
 
       <Card className="space-y-2 p-3">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[280px] flex-1"><ScannerInput onCodice={scansiona} placeholder="Spara il codice a barre (o scrivilo e premi Invio)" /></div>
+          <div className="min-w-[280px] flex-1"><ScannerInput onCodice={scansiona} autoInvio placeholder="Spara il codice a barre (o scrivilo e premi Invio)" /></div>
           <label className="text-sm">Quantità per lettura
             <Input type="number" min={1} className="h-9 w-20" value={qScan} onChange={(e) => setQScan(Math.max(1, parseInt(e.target.value || "1", 10)))} />
           </label>

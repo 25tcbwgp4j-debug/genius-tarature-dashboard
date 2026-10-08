@@ -192,7 +192,7 @@ function Magazzino() {
           <span className="text-xs font-normal text-muted-foreground">quantità proposta (la confermi a ogni lettura)</span>
           <input type="number" min={1} className="h-7 w-16 rounded border border-input bg-background px-1" value={caricoQta} onChange={(e) => setCaricoQta(Math.max(1, Number(e.target.value)))} />
         </div>
-        <ScannerInput onCodice={caricoScanner} placeholder="Spara il codice dell'articolo che entra in magazzino" />
+        <ScannerInput onCodice={caricoScanner} autoInvio placeholder="Spara il codice dell'articolo che entra in magazzino" />
       </Card>}
 
       {/* riepilogo del filtro corrente: le caselle di giacenza sono anche scorciatoie del filtro */}

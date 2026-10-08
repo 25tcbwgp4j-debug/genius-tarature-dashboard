@@ -11,18 +11,34 @@ type Detector = { detect: (src: HTMLVideoElement) => Promise<{ rawValue: string 
 
 export type AnteprimaCodice = { titolo: string; dettaglio?: string } | null;
 
-export function ScannerInput({ onCodice, anteprima, placeholder = "Spara il codice a barre o scrivilo e premi Invio" }: {
+export function ScannerInput({ onCodice, anteprima, autoInvio = false, placeholder = "Spara il codice a barre o scrivilo e premi Invio" }: {
   onCodice: (c: string) => void; placeholder?: string;
+  /** 08/10/2026: scanner che NON manda l'Invio. Se il codice arriva «sparato» (tasti a meno di 50 ms l'uno dall'altro)
+   *  si invia da solo dopo 300 ms di pausa; scritto a mano resta com'è (serve Invio). */
+  autoInvio?: boolean;
   /** 08/10/2026: mentre si spara/scrive il codice, mostra subito l'articolo trovato (null = non trovato); Invio conferma */
   anteprima?: (c: string) => Promise<AnteprimaCodice>;
 }) {
   const [v, setV] = useState("");
+  const tempi = useRef<number[]>([]);
   const [prev, setPrev] = useState<{ codice: string; esito: AnteprimaCodice | "cerco" } | null>(null);
   const [cam, setCam] = useState(false);
   const inp = useRef<HTMLInputElement>(null);
   const video = useRef<HTMLVideoElement>(null);
 
   useEffect(() => { inp.current?.focus(); }, []);
+
+  // invio automatico per gli scanner senza Invio: solo se i caratteri sono arrivati a raffica
+  useEffect(() => {
+    if (!autoInvio) return;
+    const c = v.trim();
+    if (c.length < 6) return;
+    const t = tempi.current;
+    const raffica = t.length >= 6 && t.slice(1).every((x, i) => x - t[i] < 50);
+    if (!raffica) return;
+    const timer = setTimeout(() => { onCodice(c); setV(""); tempi.current = []; }, 300);
+    return () => clearTimeout(timer);
+  }, [v, autoInvio, onCodice]);
 
   // anteprima automatica: 250 ms dopo l'ultimo carattere (lo scanner scrive tutto in pochi ms), senza premere Invio
   useEffect(() => {
@@ -68,9 +84,9 @@ export function ScannerInput({ onCodice, anteprima, placeholder = "Spara il codi
       <div className="flex gap-2">
         <div className="relative flex-1">
           <ScanBarcode className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
-          <input ref={inp} value={v} onChange={(e) => setV(e.target.value)} placeholder={placeholder}
+          <input ref={inp} value={v} onChange={(e) => { const ora = Date.now(); tempi.current = e.target.value.length <= 1 ? [ora] : [...tempi.current, ora]; setV(e.target.value); }} placeholder={placeholder}
             className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
-            onKeyDown={(e) => { if (e.key === "Enter" && v.trim()) { onCodice(v.trim()); setV(""); setPrev(null); } }} />
+            onKeyDown={(e) => { if (e.key === "Enter" && v.trim()) { onCodice(v.trim()); setV(""); setPrev(null); tempi.current = []; } }} />
         </div>
         <Button variant="outline" title="Leggi con la fotocamera" onClick={() => {
           if (!cam && !(window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector) {
