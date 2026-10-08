@@ -9,16 +9,20 @@
 //   INCASSA · ACCONTO con il componente Incassa, link Stripe); pagamenti arrivati e avviso «DA SPEDIRE»;
 // - in piccolo la via di riserva «Fattura diretta senza pro forma (o collega una fattura già fatta)».
 // Regola invariata: dalla sessione non si emette e non si invia MAI la fattura allo SdI (si fa in Fatturazione).
+// 08/10/2026 — «Aggiorna il pro forma»: se dopo il pro forma cambiano strumenti, assistenza o spedizione, banner arancione
+// «non corrisponde più alla sessione» con il pulsante che ricostruisce righe e totale (stesso numero e data). Convertito in
+// fattura BOZZA: si aggiornano insieme pro forma e bozza (con conferma). Fattura numerata/inviata o scontrino: si spiega
+// di andare in Fatturazione / Cassa. Dopo l'aggiornamento: «Vedi» e «Rimanda al cliente» con la dicitura «versione aggiornata».
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Banknote, Euro, ExternalLink, Eye, FileOutput, FileSpreadsheet, Loader2, Mail, MessageCircle, ShoppingCart, Truck } from "lucide-react";
+import { AlertTriangle, Banknote, Euro, ExternalLink, Eye, FileOutput, FileSpreadsheet, Loader2, Mail, MessageCircle, RefreshCw, ShoppingCart, Truck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OPERATORI_TARATURE, useOperatore, type Operatore } from "@/components/Operatore";
 import {
-  fetchAPI, fattCollegaSessione, fattDaSessione, incSessione, markSessionPaid,
-  type ApiError, type DaSpedire, type ProformaSessioneStato, type StatoPagamentoSessione,
+  fetchAPI, fattCollegaSessione, fattDaSessione, incSessione, markSessionPaid, proformaSessioneAggiorna,
+  type ApiError, type DaSpedire, type ProformaAggiornato, type ProformaSessioneStato, type StatoPagamentoSessione,
 } from "@/lib/api";
 import { dataIt, testoPagamento } from "./PagamentoStato";
 import { IncassoSessione } from "./IncassoSessione";
@@ -59,7 +63,8 @@ interface Props {
   setActionLoading: (v: string | null) => void;
   handleAction: (action: string, fn: () => Promise<unknown>, successMsg: string) => Promise<void>;
   previewLoading: boolean;
-  apriAnteprimaProforma: (ch: "email" | "whatsapp") => void;
+  /** aggiornata = dopo «Aggiorna il pro forma»: la mail/WhatsApp dicono «versione aggiornata» */
+  apriAnteprimaProforma: (ch: "email" | "whatsapp", aggiornata?: boolean) => void;
   apriDialogProforma: () => void;
   onRicarica?: () => void;
   /** avviso «registrazione non completata» prima di prepara/converti */
@@ -133,6 +138,44 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
 
   const btn = "h-11 whitespace-normal px-1.5 text-[11px] leading-tight";
 
+  // AGGIORNA IL PRO FORMA (08/10/2026): righe e totale di nuovo dalla sessione, stesso numero e data
+  const al = pf?.allineamento || null;
+  const [aggiornato, setAggiornato] = useState<ProformaAggiornato | null>(null);
+  async function aggiornaPf(conFattura: boolean) {
+    if (!operatore) { toast.error("Scegli chi sta facendo l'operazione (Christian o Dumy) in alto, accanto a «Genera rapporti»"); return; }
+    setActionLoading("pf_aggiorna");
+    try {
+      const r = await proformaSessioneAggiorna(sessionId, operatore, conFattura);
+      setAggiornato(r);
+      toast.success(`Pro forma ${r.documento.sigla || pf?.sigla || ""} aggiornato: da ${eur(r.totale_prima)} a ${eur(r.totale_nuovo)}`
+        + (r.fattura ? " — aggiornata anche la fattura bozza" : ""), { duration: 8000 });
+      if (r.stripe?.nuovo_errore) toast.warning(`Vecchio link Stripe spento; il nuovo non è stato creato (${r.stripe.nuovo_errore}): si crea al prossimo invio`);
+      onRicarica?.();
+    } catch (e) {
+      const err = e as ApiError;
+      if (err.status === 409 && err.detail?.richiede_conferma && !conFattura) {
+        setActionLoading(null);
+        if (confirm(err.message)) await aggiornaPf(true);
+        return;
+      }
+      if (err.status === 409 && err.detail?.fattura?.link) {
+        toast.error(err.message, { duration: 12000, action: { label: "Apri la fattura", onClick: () => router.push(err.detail.fattura.link) } });
+      } else toast.error(err.message, { duration: 10000 });
+    } finally { setActionLoading(null); }
+  }
+  function chiediAggiorna() {
+    if (!pf || !al) return;
+    const conFattura = al.azione === "aggiorna_con_fattura";
+    controllaRegistrazione(conFattura ? "aggiornare il pro forma e la fattura bozza" : "aggiornare il pro forma", () => assistenzaOk(() => {
+      const testo = `Aggiornare il pro forma ${pf.sigla} con le righe e il totale della sessione?\n\n`
+        + `Da ${eur(al.totale_proforma)} a ${eur(al.totale_sessione)} (${al.righe_proforma} → ${al.righe_sessione} righe).\n`
+        + "Numero, data e cliente restano; eventuali modifiche fatte a mano sul pro forma si perdono.\n"
+        + (conFattura ? `\nÈ già convertito nella fattura BOZZA (non numerata, non inviata): si aggiorna anche quella.\n` : "")
+        + "\nNon parte nessun invio al cliente.";
+      if (confirm(testo)) aggiornaPf(conFattura);
+    }));
+  }
+
   // 08/10/2026: con una riga di assistenza ancora a 0 né scontrino né fattura (il preventivo va scritto o la riga tolta)
   async function assistenzaOk(poi: () => void) {
     try {
@@ -200,6 +243,56 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
           <Truck className="size-4" /> <b>Pagata: DA SPEDIRE</b> <span className="text-muted-foreground">({inc.da_spedire.motivo})</span>
           <Button size="sm" variant="outline" className="ml-auto"
             onClick={() => document.getElementById("spedizioni")?.scrollIntoView({ behavior: "smooth" })}><Truck /> Vai alla spedizione</Button>
+        </div>
+      )}
+
+      {/* PRO FORMA NON PIÙ ALLINEATO ALLA SESSIONE (08/10/2026) */}
+      {pf && al?.diverso && (al.azione === "aggiorna" || al.azione === "aggiorna_con_fattura") && (
+        <div className="flex flex-col gap-1.5 rounded-md border-2 border-orange-400 bg-orange-100 p-2 text-sm text-orange-950">
+          <p className="flex items-start gap-1.5"><AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span><b>Il pro forma n. {pf.sigla} ({eur(al.totale_proforma)}) non corrisponde più alla sessione ({eur(al.totale_sessione)})</b>
+              {al.righe_proforma !== al.righe_sessione ? ` — righe: ${al.righe_proforma} nel pro forma, ${al.righe_sessione} nella sessione` : ""}</span></p>
+          {al.azione === "aggiorna_con_fattura" && al.fattura && (
+            <p className="text-xs">È già convertito nella fattura <b>bozza</b> ({eur(al.fattura.totale)}, non numerata, non inviata): si aggiornano insieme pro forma e bozza.</p>
+          )}
+          {al.assistenze_senza_importo > 0 && <p className="text-xs font-semibold text-red-700">C&apos;è una riga di assistenza senza importo: inserisci il preventivo o toglila, poi aggiorna.</p>}
+          <Button className="h-10 self-start bg-orange-600 font-semibold text-white hover:bg-orange-700" disabled={occupato} onClick={chiediAggiorna}>
+            {actionLoading === "pf_aggiorna" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            {al.azione === "aggiorna_con_fattura" ? "Aggiorna il pro forma e la fattura bozza" : "Aggiorna il pro forma"}
+          </Button>
+        </div>
+      )}
+      {pf && al?.diverso && al.azione === "fatturazione" && (
+        <div className="flex flex-col gap-1 rounded-md border-2 border-orange-400 bg-orange-50 p-2 text-sm text-orange-950">
+          <p className="flex items-start gap-1.5"><AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span><b>Il pro forma n. {pf.sigla} ({eur(al.totale_proforma)}) non corrisponde più alla sessione ({eur(al.totale_sessione)})</b>,
+              ma è già convertito nella fattura {al.fattura?.numero || "(bozza)"}{al.fattura?.motivo ? `, che ${al.fattura.motivo}` : ""}: non si aggiorna da qui.</span></p>
+          <p className="text-xs">In Fatturazione: <b>fattura integrativa</b> se il totale sale, <b>nota di credito</b> se scende.</p>
+          {al.fattura && <a href={al.fattura.link} className="inline-flex items-center gap-1 self-start text-blue-700 underline underline-offset-2"><ExternalLink className="size-3.5" />Apri la fattura in Fatturazione</a>}
+        </div>
+      )}
+      {pf && al?.diverso && al.azione === "scontrino" && (
+        <div className="flex items-start gap-1.5 rounded-md border-2 border-orange-400 bg-orange-50 p-2 text-sm text-orange-950">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <span><b>Il pro forma n. {pf.sigla} ({eur(al.totale_proforma)}) non corrisponde più alla sessione ({eur(al.totale_sessione)})</b>, ma è già chiuso con lo scontrino: la differenza si gestisce dalla Cassa.</span>
+        </div>
+      )}
+      {aggiornato && (
+        <div className="flex flex-col gap-1.5 rounded-md border-2 border-emerald-400 bg-emerald-50 p-2 text-sm text-emerald-950">
+          <p className="flex items-start gap-1.5">
+            <span className="flex-1"><b>✓ Pro forma {aggiornato.documento.sigla || pf?.sigla} aggiornato</b>: {eur(aggiornato.totale_prima)} → <b>{eur(aggiornato.totale_nuovo)}</b>
+              {aggiornato.pagato > 0 ? ` · già pagato ${eur(aggiornato.pagato)}, resta ${eur(aggiornato.residuo)}` : ""}
+              {aggiornato.fattura ? <> · fattura bozza aggiornata (<a className="underline" href={aggiornato.fattura.link}>apri</a>)</> : null}</span>
+            <button type="button" title="Chiudi" onClick={() => setAggiornato(null)}><X className="size-4" /></button>
+          </p>
+          <p className="text-xs">Niente è stato inviato. Rimanda al cliente la <b>versione aggiornata</b> (vedi l&apos;anteprima prima dell&apos;invio):</p>
+          <div className="flex flex-wrap gap-1.5">
+            <Button variant="outline" className="h-9" onClick={apriDialogProforma}><Eye className="size-4" /> Vedi</Button>
+            <Button className="h-9 bg-orange-600 text-white hover:bg-orange-700" disabled={occupato || previewLoading}
+              onClick={() => apriAnteprimaProforma("email", true)}><Mail className="size-4" /> Rimanda via mail</Button>
+            <Button className="h-9 bg-orange-700 text-white hover:bg-orange-800" disabled={occupato || previewLoading}
+              onClick={() => apriAnteprimaProforma("whatsapp", true)}><MessageCircle className="size-4" /> Rimanda via WhatsApp</Button>
+          </div>
         </div>
       )}
 

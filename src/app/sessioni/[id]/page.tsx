@@ -257,6 +257,8 @@ export default function SessionDetail() {
     resent?: boolean;
     documento?: boolean;
     documento_id?: string;
+    /** dopo «Aggiorna il pro forma»: mail e WhatsApp dicono «versione aggiornata» (08/10/2026) */
+    aggiornata?: boolean;
   }>(null);
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
   const [editingInstrument, setEditingInstrument] = useState<string | null>(null);
@@ -425,7 +427,7 @@ export default function SessionDetail() {
   };
 
   // PROFORMA EMAIL / WHATSAPP: anteprima del documento PF; se non c'è ancora si propone di prepararlo
-  const apriAnteprimaProforma = async (ch: "email" | "whatsapp") => {
+  const apriAnteprimaProforma = async (ch: "email" | "whatsapp", aggiornata = false) => {
     const shipIncl = !!session?.shipping_included && !session?.shipping_by_customer;
     const shipAmt = Number(session?.shipping_amount_gross || 0);
     setPreviewLoading(true);
@@ -441,7 +443,7 @@ export default function SessionDetail() {
       }
       setProformaPreview({
         channel: ch, suffix: "", shippingIncluded: shipIncl, shippingAmount: shipAmt,
-        ...(p as Record<string, unknown>),
+        ...(p as Record<string, unknown>), aggiornata,
       } as NonNullable<typeof proformaPreview>);
     } catch (e) {
       toast.error("Errore anteprima: " + (e as Error).message);
@@ -1049,8 +1051,9 @@ export default function SessionDetail() {
             Strumenti ({instruments.length})
           </h3>
           <span className="text-lg font-bold text-blue-600"
-            title={totAssistenza > 0 ? `Tarature EUR ${parseFloat(session.total_amount || 0).toFixed(2)} + assistenza EUR ${totAssistenza.toFixed(2)}` : undefined}>
-            EUR {(parseFloat(session.total_amount || 0) + totAssistenza).toFixed(2)}
+            title="Totale come il pro forma: tarature (con sconto cliente) + assistenza + spedizione">
+            {/* 08/10/2026: total_amount comprende già assistenza e spedizione (prima si sommava qui l'assistenza) */}
+            EUR {parseFloat(session.total_amount || 0).toFixed(2)}
           </span>
           {totAssistenza > 0 && <span className="text-xs text-gray-500">di cui assistenza EUR {totAssistenza.toFixed(2)}</span>}
           <Button
@@ -1422,6 +1425,13 @@ export default function SessionDetail() {
               </p>
             </div>
             <div className="px-5 py-4 space-y-2 text-sm">
+              {proformaPreview.documento && (
+                <label className="flex items-center gap-2 text-xs px-2 py-1.5 bg-emerald-50 border border-emerald-200 rounded">
+                  <input type="checkbox" checked={!!proformaPreview.aggiornata}
+                    onChange={(e) => setProformaPreview({ ...proformaPreview, aggiornata: e.target.checked })} />
+                  Scrivi «<b>versione aggiornata</b>» (sostituisce il pro forma mandato prima)
+                </label>
+              )}
               {proformaPreview.documento && proformaPreview.documento_id ? (
                 <div className="text-xs px-2 py-1.5 bg-orange-50 border border-orange-200 rounded flex items-center gap-2">
                   <span>Pro forma <b>{proformaPreview.proforma_number_existing}</b> — {proformaPreview.channel === "email" ? "PDF allegato alla mail" : "link al PDF nel messaggio"}</span>
@@ -1501,8 +1511,10 @@ export default function SessionDetail() {
                         amount: preview.shippingIncluded ? preview.shippingAmount : undefined,
                       },
                       preview.channel,
+                      false,
+                      !!preview.aggiornata,
                     ),
-                    `Proforma ${preview.channel === 'email' ? 'email' : 'WhatsApp'} inviata`,
+                    `Proforma ${preview.aggiornata ? 'aggiornata ' : ''}${preview.channel === 'email' ? 'email' : 'WhatsApp'} inviata`,
                   );
                 }}
               >

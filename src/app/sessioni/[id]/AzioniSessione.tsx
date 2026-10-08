@@ -26,7 +26,7 @@ interface Props {
   setActionLoading: (v: string | null) => void;
   handleAction: (action: string, fn: () => Promise<unknown>, successMsg: string) => Promise<void>;
   previewLoading: boolean;
-  apriAnteprimaProforma: (ch: "email" | "whatsapp") => void;
+  apriAnteprimaProforma: (ch: "email" | "whatsapp", aggiornata?: boolean) => void;
   apriDialogProforma: () => void;
   /** pro forma (documento PF) della sessione: c'è → «Vedi» attivo, «Prepara» spento */
   pfDoc?: ProformaSessioneStato["documento"];

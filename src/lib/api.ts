@@ -351,12 +351,29 @@ export function getDocumentoPdfUrl(documentoId: string): string {
 
 // === PRO FORMA DELLA SESSIONE (documento PF) ===
 export interface ProformaRigaCalcolata { descrizione: string; quantita: number; prezzo_unitario: number; aliquota: number; prezzo_totale: number; lordo: number | null }
+/** Pro forma ↔ sessione (08/10/2026): se la sessione è cambiata dopo il pro forma e cosa si può fare. */
+export interface ProformaAllineamento {
+  diverso: boolean; totale_sessione: number; totale_proforma: number; righe_sessione: number; righe_proforma: number;
+  assistenze_senza_importo: number;
+  /** aggiorna = pro forma aperto · aggiorna_con_fattura = convertito in fattura BOZZA · fatturazione = fattura già numerata/inviata/pagata · scontrino */
+  azione: 'aggiorna' | 'aggiorna_con_fattura' | 'fatturazione' | 'scontrino' | null;
+  fattura: { id: string; numero: string | null; stato: string; totale: number; link: string; motivo: string | null } | null;
+}
 export interface ProformaSessioneStato {
-  documento: (DocumentoCliente & { righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number }) | null;
+  documento: (DocumentoCliente & { righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number; allineamento?: ProformaAllineamento | null }) | null;
   anteprima: { righe?: RigaDoc[]; session_number?: number | null; righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number; totale: number; causale: string; shipping_by_customer?: boolean } | null;
 }
 export async function proformaSessioneStato(sessionId: string): Promise<ProformaSessioneStato> {
   return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`, { cache: 'no-store' });
+}
+export interface ProformaAggiornato {
+  documento: DocumentoCliente; totale_prima: number; totale_nuovo: number; pagato: number; residuo: number; nota: string;
+  fattura: { id: string; numero: string | null; totale: number; totale_prima: number; link: string } | null;
+  stripe: { vecchio?: Record<string, unknown>; nuovo?: string; nuovo_errore?: string };
+}
+/** «Aggiorna il pro forma» (08/10/2026): righe e totali di nuovo dalla sessione, stesso numero. */
+export async function proformaSessioneAggiorna(sessionId: string, operatore: string, aggiornaFattura = false): Promise<ProformaAggiornato> {
+  return fetchAPI(`/api/sessions/${sessionId}/proforma-documento/aggiorna`, { method: 'POST', body: JSON.stringify({ operatore, aggiorna_fattura: aggiornaFattura }) });
 }
 export async function proformaSessioneCrea(sessionId: string, operatore: string): Promise<{ gia_presente: boolean; documento: DocumentoCliente }> {
   return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`, { method: 'POST', body: JSON.stringify({ operatore }) });
@@ -434,6 +451,7 @@ export async function sendProforma(
   shipping?: { included: boolean; amount?: number },
   channel: 'email' | 'whatsapp' | 'both' = 'both',
   dryRun = false,
+  aggiornata = false,
 ) {
   const payload: Record<string, unknown> = { proforma_suffix: proformaSuffix, channel };
   if (shipping?.included) {
@@ -443,6 +461,7 @@ export async function sendProforma(
     }
   }
   if (dryRun) payload.dry_run = true;
+  if (aggiornata) payload.aggiornata = true;   // «versione aggiornata» nell'oggetto e in testa al messaggio (08/10/2026)
   return fetchAPI(`/api/sessions/${sessionId}/send-proforma`, {
     method: 'POST',
     body: JSON.stringify(payload),
