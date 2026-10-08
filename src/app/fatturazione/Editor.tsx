@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { CalendarClock, Loader2, Plus, Search, Trash2, Truck, Wallet, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
+import { AggiornaPrezzoMagazzino, prezzoDiversoDaMagazzino } from "@/components/AggiornaPrezzoMagazzino";
 import { DecInput } from "@/components/DecInput";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
@@ -46,7 +47,11 @@ interface ClienteAnagrafica { id: string; company_name?: string; vat_number?: st
 const REGIMI: [string, string][] = [["22", "22%"], ["10", "10%"], ["5", "5%"], ["4", "4%"], ["margine", "Margine (usato)"], ["0", "Esente / non imp."]];
 const regimeRiga = (r: FattRiga) => (r.regime === "margine" || r.natura === "N5" ? "margine" : String(Number(r.aliquota ?? 22)));
 
-const rigaVuota = (aliquota = 22): FattRiga => ({ descrizione: "", quantita: 1, prezzo_ivato: null, prezzo_unitario: null, aliquota, sconto: 0 });
+// riga dell'editor: prezzo_magazzino (IVA incl.) è quello dell'articolo quando è stato aggiunto dal magazzino; serve solo
+// a proporre «Aggiorna anche il prezzo in magazzino» (08/10/2026) e NON si salva (il prodotto_id sì, per gli storici)
+type RigaEd = FattRiga & { prezzo_magazzino?: number | null };
+
+const rigaVuota = (aliquota = 22): RigaEd => ({ descrizione: "", quantita: 1, prezzo_ivato: null, prezzo_unitario: null, aliquota, sconto: 0 });
 
 export function Editor({
   iniziale,
@@ -84,7 +89,7 @@ export function Editor({
   // Bozza nata a prezzi IVA inclusa (ordini, cassa, conversioni): si riapre a prezzi ivati ricostruiti dal «lordo»,
   // non con i netti a 8 decimali (e il totale resta al centesimo quello pagato dal cliente).
   const tuttiLordi = !!iniziale?.righe?.length && iniziale.righe.every((r) => r.lordo !== null && r.lordo !== undefined);
-  const [righe, setRighe] = useState<FattRiga[]>(
+  const [righe, setRighe] = useState<RigaEd[]>(
     iniziale?.righe?.length
       ? iniziale.righe.map((r) => tuttiLordi
         ? { ...r, prezzo_unitario: null,
@@ -122,11 +127,13 @@ export function Editor({
   }, [societa]);
 
   /** Aggiunge una voce del listino (come i prodotti di SimplyFatt): riempie la prima riga vuota o ne crea una. */
-  function aggiungiVoce(v: FattVoceCatalogo, quantita = 1) {
+  function aggiungiVoce(v: FattVoceCatalogo, quantita = 1, prodottoId: string | null = null) {
     const ivato = v.prezzo_ivato;
     const netto = ivato === null ? null : Math.round((ivato / (1 + v.aliquota / 100)) * 100) / 100;
-    const riga: FattRiga = { descrizione: v.descrizione, quantita, aliquota: v.aliquota, sconto: 0,
+    const riga: RigaEd = { descrizione: v.descrizione, quantita, aliquota: v.aliquota, sconto: 0,
       prezzo_ivato: prezziIvati ? ivato : null, prezzo_unitario: prezziIvati ? null : netto,
+      // articolo di magazzino: si salva il prodotto_id (storico prezzi) e si ricorda il prezzo di magazzino
+      ...(prodottoId ? { prodotto_id: prodottoId, prezzo_magazzino: ivato } : {}),
       ...(v.regime === "margine" ? { regime: "margine", natura: "N5", costo_acquisto: v.costo_acquisto ?? null } : {}) };
     setRighe((p) => {
       const vuota = p.findIndex((r) => !r.descrizione.trim() && !r.prezzo_ivato && !r.prezzo_unitario);
@@ -238,7 +245,7 @@ export function Editor({
     if (tipoCliente === "estero") { cp.sdi = ""; cp.pec = ""; if (!cp.denominazione && cp.nome) cp.denominazione = `${cp.nome} ${cp.cognome || ""}`.trim(); }
     return {
       societa, tipo_documento: tipoDoc, data, controparte: cp,
-      righe: righePerCalcolo.filter((r) => r.descrizione.trim()).map((r) => ({
+      righe: righePerCalcolo.filter((r) => r.descrizione.trim()).map(({ prezzo_magazzino: _pm, ...r }) => ({   // eslint-disable-line @typescript-eslint/no-unused-vars
         ...r,
         quantita: Number(r.quantita || 1),
         aliquota: regimeRiga(r) === "margine" ? 0 : Number(r.aliquota ?? 22),
@@ -409,7 +416,7 @@ export function Editor({
               <Button size="xs" variant="outline" className="ml-auto" onClick={() => setRighe((p) => [...p, rigaVuota(societa === "gingy" ? 10 : 22)])}><Plus /> Riga</Button>
             </div>
             <CercaArticolo listino={catalogo} className="w-full" attivita={attivita} evidenziato
-              onScelto={(a) => aggiungiVoce({ gruppo: "", codice: a.codice || null, descrizione: a.descrizione, prezzo_ivato: a.prezzo_ivato, aliquota: a.aliquota })} />
+              onScelto={(a) => aggiungiVoce({ gruppo: "", codice: a.codice || null, descrizione: a.descrizione, prezzo_ivato: a.prezzo_ivato, aliquota: a.aliquota }, 1, a.prodotto_id || null)} />
             {catalogo.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 p-2">
                 <select className={`${campo} sm:w-96`} value="" onChange={(e) => {
@@ -450,6 +457,18 @@ export function Editor({
                     {eur(stimaTotali([righePerCalcolo[i]]).totale)}
                   </div>
                   <Button variant="ghost" size="icon-sm" className="col-span-2 sm:col-span-1" onClick={() => setRighe((p) => p.filter((_, j) => j !== i))} aria-label="Togli riga"><Trash2 /></Button>
+                  {r.prodotto_id && r.prezzo_magazzino !== null && r.prezzo_magazzino !== undefined && regimeRiga(r) !== "margine" && (() => {
+                    // prezzo della riga IVA inclusa (anche se si scrive il netto) confrontato con quello di magazzino
+                    const ivatoRiga = prezziIvati ? r.prezzo_ivato
+                      : (r.prezzo_unitario === null || r.prezzo_unitario === undefined ? null
+                        : Math.round(Number(r.prezzo_unitario) * (1 + Number(r.aliquota ?? 22) / 100) * 100) / 100);
+                    if (!prezzoDiversoDaMagazzino(ivatoRiga === null || ivatoRiga === undefined ? null : Number(ivatoRiga), Number(r.prezzo_magazzino))) return null;
+                    return (
+                      <AggiornaPrezzoMagazzino className="col-span-12" prodottoId={r.prodotto_id} prezzoMagazzino={Number(r.prezzo_magazzino)}
+                        prezzoNuovo={Number(ivatoRiga)} origine="fattura"
+                        onAggiornato={(nuovo) => setRighe((p) => p.map((x) => (x.prodotto_id === r.prodotto_id ? { ...x, prezzo_magazzino: nuovo } : x)))} />
+                    );
+                  })()}
                   {regimeRiga(r) === "margine" && (() => {
                     const prezzoRiga = stimaTotali([righePerCalcolo[i]]).totale;
                     const costoRiga = r.costo_acquisto === null || r.costo_acquisto === undefined ? null : Number(r.costo_acquisto) * Number(r.quantita || 1);

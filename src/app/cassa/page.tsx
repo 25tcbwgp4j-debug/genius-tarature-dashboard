@@ -26,6 +26,7 @@ import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita, type Attivi
 import { SceltaPezzo, rigaDaPezzo } from "@/components/SceltaPezzo";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
+import { AggiornaPrezzoMagazzino, prezzoDiversoDaMagazzino } from "@/components/AggiornaPrezzoMagazzino";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
@@ -44,7 +45,8 @@ const STATO: Record<string, string> = {
 
 export default function CassaPage() {
   const router = useRouter();
-  const [carrello, setCarrello] = useState<(RigaCassa & { giacenza?: number })[]>([]);
+  // prezzo_magazzino: prezzo dell'articolo quando è entrato nel carrello (per «Aggiorna anche il prezzo in magazzino», 08/10/2026)
+  const [carrello, setCarrello] = useState<(RigaCassa & { giacenza?: number; prezzo_magazzino?: number })[]>([]);
   const [q, setQ] = useState("");
   const [trovati, setTrovati] = useState<Prodotto[]>([]);
   const [operatore, setOperatore] = useOperatore();
@@ -190,7 +192,7 @@ export default function CassaPage() {
       const reg = p.regime_iva === "margine" ? { regime: "margine" as const, natura: "N5", aliquota: 0, costo_acquisto: Number(p.costo) || null }
         : p.regime_iva === "esente" ? { regime: "esente" as const, natura: "N4", aliquota: 0 } : {};
       return [...c, { prodotto_id: p.id, descrizione: p.descrizione, quantita: 1, prezzo: Number(p.prezzo), aliquota: Number(p.aliquota), giacenza: Number(p.giacenza),
-                      plu_rt: p.plu_rt ?? null, ...reg }];
+                      plu_rt: p.plu_rt ?? null, prezzo_magazzino: Number(p.prezzo), ...reg }];
     });
     setQ(""); setTrovati([]);
   }, []);
@@ -356,7 +358,14 @@ export default function CassaPage() {
                     <Button size="icon-xs" variant="outline" disabled={!!r.pezzo_id} title={r.pezzo_id ? "Un pezzo per riga: aggiungi l'altro pezzo dall'articolo" : undefined}
                       onClick={() => setR(i, "quantita", r.quantita + 1)}><Plus /></Button></div></td>
                   <td className="p-2 text-right"><DecInput className="ml-auto h-7 w-24 px-1 text-right" value={r.prezzo}
-                    onValue={(v) => setR(i, "prezzo", v ?? 0)} /></td>
+                    onValue={(v) => setR(i, "prezzo", v ?? 0)} />
+                    {/* prezzo cambiato a mano su un articolo di magazzino: si può aggiornare anche il magazzino (solo titolare) */}
+                    {r.prodotto_id && !r.pezzo_id && r.prezzo_magazzino !== undefined && regimeCassa(r) !== "margine"
+                      && prezzoDiversoDaMagazzino(r.prezzo, r.prezzo_magazzino) && (
+                      <AggiornaPrezzoMagazzino className="mt-1 justify-end text-left" prodottoId={r.prodotto_id} prezzoMagazzino={r.prezzo_magazzino}
+                        prezzoNuovo={r.prezzo} origine="cassa"
+                        onAggiornato={(nuovo) => setCarrello((c) => c.map((x) => (x.prodotto_id === r.prodotto_id ? { ...x, prezzo_magazzino: nuovo } : x)))} />
+                    )}</td>
                   <td className="p-2 text-right"><select className="h-7 rounded-md border border-input bg-background px-1 text-xs" title="IVA della riga (decide il reparto del registratore)"
                     value={regimeCassa(r)} onChange={(e) => setRegimeCassa(i, e.target.value)}>
                     {!["22", "margine", "esente"].includes(regimeCassa(r)) && <option value={regimeCassa(r)}>{regimeCassa(r)}%</option>}
