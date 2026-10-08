@@ -32,6 +32,8 @@ interface Props {
   pfDoc?: ProformaSessioneStato["documento"];
   /** avviso bloccante se la registrazione non è stata completata: poi() parte solo dopo la scelta */
   controllaRegistrazione?: (azione: string, poi: () => void) => void;
+  /** pop-up bloccante se il cliente/destinatario vuole la scansione dei rapporti firmati (08/10/2026) */
+  controllaScansione?: (azione: string, poi: () => void) => void;
   currentStep: number;
   /** stato del pagamento dalla fattura collegata (fonte di verità, 03/10/2026) */
   statoPag?: StatoPagamentoSessione | null;
@@ -89,7 +91,8 @@ function Canali({ email, whatsapp, disabled, busy }: {
 }
 
 export function AzioniSessione({ sessionId, session, instruments, actionLoading, setActionLoading, handleAction,
-  previewLoading, apriAnteprimaProforma, apriDialogProforma, pfDoc, controllaRegistrazione = (_a, poi) => poi(), currentStep, statoPag, onRicarica }: Props) {
+  previewLoading, apriAnteprimaProforma, apriDialogProforma, pfDoc, controllaRegistrazione = (_a, poi) => poi(),
+  controllaScansione = (_a, poi) => poi(), currentStep, statoPag, onRicarica }: Props) {
   const occupato = actionLoading !== null;
   // chi sta facendo l'operazione: sulla pagina sessione solo Christian (CHR) o Dumy (DUMY), ricordato sul dispositivo
   const [opDispositivo, setOperatore] = useOperatore();
@@ -102,6 +105,10 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
   // stato rapporti: quanti strumenti da tarare (esclusi «NON lo tariamo noi») hanno già il numero RDT
   const daTarare = instruments.filter((i) => !i.external_processing);
   const conRdt = daTarare.filter((i) => !!i.rdt_number).length;
+  // scansione dei rapporti firmati richiesta ma non segnata come fatta → avviso al pronto e alla riconsegna (08/10/2026)
+  const mancaScansione = !!session.scansione_rapporti?.manca;
+  const okScansione = () => !mancaScansione
+    || confirm("⚠️ Manca la scansione dei rapporti: questo cliente vuole i PDF dei rapporti firmati prima della consegna.\n\nOK = procedo lo stesso");
 
   return (
     <Card className="p-3 sm:p-4">
@@ -132,11 +139,11 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
           <Canali disabled={occupato}
             busy={actionLoading === "ready_email" ? "email" : actionLoading === "ready_wa" ? "whatsapp" : null}
             email={{ ts: session.ready_email_at, cls: "bg-green-600 hover:bg-green-700", onClick: () => {
-              if (!confirm("Inviare SOLO l'email pronti al ritiro al cliente?")) return;
+              if (!okScansione() || !confirm("Inviare SOLO l'email pronti al ritiro al cliente?")) return;
               handleAction("ready_email", () => notifyReady(sessionId, "email"), "Email pronti al ritiro inviata");
             } }}
             whatsapp={{ ts: session.ready_whatsapp_at, cls: "bg-green-700 hover:bg-green-800", onClick: () => {
-              if (!confirm("Inviare SOLO il template WhatsApp pronti al ritiro al cliente?")) return;
+              if (!okScansione() || !confirm("Inviare SOLO il template WhatsApp pronti al ritiro al cliente?")) return;
               handleAction("ready_wa", () => notifyReady(sessionId, "whatsapp"), "Template WhatsApp pronti al ritiro inviato");
             } }}
           />
@@ -167,10 +174,11 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
           title="Genera i rapporti di taratura; l'operatore scelto sopra viene salvato sulla sessione"
           onClick={() => {
             if (!operatore) { toast.error("Scegli chi sta generando i rapporti: Christian o Dumy"); return; }
-            controllaRegistrazione("generare i rapporti di taratura", () => handleAction("rdts", async () => {
-              if (session.operator !== operatore) await updateSession(sessionId, { operator: operatore });
-              return generateRdts(sessionId);
-            }, `Rapporti di taratura generati (${NOMI_OPERATORI[operatore] || operatore})!`));
+            controllaScansione("generare i rapporti di taratura", () =>
+              controllaRegistrazione("generare i rapporti di taratura", () => handleAction("rdts", async () => {
+                if (session.operator !== operatore) await updateSession(sessionId, { operator: operatore });
+                return generateRdts(sessionId);
+              }, `Rapporti di taratura generati (${NOMI_OPERATORI[operatore] || operatore})!`)));
           }}>
           {actionLoading === "rdts" ? <Loader2 className="size-4 animate-spin" /> : <FileOutput className="size-4" />} GENERA RAPPORTI
           {operatore ? <span className="font-normal opacity-90">· {NOMI_OPERATORI[operatore] || operatore}</span> : null}
@@ -181,6 +189,7 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
             // riconsegna senza pagamento (immediato): di solito pagano e poi ritirano (03/10/2026)
             if (!isPaid && !differito && session.payment_status !== "non_richiesto"
               && !confirm(`⚠️ Il pagamento non risulta arrivato${fattura?.numero ? ` (fattura ${fattura.numero} da pagare)` : ""}.\nDi solito pagano e poi ritirano.\n\nOK = riconsegno lo stesso`)) return;
+            if (!okScansione()) return;
             if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati? (operazione interna, nessuna comunicazione al cliente)")) return;
             handleAction("delivered", () => markDelivered(sessionId), "Sessione completata! Strumenti riconsegnati.");
           }}>

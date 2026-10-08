@@ -61,9 +61,11 @@ interface Props {
   /** Cambia quando la sessione viene ricaricata (per rileggere lo stato). */
   versione: string;
   onAggiornato: () => void;
+  /** il cliente vuole la scansione dei rapporti firmati e non risulta fatta (08/10/2026, migr. 107) */
+  mancaScansione?: boolean;
 }
 
-export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornato }: Props) {
+export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornato, mancaScansione = false }: Props) {
   const [st, setSt] = useState<StatoPronto | null>(null);
   const [aperto, setAperto] = useState(false);
   const [rimanda, setRimanda] = useState(false);
@@ -119,6 +121,8 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
 
   const conferma = async () => {
     if (!scelti.length) { toast.error("Scegli almeno un canale"); return; }
+    // scansione dei rapporti firmati richiesta dal cliente ma non segnata come fatta (08/10/2026)
+    if (mancaScansione && !confirm("⚠️ Manca la scansione dei rapporti: questo cliente vuole i PDF dei rapporti firmati PRIMA della consegna.\n\nOK = procedo lo stesso con il pronto")) return;
     setLavoro(true);
     try {
       if (scelta === "adesso") {

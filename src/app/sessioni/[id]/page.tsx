@@ -72,6 +72,8 @@ import { ProformaDialog } from "./FatturaPanel";
 import { SpedizioneSessione } from "./SpedizioneSessione";
 import { ProntoProgrammato } from "./ProntoProgrammato";
 import { AssistenzaSessione } from "./AssistenzaSessione";
+import { AvvisoScansioneModal, PromemoriaScansione } from "./ScansioneRapporti";
+import type { StatoScansioneRapporti } from "@/lib/api";
 import { NOMI_OPERATORI, OPERATORI_TARATURE, useOperatore, type Operatore } from "@/components/Operatore";
 
 interface InstrumentType {
@@ -557,6 +559,14 @@ export default function SessionDetail() {
     ["registrazione", "attesa_strumenti"].includes(session.status)
     || (session.status !== "completata" && !session.registered_at && !session.receipt_email_at && !session.receipt_whatsapp_at)
   );
+  // SCANSIONE DEI RAPPORTI FIRMATI (08/10/2026, migr. 107): cliente o destinatario col flag (es. SITEF) → prima di
+  // Genera / Stampa / Scarica rapporti pop-up bloccante con «Ho capito»; promemoria finché non si segna «Scansione fatta».
+  const scansione: StatoScansioneRapporti | null = session?.scansione_rapporti || null;
+  const [avvisoScan, setAvvisoScan] = useState<{ azione: string; poi: () => void } | null>(null);
+  const controllaScansione = (azione: string, poi: () => void) => {
+    if (!scansione?.richiesta) { poi(); return; }
+    setAvvisoScan({ azione, poi });
+  };
   const controllaRegistrazione = (azione: string, poi: () => void) => {
     if (!registrazioneMancante) { poi(); return; }
     setAvvisoReg({ azione, poi });
@@ -720,6 +730,9 @@ export default function SessionDetail() {
         </div>
         {/* Avvisi di coerenza pagamento/fattura (03/10/2026): pronto senza fattura né pro forma, consegnata non pagata… */}
         <AvvisiPagamento st={statoPag} />
+        {/* Scansione dei rapporti firmati richiesta dal cliente/destinatario: promemoria finché non è fatta (08/10/2026) */}
+        <PromemoriaScansione sessionId={sessionId} stato={scansione} operatore={opNota !== "operatore non scelto" ? opNota : undefined}
+          onAggiornato={loadSession} />
         {/* ATTESA STRUMENTI (01/10/2026): la sessione esiste già, il cliente deve ancora portare gli strumenti.
             Nessuna notifica al cliente finché non si preme «Strumenti arrivati». */}
         {session.status === "attesa_strumenti" && (
@@ -835,7 +848,7 @@ export default function SessionDetail() {
             variant="outline"
             size="sm"
             disabled={!(session.instruments || []).some((i: { rdt_number?: string | null }) => !!i.rdt_number)}
-            onClick={() => { window.location.href = getSessionReportsZipUrl(sessionId); }}
+            onClick={() => controllaScansione("scaricare i rapporti", () => { window.location.href = getSessionReportsZipUrl(sessionId); })}
             className="w-full bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
             title="Scarica in un unico ZIP i rapporti di taratura generati per questa sessione"
           >
@@ -846,7 +859,7 @@ export default function SessionDetail() {
             variant="outline"
             size="sm"
             disabled={actionLoading === "stampa_rapporti" || !(session.instruments || []).some((i: { rdt_number?: string | null }) => !!i.rdt_number)}
-            onClick={() => stampaDiretta("rapporti")}
+            onClick={() => controllaScansione("stampare i rapporti", () => stampaDiretta("rapporti"))}
             className="w-full bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
             title="Stampa subito tutti i rapporti di taratura della sessione sulla stampante A4 del banco"
           >
@@ -946,6 +959,7 @@ export default function SessionDetail() {
         apriDialogProforma={() => { setPfDopo(null); setDialogPf(true); }}
         pfDoc={pfDoc}
         controllaRegistrazione={controllaRegistrazione}
+        controllaScansione={controllaScansione}
         currentStep={currentStep}
         statoPag={statoPag}
         onRicarica={loadSession}
@@ -1318,6 +1332,7 @@ export default function SessionDetail() {
           session.return_by_customer, session.shipping_by_customer, session.shipping_included, session.return_by_courier,
           (instruments || []).filter((i: { rdt_number?: string | null }) => !!i.rdt_number).length].join("|")}
         onAggiornato={loadSession}
+        mancaScansione={!!scansione?.manca}
       />
 
       {/* === SPEDIZIONI UPS: ritiro dal cliente e riconsegna === */}
@@ -1330,6 +1345,11 @@ export default function SessionDetail() {
 
       {/* La sezione «Fattura» in fondo non c'è più (07/10/2026): tutto è nel blocco Pro forma · fattura · pagamento delle Azioni */}
 
+      {avvisoScan && scansione && (
+        <AvvisoScansioneModal stato={scansione} azione={avvisoScan.azione}
+          onAnnulla={() => setAvvisoScan(null)}
+          onProsegui={() => { const poi = avvisoScan.poi; setAvvisoScan(null); poi(); }} />
+      )}
       {avvisoReg && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !regBusy && setAvvisoReg(null)}>
           <div className="w-full max-w-md overflow-hidden rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>

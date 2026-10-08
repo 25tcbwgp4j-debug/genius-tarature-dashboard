@@ -231,6 +231,25 @@ export async function updateSession(id: string, data: Record<string, unknown>) {
   });
 }
 
+// === SCANSIONE DEI RAPPORTI FIRMATI (08/10/2026, migr. 107) ===
+export type StatoScansioneRapporti = {
+  richiesta: boolean;
+  chi: { ruolo: "cliente" | "destinatario"; customer_id: string; nome: string | null; email: string | null; note: string | null }[];
+  fatta_il: string | null;
+  fatta_da: string | null;
+  rapporti_generati: number;
+  manca: boolean;
+  invio_email_attivo: boolean;
+};
+
+/** Segna (fatta=true) o annulla (fatta=false) «Scansione fatta» sulla sessione. */
+export async function segnaScansioneRapporti(id: string, fatta: boolean, operatore?: string): Promise<StatoScansioneRapporti> {
+  return fetchAPI(`/api/sessions/${id}/scansione-rapporti`, {
+    method: 'POST',
+    body: JSON.stringify({ fatta, operatore: operatore || undefined }),
+  });
+}
+
 export async function deleteSession(id: string) {
   return fetchAPI(`/api/sessions/${id}`, { method: 'DELETE' });
 }

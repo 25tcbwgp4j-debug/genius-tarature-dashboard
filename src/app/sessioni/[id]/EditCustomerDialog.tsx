@@ -27,6 +27,9 @@ interface Props {
     contact_person?: string | null;
     payment_terms?: string | null;
     discount_percent?: number | string | null;
+    scansione_rapporti?: boolean | null;
+    scansione_rapporti_email?: string | null;
+    scansione_rapporti_note?: string | null;
   };
   onSaved: () => void | Promise<void>;
   /** testo del pulsante (default «Modifica cliente») */
@@ -55,12 +58,16 @@ const FIELDS: Array<{ key: string; label: string; colSpan?: number }> = [
   // termini concordati: «Bonifico Bancario» = immediato · «Bonifico 30 gg FM» = differito (scadenza in fattura)
   { key: "payment_terms", label: "Termini di pagamento (es. Bonifico 30 gg FM)", colSpan: 2 },
   { key: "discount_percent", label: "Sconto %" },
+  // scansione dei rapporti firmati (08/10/2026, migr. 107): email vuota = email del cliente
+  { key: "scansione_rapporti_email", label: "Email per i PDF scansionati (vuota = email cliente)", colSpan: 2 },
+  { key: "scansione_rapporti_note", label: "Nota scansione rapporti", colSpan: 2 },
 ];
 
 export function EditCustomerDialog({ customer, onSaved, etichetta = "Modifica cliente", className = "", mancanti = [] }: Props) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [scansione, setScansione] = useState(false);
 
   const handleOpen = () => {
     // Inizializza il form con i valori attuali del cliente
@@ -70,6 +77,7 @@ export function EditCustomerDialog({ customer, onSaved, etichetta = "Modifica cl
       init[f.key] = v === null || v === undefined ? "" : String(v);
     }
     setForm(init);
+    setScansione(!!customer.scansione_rapporti);
     setOpen(true);
   };
 
@@ -95,6 +103,7 @@ export function EditCustomerDialog({ customer, onSaved, etichetta = "Modifica cl
           updates[f.key] = newVal || null;
         }
       }
+      if (scansione !== !!customer.scansione_rapporti) updates.scansione_rapporti = scansione;
       if (Object.keys(updates).length === 0) {
         toast.info("Nessuna modifica rilevata");
         setOpen(false);
@@ -137,6 +146,11 @@ export function EditCustomerDialog({ customer, onSaved, etichetta = "Modifica cl
                 In rosso i dati che servono per fatturare (P.IVA o CF · SDI o PEC · indirizzo · CAP · comune).
               </p>
             )}
+            <label className={`flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm ${scansione
+              ? "border-fuchsia-400 bg-fuchsia-50 font-semibold text-fuchsia-900" : "border-gray-200 text-gray-700"}`}>
+              <input type="checkbox" className="size-4" checked={scansione} onChange={(e) => setScansione(e.target.checked)} />
+              📄 Scansione rapporti richiesta (inviare i PDF firmati via email prima di graffettarli e consegnarli)
+            </label>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {FIELDS.map((f) => {
                 const manca = mancanti.includes(f.key) && !String(form[f.key] || "").trim();

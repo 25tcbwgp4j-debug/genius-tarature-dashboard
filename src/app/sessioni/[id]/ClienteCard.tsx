@@ -55,6 +55,10 @@ export function ClienteCard({ sessionId, customer, onChanged, termini, children 
     ["Referente", customer.contact_person, false],
     ["Pagamento", pagamento, false],
   ];
+  if (customer.scansione_rapporti) {
+    righe.push(["Scansione rapporti", `PDF firmati a ${customer.scansione_rapporti_email || customer.email || "— (manca l'email)"}`
+      + (customer.scansione_rapporti_note ? ` · ${customer.scansione_rapporti_note}` : ""), false]);
+  }
 
   return (
     <Card className="gap-0 p-3 sm:p-4">
@@ -64,6 +68,12 @@ export function ClienteCard({ sessionId, customer, onChanged, termini, children 
         {mancanti.length === 0
           ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-800">dati per fatturare completi</span>
           : <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold text-red-700">mancano dati per fatturare</span>}
+        {customer.scansione_rapporti && (
+          <span className="rounded border border-fuchsia-400 bg-fuchsia-100 px-2 py-0.5 text-xs font-bold text-fuchsia-800"
+            title="Dopo la firma, scansiona i rapporti PRIMA di graffettarli e consegnarli (08/10/2026)">
+            📄 Vuole la scansione dei rapporti
+          </span>
+        )}
         <div className="grid w-full grid-cols-2 gap-1.5 sm:ml-auto sm:flex sm:w-auto sm:items-center [&>button]:min-w-0 [&>button]:px-2 [&>button]:text-xs">
           <EditCustomerDialog customer={customer} onSaved={onChanged} />
           <ChangeCustomerDialog sessionId={sessionId} currentCustomerId={customer.id} currentCustomerName={customer.company_name || ""} onChanged={onChanged} />
@@ -73,7 +83,7 @@ export function ClienteCard({ sessionId, customer, onChanged, termini, children 
       {/* Riepilogo anagrafico: sempre visibile, compatto (2 colonne su telefono, 4 su iMac) */}
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t pt-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
         {righe.map(([k, v, rosso, testo]) => (
-          <div key={k} className={`min-w-0 ${k === "Indirizzo" || k === "Pagamento" ? "col-span-2" : ""}`}>
+          <div key={k} className={`min-w-0 ${k === "Indirizzo" || k === "Pagamento" || k === "Scansione rapporti" ? "col-span-2" : ""}`}>
             <dt className={`text-[11px] uppercase tracking-wide ${rosso ? "font-semibold text-red-600" : "text-gray-500"}`}>{k}</dt>
             <dd className={`break-words ${rosso ? "font-semibold text-red-700" : v ? "text-gray-900" : "text-gray-400"}`}>
               {rosso && !v ? testo : rosso && v ? <>{v} <span className="text-xs">({testo})</span></> : v || "—"}

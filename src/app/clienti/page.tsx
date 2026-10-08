@@ -467,6 +467,24 @@ export default function ClientiPage() {
                         />
                       </div>
                     </div>
+                    {/* Scansione dei rapporti firmati (08/10/2026, migr. 107): email vuota = email del cliente */}
+                    <div className="grid grid-cols-1 gap-2 rounded-md border border-fuchsia-200 bg-fuchsia-50/50 p-2 sm:grid-cols-2">
+                      <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fuchsia-900 sm:col-span-2">
+                        <input type="checkbox" className="size-4" checked={!!editData?.scansione_rapporti}
+                          onChange={(e) => setEditData({ ...editData, scansione_rapporti: e.target.checked })} />
+                        📄 Scansione rapporti richiesta (inviare i PDF firmati via email)
+                      </label>
+                      <div>
+                        <label className="text-xs text-gray-500">Email per i PDF (vuota = email cliente)</label>
+                        <Input value={editData?.scansione_rapporti_email || ""} className="h-8 text-sm"
+                          onChange={(e) => setEditData({ ...editData, scansione_rapporti_email: e.target.value })} />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500">Nota</label>
+                        <Input value={editData?.scansione_rapporti_note || ""} className="h-8 text-sm"
+                          onChange={(e) => setEditData({ ...editData, scansione_rapporti_note: e.target.value })} />
+                      </div>
+                    </div>
                     <div className="flex gap-2 justify-end">
                       <Button variant="outline" size="sm" onClick={cancelEdit}>
                         <X className="w-4 h-4 mr-1" /> Annulla
@@ -483,6 +501,12 @@ export default function ClientiPage() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-gray-900">{c.company_name}</p>
+                        {c.scansione_rapporti && (
+                          <Badge className="bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300 text-xs"
+                            title={`PDF firmati a ${c.scansione_rapporti_email || c.email || "—"}${c.scansione_rapporti_note ? " · " + c.scansione_rapporti_note : ""}`}>
+                            📄 Vuole la scansione dei rapporti
+                          </Badge>
+                        )}
                         {c.do_not_contact && (
                           <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">
                             <Ban className="w-3 h-3 mr-1" />
