@@ -956,7 +956,7 @@ export const spedElenco = (f: { attivita?: string; pratica?: string; corriere?: 
 };
 export const spedAnteprimaLibera = (b: Record<string, unknown>): Promise<{
   indirizzo: SpedIndirizzo; mancanti: string[]; oggetto: string; corpo: string; email: string | null; mittente_lab: SpedIndirizzo;
-  dhl_configurato: boolean; dhl_produzione: boolean;
+  dhl_configurato: boolean; dhl_produzione: boolean; fonti?: string[];
 }> => fetchAPI('/api/spedizioni/libera/anteprima', postJ(b));
 export const spedCreaLibera = (b: Record<string, unknown>): Promise<{
   id: string; corriere: string; tracking: string; prn: string | null; test: boolean; pickup_error: string | null; mail: string;
@@ -1739,6 +1739,8 @@ export type LinkDocumento = { documento_id?: string | null; fattura_id?: string 
 export interface SpedPrecompilata {
   attivita: 'tarature' | 'apple'; controparte: SpedIndirizzo; email: string; riferimento: string; contenuto: string; mancanti: string[];
   link: LinkDocumento; mittente: string;
+  /** P.IVA della controparte e fonti che hanno completato i campi vuoti (rubrica spedizioni unica, 08/10/2026) */
+  piva?: string; fonti?: string[];
 }
 export const spedPrecompila = (l: LinkDocumento): Promise<SpedPrecompilata> => {
   const p = new URLSearchParams();

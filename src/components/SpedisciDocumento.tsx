@@ -111,7 +111,7 @@ function FinestraSpedisci({ link, onChiudi, onFatta }: { link: LinkDocumento; on
 
   const corpo = () => ({
     attivita: pre?.attivita, corriere, tipo: ritiro ? "spedizione_ritiro" : "spedizione", controparte: ind, email, riferimento: rif,
-    contenuto, colli, peso_kg: Number(String(peso).replace(",", ".")) || 1, test: prova, ...pre?.link,
+    contenuto, colli, peso_kg: Number(String(peso).replace(",", ".")) || 1, test: prova, piva: pre?.piva || undefined, ...pre?.link,
   });
   useEffect(() => { setAnte(null); }, [corriere, ritiro, ind, email, rif, contenuto, colli, peso, prova]);
 
@@ -120,9 +120,15 @@ function FinestraSpedisci({ link, onChiudi, onFatta }: { link: LinkDocumento; on
     try { setAnte(await spedAnteprimaLibera(corpo())); } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
   async function crea() {
-    if (!ante) { await anteprima(); return; }
-    if (ante.mancanti.length) { toast.error(`Mancano: ${ante.mancanti.join(", ")}`); return; }
-    if (!prova && !confirm(`Creare l'etichetta ${corriere} VERA (a pagamento sul conto ${corriere}) per ${ind?.name}?${mail && email ? `\nMail a ${email}` : ""}`)) return;
+    // 08/10/2026: un clic solo — se l'anteprima non c'è la si calcola qui e, con i dati completi, si va avanti
+    let a = ante;
+    if (!a) {
+      setBusy(true);
+      try { a = await spedAnteprimaLibera(corpo()); setAnte(a); } catch (e) { toastErrore(e); return; } finally { setBusy(false); }
+    }
+    if (a.mancanti.length) { toast.error(`Mancano: ${a.mancanti.join(", ")}`); return; }
+    const dest = a.email || email;
+    if (!prova && !confirm(`Creare l'etichetta ${corriere} VERA (a pagamento sul conto ${corriere}) per ${a.indirizzo?.name || ind?.name}?${mail && dest ? `\nMail con l'etichetta a ${dest}` : mail ? "\nNessuna email: la mail non parte" : ""}`)) return;
     setBusy(true);
     try {
       const r = await spedCreaLibera({ ...corpo(), operatore: operatore || undefined, invia_mail: mail, stampa: !prova && stampa });
@@ -140,6 +146,7 @@ function FinestraSpedisci({ link, onChiudi, onFatta }: { link: LinkDocumento; on
           <div>
             <h2 className="flex items-center gap-2 text-lg font-semibold"><Truck className="size-5" />Spedisci {pre?.riferimento || ""}</h2>
             {pre && <div className="text-xs text-muted-foreground">Divisione {pre.attivita === "apple" ? "Apple" : "Tarature"} · mittente e firma: {pre.mittente}</div>}
+            {!!pre?.fonti?.length && <div className="text-xs text-emerald-700">Dati completati da: {pre.fonti.join(", ")}</div>}
           </div>
           <Button size="icon-sm" variant="ghost" onClick={onChiudi} aria-label="Chiudi"><X /></Button>
         </div>
@@ -181,7 +188,7 @@ function FinestraSpedisci({ link, onChiudi, onFatta }: { link: LinkDocumento; on
           )}
           <div className="flex justify-end gap-2">
             <Button variant="outline" disabled={busy} onClick={anteprima}><Eye className="mr-1 size-4" />Anteprima</Button>
-            <Button disabled={busy || dhlBloccato || !ante} onClick={crea}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Truck className="mr-1 size-4" />}
+            <Button disabled={busy || dhlBloccato} onClick={crea}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Truck className="mr-1 size-4" />}
               Crea etichetta {corriere}{prova ? " (prova)" : ""}</Button>
           </div>
         </>}
