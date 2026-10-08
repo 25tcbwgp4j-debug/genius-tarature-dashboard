@@ -117,6 +117,11 @@ export async function listConversations(
   );
 }
 
+/** Segnale leggero per la chat a polling (08/10/2026): id e ora dell'ultimo messaggio. */
+export async function ultimoMessaggio() {
+  return apiGet<{ id: string | null; created_at: string | null }>("/ultimo");
+}
+
 export async function listMessages(phone: string, before?: string) {
   const qs = new URLSearchParams({ phone });
   if (before) qs.set("before", before);

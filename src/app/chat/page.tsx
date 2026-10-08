@@ -7,8 +7,7 @@ import { ChatPanel } from "./_components/ChatPanel";
 import { AnalyticsWidget } from "./_components/AnalyticsWidget";
 import { CommandPalette, type Command } from "./_components/CommandPalette";
 import { BroadcastWizard } from "./_components/BroadcastWizard";
-import { getSupabaseBrowser } from "@/lib/supabase-browser";
-import type { ChatMessage } from "@/lib/chat-api";
+import { ultimoMessaggio } from "@/lib/chat-api";
 
 export default function ChatPage() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -26,19 +25,28 @@ export default function ChatPage() {
     if (phone) setSelectedPhone(phone);
   }, []);
 
+  // Aggiornamento a polling (08/10/2026): prima era il realtime Supabase con la chiave anonima, che obbligava a
+  // lasciare leggibili a chiunque i messaggi WhatsApp dell'ultima ora. Ora ogni 5 s si chiede al backend
+  // (autenticato) l'ultimo messaggio e si ricarica l'elenco solo se è cambiato.
   useEffect(() => {
-    const sb = getSupabaseBrowser();
-    if (!sb) return;
-    const channel = sb
-      .channel("chat-global")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "whatsapp_messages" },
-        () => bumpRefresh(),
-      )
-      .subscribe();
+    let ultimo: string | null | undefined = undefined;
+    let fermo = false;
+    const giro = async () => {
+      if (fermo || document.visibilityState !== "visible") return;
+      try {
+        const r = await ultimoMessaggio();
+        const chiave = `${r.id ?? ""}|${r.created_at ?? ""}`;
+        if (ultimo !== undefined && chiave !== ultimo) bumpRefresh();
+        ultimo = chiave;
+      } catch {
+        // rete o sessione: si riprova al prossimo giro
+      }
+    };
+    giro();
+    const t = setInterval(giro, 5000);
     return () => {
-      sb.removeChannel(channel);
+      fermo = true;
+      clearInterval(t);
     };
   }, [bumpRefresh]);
 

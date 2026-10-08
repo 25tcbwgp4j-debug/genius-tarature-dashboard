@@ -153,6 +153,10 @@ export default function RapportiPage() {
     setSearch(searchInput.trim());
   };
 
+  // Bucket dei rapporti privato (08/10/2026): il file si apre dal backend autenticato, che fa redirect a un link
+  // firmato di 10 minuti. Passando dal proxy dello stesso dominio il nome del file del download resta quello giusto.
+  const fileRapporto = (id: string) => `/api/backend/api/reports/${id}/file`;
+
   const handleDownload = (url: string, filename: string) => {
     const a = document.createElement("a");
     a.href = url;
@@ -243,7 +247,7 @@ export default function RapportiPage() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => window.open(r.storage_url!, "_blank")}
+              onClick={() => window.open(fileRapporto(r.id), "_blank")}
               title="Apri in nuova scheda"
             >
               <ExternalLink className="w-4 h-4" />
@@ -251,7 +255,7 @@ export default function RapportiPage() {
             <Button
               size="sm"
               onClick={() =>
-                handleDownload(r.storage_url!, r.file_name || `RDT_${r.rdt_number}.xlsx`)
+                handleDownload(fileRapporto(r.id), r.file_name || `RDT_${r.rdt_number}.xlsx`)
               }
               title="Scarica Excel"
             >

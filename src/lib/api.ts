@@ -3,8 +3,8 @@
  */
 
 // Per gli endpoint interattivi passiamo dal proxy /api/backend/*
-// (route handler Next.js) che inoltra al backend Railway aggiungendo
-// l'header X-API-Key lato server. L'API_KEY non e' mai esposta al client.
+// (route handler Next.js) che inoltra al backend Railway con il JWT
+// dell'utente (cookie httpOnly). L'API_KEY non e' mai esposta al client.
 import { attivitaSalvata } from '@/lib/attivita';
 
 const API_PROXY = '/api/backend';

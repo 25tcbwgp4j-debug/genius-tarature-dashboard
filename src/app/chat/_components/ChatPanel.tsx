@@ -40,7 +40,6 @@ import { ScheduleSendModal } from "./ScheduleSendModal";
 import { SendRDTModal } from "./SendRDTModal";
 import { SendQuoteModal } from "./SendQuoteModal";
 import { SendTemplateModal } from "./SendTemplateModal";
-import { getSupabaseBrowser } from "@/lib/supabase-browser";
 
 function groupByDay(messages: ChatMessage[]) {
   const groups: { label: string; items: ChatMessage[] }[] = [];
@@ -151,40 +150,36 @@ export function ChatPanel({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, phone]);
 
-  // Realtime subscription
+  // Aggiornamento a polling (08/10/2026): sostituisce il realtime Supabase con la chiave anonima (policy
+  // wa_msg_anon_realtime eliminata). Ogni 5 s, solo con la pagina visibile, si rileggono i messaggi della
+  // conversazione dal backend autenticato: nuovi messaggi e cambi di stato (consegnato/letto).
   useEffect(() => {
-    const sb = getSupabaseBrowser();
-    if (!sb) return;
-    const normalize = (p: string) => p.replace(/^\+/, "").replace(/\s+/g, "");
-    const norm = normalize(phone);
-    const channel = sb
-      .channel(`chat-${norm}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "whatsapp_messages", filter: `phone_number=eq.${norm}` },
-        (payload: { new: ChatMessage }) => {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === payload.new.id)) return prev;
-            return [...prev, payload.new];
-          });
-          if (payload.new.direction === "inbound") {
-            markRead(phone).catch(() => undefined);
-          }
-          onChanged?.();
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "whatsapp_messages", filter: `phone_number=eq.${norm}` },
-        (payload: { new: ChatMessage }) => {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === payload.new.id ? payload.new : m)),
-          );
-        },
-      )
-      .subscribe();
+    let fermo = false;
+    const giro = async () => {
+      if (fermo || document.visibilityState !== "visible") return;
+      try {
+        const r = await listMessages(phone);
+        if (fermo) return;
+        let nuoviInbound = false;
+        let cambiato = false;
+        setMessages((prev) => {
+          const firma = (l: ChatMessage[]) => l.map((m) => `${m.id}:${m.status ?? ""}`).join(",");
+          if (firma(prev) === firma(r.messages)) return prev;
+          const visti = new Set(prev.map((m) => m.id));
+          nuoviInbound = r.messages.some((m) => !visti.has(m.id) && m.direction === "inbound");
+          cambiato = true;
+          return r.messages;
+        });
+        if (nuoviInbound) markRead(phone).catch(() => undefined);
+        if (cambiato) onChanged?.();
+      } catch {
+        // rete o sessione: si riprova al prossimo giro
+      }
+    };
+    const t = setInterval(giro, 5000);
     return () => {
-      sb.removeChannel(channel);
+      fermo = true;
+      clearInterval(t);
     };
   }, [phone, onChanged]);
 
