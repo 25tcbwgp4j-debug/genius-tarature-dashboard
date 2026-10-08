@@ -17,7 +17,7 @@ import { Banknote, Euro, ExternalLink, Eye, FileOutput, FileSpreadsheet, Loader2
 import { Button } from "@/components/ui/button";
 import { OPERATORI_TARATURE, useOperatore, type Operatore } from "@/components/Operatore";
 import {
-  fattCollegaSessione, fattDaSessione, incSessione, markSessionPaid,
+  fetchAPI, fattCollegaSessione, fattDaSessione, incSessione, markSessionPaid,
   type ApiError, type DaSpedire, type ProformaSessioneStato, type StatoPagamentoSessione,
 } from "@/lib/api";
 import { dataIt, testoPagamento } from "./PagamentoStato";
@@ -133,6 +133,19 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
 
   const btn = "h-11 whitespace-normal px-1.5 text-[11px] leading-tight";
 
+  // 08/10/2026: con una riga di assistenza ancora a 0 né scontrino né fattura (il preventivo va scritto o la riga tolta)
+  async function assistenzaOk(poi: () => void) {
+    try {
+      const r = await fetchAPI(`/api/sessions/${sessionId}/assistenze`, { cache: "no-store" }) as { senza_importo?: number };
+      if (r.senza_importo) {
+        toast.error("Riga di assistenza senza importo: inserisci il preventivo o toglila", { duration: 7000 });
+        document.getElementById("assistenza")?.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
+    } catch { /* se il controllo non risponde decide il backend */ }
+    poi();
+  }
+
   return (
     <div className="flex flex-col gap-2 rounded-lg border-2 border-orange-200 bg-orange-50/30 p-2.5 sm:p-3">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-orange-800">Pro forma · fattura · pagamento</p>
@@ -219,14 +232,14 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
               title={pf ? `Il pro forma ${pf.sigla} c'è già` : fattura ? "La sessione ha già la fattura" : "Anteprima del pro forma con le righe della fattura; si crea solo se confermi"}>
               <FileSpreadsheet className="size-4 shrink-0" /> {pf ? "Pro forma pronto" : "Prepara pro forma di fattura"}
             </Button>
-            <Button disabled={!pfAperto || !!fattura} onClick={() => pfAperto && controllaRegistrazione("convertire il pro forma in fattura", () => router.push(`/proforma?id=${pfAperto.id}`))}
+            <Button disabled={!pfAperto || !!fattura} onClick={() => pfAperto && controllaRegistrazione("convertire il pro forma in fattura", () => assistenzaOk(() => router.push(`/proforma?id=${pfAperto.id}`)))}
               className={`${btn} bg-emerald-600 font-semibold text-white hover:bg-emerald-700`}
               title={fattura ? "La fattura c'è già" : pfAperto ? `Apre il pro forma ${pfAperto.sigla}: lì «Converti in fattura»` : "Prima prepara il pro forma"}>
               <FileOutput className="size-4 shrink-0" /> Converti in fattura
             </Button>
             <Button variant="outline" disabled={occupato || !!fattura || pf?.stato === "convertito"} className={btn}
               title={fattura ? "La sessione ha già la fattura" : "Caso raro: il cliente non vuole la fattura. Apre lo Scontrino (registratore) con le righe della sessione"}
-              onClick={() => controllaRegistrazione("convertire in scontrino", () => { if (confirm("Il cliente non vuole la fattura?\n\nApro lo Scontrino (registratore) con le righe di questa sessione: lì scegli operatore e pagamento.")) router.push(`/cassa?sessione=${sessionId}`); })}>
+              onClick={() => controllaRegistrazione("convertire in scontrino", () => assistenzaOk(() => { if (confirm("Il cliente non vuole la fattura?\n\nApro lo Scontrino (registratore) con le righe di questa sessione: lì scegli operatore e pagamento.")) router.push(`/cassa?sessione=${sessionId}`); }))}>
               <ShoppingCart className="size-4 shrink-0" /> Converti in scontrino
             </Button>
           </div>

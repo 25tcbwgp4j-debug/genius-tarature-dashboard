@@ -33,6 +33,9 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
   const v = doc ? { righe: doc.righe_calcolate, imponibile: doc.imponibile, iva: doc.iva, totale: doc.totale } : st?.anteprima
     ? { righe: st.anteprima.righe_calcolate, imponibile: st.anteprima.imponibile, iva: st.anteprima.iva, totale: st.anteprima.totale } : null;
 
+  // 08/10/2026: riga di assistenza ancora a 0 → il pro forma non si crea (il backend risponde 409 con lo stesso testo)
+  const avvisoAssistenza = !doc ? ((st?.anteprima as { avviso?: string | null } | null | undefined)?.avviso || "") : "";
+
   // il ref blocca il secondo clic anche prima che React ridisegni il pulsante disabilitato
   const inCorso = useRef(false);
   const [creato, setCreato] = useState(false);
@@ -62,6 +65,11 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
         </div>
         <div className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-3 text-sm sm:px-5">
           {errore && <p className="text-red-600">{errore}</p>}
+          {avvisoAssistenza && (
+            <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 font-semibold text-red-700">
+              ⚠️ {avvisoAssistenza} (sezione «Assistenza / riparazioni» della sessione).
+            </p>
+          )}
           {!v && !errore && <Loader2 className="animate-spin" />}
           {v && (
             <>
@@ -81,7 +89,7 @@ export function ProformaDialog({ sessionId, onChiudi, onCreato }: { sessionId: s
           {doc ? (
             <Button className="flex-1" onClick={() => window.open(getDocumentoPdfUrl(doc.id), "_blank")}><FileText /> Apri PDF</Button>
           ) : (
-            <Button className="flex-1 bg-orange-600 hover:bg-orange-700" disabled={busy || creato || !v || !v.righe.length || !operatore} onClick={conferma}>
+            <Button className="flex-1 bg-orange-600 hover:bg-orange-700" disabled={busy || creato || !v || !v.righe.length || !operatore || !!avvisoAssistenza} onClick={conferma}>
               {busy ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />} Conferma e crea pro forma</Button>
           )}
         </div>

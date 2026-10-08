@@ -44,6 +44,7 @@ import {
   Save,
   X,
   Plus,
+  Wrench,
   Printer,
   Tag,
   FileDown,
@@ -70,6 +71,7 @@ import { ShipmentsPanel } from "./ShipmentsPanel";
 import { ProformaDialog } from "./FatturaPanel";
 import { SpedizioneSessione } from "./SpedizioneSessione";
 import { ProntoProgrammato } from "./ProntoProgrammato";
+import { AssistenzaSessione } from "./AssistenzaSessione";
 import { NOMI_OPERATORI, OPERATORI_TARATURE, useOperatore, type Operatore } from "@/components/Operatore";
 
 interface InstrumentType {
@@ -262,6 +264,9 @@ export default function SessionDetail() {
   const [editingSession, setEditingSession] = useState(false);
   const [editSessionData, setEditSessionData] = useState<any>(null);
   const [addingInstrument, setAddingInstrument] = useState(false);
+  // righe di ASSISTENZA (08/10/2026): totale per l'intestazione + «Aggiungi assistenza»
+  const [totAssistenza, setTotAssistenza] = useState(0);
+  const [nuovaAssistenza, setNuovaAssistenza] = useState(0);
   const [newInstrument, setNewInstrument] = useState<any>({
     instrument_type_id: "",
     instrument_name: "",
@@ -1043,14 +1048,24 @@ export default function SessionDetail() {
           <h3 className="font-semibold text-lg">
             Strumenti ({instruments.length})
           </h3>
-          <span className="text-lg font-bold text-blue-600">
-            EUR {parseFloat(session.total_amount || 0).toFixed(2)}
+          <span className="text-lg font-bold text-blue-600"
+            title={totAssistenza > 0 ? `Tarature EUR ${parseFloat(session.total_amount || 0).toFixed(2)} + assistenza EUR ${totAssistenza.toFixed(2)}` : undefined}>
+            EUR {(parseFloat(session.total_amount || 0) + totAssistenza).toFixed(2)}
           </span>
+          {totAssistenza > 0 && <span className="text-xs text-gray-500">di cui assistenza EUR {totAssistenza.toFixed(2)}</span>}
+          <Button
+            variant="outline"
+            onClick={() => setNuovaAssistenza((n) => n + 1)}
+            className={`ml-auto h-11 border-violet-300 bg-violet-50 text-violet-800 hover:bg-violet-100`}
+            title="Riga di assistenza (manutenzione o riparazione): nessun rapporto di taratura, importo libero da preventivare dopo la verifica"
+          >
+            <Wrench className="w-4 h-4 mr-1" /> Aggiungi assistenza
+          </Button>
           {!addingInstrument && (
             <Button
               variant="outline"
               onClick={() => setAddingInstrument(true)}
-              className="ml-auto h-11 border-green-300 bg-green-50 text-green-800 hover:bg-green-100"
+              className="h-11 border-green-300 bg-green-50 text-green-800 hover:bg-green-100"
               title="Inserisci lo strumento scrivendo tipo, marca, modello e matricola"
             >
               <Plus className="w-4 h-4 mr-1" /> A mano
@@ -1288,6 +1303,8 @@ export default function SessionDetail() {
             <p className="py-4 text-center text-gray-500">Nessuno strumento registrato</p>
           )}
         </div>
+        {/* Assistenza / riparazioni (08/10/2026): righe senza rapporto, importo libero, nel totale e in pro forma/fattura */}
+        <AssistenzaSessione sessionId={sessionId} instruments={instruments} richiestaNuova={nuovaAssistenza} onTotale={setTotAssistenza} />
       </Card>
 
       {/* Pronto al cliente: banner «Quando invio il pronto?» dopo i rapporti, programmazione ed esito (01/10/2026) */}
