@@ -14,7 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowDown, ArrowUp, ArrowUpDown, Boxes, ChevronDown, ChevronRight, Download, FileSpreadsheet, FolderInput, Loader2, PackagePlus, Pencil,
-  Plus, Printer, Save, Search, Tag, X } from "lucide-react";
+  Copy, Plus, Printer, Save, Search, Tag, X } from "lucide-react";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
 import { dec0 } from "@/components/DecInput";
@@ -391,7 +391,16 @@ function Magazzino() {
       {(nuovo || aperto) && (
         <Scheda p={aperto} nuovo={nuovo} setNuovo={setNuovo} onClose={() => { setAperto(null); setNuovo(null); }} onSalvaNuovo={salvaNuovo} creando={creando}
           onCambiato={(p) => { carica(); if (p) apri(p.id); }} campo={campo} solaLettura={!puoModificare} tasso={tasso}
-          onStampa={(p) => stampaEtichetta(p)} />
+          onStampa={(p) => stampaEtichetta(p)}
+          onDuplica={(p) => {
+            // «Duplica»: nuovo articolo con gli stessi dati, SENZA codice a barre e codice (il barcode interno lo crea il gestionale)
+            const { descrizione, categoria, sottocategoria, marca, modello, prezzo, aliquota, costo, unita, ubicazione, attivita,
+                    gestisce_giacenza, scorta_minima, plu_rt } = p as Prodotto & { costo?: number; plu_rt?: number | null };
+            setAperto(null);
+            setNuovo({ descrizione, categoria, sottocategoria, marca, modello, prezzo, aliquota, costo, unita, ubicazione, attivita,
+                       gestisce_giacenza, scorta_minima, plu_rt, giacenza_iniziale: 0 } as Partial<Prodotto> & { giacenza_iniziale?: number });
+            toast.info("Copia pronta: cambia la descrizione e premi «Crea articolo» (il codice a barre nuovo lo crea il gestionale)");
+          }} />
       )}
       {etichette && <StampaEtichette voci={etichette.voci} titolo={etichette.titolo} onClose={() => setEtichette(null)}
         onStampato={() => { carica(); if (aperto) apri(aperto.id); }} />}
@@ -493,8 +502,8 @@ function SpostaInCategoria({ ids, tasso, onClose, onFatto }: { ids: string[]; ta
   );
 }
 
-function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, creando, solaLettura, tasso, onStampa }: {
-  tasso: Record<string, string[]>; onStampa: (p: Prodotto) => void;
+function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, creando, solaLettura, tasso, onStampa, onDuplica }: {
+  tasso: Record<string, string[]>; onStampa: (p: Prodotto) => void; onDuplica?: (p: Prodotto) => void;
   p: Prodotto | null; nuovo: (Partial<Prodotto> & { giacenza_iniziale?: number }) | null; creando: boolean; solaLettura: boolean;
   setNuovo: (n: Partial<Prodotto> & { giacenza_iniziale?: number }) => void; onClose: () => void; onSalvaNuovo: () => void;
   onCambiato: (p: Prodotto | null) => void; campo: string;
@@ -571,6 +580,8 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, 
             <div className="flex flex-wrap items-start gap-2">{!solaLettura && <Button onClick={salva} disabled={!!busy}>{busy === "salva" ? <Loader2 className="animate-spin" /> : <Save />} Salva</Button>}
               {!solaLettura && p && <Button variant="outline" onClick={() => onStampa(p)} title="Etichetta 50x22 mm sulla Brother del banco">
                 <Printer /> Stampa etichetta</Button>}
+              {!solaLettura && p && onDuplica && <Button variant="outline" onClick={() => onDuplica(p)} title="Crea un articolo nuovo con gli stessi dati e un codice a barre nuovo">
+                <Copy /> Duplica</Button>}
               {p?.barcode && <div className="rounded border p-2"><Barcode value={p.barcode} /></div>}</div>
             {p?.serializzato && <PezziArticolo prodotto={p} solaLettura={solaLettura} onCambiato={() => onCambiato(p)} />}
             {solaLettura ? <div className="text-sm">Giacenza attuale <b>{Number(p?.giacenza)}</b></div> : p?.serializzato ? null : <Card className="space-y-2 p-3">
