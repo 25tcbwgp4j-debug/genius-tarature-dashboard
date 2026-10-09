@@ -151,6 +151,24 @@ function FinestraSpedisci({ link, onChiudi, onFatta }: { link: LinkDocumento; on
           <Button size="icon-sm" variant="ghost" onClick={onChiudi} aria-label="Chiudi"><X /></Button>
         </div>
         {!pre || !ind ? <Loader2 className="animate-spin" /> : <>
+          {/* 09/10/2026: la proposta parte dall'intestazione del documento (es. sede legale in fattura), che può NON essere
+              l'indirizzo di consegna. Gli altri indirizzi noti dello stesso cliente si scelgono con un clic. */}
+          <div className="rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+            Proposto: <b>{pre.controparte.street}, {pre.controparte.zip} {pre.controparte.city}</b> (dati del documento{pre.fonti?.length ? ` + ${pre.fonti.join(", ")}` : ""}).
+            Controlla che sia l&apos;indirizzo dove consegnare.
+            {!!pre.altri_indirizzi?.length && (
+              <div className="mt-2 space-y-1">
+                <div className="text-xs font-semibold uppercase">Altri indirizzi noti di questo cliente — clic per usarlo</div>
+                {pre.altri_indirizzi.map((a, i) => (
+                  <button key={i} type="button" className="block w-full rounded border border-amber-300 bg-background px-2 py-1 text-left text-xs hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                    onClick={() => setInd({ ...ind, street: a.street, zip: a.zip, city: a.city, province: a.province,
+                      attention: a.attention || ind.attention, phone: ind.phone || a.phone })}>
+                    <b>{a.street}, {a.zip} {a.city} {a.province}</b>{a.attention ? ` · c.a. ${a.attention}` : ""} <span className="text-muted-foreground">({a.fonte})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
             {(["name", "phone", "street", "zip", "city", "province"] as const).map((k) => (
               <label key={k} className={`text-xs text-muted-foreground ${k === "street" || k === "name" ? "col-span-2 sm:col-span-3" : k === "province" || k === "zip" ? "sm:col-span-1" : "col-span-2 sm:col-span-2"}`}>{NOMI[k]}
