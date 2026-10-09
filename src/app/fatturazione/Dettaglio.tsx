@@ -205,17 +205,25 @@ export function Dettaglio({
             )}
             <a href={fattUrlPdf(f.id)} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><FileDown /> PDF di cortesia</Button></a>
             <a href={fattUrlStampa(f.id)} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><Printer /> Stampa</Button></a>
-            {emessa && f.stato !== "bozza" && (
+            {/* 09/10/2026: da pagare (anche in BOZZA, prima dello SdI) → «Richiedi pagamento» con estremi del bonifico */}
+            {emessa && f.tipo_documento !== "TD04" && (f.stato !== "bozza" || (!pagata && Number(f.totale) > 0.005)) && (
               <>
                 <Button size="sm" variant={invio === "email" ? "default" : "outline"}
+                  className={!pagata && f.tipo_documento !== "TD04" && invio !== "email" ? "border-amber-500 text-amber-800 dark:text-amber-300" : ""}
                   onClick={() => { setInvio(invio === "email" ? "" : "email"); setDest(f.recapiti?.email || ""); }}>
-                  <Mail /> Invia per email
+                  <Mail /> {!pagata ? "Richiedi pagamento per email" : "Invia per email"}
                 </Button>
                 <Button size="sm" variant={invio === "whatsapp" ? "default" : "outline"}
                   onClick={() => { setInvio(invio === "whatsapp" ? "" : "whatsapp"); setDest(f.recapiti?.telefono || ""); }}>
-                  <MessageCircle /> WhatsApp staff
+                  <MessageCircle /> {!pagata ? "Richiedi pagamento su WhatsApp" : "WhatsApp staff"}
                 </Button>
               </>
+            )}
+            {emessa && f.tipo_documento === "TD04" && f.stato !== "bozza" && (
+              <Button size="sm" variant={invio === "email" ? "default" : "outline"}
+                onClick={() => { setInvio(invio === "email" ? "" : "email"); setDest(f.recapiti?.email || ""); }}>
+                <Mail /> Invia per email
+              </Button>
             )}
             <a href={fattUrlXml(f.id)}><Button size="sm" variant="outline"><FileCode2 /> XML</Button></a>
             {/* nota di credito: solo su fatture trasmesse allo SdI (come il backend); per l'operatore serve l'autorizzazione dell'admin */}
@@ -268,10 +276,13 @@ export function Dettaglio({
           {invio && (
             <div className="space-y-2 rounded-lg border border-primary/40 p-3">
               <div className="text-sm font-medium">
-                {invio === "email" ? "Invia la copia di cortesia per email (PDF allegato)" : "Invia sul WhatsApp dello staff (link al PDF)"}
+                {f.stato === "bozza"
+                  ? (invio === "email" ? "Richiesta di pagamento per email (PDF «Richiesta di pagamento» allegato)" : "Richiesta di pagamento sul WhatsApp dello staff (link al PDF)")
+                  : invio === "email" ? "Invia la copia di cortesia per email (PDF allegato)" : "Invia sul WhatsApp dello staff (link al PDF)"}
                 {!pagata && f.tipo_documento !== "TD04" && (
                   <div className="text-xs font-normal text-muted-foreground">
                     Da pagare: il messaggio indica importo residuo, scadenza ed estremi del bonifico{linkCarta ? " + il link di pagamento con carta" : ""}.
+                    {f.stato === "bozza" ? " La fattura vera si emette e va allo SdI dopo il pagamento." : ""}
                   </div>
                 )}
               </div>
