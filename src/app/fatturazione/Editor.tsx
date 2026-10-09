@@ -539,7 +539,11 @@ export function Editor({
             <div className="flex items-center gap-2 text-sm"><span className="text-muted-foreground">Attività</span>
               <SceltaAttivita value={attivita} onChange={(a) => { setAttivita(a); setSporco(true); }} /></div>
           )}
-          <SceltaOperatore className="ml-auto max-w-md" value={operatore} onChange={setOperatore} compatto />
+          {/* 09/10/2026: senza operatore i pulsanti «Salva» restano grigi — lo diciamo chiaramente */}
+          <div className={`ml-auto flex flex-wrap items-center gap-2 ${operatore ? "" : "rounded-md border-2 border-amber-500 bg-amber-50 px-2 py-1 dark:bg-amber-950/30"}`}>
+            {!operatore && <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">Scegli chi sei per poter salvare →</span>}
+            <SceltaOperatore className="max-w-md" value={operatore} onChange={setOperatore} compatto />
+          </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2 px-4 py-3">
           <Button variant="ghost" onClick={chiudi}>Annulla</Button>
