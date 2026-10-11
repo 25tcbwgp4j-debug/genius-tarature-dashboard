@@ -140,7 +140,7 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
           {c && c.schede.length > 0 && (
             <div>
               <div className="mb-1 text-xs font-semibold text-muted-foreground">Schede del cliente ({c.schede.length})</div>
-              <div className="divide-y rounded-lg border text-sm">
+              <div className="max-h-72 divide-y overflow-y-auto rounded-lg border text-sm">
                 {c.schede.map((s) => (
                   <button key={s.id} type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted" onClick={() => onApriScheda?.(s.id)}>
                     <b className="tabular-nums">{s.sigla}</b><span className="truncate text-muted-foreground">{s.modello || s.prodotto} · {s.difetto}</span>
