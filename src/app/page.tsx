@@ -207,7 +207,7 @@ function HomeTarature() {
                     EUR {parseFloat(session.total_amount || 0).toFixed(2)}
                   </span>
                   {(() => {
-                    const cfg = getStatusConfig(session.status, { shippingIncluded: !!session.shipping_included });
+                    const cfg = getStatusConfig(session.status, session);
                     return (
                       <Badge className={cfg.color}>
                         {cfg.label}

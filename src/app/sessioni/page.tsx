@@ -717,7 +717,7 @@ export default function SessionsPage() {
                       </span>
                       {/* Badge stato sessione */}
                       {(() => {
-                        const cfg = getStatusConfig(s.status, { shippingIncluded: !!s.shipping_included });
+                        const cfg = getStatusConfig(s.status, s);
                         return <Badge className={`${cfg.color} text-xs`}>{cfg.label}</Badge>;
                       })()}
                       {/* Badge pagamento — nascosto per completata (pagamento implicito) */}

@@ -698,7 +698,7 @@ export default function SessionDetail() {
             {session.session_number != null ? `Sessione N. ${session.session_number}` : "Dettaglio sessione"}
           </h2>
           {(() => {
-            const cfg = getStatusConfig(session.status, { shippingIncluded: !!session.shipping_included });
+            const cfg = getStatusConfig(session.status, session);
             return (
               <Badge className={cfg.color}>
                 {cfg.label}
@@ -930,8 +930,8 @@ export default function SessionDetail() {
                 value={editSessionData?.status || ""}
                 onChange={(e) => setEditSessionData({ ...editSessionData, status: e.target.value })}
               >
-                {Object.entries(STATUS_CONFIG).map(([k, v]) => (
-                  <option key={k} value={k}>{v.label}</option>
+                {Object.keys(STATUS_CONFIG).map((k) => (
+                  <option key={k} value={k}>{getStatusConfig(k, session).label}</option>
                 ))}
               </select>
             </div>

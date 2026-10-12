@@ -31,18 +31,39 @@ export function getPaymentConfig(
   return base;
 }
 
+/** Campi della sessione che decidono come tornano gli strumenti al cliente. */
+export type SpedizioneSessione = {
+  shipping_included?: boolean | null;
+  shipping_amount_gross?: number | string | null;
+  return_by_courier?: boolean | null;
+  return_by_customer?: boolean | null;
+  shipping_by_customer?: boolean | null;
+};
+
+/**
+ * Gli strumenti tornano al cliente con un corriere (nostro o suo) e non vengono ritirati in negozio.
+ * Stessa regola di backend/etichetta_ritorno.py `variante()`: ritorno a carico del cliente, spedizione
+ * addebitata oppure «da rispedire con corriere» (12/10/2026: prima guardava solo shipping_included).
+ */
+export function siSpedisce(s?: SpedizioneSessione | null): boolean {
+  if (!s) return false;
+  if (s.return_by_customer || s.shipping_by_customer) return true;
+  const addebitata = !!s.shipping_included && Number(s.shipping_amount_gross || 0) > 0;
+  return addebitata || !!s.return_by_courier;
+}
+
 /**
  * Restituisce il config di stato sessione considerando la modalità di consegna.
- * Quando una sessione ha `shipping_included=true`, lo step "pronto_ritiro" viene
- * etichettato come "Pronto alla spedizione" (cosmetico, no migration DB enum).
+ * Lo stato a DB resta "pronto_ritiro" (nessuna migrazione dell'enum): se gli strumenti
+ * tornano col corriere l'etichetta diventa "Pronto alla spedizione", in azzurro.
  */
 export function getStatusConfig(
   status: string,
-  opts?: { shippingIncluded?: boolean },
+  sessione?: SpedizioneSessione | null,
 ): { label: string; color: string; step: number } {
   const base = STATUS_CONFIG[status] || { label: status, color: "bg-gray-100 text-gray-800", step: 0 };
-  if (status === "pronto_ritiro" && opts?.shippingIncluded) {
-    return { ...base, label: "Pronto alla spedizione" };
+  if ((status === "pronto_ritiro" || status === "attesa_pagamento") && siSpedisce(sessione)) {
+    return { ...base, label: "Pronto alla spedizione", color: "bg-cyan-100 text-cyan-800" };
   }
   return base;
 }
