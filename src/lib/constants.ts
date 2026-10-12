@@ -55,7 +55,7 @@ export function siSpedisce(s?: SpedizioneSessione | null): boolean {
 /**
  * Restituisce il config di stato sessione considerando la modalità di consegna.
  * Lo stato a DB resta "pronto_ritiro" (nessuna migrazione dell'enum): se gli strumenti
- * tornano col corriere l'etichetta diventa "Pronto alla spedizione", in azzurro.
+ * tornano col corriere l'etichetta diventa "PRONTO ALLA SPEDIZIONE", verde pieno ben visibile.
  */
 export function getStatusConfig(
   status: string,
@@ -63,7 +63,7 @@ export function getStatusConfig(
 ): { label: string; color: string; step: number } {
   const base = STATUS_CONFIG[status] || { label: status, color: "bg-gray-100 text-gray-800", step: 0 };
   if ((status === "pronto_ritiro" || status === "attesa_pagamento") && siSpedisce(sessione)) {
-    return { ...base, label: "Pronto alla spedizione", color: "bg-cyan-100 text-cyan-800" };
+    return { ...base, label: "PRONTO ALLA SPEDIZIONE", color: "bg-green-600 text-white font-bold border border-green-700 hover:bg-green-600" };
   }
   return base;
 }

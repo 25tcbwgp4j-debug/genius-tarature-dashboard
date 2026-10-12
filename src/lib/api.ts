@@ -462,13 +462,16 @@ export async function getProntoProgrammato(sessionId: string): Promise<StatoPron
 export async function programmaPronto(sessionId: string, body: { canali: CanalePronto[]; data?: string; ora?: string; quando?: string; rimanda?: boolean }) {
   return fetchAPI(`/api/sessions/${sessionId}/pronto-programmato`, { method: 'POST', body: JSON.stringify(body) });
 }
-// «Pronto per la spedizione – chiedi etichetta» (ritorno a carico del cliente, 08/10/2026)
+// «Pronto alla spedizione»: chiedi etichetta (ritorno a carico del cliente, 08/10/2026) oppure
+// spediamo noi col nostro corriere, pagamento richiesto se manca (12/10/2026)
 export interface EtichettaRitorno {
   abilitato: boolean; motivo: string | null; pagata: boolean;
+  variante: 'etichetta' | 'spediamo_noi' | 'ritiro'; etichetta_variante: string;
+  pronto_inviato: { il: string; via: string | null } | null;
   rapporti: { completi: boolean; mancanti: number; totale: number };
   avvisi: string[];
   destinatari: { email: string | null; whatsapp: string | null; motivo_no_whatsapp: string | null };
-  colli: number; peso: number | null; misure: string | null;
+  colli: number | null; peso: number | null; misure: string | null;
   richiesta: { il: string; via: string | null } | null;
   oggetto: string; testo_email: string; testo_whatsapp: string;
 }
@@ -483,7 +486,7 @@ export async function getEtichettaRitorno(sessionId: string, q?: { colli?: strin
 export async function inviaEtichettaRitorno(sessionId: string, body: {
   canali: CanalePronto[]; oggetto: string; testo_email: string; testo_whatsapp: string;
   colli: string; peso: string; misure: string; conferma?: boolean;
-}): Promise<{ ok: boolean; esito: Partial<Record<CanalePronto, { ok: boolean; a?: string | null; saltato?: boolean; errore?: string | null }>>; richiesta: EtichettaRitorno['richiesta'] }> {
+}): Promise<{ ok: boolean; variante?: EtichettaRitorno['variante']; esito: Partial<Record<CanalePronto, { ok: boolean; a?: string | null; saltato?: boolean; errore?: string | null }>>; richiesta: EtichettaRitorno['richiesta']; pronto_inviato?: EtichettaRitorno['pronto_inviato'] }> {
   return fetchAPI(`/api/sessions/${sessionId}/etichetta-ritorno`, { method: 'POST', body: JSON.stringify(body) });
 }
 export async function annullaProntoProgrammato(sessionId: string) {

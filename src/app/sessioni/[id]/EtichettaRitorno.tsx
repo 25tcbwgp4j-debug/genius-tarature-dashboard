@@ -1,8 +1,10 @@
 "use client";
 
-// «PRONTO PER LA SPEDIZIONE – CHIEDI ETICHETTA» (08/10/2026, Christian).
-// Quando il RITORNO è a carico del cliente (flag in «Spedizione e corriere»), a lavoro finito si chiede al cliente
-// l'etichetta del suo corriere in PDF da attaccare al collo. Pulsante grigio finché il flag non è scelto.
+// «PRONTO ALLA SPEDIZIONE» (08/10/2026, esteso il 12/10/2026, Christian). Due versioni, scelte dalla spedizione:
+// - ritorno a carico del cliente → si chiede l'etichetta del suo corriere in PDF da attaccare al collo;
+// - ritorno col NOSTRO corriere → «sono pronti, spediamo appena arriva il pagamento» (importo, pro forma, bonifico)
+//   oppure, se già pagata, «spediamo oggi o domani».
+// Pulsante grigio quando gli strumenti si ritirano in negozio. L'invio porta la sessione a «pronto».
 // Al clic: anteprima con testi mail e WhatsApp modificabili + colli (default 1), peso indicativo, misure.
 // Invio solo dopo «Invia»; se non è pagata o mancano rapporti chiede conferma. Mail dalla casella tarature (CCN
 // d'archivio, firma tarature), WhatsApp sulla linea staff tarature (saltato se il cliente ha solo il fisso).
@@ -11,6 +13,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Mail, MessageCircle, Package, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { siSpedisce } from "@/lib/constants";
 import { getEtichettaRitorno, inviaEtichettaRitorno, type ApiError, type EtichettaRitorno as Dati } from "@/lib/api";
 
 type Sess = Record<string, any>;  // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -22,7 +25,8 @@ function quando(iso: string) {
 }
 
 export function EtichettaRitorno({ sessionId, session, onFatto }: { sessionId: string; session: Sess; onFatto?: () => void }) {
-  const abilitato = !!(session.return_by_customer || session.shipping_by_customer);
+  const abilitato = siSpedisce(session);
+  const chiediEtichetta = !!(session.return_by_customer || session.shipping_by_customer);
   const [dati, setDati] = useState<Dati | null>(null);
   const [colli, setColli] = useState("1");
   const [peso, setPeso] = useState("");
@@ -67,14 +71,15 @@ export function EtichettaRitorno({ sessionId, session, onFatto }: { sessionId: s
     if (!conferma) {
       const avv = dati.avvisi.length ? `\n\n⚠️ ${dati.avvisi.join("\n⚠️ ")}` : "";
       const a = scelti.map((c) => c === "email" ? `mail a ${dati.destinatari.email}` : `WhatsApp a ${dati.destinatari.whatsapp}`).join(" e ");
-      if (!confirm(`Inviare la richiesta dell'etichetta di ritorno via ${a}?${avv}`)) return;
+      const cosa = dati.variante === "etichetta" ? "il pronto alla spedizione con la richiesta dell'etichetta" : "il pronto alla spedizione";
+      if (!confirm(`Inviare ${cosa} via ${a}?${avv}`)) return;
     }
     setInvio(true);
     try {
       const r = await inviaEtichettaRitorno(sessionId, { canali: [...scelti], oggetto, testo_email: testoMail, testo_whatsapp: testoWa,
         colli, peso, misure, conferma: conferma || dati.avvisi.length > 0 });
       const parti = Object.entries(r.esito).map(([c, e]) => `${c === "email" ? "Mail" : "WhatsApp"}: ${e?.saltato ? `saltato (${e.errore})` : e?.ok ? `inviata a ${e.a}` : `ERRORE ${e?.errore || ""}`}`);
-      (r.ok ? toast.success : toast.error)(`Etichetta di ritorno ${r.ok ? "richiesta" : "NON richiesta"} — ${parti.join(" · ")}`, { duration: 10000 });
+      (r.ok ? toast.success : toast.error)(`Pronto alla spedizione ${r.ok ? "inviato" : "NON inviato"} — ${parti.join(" · ")}`, { duration: 10000 });
       if (r.ok) { setDati(null); onFatto?.(); }
     } catch (e) {
       const err = e as ApiError;
@@ -91,14 +96,20 @@ export function EtichettaRitorno({ sessionId, session, onFatto }: { sessionId: s
   return (
     <span className="flex flex-col items-start gap-0.5 sm:items-end">
       <Button size="sm" variant={abilitato ? "default" : "outline"} disabled={!abilitato || carico}
-        className={abilitato ? "h-8 bg-amber-700 px-2 text-[11px] font-semibold text-white hover:bg-amber-800" : "h-8 px-2 text-[11px] text-gray-400"}
-        title={abilitato ? "Comunica che gli strumenti sono pronti e chiedi l'etichetta del corriere del cliente (vedi l'anteprima prima dell'invio)"
-          : "Si attiva quando in «Spedizione e corriere» è scelto «Ritorno a carico del cliente (ci manda l'etichetta)»"}
+        className={abilitato ? "h-9 bg-amber-600 px-3 text-xs font-bold text-white hover:bg-amber-700" : "h-8 px-2 text-[11px] text-gray-400"}
+        title={!abilitato ? "Si attiva quando in «Spedizione e corriere» è scelto come tornano gli strumenti (nostro corriere o etichetta del cliente)"
+          : chiediEtichetta ? "Comunica che gli strumenti sono pronti e chiedi l'etichetta del corriere del cliente (vedi l'anteprima prima dell'invio)"
+          : "Comunica che gli strumenti sono pronti: li spediamo col nostro corriere appena arriva il pagamento (vedi l'anteprima prima dell'invio)"}
         onClick={apri}>
-        {carico ? <Loader2 className="size-3.5 animate-spin" /> : <Package className="size-3.5" />} Pronto per la spedizione – chiedi etichetta
+        {carico ? <Loader2 className="size-3.5 animate-spin" /> : <Package className="size-3.5" />}
+        {chiediEtichetta ? "Pronto alla spedizione – chiedi etichetta" : "Pronto alla spedizione"}
       </Button>
-      {richiesta && (
+      {richiesta && chiediEtichetta && (
         <span className="text-[11px] text-amber-800">Etichetta richiesta il {quando(richiesta)}{session.return_label_requested_via ? ` via ${session.return_label_requested_via}` : ""} — in attesa</span>
+      )}
+      {abilitato && !chiediEtichetta && (session.ready_email_at || session.ready_whatsapp_at) && (
+        <span className="text-[11px] text-amber-800">Pronto inviato il {quando(String(session.ready_email_at || session.ready_whatsapp_at))}
+          {session.payment_status !== "pagato" ? " — in attesa del pagamento" : ""}</span>
       )}
 
       {dati && (
@@ -106,20 +117,25 @@ export function EtichettaRitorno({ sessionId, session, onFatto }: { sessionId: s
           <div className="max-h-[92vh] w-full max-w-2xl overflow-auto rounded-lg bg-white text-left shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 flex items-start gap-2 border-b bg-white px-5 py-3">
               <div className="flex-1">
-                <h3 className="text-base font-semibold">Pronto per la spedizione – chiedi etichetta</h3>
+                <h3 className="text-base font-semibold">{dati.variante === "etichetta" ? "Pronto alla spedizione – chiedi etichetta" : "Pronto alla spedizione – spediamo noi"}</h3>
                 <p className="text-xs text-gray-500">Anteprima: controlla e modifica i testi. Non parte nulla finché non premi «Invia».</p>
               </div>
               <button type="button" title="Chiudi" onClick={() => setDati(null)} disabled={invio}><X className="size-5" /></button>
             </div>
             <div className="space-y-3 px-5 py-3 text-sm">
               {dati.avvisi.map((a) => <p key={a} className="rounded border border-amber-400 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900">⚠️ {a}</p>)}
-              {dati.richiesta && <p className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs">Già richiesta il {quando(dati.richiesta.il)} via {dati.richiesta.via}: stai per rimandarla.</p>}
-              <div className="flex flex-wrap items-end gap-2">
+              {dati.variante === "etichetta" && dati.richiesta && <p className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs">Già richiesta il {quando(dati.richiesta.il)} via {dati.richiesta.via}: stai per rimandarla.</p>}
+              {dati.variante === "spediamo_noi" && (
+                <p className="rounded border border-gray-300 bg-gray-50 px-2 py-1 text-xs">
+                  {dati.pagata ? "Pagamento arrivato: il testo dice che spediamo oggi o domani." : "Pagamento non ancora arrivato: il testo dice che spediamo appena arriva, con importo, pro forma e dati del bonifico."}
+                  {dati.pronto_inviato ? ` Pronto già mandato il ${quando(dati.pronto_inviato.il)} via ${dati.pronto_inviato.via}: stai per rimandarlo.` : ""}</p>
+              )}
+              {dati.variante === "etichetta" && <div className="flex flex-wrap items-end gap-2">
                 <label className="flex flex-col text-xs text-gray-600">Colli<input className={`${inp} w-16`} inputMode="numeric" value={colli} onChange={(e) => setColli(e.target.value.replace(/\D/g, ""))} /></label>
                 <label className="flex flex-col text-xs text-gray-600">Peso indicativo (kg)<input className={`${inp} w-24`} inputMode="decimal" placeholder="es. 5" value={peso} onChange={(e) => setPeso(e.target.value.replace(/[^\d,.]/g, ""))} /></label>
                 <label className="flex flex-col text-xs text-gray-600">Misure (cm, facoltative)<input className={`${inp} w-36`} placeholder="40x30x20" value={misure} onChange={(e) => setMisure(e.target.value)} /></label>
                 <Button size="sm" variant="outline" className="h-8" onClick={rigenera}>Aggiorna i testi</Button>
-              </div>
+              </div>}
               <div className="space-y-1 rounded-md border p-2">
                 <label className="flex items-center gap-1.5 font-medium">
                   <input type="checkbox" checked={canali.email} disabled={!dati.destinatari.email} onChange={(e) => setCanali({ ...canali, email: e.target.checked })} />
