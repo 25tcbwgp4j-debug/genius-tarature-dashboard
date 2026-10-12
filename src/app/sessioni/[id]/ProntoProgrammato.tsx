@@ -69,7 +69,10 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
   const [st, setSt] = useState<StatoPronto | null>(null);
   const [aperto, setAperto] = useState(false);
   const [rimanda, setRimanda] = useState(false);
-  const [scelta, setScelta] = useState<Scelta>("suggerito");
+  // 12/10/2026: se il negozio è aperto, la proposta è OGGI alla prossima mezz'ora (prima era il giorno lavorativo
+  // successivo alle 9:30: di venerdì pomeriggio, confermando senza guardare, partiva lunedì mattina)
+  const sceltaIniziale = (): Scelta => (inOrarioNegozio(oggiRoma(), prossimaMezzora()) ? "oggi" : "suggerito");
+  const [scelta, setScelta] = useState<Scelta>(sceltaIniziale);
   const [data, setData] = useState("");
   const [ora, setOra] = useState("09:30");
   const [oraOggi, setOraOggi] = useState(prossimaMezzora());
@@ -115,7 +118,8 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
 
   const apri = (perRimandare: boolean) => {
     setRimanda(perRimandare);
-    setScelta(attiva ? "libero" : "suggerito");
+    setScelta(attiva ? "libero" : sceltaIniziale());
+    setOraOggi(prossimaMezzora());
     setAperto(true);
   };
 
@@ -291,7 +295,8 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
       <div className="flex flex-wrap gap-2">
         <Button className="bg-amber-600 hover:bg-amber-700" disabled={lavoro || !scelti.length} onClick={conferma}>
           {lavoro ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : scelta === "adesso" ? <Send className="w-4 h-4 mr-1" /> : <AlarmClock className="w-4 h-4 mr-1" />}
-          {scelta === "adesso" ? "Invia adesso" : "Programma l'invio"}
+          {scelta === "adesso" ? "Invia adesso"
+            : qs?.data && qs?.ora ? `Programma per ${dataOraRoma(`${qs.data}T${qs.ora}:00`)}` : "Programma l'invio"}
         </Button>
         {!aperto && <Button variant="ghost" onClick={nonOraClick}>Non ora</Button>}
       </div>
