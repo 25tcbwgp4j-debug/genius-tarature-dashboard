@@ -52,6 +52,8 @@ interface Preview {
   missing: string[];
   /** riconsegna senza pagamento (e senza differito concordato): avviso, si può forzare alla conferma */
   payment_block?: string | null;
+  /** 13/10/2026: da dove viene l'indirizzo proposto (ritiro della sessione, anagrafica di spedizione, sede) */
+  address_source?: string;
   email: string;
   whatsapp_phone: string;
   texts: { oggetto: string; mail: string; wa: string };
@@ -337,6 +339,15 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
             </label>
           </div>
 
+          {preview?.address_source && (
+            preview.address_source.startsWith("anagrafica del cliente") && direction === "riconsegna" ? (
+              <p className="rounded border-2 border-amber-500 bg-amber-50 px-2 py-1 text-sm font-medium text-amber-900">
+                ⚠️ Indirizzo preso dalla <b>sede del cliente (fatturazione)</b>: non risulta un indirizzo di spedizione.
+                Controlla dove vanno consegnati gli strumenti prima di confermare.</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Indirizzo proposto: <b>{preview.address_source}</b></p>
+            )
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
             {CAMPI_INDIRIZZO.map(({ key, label }) => (
               <label key={key} className="flex flex-col">
