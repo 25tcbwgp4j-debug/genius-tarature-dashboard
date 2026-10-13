@@ -20,11 +20,18 @@ import {
 
 const TZ = "Europe/Rome";
 
-function dataOraRoma(iso: string | null | undefined, conGiorno = true): string {
+function dataOraRoma(iso: string | null | undefined, conGiorno = true, relativo = true): string {
   if (!iso) return "—";
   const d = new Date(iso);
   const giorno = d.toLocaleDateString("it-IT", { timeZone: TZ, weekday: conGiorno ? "long" : undefined, day: "2-digit", month: "2-digit" });
   const ora = d.toLocaleTimeString("it-IT", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+  // 13/10/2026: «martedì 13/10» per oggi faceva pensare a un altro giorno → si scrive «oggi» / «domani»
+  if (relativo) {
+    const g = d.toLocaleDateString("en-CA", { timeZone: TZ });
+    const oggi = oggiRoma();
+    if (g === oggi) return `oggi (${giorno}) alle ${ora}`;
+    if (g === spostaGiorno(oggi, 1)) return `domani (${giorno}) alle ${ora}`;
+  }
   return `${giorno} alle ${ora}`;
 }
 /** "AAAA-MM-GG" e "HH:MM" di un istante, nel fuso di Roma (per gli input data/ora). */
@@ -261,7 +268,7 @@ export function ProntoProgrammato({ sessionId, haRapporti, versione, onAggiornat
 
       {(scelta === "oggi" || scelta === "domani") && (
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <span className="text-sm">{scelta === "oggi" ? "Oggi" : nomeDomani} ({dataOraRoma(`${scelta === "oggi" ? oggi : domani}T12:00:00`).split(" alle ")[0]}) alle</span>
+          <span className="text-sm">{scelta === "oggi" ? "Oggi" : nomeDomani} ({dataOraRoma(`${scelta === "oggi" ? oggi : domani}T12:00:00`, true, false).split(" alle ")[0]}) alle</span>
           <Input type="time" value={scelta === "oggi" ? oraOggi : oraDomani}
             onChange={(e) => (scelta === "oggi" ? setOraOggi : setOraDomani)(e.target.value)} className="w-28 bg-white" />
           <span className="text-xs text-gray-500">ora di Roma</span>
