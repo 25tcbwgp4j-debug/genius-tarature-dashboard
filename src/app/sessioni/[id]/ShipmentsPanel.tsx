@@ -17,6 +17,7 @@ import {
   cancelShipment,
   createShipment,
   getShipmentLabelUrl,
+  spedStampaBanco,
   listShipments,
   previewShipment,
   type ShipmentAddress,
@@ -78,31 +79,15 @@ const CAMPI_INDIRIZZO: { key: keyof ShipmentAddress; label: string }[] = [
   { key: "province", label: "Prov." },
 ];
 
-// Stampa l'etichetta dalla dashboard: il PDF si carica in un riquadro nascosto e si apre
-// la finestra di stampa del browser (niente download, niente popup bloccati).
+// Stampa l'etichetta alla stampante del BANCO (agente di stampa), come la pagina Spedizioni (14/10/2026):
+// la vecchia stampa dal browser a volte non faceva nulla.
 async function stampaEtichetta(shipmentId: string) {
   try {
-    const res = await fetch(getShipmentLabelUrl(shipmentId));
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const url = URL.createObjectURL(await res.blob());
-    const frame = document.createElement("iframe");
-    frame.style.position = "fixed";
-    frame.style.width = "0";
-    frame.style.height = "0";
-    frame.style.border = "0";
-    frame.src = url;
-    frame.onload = () => {
-      try {
-        frame.contentWindow?.focus();
-        frame.contentWindow?.print();
-      } catch {
-        window.open(url, "_blank");
-      }
-      setTimeout(() => { frame.remove(); URL.revokeObjectURL(url); }, 60000);
-    };
-    document.body.appendChild(frame);
+    const r = await spedStampaBanco(shipmentId);
+    toast.success(`Etichetta mandata in stampa al banco (${r.copie} copie)` +
+      (r.agente_attivo === false ? " — ATTENZIONE: l'agente di stampa non risponde" : ""));
   } catch (e: unknown) {
-    toast.error(`Etichetta non stampabile: ${(e as Error).message}`);
+    toast.error(`Etichetta non stampata: ${(e as Error).message}`);
   }
 }
 
@@ -220,7 +205,8 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
       if (!form.test) await salvaCosto();
       chiudi();
       await load();
-      // Niente stampa automatica (dava due fogli bianchi): si usa «Stampa etichetta» o «Apri PDF»
+      // 14/10/2026: l'etichetta va in stampa da sola al banco (backend); «Stampa etichetta» la ristampa
+      if (!form.test) toast.success("Etichetta mandata in stampa al banco", { duration: 8000 });
     } catch (e: unknown) {
       toast.error((e as Error).message || "Errore spedizione", { duration: 12000 });
     } finally {
