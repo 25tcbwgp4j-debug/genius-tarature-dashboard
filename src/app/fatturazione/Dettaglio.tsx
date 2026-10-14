@@ -14,7 +14,6 @@ import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore, type Operatore } from "@/components/Operatore";
 import { SceltaAttivita } from "@/components/attivita";
 import { CaricoMagazzino } from "./CaricoMagazzino";
-import { usePermessi as usePermessiAtt } from "@/components/permessi";
 import { cambiaAttivita } from "@/lib/api";
 import { SpedisciDocumento } from "@/components/SpedisciDocumento";
 import { VerificaBonifico } from "@/components/VerificaBonifico";
@@ -53,7 +52,6 @@ export function Dettaglio({
   const [linkCarta, setLinkCarta] = useState("");
   const [errore, setErrore] = useState("");
   const [conv, setConv] = useState<{ numero: string; modalita: string } | null>(null);   // conversione in scontrino
-  const { admin: titolare } = usePermessiAtt();
   const [carico, setCarico] = useState(false);   // fattura ricevuta → «Carica in magazzino»
 
   const carica = useCallback(() => {
@@ -146,7 +144,7 @@ export function Dettaglio({
             {emessa && f.societa === "genius" && (
               <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground" title={f.attivita_nota || undefined}>
                 Attività
-                <SceltaAttivita value={f.attivita} disabled={!!busy || !(["bozza", "errore", "scartata"].includes(f.stato) || titolare)}
+                <SceltaAttivita value={f.attivita} disabled={!!busy /* 14/10/2026: cambia chiunque, anche dagli iMac (etichetta interna) */}
                   onChange={(a) => {
                     if (a === f.attivita) return;
                     // fattura già numerata/inviata (05/10/2026): solo l'etichetta interna, con conferma
