@@ -17,7 +17,8 @@ import { AnnullaEFattura } from "@/components/AnnullaEFattura";
 import { usePermessi } from "@/components/permessi";
 import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
-import { BadgeAttivita, FiltroAttivita } from "@/components/attivita";
+import { BadgeAttivita, FiltroAttivita, SceltaAttivita } from "@/components/attivita";
+import { cambiaAttivita } from "@/lib/api";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { ChiusuraFiscale } from "./ChiusuraFiscale";
@@ -525,6 +526,23 @@ export default function CassaGiornataPage() {
                 <DialogTitle>{r.tipo}{r.numero ? ` n. ${r.numero}` : ""}</DialogTitle>
                 <DialogDescription>{dataIt(giorno)}{r.orario ? ` · ore ${r.orario}` : ""}{r.operatore ? ` · operatore ${r.operatore}` : ""} · {FONTE[r.fonte]}</DialogDescription>
               </DialogHeader>
+              {/* 14/10/2026: riaddebito Tarature ↔ Apple anche per scontrini e righe a mano (prima solo dalla fattura).
+                  È un'etichetta interna: non tocca registratore, numerazione o XML. Emessi: solo il titolare. */}
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Attività</span>
+                <SceltaAttivita value={r.attivita} onChange={async (a) => {
+                  if (a === r.attivita) return;
+                  const tab = r.fonte === "scontrino" ? "scontrini" : r.fonte === "manuale" ? "cassa_movimenti" : "fatture";
+                  const cosa = r.fonte === "scontrino" ? "Scontrino" : r.fonte === "manuale" ? "Riga" : "Fattura";
+                  if (!confirm(`${cosa}${r.numero ? ` n. ${r.numero}` : ""}: spostarlo in ${a === "apple" ? "Apple" : "Tarature"}?\n\nCambia solo l'attività a cui è addebitato (etichetta interna): registratore, numerazione e XML non cambiano.`)) return;
+                  try {
+                    await cambiaAttivita(tab, r.id, a);
+                    toast.success(`${cosa} spostato in ${a === "apple" ? "Apple" : "Tarature"}`);
+                    setDettaglio((d) => d && d.riga.id === r.id ? { ...d, riga: { ...d.riga, attivita: a } } : d);
+                    ricarica();
+                  } catch (e) { toastErrore(e); }
+                }} />
+              </div>
               {r.fonte === "scontrino" && s === undefined && <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" />Carico lo scontrino…</div>}
               {r.fonte === "scontrino" && s === null && <div className="text-sm text-red-700">Scontrino non trovato.</div>}
               {s ? (
