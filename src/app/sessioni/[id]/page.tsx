@@ -925,15 +925,12 @@ export default function SessionDetail() {
             </div>
             <div>
               <label className="text-xs text-gray-500">Stato</label>
-              <select
-                className="w-full h-8 text-sm border rounded px-2"
-                value={editSessionData?.status || ""}
-                onChange={(e) => setEditSessionData({ ...editSessionData, status: e.target.value })}
-              >
-                {Object.keys(STATUS_CONFIG).map((k) => (
-                  <option key={k} value={k}>{getStatusConfig(k, session).label}</option>
-                ))}
-              </select>
+              {/* 14/10/2026 (audit): il backend non salva lo stato da qui (lo cambiano i pulsanti della sessione, che fanno
+                  anche scadenzario, avvisi e pagamenti): prima il menu diceva «Sessione aggiornata» senza cambiare nulla. */}
+              <div className="flex h-8 items-center rounded border bg-gray-50 px-2 text-sm text-gray-700"
+                title="Lo stato si cambia con i pulsanti della sessione (Strumenti arrivati, Pronto, Riconsegnati…)">
+                {getStatusConfig(session.status, session).label}
+              </div>
             </div>
             <div>
               <label className="text-xs text-gray-500">Note</label>
