@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { SceltaOperatore, type Operatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
 import {
-  assAzione, assDocUrl, assEtichettaUrl, assModifica, assScheda, assTrackUrl, dataOra, DOCUMENTI_PDF, type ConfigAssistenza, type DocPdf, type Esito, type Scheda,
+  assAzione, assDocUrl, assEtichettaUrl, assModifica, assScheda, assTrackUrl, dataOra, DOCUMENTI_PDF, eur, type ConfigAssistenza, type DocPdf, type Esito, type Scheda,
 } from "@/lib/assistenza";
 import type { EstimateLine } from "@/lib/assistenza-preventivo";
 import { Apparecchio, type ValoriApparecchio } from "./Apparecchio";
@@ -262,6 +262,12 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
               const x = prompt("Importo dell'acconto (€)", "");
               const imp = Number(String(x || "").replace(",", "."));
               if (imp > 0) router.push(`/cassa?${new URLSearchParams({ scheda: s.id, acconto: imp.toFixed(2) })}`);
+            }}
+            onRichiediAcconto={async () => {
+              const x = prompt("Acconto da chiedere al cliente (€) — parte una mail e un WhatsApp con IBAN, causale e il preventivo allegato", "");
+              const imp = Number(String(x || "").replace(",", "."));
+              if (!(imp > 0)) return;
+              await azione("richiesta-acconto", { importo: imp }, `Richiesta di acconto di ${eur(imp)} inviata`);
             }}
             onVendi={vendi} onPagato={() => setDlg({ k: "pagato" })} onCorriere={() => setDlg({ k: "corriere" })} />
           <Sezione titolo="Nota interna" sottotitolo="mai al cliente">

@@ -6,16 +6,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CheckCircle2, FileText, Receipt, ShoppingCart, Truck, Wallet } from "lucide-react";
+import { CheckCircle2, FileText, Receipt, Send, ShoppingCart, Truck, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { assAzione, eur, type Scheda } from "@/lib/assistenza";
 import { Pill, Sezione } from "./ui";
 
-export function Documenti({ s, ro, busy, onScontrino, onAcconto, onVendi, onPagato, onCorriere }: {
-  s: Scheda; ro: boolean; busy: boolean; onScontrino: () => void; onAcconto: () => void; onVendi: (t: "fattura" | "proforma") => void;
-  onPagato: () => void; onCorriere: () => void;
+export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAcconto, onVendi, onPagato, onCorriere }: {
+  s: Scheda; ro: boolean; busy: boolean; onScontrino: () => void; onAcconto: () => void; onRichiediAcconto: () => void;
+  onVendi: (t: "fattura" | "proforma") => void; onPagato: () => void; onCorriere: () => void;
 }) {
+  // 14/10/2026: ultima richiesta d'acconto mandata al cliente (mail + WhatsApp)
+  const rich = (s.fasi as Record<string, { il?: string; importo?: number } | undefined> | undefined)?.richiesta_acconto;
   const c = s.collegamenti || {};
   return (
     <Sezione titolo="Documenti, pagamento e spedizioni" icona={<Wallet />}
@@ -25,6 +27,7 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onVendi, onPaga
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             <Button variant="outline" onClick={onScontrino} title="Apre la cassa con le righe della scheda"><ShoppingCart />Scontrino</Button>
             <Button variant="outline" onClick={onAcconto} title="Scontrino d'acconto: al saldo si scala da solo"><Receipt />Acconto</Button>
+            <Button variant="outline" disabled={busy} onClick={onRichiediAcconto} title="Chiede al cliente un acconto (importo a scelta) per mail e WhatsApp, con IBAN, causale e preventivo allegato"><Send />Richiedi acconto</Button>
             <Button variant="outline" disabled={!!s.fattura_id || busy} onClick={() => onVendi("fattura")} title="Fattura in bozza con le righe della scheda (nulla va allo SdI finché non la emetti)"><FileText />Fattura</Button>
             <Button variant="outline" disabled={!!s.documento_id || busy} onClick={() => onVendi("proforma")} title="Pro forma per il pagamento con bonifico (poi «Converti in fattura»)"><FileText />Pro forma</Button>
             <Button variant={s.stato === "pronto" && !s.pagata ? "default" : "outline"} disabled={busy || s.pagata} onClick={onPagato} title="Pagamento arrivato (bonifico, PayPal, contanti, POS)"><CheckCircle2 />Pagato</Button>
@@ -37,6 +40,7 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onVendi, onPaga
           {c.documento && <div className="flex items-center gap-2"><FileText className="size-4 text-muted-foreground" />
             <Link className="underline" href={c.documento.sigla.startsWith("PF") ? `/proforma?id=${c.documento.id}` : `/ordini?id=${c.documento.id}`}>{c.documento.sigla}</Link> {eur(c.documento.totale)} <Pill>{c.documento.stato}</Pill></div>}
           {Number(s.acconto || 0) > 0 && <div className="text-muted-foreground">Acconto versato {eur(s.acconto)}</div>}
+          {rich?.importo ? <div className="text-muted-foreground">Acconto richiesto {eur(rich.importo)}{rich.il ? ` il ${new Date(rich.il).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" })}` : ""}{Number(s.acconto || 0) >= Number(rich.importo) ? " · versato" : " · in attesa"}</div> : null}
           {!c.scontrino && !c.fattura && !c.documento && !s.spedizioni.length && <div className="text-xs text-muted-foreground">Nessun documento ancora. Prezzi della scheda IVA compresa.</div>}
         </div>
         {s.spedizioni.length > 0 && (
