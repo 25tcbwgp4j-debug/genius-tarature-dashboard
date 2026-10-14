@@ -201,7 +201,7 @@ export function DaIncassare({
                         Richiesta di pagamento{per.label ? ` — estratto ${per.label.startsWith("dal") || per.label.startsWith("del") ? per.label : `di ${per.label}`}` : ""}
                       </div>
                       <div className="grid gap-2 sm:grid-cols-2">
-                        <Input className="h-8" placeholder="Email del cliente" value={email} onChange={(e) => setEmail(e.target.value)} />
+                        <Input className="h-8" placeholder="Email del cliente (più indirizzi separati da ;)" value={email} onChange={(e) => setEmail(e.target.value)} />
                         <Input className="h-8" placeholder="Messaggio in testa all'estratto (facoltativo)" value={messaggio} onChange={(e) => setMessaggio(e.target.value)} />
                       </div>
                       <label className="flex items-center gap-1.5 text-sm">

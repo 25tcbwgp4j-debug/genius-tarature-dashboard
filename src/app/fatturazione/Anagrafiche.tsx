@@ -22,6 +22,7 @@ const CAMPI: [keyof FattAnagrafica, string, string][] = [
   ["indirizzo", "Indirizzo", "sm:col-span-2"], ["cap", "CAP", "sm:col-span-1"], ["comune", "Comune", "sm:col-span-1"],
   ["provincia", "Prov.", "sm:col-span-1"], ["paese", "Paese", "sm:col-span-1"],
   ["email", "Email", "sm:col-span-1"], ["telefono", "Telefono", "sm:col-span-1"],
+  ["email_contabilita", "Email amministrazione (riceve estratti conto e fatture; più indirizzi separati da ;)", "sm:col-span-2"],
 ];
 
 export function anagraficaAControparte(a: FattAnagrafica): FattControparte {

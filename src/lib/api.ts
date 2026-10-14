@@ -1237,6 +1237,7 @@ export interface FattAnagrafica {
   denominazione: string | null; piva: string | null; cf: string | null; sdi: string | null; pec: string | null;
   indirizzo: string | null; cap: string | null; comune: string | null; provincia: string | null; paese: string | null;
   email: string | null; telefono: string | null; referente?: string | null; attivo?: boolean;
+  email_contabilita?: string | null; email_altre?: string | null;
   resoconto?: FattResocontoCfg | null;
   fatture?: { id: string; direzione: string; tipo_documento: string; numero: string | null; data: string | null;
     totale: number; stato: string; pagamento_stato: string; origine: string }[];
