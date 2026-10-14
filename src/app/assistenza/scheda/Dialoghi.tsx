@@ -279,10 +279,13 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
     if (!operatore) { toast.error("Scegli l'operatore"); return; }
     const conRitiro = dir === "ritiro" ? !!giorno : prenotaDaNoi;
     if (!inProva && !confirm(`Creare l'etichetta ${corriere} VERA (costo sul conto ${corriere})${conRitiro ? " e prenotare il corriere" : ""}?`)) return;
+    // 14/10/2026: riconsegna di una scheda non ancora pagata → il backend la ferma; qui si chiede conferma esplicita
+    const nonPagata = dir === "riconsegna" && !inProva && !s.pagata && s.saldo > 0;
+    if (nonPagata && !confirm(`ATTENZIONE: risulta ancora da pagare ${eur(s.saldo)}. Spedire lo stesso, senza pagamento?`)) return;
     setBusy(true);
     try {
       const r = await assAzione(s.id, "spedizione", { operatore, corriere, direzione: dir, indirizzo: ind, giorno_ritiro: giorno || undefined, test: inProva,
-        prenota: dir === "riconsegna" ? prenotaDaNoi : undefined, stampa: inProva ? false : stampa });
+        prenota: dir === "riconsegna" ? prenotaDaNoi : undefined, stampa: inProva ? false : stampa, forza: nonPagata || undefined });
       toast.success(`${r.corriere} ${r.test ? "(PROVA) " : ""}${r.tracking}${r.prn ? ` · ritiro ${r.prn}` : ""}${r.pickup_error ? ` · ERRORE ritiro: ${r.pickup_error}` : ""}` + (r.esito?.mail ? ` · mail ${r.esito.mail}` : ""), { duration: 10000 });
       if (!r.stampa || !r.stampa.agente_attivo) window.open(`/api/backend${r.label_url}`, "_blank");
       onFatta();

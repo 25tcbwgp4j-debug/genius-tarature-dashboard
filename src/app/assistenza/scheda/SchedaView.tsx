@@ -292,7 +292,12 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       {dlg?.k === "pronto" && <DialogoPronto s={s} lavorazione={String(v("lavorazione") || "")} totale={(v("totale_lavorazione") as number | null) ?? null} onClose={() => setDlg(null)}
         onInvia={async (body) => { const r = await azione("pronto", body, "PRONTO"); return r ? (r.esito as Esito) : null; }} />}
       {dlg?.k === "pagato" && <DialogoPagato s={s} onClose={() => setDlg(null)} onPagato={async (body) => !!(await azione("pagamento", body, "Pagamento registrato"))} />}
-      {dlg?.k === "consegna" && <DialogoConsegna s={s} onClose={() => setDlg(null)} onConsegna={async (modo) => !!(await azione("consegna", { modo }, "Consegnata: scheda chiusa"))} />}
+      {dlg?.k === "consegna" && <DialogoConsegna s={s} onClose={() => setDlg(null)} onConsegna={async (modo) => {
+        // 14/10/2026: con un saldo aperto il backend ferma la consegna; si va avanti solo con conferma esplicita
+        const daPagare = ["ritiro", "spedizione", "corriere_cliente"].includes(modo) && !s.pagata && s.saldo > 0;
+        if (daPagare && !confirm(`Risulta ancora da pagare ${eur(s.saldo)}. Consegnare lo stesso senza pagamento?`)) return false;
+        return !!(await azione("consegna", { modo, forza: daPagare || undefined }, "Consegnata: scheda chiusa"));
+      }} />}
       {dlg?.k === "corriere" && <DialogoCorriere s={s} operatore={operatore} onClose={() => setDlg(null)}
         onFatta={() => { setDlg(null); ricarica(); onCambiata(); }}
         onCorriereCliente={async () => {
