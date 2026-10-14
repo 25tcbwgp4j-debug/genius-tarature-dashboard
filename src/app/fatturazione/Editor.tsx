@@ -14,7 +14,7 @@ import { CercaArticolo } from "@/components/CercaArticolo";
 import { AggiornaPrezzoMagazzino, prezzoDiversoDaMagazzino } from "@/components/AggiornaPrezzoMagazzino";
 import { DecInput } from "@/components/DecInput";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
-import { SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
+import { attivitaDaTesto, SceltaAttivita, type Attivita } from "@/components/attivita";
 import { AnnullaEFattura } from "@/components/AnnullaEFattura";
 import { EstraiDati } from "@/components/EstraiDati";
 import { oggiRoma } from "@/lib/date";
@@ -70,8 +70,8 @@ export function Editor({
   const [operatore, setOperatore] = useOperatore();
   const [societa, setSocieta] = useState<FattSocieta>(iniziale?.societa || anagrafica?.societa || societaDefault);
   // attività (Genius Lab): quella della bozza, o tarature se viene da una sessione, altrimenti il selettore in alto
-  const { attivita: attSelettore } = useAttivita();
-  const [attivita, setAttivita] = useState<Attivita>(iniziale?.attivita || (iniziale?.session_id ? "tarature" : attSelettore));
+  // 14/10/2026: senza scelta a mano l'attività si riconosce dal contenuto (taratura → Tarature, il resto → Apple)
+  const [attScelta, setAttivita] = useState<Attivita | null>(iniziale?.attivita || (iniziale?.session_id ? "tarature" : null));
   const [tipoDoc, setTipoDoc] = useState(iniziale?.tipo_documento || "TD01");
   const [data, setData] = useState(iniziale?.data || oggiRoma());
   const c0: FattControparte = iniziale?.controparte || (anagrafica ? {
@@ -97,6 +97,7 @@ export function Editor({
         : { ...r, prezzo_ivato: null })
       : [rigaVuota(societaDefault === "gingy" ? 10 : 22)],
   );
+  const attivita: Attivita = attScelta || attivitaDaTesto(righe.map((r) => r.descrizione));
   const [prezziIvati, setPrezziIvati] = useState(!iniziale?.righe?.length || tuttiLordi);
   const [idSalvato, setIdSalvato] = useState<string | null>(iniziale?.id || null);   // dopo il primo salvataggio si MODIFICA, non si ricrea
   const [sporco, setSporco] = useState(false);
@@ -263,7 +264,7 @@ export function Editor({
       anagrafica_id: anagraficaId || undefined,
       salva_anagrafica: !anagraficaId && salvaAnag,
       operatore,
-      ...(societa === "genius" ? { attivita } : {}),
+      ...(societa === "genius" && attScelta ? { attivita: attScelta } : {}),
     };
   }
 

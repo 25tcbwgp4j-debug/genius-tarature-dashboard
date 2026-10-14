@@ -10,6 +10,7 @@ import { attivitaSalvata, CHIAVE_ATTIVITA, type Attivita } from "@/lib/attivita"
 
 export type { Attivita };
 export { attivitaSalvata };
+export { attivitaDaTesto } from "@/lib/attivita";
 export const ATTIVITA: { codice: Attivita; etichetta: string }[] = [
   { codice: "tarature", etichetta: "Tarature" },
   { codice: "apple", etichetta: "Apple" },
@@ -20,7 +21,7 @@ interface Ctx {
   attivita: Attivita;
   setAttivita: (a: Attivita) => void;
 }
-const AttivitaCtx = createContext<Ctx>({ attivita: "tarature", setAttivita: () => undefined });
+const AttivitaCtx = createContext<Ctx>({ attivita: "apple", setAttivita: () => undefined });
 
 export function useAttivita() {
   return useContext(AttivitaCtx);
@@ -36,7 +37,7 @@ function iscriviti(f: () => void) {
 }
 
 export function AttivitaProvider({ children }: { children: React.ReactNode }) {
-  const attivita = useSyncExternalStore(iscriviti, attivitaSalvata, () => "tarature" as Attivita);
+  const attivita = useSyncExternalStore(iscriviti, attivitaSalvata, () => "apple" as Attivita);
   const setAttivita = useCallback((a: Attivita) => {
     try {
       window.localStorage.setItem(CHIAVE, a);

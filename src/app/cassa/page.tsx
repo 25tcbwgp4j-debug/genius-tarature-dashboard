@@ -24,7 +24,7 @@ import { Incassa, NOMI_MODALITA } from "@/components/Incassa";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { SpedisciDocumento } from "@/components/SpedisciDocumento";
-import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
+import { attivitaDaTesto, BadgeAttivita, FiltroAttivita, SceltaAttivita, type Attivita } from "@/components/attivita";
 import { SceltaPezzo, rigaDaPezzo } from "@/components/SceltaPezzo";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
@@ -52,10 +52,10 @@ export default function CassaPage() {
   const [q, setQ] = useState("");
   const [trovati, setTrovati] = useState<Prodotto[]>([]);
   const [operatore, setOperatore] = useOperatore();
-  // attività dello scontrino: quella del selettore in alto, cambiabile qui (sessione = tarature, ordine = quella dell'ordine)
-  const { attivita: attSelettore } = useAttivita();
+  // attività dello scontrino (14/10/2026): se nessuno la sceglie qui, si riconosce dal CONTENUTO del carrello (righe di
+  // taratura → Tarature, tutto il resto → Apple) e la decide il database; la scelta a mano vince sempre.
   const [attScelta, setAttScelta] = useState<Attivita | null>(null);
-  const att: Attivita = attScelta || attSelettore;
+  const att: Attivita = attScelta || attivitaDaTesto(carrello.map((x) => x.descrizione));
   const [filtroAtt, setFiltroAtt] = useState("");
   const [busy, setBusy] = useState("");
   const [oggi, setOggi] = useState<{ scontrini: Scontrino[]; totale: number; per_modalita: Record<string, number> } | null>(null);
@@ -262,7 +262,7 @@ export default function CassaPage() {
       const sc = await cassaScontrino({ righe: carrello, pagamenti, operatore,
                              ...(sessione ? { session_id: sessione.id } : {}), ...(ordine ? { documento_id: ordine.id } : {}),
                              ...(scheda ? { scheda_id: scheda.id } : {}),
-                             ...(!sessione && !ordine ? { attivita: att } : {}) });
+                             ...(!sessione && !ordine && attScelta ? { attivita: attScelta } : {}) });
       esito = { id: sc.id, descrizione: `Scontrino ${eur(tot)}${ordine ? ` (ordine ${ordine.sigla})` : ""} — ${carrello.map((r) => r.descrizione).join(", ")}`.slice(0, 280) };
       toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${come} · ${operatore})${sc.resto ? ` — RESTO ${eur(sc.resto)}` : ""}`, { duration: sc.resto ? 15000 : 5000 });
       setCarrello([]); ricarica(); setRiemissione(null);
@@ -286,7 +286,7 @@ export default function CassaPage() {
     if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
     setBusy("fattura");
     try {
-      const f = await cassaFattura({ righe: carrello, operatore, attivita: att });
+      const f = await cassaFattura({ righe: carrello, operatore, ...(attScelta ? { attivita: attScelta } : {}) });
       toast.success("Bozza di fattura creata: completa il cliente e inviala allo SdI");
       setCarrello([]);
       if (scheda) await collegaScheda({ fattura_id: f.id });

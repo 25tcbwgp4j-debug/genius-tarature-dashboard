@@ -17,7 +17,7 @@ import { CercaArticolo } from "@/components/CercaArticolo";
 import { EstraiDati, esistenteInCampi } from "@/components/EstraiDati";
 import { PagaPos } from "@/components/PagaPos";
 import { BadgeOperatore, SceltaOperatore, useOperatore } from "@/components/Operatore";
-import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita, type Attivita } from "@/components/attivita";
+import { attivitaDaTesto, BadgeAttivita, FiltroAttivita, SceltaAttivita, type Attivita } from "@/components/attivita";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
@@ -90,8 +90,9 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
   const [trovati, setTrovati] = useState<FattAnagrafica[]>([]);
   const [busy, setBusy] = useState(false);
   const [operatore, setOperatore] = useOperatore();
-  const { attivita: attSelettore } = useAttivita();
-  const [att, setAtt] = useState<Attivita>(iniziale.attivita || attSelettore);
+  // 14/10/2026: senza scelta a mano decide il contenuto (taratura → Tarature, il resto → Apple)
+  const [attScelta, setAtt] = useState<Attivita | null>(iniziale.attivita || null);
+  const att: Attivita = attScelta || attivitaDaTesto(b.righe.map((r) => r.descrizione));
   useEffect(() => {
     if (q.trim().length < 2) return;
     const t = setTimeout(() => fattAnagrafiche("genius", "cliente", q.trim(), 8).then((r) => setTrovati(r.anagrafiche || [])).catch(() => setTrovati([])), 250);
@@ -126,7 +127,7 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
     setBusy(true);
     try {
       const corpo = { tipo: b.tipo, cliente_nome: b.cliente_nome.trim(), telefono: b.telefono, email: b.email, anagrafica_id: b.anagrafica_id,
-        controparte: { ...b.controparte, email: b.email, telefono: b.telefono }, rif: b.rif, note: b.note, righe, operatore, attivita: att,
+        controparte: { ...b.controparte, email: b.email, telefono: b.telefono }, rif: b.rif, note: b.note, righe, operatore, ...(attScelta ? { attivita: attScelta } : {}),
         ...(b.tipo === "proforma" ? { scadenza: b.scadenza || null } : {}) };
       onSalvato(b.id ? await docModifica(b.id, corpo) : await docCrea(corpo));
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
