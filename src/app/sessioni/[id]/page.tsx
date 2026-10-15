@@ -67,6 +67,7 @@ import { ClienteCard } from "./ClienteCard";
 import { AvvisiPagamento, testoPagamento } from "./PagamentoStato";
 import { AzioniSessione } from "./AzioniSessione";
 import { AcquisisciFoto } from "./AcquisisciFoto";
+import { AggiungiFotoStrumento } from "./AggiungiFotoStrumento";
 import { ShipmentsPanel } from "./ShipmentsPanel";
 import { ProformaDialog } from "./FatturaPanel";
 import { SpedizioneSessione } from "./SpedizioneSessione";
@@ -1252,8 +1253,8 @@ export default function SessionDetail() {
                 </div>
               ) : (
                 /* Visualizzazione strumento */
-                <div className="flex justify-between items-center">
-                  <div>
+                <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-1">
+                  <div className="min-w-0">
                     <p className="font-medium">
                       {i + 1}. {inst.instrument_name}
                       {inst.external_processing && (
@@ -1290,6 +1291,10 @@ export default function SessionDetail() {
                         </Badge>
                       )}
                     </div>
+                    {/* «Aggiungi foto» (15/10/2026): altra foto dello stesso strumento → dati riletti e corretti */}
+                    {!inst.rdt_number && !inst.rdt_generated && session.status !== "completata" && (
+                      <AggiungiFotoStrumento instrumentId={inst.id} nFoto={(inst.photo_urls || []).length} onAggiornato={loadSession} />
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"

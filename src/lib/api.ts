@@ -185,18 +185,49 @@ export async function strumentiArrivati(sessionId: string) {
 /** «Acquisisci» (02/10/2026): foto di uno strumento (fotocamera iPad/iPhone o immagine incollata) → riga nella
  *  sessione, con lo stesso motore delle foto WhatsApp (fronte/retro uniti, niente doppioni sulla matricola).
  *  esito: nuovo | unito | doppione | illeggibile. Se la sessione era in attesa strumenti passa in registrazione. */
+export interface StrumentoLetto { id: string; instrument_name?: string; manufacturer?: string; model?: string; serial_number?: string | null;
+  probe_model?: string | null; price?: number; photo_urls?: string[] | null }
 export interface EsitoAcquisizione {
   esito: 'nuovo' | 'unito' | 'doppione' | 'illeggibile';
-  strumento: { id: string; instrument_name?: string; manufacturer?: string; model?: string; serial_number?: string | null;
-    probe_model?: string | null; price?: number } | null;
+  strumento: StrumentoLetto | null;
   descrizione: string | null;
+  n_foto?: number;
+  /** esito doppione: lo strumento già in sessione con la stessa matricola */
+  doppione_di?: { id: string; descrizione: string } | null;
   n_strumenti?: number;
   totale?: number;
 }
-export async function acquisisciStrumentoDaFoto(sessionId: string, imageDataUrl: string): Promise<EsitoAcquisizione> {
+/** Una foto, o 2-4 foto dello STESSO strumento (15/10/2026: marca/modello da una parte, matricola dall'altra)
+ *  lette insieme dalla vision → UN solo strumento. */
+export async function acquisisciStrumentoDaFoto(sessionId: string, immagini: string | string[]): Promise<EsitoAcquisizione> {
+  const body = Array.isArray(immagini) ? (immagini.length === 1 ? { image_base64: immagini[0] } : { images_base64: immagini })
+    : { image_base64: immagini };
   return fetchAPI(`/api/sessions/${sessionId}/instruments/da-foto`, {
     method: 'POST',
-    body: JSON.stringify({ image_base64: imageDataUrl }),
+    body: JSON.stringify(body),
+  });
+}
+
+/** «Altra foto di QUESTO strumento» (15/10/2026, sessione 216): la vision rilegge insieme tutte le foto della riga
+ *  (già salvate + le nuove) e corregge tipo, prezzo da listino, marca, modello, matricola, sonda.
+ *  409 se lo strumento ha già il rapporto. esito doppione = la matricola letta è già su un'altra riga. */
+export interface EsitoAggiungiFoto {
+  esito: 'aggiornato' | 'illeggibile' | 'doppione';
+  strumento: StrumentoLetto | null;
+  descrizione: string | null;
+  prima: string | null;
+  cambiati: string[];
+  n_foto: number;
+  doppione_di?: { id: string; descrizione: string } | null;
+  n_strumenti?: number;
+  totale?: number;
+}
+export async function aggiungiFotoStrumento(instrumentId: string, immagini: string | string[]): Promise<EsitoAggiungiFoto> {
+  const lista = Array.isArray(immagini) ? immagini : [immagini];
+  return fetchAPI(`/api/instruments/${instrumentId}/aggiungi-foto`, {
+    method: 'POST',
+    body: JSON.stringify(lista.length === 1 ? { image_base64: lista[0] } : { images_base64: lista }),
+    timeoutMs: 120000,
   });
 }
 
