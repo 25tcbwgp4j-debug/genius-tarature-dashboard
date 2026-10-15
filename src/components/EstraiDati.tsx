@@ -21,7 +21,7 @@ const LATO_MAX = 2000;
 const PDF_MAX = 3 * 1024 * 1024;   // il proxy accetta ~4,5 MB di corpo: il PDF in base64 cresce di un terzo
 
 /** Foto ridotta (telefoni 12 MP → 2000 px, JPEG 0.85) come data URL: più leggera e più veloce da leggere. */
-async function riduci(file: Blob): Promise<string> {
+export async function riduci(file: Blob): Promise<string> {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((ok, ko) => {

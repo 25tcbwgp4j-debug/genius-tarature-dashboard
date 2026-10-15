@@ -200,6 +200,30 @@ export async function acquisisciStrumentoDaFoto(sessionId: string, imageDataUrl:
   });
 }
 
+/** «Nuova sessione da foto» (15/10/2026): biglietto da visita, foglio, insegna o nome scritto → campi letti +
+ *  clienti candidati (rubrica e prospect F-GAS) + sessione aperta da riusare. L'analisi non salva nulla. */
+export interface SessioneAperta { id: string; session_number?: number; status: string; session_date?: string | null; created_at?: string;
+  motivo?: 'attesa_strumenti' | 'registrazione_recente' }
+export interface CandidatoCliente {
+  fonte: 'cliente' | 'prospect'; id: string; nome: string | null; piva: string | null; citta: string | null; provincia: string | null;
+  indirizzo: string | null; email: string | null; telefono: string | null; punteggio: number; motivi: string[];
+  sessioni_aperte: SessioneAperta[]; sessione_proposta: SessioneAperta | null;
+}
+export interface EsitoAnalisiDaFoto {
+  campi: CampiEstratti; fonti: EsitoEstrai['fonti']; incerti: (keyof CampiEstratti)[]; mancanti: string[]; avvisi: string[];
+  ai: { usata: boolean; errore?: string }; vuoto: boolean; nome_cercato: string; candidati: CandidatoCliente[]; migliore: string | null;
+}
+export async function analizzaSessioneDaFoto(body: { testo?: string; file_base64?: string; media_type?: string }): Promise<EsitoAnalisiDaFoto> {
+  return fetchAPI('/api/sessions/da-foto/analizza', { method: 'POST', body: JSON.stringify(body), timeoutMs: 90000 });
+}
+/** Apre (o riprende) la sessione. 409 detail.code === 'sessione_in_attesa_strumenti' come createSession. */
+export async function apriSessioneDaFoto(body: {
+  customer_id?: string; prospect_id?: string; cliente?: Partial<CampiEstratti>; session_id?: string;
+  attesa_strumenti?: boolean; conferma_duplicato?: boolean;
+}): Promise<{ session: { id: string; session_number?: number; status: string }; riusata: boolean; cliente_creato: boolean }> {
+  return fetchAPI('/api/sessions/da-foto/apri', { method: 'POST', body: JSON.stringify(body), timeoutMs: 30000 });
+}
+
 /** Riporta in ATTESA STRUMENTI una sessione in registrazione senza ricevuta inviata. */
 export async function mettiInAttesaStrumenti(sessionId: string) {
   return fetchAPI(`/api/sessions/${sessionId}/attesa-strumenti`, { method: 'POST' });

@@ -226,6 +226,16 @@ export default function SessionDetail() {
   const router = useRouter();
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  // «Nuova da foto» (15/10/2026): arrivo con ?acquisisci=1 → acquisizione strumenti già aperta
+  const [acquisisciSubito, setAcquisisciSubito] = useState(false);
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    if (u.searchParams.get("acquisisci") === "1") {
+      setAcquisisciSubito(true);
+      u.searchParams.delete("acquisisci");
+      window.history.replaceState(null, "", u.pathname + u.search + u.hash);
+    }
+  }, []);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   // Pro forma (documento PF n/AAAA): dialog di preparazione; se aperto da PROFORMA EMAIL/WHATSAPP
   // dopo la creazione si riapre l'anteprima di invio su quel canale
@@ -1093,6 +1103,7 @@ export default function SessionDetail() {
               sessionId={sessionId}
               nStrumenti={instruments.length}
               attesaStrumenti={session.status === "attesa_strumenti"}
+              apriSubito={acquisisciSubito}
               onAggiornato={loadSession}
             />
           </div>

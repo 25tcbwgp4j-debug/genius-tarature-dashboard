@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input";
 import { listSessions, searchLeads, promoteLead, createSession } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Plus, Search, Loader2, ChevronLeft, ChevronRight, FileDown, UserPlus, Camera, ClipboardPaste, Images, PackageOpen, Play } from "lucide-react";
+import { Plus, Search, Loader2, ChevronLeft, ChevronRight, FileDown, UserPlus, PackageOpen, Play } from "lucide-react";
 import { ParseCustomerModal } from "../clienti/ParseCustomerModal";
+import { NuovaDaFoto } from "./NuovaDaFoto";
 import {
   Dialog,
   DialogContent,
@@ -152,9 +153,6 @@ export default function SessionsPage() {
   const [qSearching, setQSearching] = useState(false);
   const [imgIniziale, setImgIniziale] = useState<File | null>(null);
   const [modalMode, setModalMode] = useState<"text" | "image">("text");
-  const camRef = useRef<HTMLInputElement>(null);
-  const [touch, setTouch] = useState(true);
-  useEffect(() => { setTouch(typeof navigator !== "undefined" && navigator.maxTouchPoints > 0); }, []);
   useEffect(() => {
     if (q.trim().length < 2) { setQResults([]); return; }
     let annullato = false;
@@ -254,8 +252,6 @@ export default function SessionsPage() {
         <h2 className="text-2xl font-bold">Sessioni taratura</h2>
         {/* Barra di partenza: tutto a portata di dito (≥44 px), niente scorrimento orizzontale */}
         <Card className="gap-0 p-3">
-          <input ref={camRef} type="file" accept="image/*" capture="environment" hidden
-            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { setImgIniziale(f); setModalMode("image"); setDialogOpen(false); setNewCustomerOpen(true); } }} />
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
             <Button onClick={() => setDialogOpen(true)} className="h-11 shrink-0 px-4 text-sm font-semibold">
               <Plus className="size-5" /> Nuova sessione
@@ -307,17 +303,8 @@ export default function SessionsPage() {
                 </div>
               )}
             </div>
-            <div className="grid shrink-0 grid-cols-2 gap-2">
-              <Button variant="outline" className="h-11 border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100" onClick={() => camRef.current?.click()}
-                title="Fotografa il biglietto da visita, il timbro o la visura: il cliente viene trovato o creato e la sessione parte">
-                <Camera className="size-5" /> {touch ? "Inquadra" : "Foto / file"}
-              </Button>
-              <Button variant="outline" className="h-11 border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100"
-                onClick={() => { setImgIniziale(null); setModalMode("image"); setDialogOpen(false); setNewCustomerOpen(true); }}
-                title="Incolla un'immagine dagli appunti (⌘V) o scegline una dalla galleria">
-                {touch ? <Images className="size-5" /> : <ClipboardPaste className="size-5" />} {touch ? "Dalla galleria" : "Incolla immagine"}
-              </Button>
-            </div>
+            {/* 15/10/2026 — «Nuova da foto»: biglietto, foglio o nome → cliente trovato/nuovo → sessione (o ripresa) */}
+            <NuovaDaFoto />
           </div>
         </Card>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
