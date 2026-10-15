@@ -32,7 +32,9 @@ function quando(s: string) {
 
 interface BonificoArrivato {
   id: string; codice: string; data: string; data_valuta: string | null; importo: number; ordinante: string | null;
-  causale: string | null; iban: string | null; stesso_importo: boolean; nome_corrisponde: boolean; differenza: number;
+  causale: string | null; iban: string | null; stesso_importo: boolean;
+  /** quanto resta del bonifico se è già stato usato in parte per un altro documento (15/10/2026) */
+  residuo?: number; nome_corrisponde: boolean; differenza: number;
 }
 /** Quello che il chiamante ha emesso: id e descrizione del documento (per l'abbinamento). null/undefined = non emesso. */
 export type EsitoDocumento = { id?: string | null; descrizione?: string } | null | undefined | void;
@@ -119,7 +121,7 @@ export function VerificaBonifico({ importo, testo: testoIniziale = "", etichetta
   async function confermaScelto() {
     const b = lista?.find((x) => x.id === scelto);
     if (!b) return;
-    if (!b.stesso_importo && !confirm(`Il bonifico è di ${eur(b.importo)}, il documento di ${eur(importo)}. Procedere comunque?`)) return;
+    if (!b.stesso_importo && !confirm(`Il bonifico è di ${eur(b.residuo ?? b.importo)}, il documento di ${eur(importo)}.${(b.residuo ?? b.importo) > importo ? " Il resto del bonifico resterà disponibile per gli altri documenti." : ""} Procedere comunque?`)) return;
     const giorno = (b.data_valuta || b.data).slice(0, 10);
     const rif = `Bonifico ${b.ordinante || ""} del ${quando(giorno)} (SumUp ${b.codice.split(":").pop()})`.replace(/\s+/g, " ").trim();
     setBusy(true);
@@ -188,7 +190,7 @@ export function VerificaBonifico({ importo, testo: testoIniziale = "", etichetta
                     <label key={b.id} className={`flex cursor-pointer items-start gap-2 p-2 text-xs ${scelto === b.id ? "bg-emerald-50 dark:bg-emerald-950/30" : ""}`}>
                       <input type="radio" className="mt-0.5" name="bonifico" checked={scelto === b.id} onChange={() => setScelto(b.id)} />
                       <span className="flex-1">
-                        <span className="font-semibold tabular-nums">{eur(b.importo)}</span> · <span className="font-medium">{b.ordinante || "ordinante non indicato"}</span> · {quando(b.data)}
+                        <span className="font-semibold tabular-nums">{eur(b.importo)}</span>{b.residuo != null && b.residuo < b.importo - 0.005 && <span className="text-amber-700 dark:text-amber-300"> (restano {eur(b.residuo)})</span>} · <span className="font-medium">{b.ordinante || "ordinante non indicato"}</span> · {quando(b.data)}
                         {b.stesso_importo && <span className="ml-1 rounded bg-emerald-600 px-1 text-[10px] text-white">stesso importo</span>}
                         {b.nome_corrisponde && <span className="ml-1 rounded bg-sky-600 px-1 text-[10px] text-white">nome giusto</span>}
                         {b.causale && <div className="text-muted-foreground">{b.causale}</div>}
