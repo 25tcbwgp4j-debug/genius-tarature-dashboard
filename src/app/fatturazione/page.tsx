@@ -332,7 +332,8 @@ function Pagina() {
         </Card>
       )}
 
-      {ricStato?.ultimo && (
+      {/* 15/10/2026: il controllo passive Effatta riguarda solo le società con un account Effatta (oggi Genius) */}
+      {ricStato?.ultimo && !info?.manuale && (
         <div className={`text-xs ${ricStato.ultimo.ok ? "text-muted-foreground" : "font-medium text-red-600"}`}
           title={ricStato.ultimo.messaggio}>
           Fatture ricevute — ultimo controllo SdI: {new Date(ricStato.ultimo.quando).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
