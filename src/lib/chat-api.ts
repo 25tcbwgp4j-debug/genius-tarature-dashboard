@@ -146,9 +146,16 @@ export async function sendMedia(payload: {
   caption?: string;
   operator_email?: string;
 }) {
+  // 15/10/2026: le foto di iPad/iPhone (12 MP) superano il limite del proxy (~4,5 MB): sopra 3 MB si riducono a JPEG 2000 px.
+  let file: File = payload.file;
+  if (file.type.startsWith("image/") && file.size > 3 * 1024 * 1024) {
+    const { riduci } = await import("@/components/EstraiDati");
+    const blob = await (await fetch(await riduci(file))).blob();
+    file = new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+  }
   const fd = new FormData();
   fd.append("phone", payload.phone);
-  fd.append("file", payload.file);
+  fd.append("file", file);
   if (payload.caption) fd.append("caption", payload.caption);
   if (payload.operator_email) fd.append("operator_email", payload.operator_email);
   const res = await fetch(`${BASE}/send-media`, { method: "POST", body: fd });

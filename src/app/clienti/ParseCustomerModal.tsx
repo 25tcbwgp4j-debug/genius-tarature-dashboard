@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Loader2, Sparkles, Save, X, AlertCircle, Check, Plus, GitMerge, FileText, Image as ImageIcon, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { parseCustomerText, parseCustomerImage, applyCustomerParsedUpdate } from "@/lib/api";
+import { riduci } from "@/components/EstraiDati";
 
 interface Props {
   open: boolean;
@@ -109,17 +110,19 @@ export function ParseCustomerModal({ open, onClose, onCreated, onUpdated, initia
     return () => window.removeEventListener("paste", onPaste);
   }, [open, mode]);
 
-  const loadImageFile = (file: File | Blob) => {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result as string;
+  // 15/10/2026: la foto dell'iPad (12 MP, diversi MB) superava il limite del proxy (~4,5 MB) e la lettura falliva
+  // con un errore in alto a destra: ora si riduce a 2000 px JPEG come in «Estrai dati» (anche HEIC → JPEG).
+  const loadImageFile = async (file: File | Blob) => {
+    try {
+      const result = await riduci(file);
       setImagePreview(result);
       // Estraggo il base64 puro senza prefisso data:
       const comma = result.indexOf(",");
       setImageB64(comma >= 0 ? result.slice(comma + 1) : result);
       setFields(null); setDuplicate(null); setDiff(null); setSelection({});
-    };
-    reader.readAsDataURL(file);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Immagine non leggibile");
+    }
   };
 
   // Apertura dalla pagina Sessioni: scheda Immagine e, se c'è, la foto appena scattata
