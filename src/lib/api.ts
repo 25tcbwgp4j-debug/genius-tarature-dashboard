@@ -1083,6 +1083,8 @@ export interface Fattura {
   pagamento_rif?: string | null; scadenza: string | null; causale?: string | null; note?: string | null;
   session_id: string | null; errore: string | null; inviata_il: string | null; created_at: string;
   fattura_collegata_id?: string | null;
+  /** nota di credito: come si chiude verso il cliente (15/10/2026) */
+  nc_regolazione?: NcRegolazione | null;
   /** estremi della dichiarazione/attestazione del cliente (es. modulo dell'ambasciata, art. 72): stampati in fattura */
   estremi_esenzione?: string | null;
   origine?: string; anagrafica_id?: string | null; operatore?: string | null; vista_il?: string | null;
@@ -1189,6 +1191,11 @@ export async function fattPagamento(id: string, body: { modalita?: FattModalita;
   return fetchAPI(`/api/fatturazione/fatture/${id}/pagamento`, { method: 'POST', body: JSON.stringify(body) });
 }
 export async function fattLinkStripe(id: string, importo?: number) { return fetchAPI(`/api/fatturazione/fatture/${id}/link-stripe`, { method: 'POST', body: JSON.stringify(importo ? { importo } : {}) }); }
+export type NcRegolazione = 'rimborso_bonifico' | 'rimborso_contanti' | 'nessun_rimborso' | 'rifacimento';
+/** Nota di credito (15/10/2026): rimborso con bonifico (data vuota = da fare), in contanti, nessun rimborso o fattura da rifare */
+export async function fattRegolazione(id: string, body: { modo: NcRegolazione; data?: string; riferimento?: string; operatore: string }): Promise<{ ok: boolean; descrizione: string; avvisi: string[] }> {
+  return fetchAPI(`/api/fatturazione/fatture/${id}/regolazione`, { method: 'POST', body: JSON.stringify(body) });
+}
 export async function fattNotaCredito(id: string, operatore: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/nota-credito`, { method: 'POST', body: JSON.stringify({ operatore }) }); }
 export async function fattDuplica(id: string, operatore: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}/duplica`, { method: 'POST', body: JSON.stringify({ operatore }) }); }
 // dalla sessione si prepara SOLO la bozza (anche dal pro forma): pagamento ed emissione si fanno in Fatturazione

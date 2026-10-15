@@ -23,10 +23,11 @@ import { apriConfermaBonifico, useBonificoDelDocumento } from "@/components/Boni
 import { toastErrore } from "@/lib/errori";
 import {
   fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattInvia, fattLinkStripe, fattNotaCredito,
-  fattPagamento, fattUrlPdf, fattUrlStampa, fattUrlXml, pagAnnulla, pagIncassaFattura, pagRate, pagTerminiFattura,
+  fattPagamento, fattRegolazione, fattUrlPdf, fattUrlStampa, fattUrlXml, pagAnnulla, pagIncassaFattura, pagRate, pagTerminiFattura,
   type FattModalita, type Fattura, type ModalitaIncasso,
 } from "@/lib/api";
 import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
+import type { NcRegolazione } from "@/lib/api";
 
 const MODALITA_SCONTRINO: Record<string, string> = { contanti: "Contanti", pos_sumup: "POS SumUp", bonifico: "Bonifico", paypal: "PayPal", carta_stripe: "Carta (Stripe)" };
 
@@ -177,7 +178,8 @@ export function Dettaglio({
           {/* Azioni */}
           <div className="flex flex-wrap gap-2">
             {inviabile && !passaDalPagamento && (
-              <Button size="sm" disabled={!!busy || !!f.controlli?.length || !operatore}
+              <Button size="sm" disabled={!!busy || !!f.controlli?.length || !operatore || (f.tipo_documento === "TD04" && emessa && !f.nc_regolazione)}
+                title={f.tipo_documento === "TD04" && emessa && !f.nc_regolazione ? "Prima indica come si chiude la nota di credito (rimborso o no)" : undefined}
                 onClick={() => azione("emetti", () => fattEmetti(f.id, operatore), (r) => r.ok ? toast.success(`Fattura ${r.numero} inviata allo SdI`) : toast.error(`Invio non riuscito: ${r.errore}`))}>
                 {busy === "emetti" ? <Loader2 className="animate-spin" /> : <Send />} {f.stato === "bozza" ? "Invia allo SdI" : "Reinvia allo SdI"}
               </Button>
@@ -384,6 +386,10 @@ export function Dettaglio({
           {emessa && f.tipo_documento !== "TD04" && (
             <IncassoFattura f={f} operatore={operatore} busy={busy} onCambiato={() => { carica(); onChanged(); }}
               intento={intento} passaDalPagamento={passaDalPagamento} />
+          )}
+          {/* Nota di credito EMESSA (15/10/2026): come si chiude verso il cliente — rimborso (bonifico/contanti), nessuno, o fattura da rifare */}
+          {emessa && f.tipo_documento === "TD04" && (
+            <RegolazioneNC f={f} operatore={operatore} busy={busy} onCambiato={() => { carica(); onChanged(); }} />
           )}
           {/* Pagamento al FORNITORE (fatture ricevute): come prima */}
           {!emessa && f.tipo_documento !== "TD04" && (
@@ -678,6 +684,73 @@ function InvioSdi({ f, residuo, operatore, busy, intento, onCambiato }: {
       <Button className={`h-auto min-h-11 w-full text-base font-semibold ${!pagata && daPagare ? "bg-amber-600 text-white hover:bg-amber-700" : ""}`}
         disabled={!!busy || invio || !!motivo || !(pagata || (daPagare && !!scadenza))} onClick={() => invia(!pagata)}>
         {invio ? <Loader2 className="animate-spin" /> : <Send />} {pagata ? "Invia allo SdI" : "Invia allo SdI come DA PAGARE"}
+      </Button>
+    </div>
+  );
+}
+
+
+const REGOLAZIONI: [NcRegolazione, string, string][] = [
+  ["rimborso_bonifico", "Rimborso al cliente con bonifico", "La fattura era stata pagata e restituiamo i soldi con un bonifico. L'incasso resta sulla fattura stornata; qui si segna il bonifico di rimborso (lascia la data vuota se è ancora da fare)."],
+  ["rimborso_contanti", "Rimborso al cliente in contanti", "Restituiti i contanti al banco: se è oggi entra nella cassa del giorno come uscita (riga «reso»)."],
+  ["nessun_rimborso", "Nessun rimborso", "La fattura non era stata pagata: la nota di credito chiude solo il credito, non escono soldi."],
+  ["rifacimento", "Fattura da rifare", "La fattura era sbagliata e si rifà: l'incasso torna «da abbinare» e si collega alla fattura nuova."],
+];
+
+/** Nota di credito (15/10/2026): come si regola con il cliente. Obbligatoria prima di «Invia allo SdI». */
+function RegolazioneNC({ f, operatore, busy, onCambiato }: { f: Fattura; operatore: Operatore | ""; busy: string; onCambiato: () => void }) {
+  const [modo, setModo] = useState<NcRegolazione | "">(f.nc_regolazione || "");
+  const [data, setData] = useState<string>(f.nc_regolazione === "rimborso_bonifico" && f.pagamento_stato === "pagata" ? (f.pagato_il || "") : "");
+  const [rif, setRif] = useState("");
+  const [salva, setSalva] = useState(false);
+  useEffect(() => { setModo(f.nc_regolazione || ""); }, [f.id, f.nc_regolazione]);
+  const fatto = f.pagamento_stato === "pagata";
+  async function registra() {
+    if (!modo) { toast.error("Scegli come si chiude la nota di credito"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    setSalva(true);
+    try {
+      const r = await fattRegolazione(f.id, { modo, data: data || undefined, riferimento: rif || undefined, operatore });
+      toast.success(`Registrato: ${r.descrizione}`);
+      (r.avvisi || []).forEach((a) => toast.warning(a, { duration: 12000 }));
+      onCambiato();
+    } catch (e) { toastErrore(e); } finally { setSalva(false); }
+  }
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">Rimborso al cliente</span>
+        {f.nc_regolazione && (
+          <span className={`text-xs ${fatto ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-300"}`}>
+            {f.pagamento_rif || (fatto ? "Regolata" : "Da regolare")}
+          </span>
+        )}
+      </div>
+      {!f.nc_regolazione && f.stato === "bozza" && (
+        <div className="text-xs text-amber-700 dark:text-amber-300">Prima di inviarla allo SdI indica come si chiude: i soldi tornano al cliente oppure no?</div>
+      )}
+      <div className="grid gap-1.5">
+        {REGOLAZIONI.map(([k, l, d]) => (
+          <label key={k} className="flex cursor-pointer items-start gap-2 rounded-md p-1.5 text-sm hover:bg-muted/50">
+            <input type="radio" name={`reg-${f.id}`} className="mt-1" checked={modo === k} onChange={() => setModo(k)} />
+            <span><span className="font-medium">{l}</span><span className="block text-xs text-muted-foreground">{d}</span></span>
+          </label>
+        ))}
+      </div>
+      {(modo === "rimborso_bonifico" || modo === "rimborso_contanti") && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs">Data del rimborso{modo === "rimborso_bonifico" ? " (vuota = da fare)" : ""}
+            <input type="date" className="mt-0.5 block h-8 rounded-md border border-input bg-background px-2 text-sm" value={data} onChange={(e) => setData(e.target.value)} />
+          </label>
+          {modo === "rimborso_bonifico" && (
+            <label className="min-w-0 flex-1 text-xs">Riferimento del bonifico (CRO / TRN)
+              <input className="mt-0.5 block h-8 w-full rounded-md border border-input bg-background px-2 text-sm" value={rif} onChange={(e) => setRif(e.target.value)} placeholder="facoltativo" />
+            </label>
+          )}
+        </div>
+      )}
+      <Button size="sm" disabled={salva || !!busy || !modo || !operatore} onClick={registra}>
+        {salva ? <Loader2 className="animate-spin" /> : <Wallet />} Registra
       </Button>
     </div>
   );
