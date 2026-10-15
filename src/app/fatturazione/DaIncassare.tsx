@@ -74,7 +74,7 @@ export function DaIncassare({
 
   const carica = useCallback(async () => {
     setLoading(true);
-    try { setDati(await fattCrediti(societa || "genius", direzione, anno, per.dal, per.al)); }
+    try { setDati(await fattCrediti(societa, direzione, anno, per.dal, per.al)); }
     catch (e) { toast.error((e as Error).message); }
     finally { setLoading(false); }
   }, [societa, direzione, anno, per.dal, per.al]);
@@ -106,7 +106,7 @@ export function DaIncassare({
       `${allega ? ", con le copie PDF delle fatture" : ""}?`)) return;
     setBusy("mail");
     try {
-      const r = await fattEstrattoInvia({ societa: societa || "genius", chiave: c.chiave, email, ids, messaggio,
+      const r = await fattEstrattoInvia({ societa: societa, chiave: c.chiave, email, ids, messaggio,
         dal: per.dal, al: per.al, allega_fatture: allega });
       toast.success(`Richiesta di pagamento inviata a ${r.email} da ${r.mittente}: ${r.fatture} fatture, ${eur(r.totale)} (${r.allegati} PDF)`);
     } catch (e) { toast.error((e as Error).message); } finally { setBusy(""); }
@@ -129,7 +129,7 @@ export function DaIncassare({
 
   return (
     <div className="space-y-3">
-      {emessa && <ResocontiMensili societa={societa || "genius"} onInviato={carica} />}
+      {emessa && <ResocontiMensili societa={societa} onInviato={carica} />}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
@@ -209,7 +209,7 @@ export function DaIncassare({
                         allega anche la copia PDF di ogni fattura
                       </label>
                       <div className="flex flex-wrap gap-2">
-                        <a href={fattUrlEstrattoPdf(societa || "genius", c.chiave, scelte(c), messaggio, per.dal, per.al)} target="_blank" rel="noreferrer">
+                        <a href={fattUrlEstrattoPdf(societa, c.chiave, scelte(c), messaggio, per.dal, per.al)} target="_blank" rel="noreferrer">
                           <Button size="sm" variant="outline"><FileDown /> PDF estratto</Button>
                         </a>
                         <Button size="sm" disabled={!!busy || !email} onClick={() => richiedi(c)}>

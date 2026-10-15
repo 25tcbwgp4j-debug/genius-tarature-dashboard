@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CalendarClock, Loader2, Plus, Search, Trash2, Truck, Wallet, Wrench, X } from "lucide-react";
+import { Building2, CalendarClock, Loader2, Plus, Search, Trash2, Truck, Wallet, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { AggiornaPrezzoMagazzino, prezzoDiversoDaMagazzino } from "@/components/AggiornaPrezzoMagazzino";
@@ -37,7 +37,36 @@ import {
   type Fattura,
   type Scontrino,
 } from "@/lib/api";
-import { MODALITA_LABEL, NATURE_IVA, SOCIETA_LABEL, TIPI_LABEL, eur, ivaMargine, stimaTotali } from "./util";
+import { MODALITA_LABEL, MODALITA_SOCIETA, NATURE_IVA, SOCIETA_LABEL, TIPI_LABEL, eur, ivaMargine, stimaTotali } from "./util";
+
+// Modello «Canoni locazione Avantifiori → Gingy» (15/10/2026): stesso contenuto delle fatture 1/EL e 2/EL 2026
+// (SimplyFatt) — cliente GINGY, una riga per appartamento con quantità = mesi e canone mensile, IVA 10%, codice
+// articolo 0007/0008/0009, più la riga descrittiva del periodo a 0,00. Solo il modello: la fattura si controlla e si emette a mano.
+const GINGY_CLIENTE: FattControparte = {
+  denominazione: "GINGY s.r.l.s.", piva: "17817061009", cf: "17817061009", sdi: "WP7SE2Q", pec: "",
+  indirizzo: "Viale Libia, 167", cap: "00199", comune: "ROMA", provincia: "RM", paese: "IT", email: "",
+};
+const CANONI_AVANTIFIORI = [
+  { codice: "0007", app: "D1", canone: 1500, testo: (a: string) => `Contratto di locazione appartamento D1, Viale di Valle Aurelia 118, Roma - Annualità ${a}` },
+  { codice: "0008", app: "D2", canone: 1000, testo: (a: string) => `Contratto di locazione appartamento D2, Viale di Valle Aurelia 118, Roma Annualità ${a}` },
+  { codice: "0009", app: "D3", canone: 1350, testo: (a: string) => `Contratto di locazione appartamento D3, Viale di Valle Aurelia 118, Roma Annualità ${a}` },
+];
+const MESI = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE"];
+const TRIMESTRI = ["PRIMO", "SECONDO", "TERZO", "QUARTO"];
+/** Mesi fra «da» e «a» (YYYY-MM inclusi) ed etichetta del periodo come in 2/EL («PRIMO TRIMESTRE 2026»). */
+export function periodoCanoni(da: string, a: string): { mesi: number; etichetta: string; anni: string } {
+  const [y1, m1] = da.split("-").map(Number);
+  const [y2, m2] = a.split("-").map(Number);
+  const mesi = (y2 - y1) * 12 + (m2 - m1) + 1;
+  if (!y1 || !y2 || mesi < 1) return { mesi: 0, etichetta: "", anni: "" };
+  const anni = y1 === y2 ? String(y1) : `${y1}-${y2}`;
+  let etichetta: string;
+  if (y1 === y2 && mesi === 12 && m1 === 1) etichetta = `ANNUALITÀ ${y1}`;
+  else if (y1 === y2 && mesi === 3 && (m1 - 1) % 3 === 0) etichetta = `${TRIMESTRI[(m1 - 1) / 3]} TRIMESTRE ${y1}`;
+  else if (mesi === 1) etichetta = `${MESI[m1 - 1]} ${y1}`;
+  else etichetta = `DA ${MESI[m1 - 1]} ${y1} A ${MESI[m2 - 1]} ${y2}`;
+  return { mesi, etichetta, anni };
+}
 
 type TipoCliente = "azienda" | "privato" | "estero";
 interface ClienteAnagrafica { id: string; company_name?: string; vat_number?: string; tax_id?: string; sdi_code?: string;
@@ -57,12 +86,15 @@ export function Editor({
   iniziale,
   anagrafica,
   societaDefault,
+  societaDisponibili,
   onClose,
   onSaved,
 }: {
   iniziale?: Fattura | null;
   anagrafica?: FattAnagrafica;
   societaDefault: FattSocieta;
+  /** società che l'utente può usare (allo staff solo Genius) */
+  societaDisponibili?: string[];
   onClose: () => void;
   /** passo: dove aprire la bozza salvata («pagamento» o «da_pagare»); assente = solo salvata */
   onSaved: (id: string, passo?: "pagamento" | "da_pagare") => void;
@@ -239,6 +271,34 @@ export function Editor({
   const serveEstremi = righe.some((r) => Number(r.aliquota) === 0 && r.natura && r.natura !== "N5");
   const [estremi, setEstremi] = useState(iniziale?.estremi_esenzione || "");
 
+  // modello canoni Avantifiori → Gingy
+  const [canDa, setCanDa] = useState(() => `${oggiRoma().slice(0, 4)}-01`);
+  const [canA, setCanA] = useState(() => `${oggiRoma().slice(0, 4)}-03`);
+  const [canoni, setCanoni] = useState<Record<string, number | null>>(() => Object.fromEntries(CANONI_AVANTIFIORI.map((c) => [c.codice, c.canone])));
+  async function modelloCanoni() {
+    const p = periodoCanoni(canDa, canA);
+    if (!p.mesi) { toast.error("Periodo non valido: il mese «a» deve venire dopo «da»"); return; }
+    if (righe.some((r) => r.descrizione.trim()) && !confirm("Sostituire le righe e il cliente con il modello dei canoni?")) return;
+    setTipoCliente("azienda");
+    setCliente({ ...GINGY_CLIENTE });
+    setCustomerId(null);
+    try {   // cliente Gingy dell'anagrafica Avantifiori (importata da SimplyFatt), se c'è
+      const r = await fattAnagrafiche("avantifiori", "cliente", "17817061009", 1);
+      setAnagraficaId(r.anagrafiche?.[0]?.id || null);
+    } catch { setAnagraficaId(null); }
+    setPrezziIvati(false);
+    setRighe([
+      ...CANONI_AVANTIFIORI.filter((c) => Number(canoni[c.codice] || 0) > 0).map((c) => ({
+        descrizione: c.testo(p.anni), quantita: p.mesi, prezzo_unitario: Number(canoni[c.codice]), prezzo_ivato: null,
+        aliquota: 10, sconto: 0, codice_articolo: c.codice })),
+      { descrizione: p.etichetta, quantita: 1, prezzo_unitario: 0, prezzo_ivato: null, aliquota: 10, sconto: 0 },
+    ]);
+    setModalita("bonifico");
+    setCausale("");
+    setSporco(true);
+    toast.success(`Modello canoni: ${p.mesi} ${p.mesi === 1 ? "mese" : "mesi"} (${p.etichetta.toLowerCase()}). Controlla e salva la bozza.`);
+  }
+
   function corpo() {
     const cp: FattControparte = { ...cliente };
     if (tipoCliente === "azienda") { delete cp.nome; delete cp.cognome; cp.paese = "IT"; }
@@ -304,7 +364,8 @@ export function Editor({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <label className="space-y-1"><div className={lab}>Società</div>
               <select className={campo} value={societa} onChange={(e) => setSocieta(e.target.value as FattSocieta)}>
-                {Object.entries(SOCIETA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                {Object.entries(SOCIETA_LABEL).filter(([k]) => k === societa || !societaDisponibili?.length || societaDisponibili.includes(k))
+                  .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select></label>
             <label className="space-y-1"><div className={lab}>Documento</div>
               <select className={campo} value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)}>
@@ -338,6 +399,25 @@ export function Editor({
                 </div>
               )}
               {qSc.trim().length >= 2 && !scTrovati.length && <div className="text-xs text-muted-foreground">Nessuno scontrino emesso e senza fattura con questa ricerca.</div>}
+            </div>
+          )}
+
+          {societa === "avantifiori" && !iniziale?.numero && (
+            <div className="space-y-2 rounded-lg border border-dashed border-sky-400/60 bg-sky-50/40 p-3 dark:bg-sky-950/20">
+              <div className="flex items-center gap-2 text-sm font-medium"><Building2 className="size-4" /> Modello rapido: canoni locazione Avantifiori → Gingy</div>
+              <p className="text-xs text-muted-foreground">Come le fatture 1/EL e 2/EL: cliente GINGY, una riga per appartamento (mesi × canone mensile, IVA 10%) e la riga del periodo. Precompila soltanto: controlla, salva la bozza ed emetti quando vuoi.</p>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="space-y-1"><div className={lab}>Dal mese</div>
+                  <input type="month" className={`${campo} w-40`} value={canDa} onChange={(e) => setCanDa(e.target.value)} /></label>
+                <label className="space-y-1"><div className={lab}>Al mese</div>
+                  <input type="month" className={`${campo} w-40`} value={canA} onChange={(e) => setCanA(e.target.value)} /></label>
+                {CANONI_AVANTIFIORI.map((c) => (
+                  <label key={c.codice} className="space-y-1"><div className={lab}>Canone {c.app} / mese</div>
+                    <DecInput className={`${campo} w-28`} value={canoni[c.codice] ?? null} onValue={(v) => setCanoni((p) => ({ ...p, [c.codice]: v }))} /></label>
+                ))}
+                <Button size="sm" variant="outline" onClick={modelloCanoni}>Precompila</Button>
+                <span className="text-xs text-muted-foreground">{(() => { const p = periodoCanoni(canDa, canA); return p.mesi ? `${p.mesi} mesi · ${p.etichetta}` : "periodo non valido"; })()}</span>
+              </div>
             </div>
           )}
 
@@ -523,7 +603,8 @@ export function Editor({
           <div className="grid grid-cols-2 gap-3 rounded-lg border p-3 sm:grid-cols-4">
             <label className="space-y-1"><div className={lab}>Pagamento previsto</div>
               <select className={campo} value={modalita} onChange={(e) => setModalita(e.target.value as FattModalita)}>
-                {Object.entries(MODALITA_LABEL).filter(([k]) => k !== "non_pagato").map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                {Object.entries(MODALITA_LABEL).filter(([k]) => k !== "non_pagato" && (k === modalita || (MODALITA_SOCIETA[societa] || MODALITA_SOCIETA.genius).includes(k)))
+                  .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select></label>
             <div className="flex items-end pb-1.5 text-xs text-muted-foreground sm:col-span-1">Incasso vero e invio allo SdI: dopo il salvataggio, nella bozza.</div>
             <label className="space-y-1"><div className={lab}>Scadenza</div>

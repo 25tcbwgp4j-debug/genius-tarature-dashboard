@@ -1089,7 +1089,7 @@ export const spedStampaBanco = (id: string): Promise<{ id: string; copie: number
 
 // === FATTURAZIONE (Openapi SDI) — 30/09/2026 ===
 export type FattSocieta = 'genius' | 'gingy' | 'avantifiori';
-export type FattModalita = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'paypal' | 'bonifico' | 'assegno' | 'non_pagato';
+export type FattModalita = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'paypal' | 'bonifico' | 'assegno' | 'non_pagato' | 'booking' | 'airbnb';
 export interface FattRiga {
   descrizione: string;
   quantita: number;
@@ -1107,6 +1107,8 @@ export interface FattRiga {
   /** prezzo di acquisto per pezzo (regime del margine): non va nell'XML, serve per l'IVA sul margine */
   costo_acquisto?: number | null;
   prodotto_id?: string | null;
+  /** codice articolo nell'XML (CodiceArticolo COD), es. canoni Avantifiori 0007/0008/0009 */
+  codice_articolo?: string | null;
 }
 export interface FattControparte {
   denominazione?: string; nome?: string; cognome?: string;
@@ -1163,7 +1165,7 @@ export interface Fattura {
 }
 // ---------------------------------------------------------------------------------------------------------------
 // Registro pagamenti: misti, parziali, acconti e saldi (03/10/2026, migrazione 087)
-export type ModalitaIncasso = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'paypal' | 'bonifico' | 'assegno';
+export type ModalitaIncasso = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'paypal' | 'bonifico' | 'assegno' | 'booking' | 'airbnb';
 export interface RigaPagamento {
   id: string; data: string; importo: number; modalita: ModalitaIncasso | string; tipo: 'acconto' | 'saldo' | 'parziale' | 'intero' | 'rimborso' | 'recupero';
   stato: 'valido' | 'annullato'; fattura_id?: string | null; scontrino_id?: string | null; documento_id?: string | null; session_id?: string | null;
@@ -1221,7 +1223,7 @@ export async function cassaAnnullaEFatturaRiprovaFattura(annulloId: string): Pro
 export async function cassaScontriniDaFatturare(q: string, societa = 'genius'): Promise<{ scontrini: Scontrino[] }> {
   return fetchAPI(`/api/cassa/scontrini-da-fatturare?q=${encodeURIComponent(q)}&societa=${societa}`, { cache: 'no-store' });
 }
-export async function fattConfig() { return fetchAPI('/api/fatturazione/config'); }
+export async function fattConfig(): Promise<FattConfig> { return fetchAPI('/api/fatturazione/config'); }
 export async function fattElenco(params: Record<string, string>) {
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
   return fetchAPI(`/api/fatturazione/fatture?${q}`);
@@ -1229,7 +1231,28 @@ export async function fattElenco(params: Record<string, string>) {
 export async function fattRiepilogo(societa = '', anno = 0) {
   return fetchAPI(`/api/fatturazione/riepilogo?societa=${societa}&anno=${anno || 0}`);
 }
-export async function fattEsiti(limit = 100) { return fetchAPI(`/api/fatturazione/esiti?limit=${limit}`); }
+export async function fattEsiti(limit = 100, societa = '') { return fetchAPI(`/api/fatturazione/esiti?limit=${limit}&societa=${encodeURIComponent(societa)}`); }
+/** Configurazione per società (15/10/2026): fornitore SdI, modalità manuale, WhatsApp, verifica pagamenti automatica. */
+export interface FattSocietaCfg {
+  codice: FattSocieta; denominazione: string; piva: string; sede: string; iban: string; sezionale: string;
+  fornitore: string; ambiente: string; manuale: boolean; whatsapp: boolean; verifica_pagamenti: boolean;
+}
+export interface FattConfig { ambiente: string; configurato: boolean; fornitore: string; admin?: boolean; societa: FattSocietaCfg[] }
+/** Modalità manuale: XML caricato a mano su Fatture e Corrispettivi / SimplyFatt → identificativo SdI, poi l'esito. */
+export async function fattTrasmessaManuale(id: string, body: { identificativo_sdi: string; data?: string }) {
+  return fetchAPI(`/api/fatturazione/fatture/${id}/trasmessa-manuale`, { method: 'POST', body: JSON.stringify(body) });
+}
+export async function fattEsitoManuale(id: string, body: { esito: 'consegnata' | 'mc' | 'scartata'; data?: string; nota?: string }) {
+  return fetchAPI(`/api/fatturazione/fatture/${id}/esito-manuale`, { method: 'POST', body: JSON.stringify(body) });
+}
+export interface ScontrinoArchivio {
+  id: string; societa: string; sf_id: number; numero: string | null; data: string | null; anno: number | null; cliente: string | null;
+  righe: FattRiga[]; imponibile: number | null; iva: number | null; totale: number | null; pagamento_stato: string | null;
+  pagamenti: { amount: number; date: string; method: string }[]; stato_ade: string | null;
+}
+export async function fattScontriniArchivio(societa: string, anno = 0, q = ''): Promise<{ scontrini: ScontrinoArchivio[]; totale_righe: number; totale: number }> {
+  return fetchAPI(`/api/fatturazione/scontrini-archivio?societa=${societa}&anno=${anno || 0}&q=${encodeURIComponent(q)}&limit=500`);
+}
 export async function fattDettaglio(id: string): Promise<Fattura> { return fetchAPI(`/api/fatturazione/fatture/${id}`); }
 export async function fattCrea(body: Record<string, unknown>): Promise<Fattura> {
   return fetchAPI('/api/fatturazione/fatture', { method: 'POST', body: JSON.stringify(body) });

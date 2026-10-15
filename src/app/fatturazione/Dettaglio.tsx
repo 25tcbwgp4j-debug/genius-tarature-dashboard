@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   AlertTriangle, Banknote, Copy, CreditCard, FileCode2, FileDown, Link2, Loader2, Mail, MessageCircle, Pencil, Printer,
-  PackagePlus, Receipt, RotateCcw, Send, Smartphone, Trash2, Undo2, Wallet, X,
+  PackagePlus, Receipt, RotateCcw, Send, Smartphone, Trash2, Undo2, Upload, Wallet, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { docDaFattura } from "@/lib/api";
@@ -22,11 +22,12 @@ import { GiaPagato } from "@/components/GiaPagato";
 import { apriConfermaBonifico, useBonificoDelDocumento } from "@/components/BonificiAvviso";
 import { toastErrore } from "@/lib/errori";
 import {
-  fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattInvia, fattLinkStripe, fattNotaCredito,
+  fattConfig, fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattEsitoManuale, fattInvia, fattLinkStripe, fattNotaCredito, fattTrasmessaManuale,
   fattPagamento, fattRegolazione, fattUrlPdf, fattUrlStampa, fattUrlXml, pagAnnulla, pagIncassaFattura, pagRate, pagTerminiFattura,
   type FattModalita, type Fattura, type ModalitaIncasso,
 } from "@/lib/api";
-import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
+import { MODALITA_LABEL, MODALITA_SOCIETA, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
+import { oggiRoma } from "@/lib/date";
 import type { NcRegolazione } from "@/lib/api";
 
 const MODALITA_SCONTRINO: Record<string, string> = { contanti: "Contanti", pos_sumup: "POS SumUp", bonifico: "Bonifico", paypal: "PayPal", carta_stripe: "Carta (Stripe)" };
@@ -54,6 +55,9 @@ export function Dettaglio({
   const [errore, setErrore] = useState("");
   const [conv, setConv] = useState<{ numero: string; modalita: string } | null>(null);   // conversione in scontrino
   const [carico, setCarico] = useState(false);   // fattura ricevuta → «Carica in magazzino»
+  // società in modalità manuale (15/10/2026): Gingy / Avantifiori senza fornitore SdI automatico
+  const [manuali, setManuali] = useState<string[]>([]);
+  useEffect(() => { fattConfig().then((c) => setManuali(c.societa.filter((x) => x.manuale).map((x) => x.codice))).catch(() => undefined); }, []);
 
   const carica = useCallback(() => {
     fattDettaglio(id).then((r) => { setF(r); setErrore(""); })
@@ -109,6 +113,8 @@ export function Dettaglio({
   }
 
   const emessa = f.direzione === "emessa";
+  const genius = f.societa === "genius";
+  const manuale = manuali.includes(f.societa);
   const st = STATI[f.stato] || { label: f.stato, cls: "bg-muted" };
   const inviabile = emessa && ["bozza", "errore", "scartata"].includes(f.stato);
   // 05/10/2026 — PRIMA il pagamento, POI lo SdI: la bozza da incassare si invia dal pannello «Pagamento» (ultimo passo)
@@ -180,12 +186,12 @@ export function Dettaglio({
             {inviabile && !passaDalPagamento && (
               <Button size="sm" disabled={!!busy || !!f.controlli?.length || !operatore || (f.tipo_documento === "TD04" && emessa && !f.nc_regolazione)}
                 title={f.tipo_documento === "TD04" && emessa && !f.nc_regolazione ? "Prima indica come si chiude la nota di credito (rimborso o no)" : undefined}
-                onClick={() => azione("emetti", () => fattEmetti(f.id, operatore), (r) => r.ok ? toast.success(`Fattura ${r.numero} inviata allo SdI`) : toast.error(`Invio non riuscito: ${r.errore}`))}>
-                {busy === "emetti" ? <Loader2 className="animate-spin" /> : <Send />} {f.stato === "bozza" ? "Invia allo SdI" : "Reinvia allo SdI"}
+                onClick={() => azione("emetti", () => fattEmetti(f.id, operatore), (r) => r.ok ? toast.success(manuale ? `Fattura ${r.numero} pronta: scarica l'XML e trasmettila` : `Fattura ${r.numero} inviata allo SdI`) : toast.error(`Invio non riuscito: ${r.errore}`))}>
+                {busy === "emetti" ? <Loader2 className="animate-spin" /> : <Send />} {manuale ? (f.stato === "bozza" ? "Emetti (numero + XML)" : "Riemetti XML") : f.stato === "bozza" ? "Invia allo SdI" : "Reinvia allo SdI"}
               </Button>
             )}
             {inviabile && <Button size="sm" variant="outline" onClick={() => onEdit(f)}><Pencil /> Modifica</Button>}
-            {emessa && ["bozza", "errore", "scartata"].includes(f.stato) && (
+            {emessa && genius && ["bozza", "errore", "scartata"].includes(f.stato) && (
               <select className="h-8 rounded-md border border-input bg-background px-2 text-sm" value="" disabled={!!busy || !operatore}
                 onChange={(e) => {
                   const a = e.target.value as "ordine" | "preventivo" | "scontrino";
@@ -213,10 +219,13 @@ export function Dettaglio({
                   onClick={() => { setInvio(invio === "email" ? "" : "email"); setDest(f.recapiti?.email || ""); }}>
                   <Mail /> {!pagata ? "Richiedi pagamento per email" : "Invia per email"}
                 </Button>
-                <Button size="sm" variant={invio === "whatsapp" ? "default" : "outline"}
-                  onClick={() => { setInvio(invio === "whatsapp" ? "" : "whatsapp"); setDest(f.recapiti?.telefono || ""); }}>
-                  <MessageCircle /> {!pagata ? "Richiedi pagamento su WhatsApp" : "WhatsApp staff"}
-                </Button>
+                {/* WhatsApp: linee del negozio, solo Genius (Gingy e Avantifiori: solo email) */}
+                {genius && (
+                  <Button size="sm" variant={invio === "whatsapp" ? "default" : "outline"}
+                    onClick={() => { setInvio(invio === "whatsapp" ? "" : "whatsapp"); setDest(f.recapiti?.telefono || ""); }}>
+                    <MessageCircle /> {!pagata ? "Richiedi pagamento su WhatsApp" : "WhatsApp staff"}
+                  </Button>
+                )}
               </>
             )}
             {emessa && f.tipo_documento === "TD04" && f.stato !== "bozza" && (
@@ -254,6 +263,7 @@ export function Dettaglio({
           </div>
           {/* «Spedisci» dalla fattura (05/10/2026): spedizione libera già compilata col cliente e la divisione della fattura */}
           {emessa && f.societa === "genius" && <SpedisciDocumento link={{ fattura_id: f.id }} />}
+          {emessa && manuale && <TrasmissioneManuale f={f} busy={busy} onCambiato={() => { carica(); onChanged(); }} />}
 
           {conv && (
             <div className="space-y-2 rounded-lg border border-primary/40 p-3">
@@ -385,7 +395,7 @@ export function Dettaglio({
           {/* Incasso della fattura EMESSA (03/10/2026): registro pagamenti — più incassi, metodi diversi, acconti e saldo */}
           {emessa && f.tipo_documento !== "TD04" && (
             <IncassoFattura f={f} operatore={operatore} busy={busy} onCambiato={() => { carica(); onChanged(); }}
-              intento={intento} passaDalPagamento={passaDalPagamento} />
+              intento={intento} passaDalPagamento={passaDalPagamento} manuale={manuale} />
           )}
           {/* Nota di credito EMESSA (15/10/2026): come si chiude verso il cliente — rimborso (bonifico/contanti), nessuno, o fattura da rifare */}
           {emessa && f.tipo_documento === "TD04" && (
@@ -486,10 +496,13 @@ export function Dettaglio({
 
 /** Incasso di una fattura emessa (03/10/2026): righe del registro pagamenti (anche annullate), residuo, un pagamento alla
  *  volta con qualunque metodo (Incassa in modo «documento»), link Stripe per l'importo scelto, piano rate per l'XML. */
-function IncassoFattura({ f, operatore, busy, onCambiato, intento, passaDalPagamento }: {
+function IncassoFattura({ f, operatore, busy, onCambiato, intento, passaDalPagamento, manuale = false }: {
   f: Fattura; operatore: Operatore | ""; busy: string; onCambiato: () => void;
-  intento?: "pagamento" | "da_pagare" | null; passaDalPagamento: boolean;
+  intento?: "pagamento" | "da_pagare" | null; passaDalPagamento: boolean; manuale?: boolean;
 }) {
+  // Gingy / Avantifiori (15/10/2026): incasso registrato a mano (bonifico BPM, SumUp Gingy, Stripe, Booking, Airbnb…);
+  // la verifica automatica dei pagamenti (SumUp, PayPal, bonifici) è solo dei conti Genius
+  const genius = f.societa === "genius";
   const inc = f.incassi;
   const totale = Number(f.totale) || 0;
   const pagato = inc ? inc.pagato : Number(f.pagato || 0);
@@ -552,7 +565,7 @@ function IncassoFattura({ f, operatore, busy, onCambiato, intento, passaDalPagam
           ))}
         </div>
       )}
-      {residuo > 0.005 && bon && !bonCorreggi && (
+      {residuo > 0.005 && genius && bon && !bonCorreggi && (
         <div className="space-y-2 rounded-md border-2 border-emerald-500 bg-emerald-50 p-3 text-sm text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100">
           <div className="font-semibold">Bonifico già incassato: {eur(Number(bon.importo))} da {bon.ordinante || "—"}</div>
           <div className="text-xs">Metodo <b>bonifico</b> · accredito {(bon.data_valuta || bon.data).slice(0, 10).split("-").reverse().join("/")} · rif. SumUp {bon.codice.split(":").pop()}
@@ -560,7 +573,10 @@ function IncassoFattura({ f, operatore, busy, onCambiato, intento, passaDalPagam
           <Button className="h-11 w-full bg-emerald-600 text-base font-semibold text-white hover:bg-emerald-700" onClick={apriConfermaBonifico}>Conferma incasso del bonifico</Button>
         </div>
       )}
-      {residuo > 0.005 && !(bon && !bonCorreggi) && (
+      {residuo > 0.005 && !genius && (
+        <IncassoManuale f={f} residuo={residuo} operatore={operatore} busy={busy} onCambiato={onCambiato} />
+      )}
+      {residuo > 0.005 && genius && !(bon && !bonCorreggi) && (
         <>
           <Incassa key={`${f.id}-${pagato}`} modo="documento" totale={totale} giaPagato={pagato} documentoTipo="fattura" descrizione={desc}
             testoCliente={f.controparte_nome || ""} disabled={!!busy || !operatore} motivo={!operatore ? "scegli l'operatore" : ""}
@@ -607,7 +623,7 @@ function IncassoFattura({ f, operatore, busy, onCambiato, intento, passaDalPagam
           ))}
         </>
       )}
-      {passaDalPagamento && <InvioSdi f={f} residuo={residuo} operatore={operatore} busy={busy} intento={intento} onCambiato={onCambiato} />}
+      {passaDalPagamento && <InvioSdi f={f} residuo={residuo} operatore={operatore} busy={busy} intento={intento} onCambiato={onCambiato} manuale={manuale} />}
     </div>
   );
 }
@@ -616,8 +632,9 @@ function IncassoFattura({ f, operatore, busy, onCambiato, intento, passaDalPagam
 /** ULTIMO PASSO (05/10/2026): «Invia allo SdI» solo col pagamento registrato per intero, oppure con la scelta
  *  ESPLICITA «Da pagare» (scadenza + metodo atteso dai termini del cliente) e conferma. I DatiPagamento dell'XML
  *  escono dal registro pagamenti (incassi con la loro data) + il residuo con la scadenza scelta qui. */
-function InvioSdi({ f, residuo, operatore, busy, intento, onCambiato }: {
+function InvioSdi({ f, residuo, operatore, busy, intento, onCambiato, manuale = false }: {
   f: Fattura; residuo: number; operatore: Operatore | ""; busy: string; intento?: "pagamento" | "da_pagare" | null; onCambiato: () => void;
+  manuale?: boolean;
 }) {
   const pagata = residuo <= 0.005;
   const [daPagare, setDaPagare] = useState(intento === "da_pagare");
@@ -651,14 +668,14 @@ function InvioSdi({ f, residuo, operatore, busy, intento, onCambiato }: {
     setInvio(true);
     try {
       const r = await fattEmetti(f.id, operatore as string, comeDaPagare ? { scadenza, modalita } : undefined);
-      if (r.ok) toast.success(`Fattura ${r.numero} inviata allo SdI`); else toast.error(`Invio non riuscito: ${r.errore}`);
+      if (r.ok) toast.success(manuale ? `Fattura ${r.numero} pronta: scarica l'XML e trasmettila allo SdI` : `Fattura ${r.numero} inviata allo SdI`); else toast.error(`Invio non riuscito: ${r.errore}`);
       onCambiato();
     } catch (e) { toastErrore(e); } finally { setInvio(false); }
   }
 
   return (
     <div ref={box} className="mt-3 space-y-2 border-t pt-3">
-      <div className="text-sm font-medium">2 · Invia allo SdI</div>
+      <div className="text-sm font-medium">{manuale ? "2 · Emetti (numero definitivo + XML da trasmettere a mano)" : "2 · Invia allo SdI"}</div>
       {pagata ? (
         <div className="rounded-md bg-emerald-500/15 px-2 py-1.5 text-sm text-emerald-800 dark:text-emerald-300">Pagamento registrato per intero: la fattura può partire.</div>
       ) : (
@@ -673,7 +690,7 @@ function InvioSdi({ f, residuo, operatore, busy, intento, onCambiato }: {
                 <input type="date" className="mt-0.5 h-11 w-full rounded-md border border-input bg-background px-2 text-sm" value={scadenza} onChange={(e) => setScadenza(e.target.value)} /></label>
               <label className="text-xs text-muted-foreground">Come pagherà
                 <select className="mt-0.5 h-11 w-full rounded-md border border-input bg-background px-2 text-sm" value={modalita} onChange={(e) => setModalita(e.target.value)}>
-                  {["bonifico", "paypal", "carta_stripe", "pos_sumup", "contanti", "assegno"].map((k) => <option key={k} value={k}>{NOMI_MODALITA[k] || k}</option>)}
+                  {(MODALITA_SOCIETA[f.societa] || ["bonifico", "paypal", "carta_stripe", "pos_sumup", "contanti", "assegno"]).map((k) => <option key={k} value={k}>{NOMI_MODALITA[k] || MODALITA_LABEL[k] || k}</option>)}
                 </select></label>
             </div>
           )}
@@ -683,7 +700,7 @@ function InvioSdi({ f, residuo, operatore, busy, intento, onCambiato }: {
       {motivo && <div className="text-xs text-amber-700 dark:text-amber-300">Prima {motivo}.</div>}
       <Button className={`h-auto min-h-11 w-full text-base font-semibold ${!pagata && daPagare ? "bg-amber-600 text-white hover:bg-amber-700" : ""}`}
         disabled={!!busy || invio || !!motivo || !(pagata || (daPagare && !!scadenza))} onClick={() => invia(!pagata)}>
-        {invio ? <Loader2 className="animate-spin" /> : <Send />} {pagata ? "Invia allo SdI" : "Invia allo SdI come DA PAGARE"}
+        {invio ? <Loader2 className="animate-spin" /> : <Send />} {manuale ? (pagata ? "Emetti fattura" : "Emetti come DA PAGARE") : pagata ? "Invia allo SdI" : "Invia allo SdI come DA PAGARE"}
       </Button>
     </div>
   );
@@ -754,4 +771,108 @@ function RegolazioneNC({ f, operatore, busy, onCambiato }: { f: Fattura; operato
       </Button>
     </div>
   );
+}
+
+
+/** Incasso registrato a mano (Gingy / Avantifiori, 15/10/2026): importo, data, metodo e riferimento.
+ *  POS SumUp e PayPal vogliono il codice della transazione nel riferimento (controllo del backend). */
+function IncassoManuale({ f, residuo, operatore, busy, onCambiato }: {
+  f: Fattura; residuo: number; operatore: Operatore | ""; busy: string; onCambiato: () => void;
+}) {
+  const modalita = MODALITA_SOCIETA[f.societa] || ["bonifico"];
+  const [mod, setMod] = useState<string>(f.pagamento_modalita && modalita.includes(f.pagamento_modalita) ? f.pagamento_modalita : modalita[0]);
+  const [importo, setImporto] = useState(residuo.toFixed(2).replace(".", ","));
+  const [data, setData] = useState(oggiRoma());
+  const [rif, setRif] = useState("");
+  const [salva, setSalva] = useState(false);
+  async function registra() {
+    const imp = Number(importo.replace(/\./g, "").replace(",", "."));
+    if (!(imp > 0)) { toast.error("Importo non valido"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore"); return; }
+    setSalva(true);
+    try {
+      await pagIncassaFattura(f.id, { importo: imp, modalita: mod as ModalitaIncasso, data, riferimento: rif.trim(), operatore });
+      toast.success(`Incasso registrato: ${MODALITA_LABEL[mod] || mod} ${eur(imp)}`);
+      onCambiato();
+    } catch (e) { toastErrore(e); } finally { setSalva(false); }
+  }
+  const lab = "text-xs text-muted-foreground";
+  const campo = "mt-0.5 h-9 w-full rounded-md border border-input bg-background px-2 text-sm";
+  return (
+    <div className="space-y-2 rounded-md border p-2">
+      <div className="text-xs text-muted-foreground">Registra l&apos;incasso ({f.societa === "gingy" ? "conto Banco BPM Gingy, SumUp Gingy, Stripe, Booking, Airbnb…" : "bonifico sul conto Banco BPM"})</div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <label className={lab}>Importo<input className={`${campo} text-right`} inputMode="decimal" value={importo} onChange={(e) => setImporto(e.target.value)} /></label>
+        <label className={lab}>Data<input type="date" className={campo} value={data} onChange={(e) => setData(e.target.value)} /></label>
+        <label className={lab}>Metodo<select className={campo} value={mod} onChange={(e) => setMod(e.target.value)}>
+          {modalita.map((k) => <option key={k} value={k}>{MODALITA_LABEL[k] || k}</option>)}</select></label>
+        <label className={lab}>Riferimento{["pos_sumup", "paypal"].includes(mod) ? " (codice transazione)" : ""}
+          <input className={campo} value={rif} onChange={(e) => setRif(e.target.value)} placeholder="CRO, n. prenotazione, codice…" /></label>
+      </div>
+      <Button size="sm" disabled={!!busy || salva || !operatore} onClick={registra}>
+        {salva ? <Loader2 className="animate-spin" /> : <Wallet />} Registra incasso
+      </Button>
+    </div>
+  );
+}
+
+
+/** Modalità manuale (15/10/2026): la fattura ha numero e XML ma nessuno l'ha trasmessa allo SdI. Si scarica l'XML,
+ *  lo si carica su «Fatture e Corrispettivi» (o SimplyFatt), poi si segna trasmessa con l'identificativo SdI e,
+ *  quando arriva la ricevuta, si registra l'esito (consegnata, mancata consegna = nel cassetto fiscale, scartata). */
+function TrasmissioneManuale({ f, busy, onCambiato }: { f: Fattura; busy: string; onCambiato: () => void }) {
+  const [ident, setIdent] = useState("");
+  const [data, setData] = useState(oggiRoma());
+  const [esito, setEsito] = useState<"consegnata" | "mc" | "scartata">("consegnata");
+  const [nota, setNota] = useState("");
+  const [lavoro, setLavoro] = useState(false);
+  const trasmessaAMano = (f.sdi_uuid || "").startsWith("man:");
+  async function esegui(fn: () => Promise<unknown>, ok: string) {
+    setLavoro(true);
+    try { await fn(); toast.success(ok); onCambiato(); } catch (e) { toastErrore(e); } finally { setLavoro(false); }
+  }
+  const campo = "h-9 rounded-md border border-input bg-background px-2 text-sm";
+  if (f.stato === "da_trasmettere") {
+    return (
+      <div className="space-y-2 rounded-lg border-2 border-orange-400 bg-orange-50 p-3 text-sm dark:bg-orange-950/30">
+        <div className="font-semibold">Da trasmettere allo SdI (a mano)</div>
+        <ol className="ml-5 list-decimal text-xs">
+          <li>Scarica l&apos;XML <b>{f.sdi_file_name}</b>.</li>
+          <li>Caricalo su Fatture e Corrispettivi (Agenzia delle Entrate → Fatture elettroniche → Trasmissione) oppure in SimplyFatt.</li>
+          <li>Scrivi qui l&apos;identificativo SdI che ti restituisce e la data di invio.</li>
+        </ol>
+        <div className="flex flex-wrap items-center gap-2">
+          <a href={fattUrlXml(f.id)}><Button size="sm"><FileCode2 /> Scarica XML</Button></a>
+          <input className={`${campo} w-48`} placeholder="Identificativo SdI" value={ident} onChange={(e) => setIdent(e.target.value)} />
+          <input type="date" className={campo} value={data} onChange={(e) => setData(e.target.value)} />
+          <Button size="sm" variant="outline" disabled={!!busy || lavoro || ident.trim().length < 4}
+            onClick={() => esegui(() => fattTrasmessaManuale(f.id, { identificativo_sdi: ident.trim(), data }), "Segnata trasmessa allo SdI")}>
+            {lavoro ? <Loader2 className="animate-spin" /> : <Upload />} Segna trasmessa
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  if (trasmessaAMano && ["inviata", "non_consegnata"].includes(f.stato)) {
+    return (
+      <div className="space-y-2 rounded-lg border p-3 text-sm">
+        <div className="font-medium">Esito SdI (trasmessa a mano · {f.sdi_uuid?.split(":").pop()})</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select className={campo} value={esito} onChange={(e) => setEsito(e.target.value as typeof esito)}>
+            <option value="consegnata">Consegnata (RC)</option>
+            <option value="mc">Mancata consegna: nel cassetto fiscale (MC)</option>
+            <option value="scartata">Scartata (NS)</option>
+          </select>
+          <input type="date" className={campo} value={data} onChange={(e) => setData(e.target.value)} />
+          {esito === "scartata" && <input className={`${campo} w-64`} placeholder="Motivo dello scarto (codice errore)" value={nota} onChange={(e) => setNota(e.target.value)} />}
+          <Button size="sm" variant="outline" disabled={!!busy || lavoro}
+            onClick={() => esegui(() => fattEsitoManuale(f.id, { esito, data, nota: nota.trim() }), "Esito registrato")}>
+            {lavoro ? <Loader2 className="animate-spin" /> : <Send />} Registra esito
+          </Button>
+        </div>
+        <a className="text-xs underline" href={fattUrlXml(f.id)}>Scarica di nuovo l&apos;XML</a>
+      </div>
+    );
+  }
+  return null;
 }

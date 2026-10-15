@@ -7,9 +7,18 @@ export const SOCIETA_LABEL: Record<string, string> = {
   avantifiori: "Avantifiori Imm.",
 };
 
+/** Modalità di incasso proposte per società (15/10/2026): Gingy incassa anche da Booking/Airbnb, Avantifiori col bonifico BPM. */
+export const MODALITA_SOCIETA: Record<string, string[]> = {
+  genius: ["bonifico", "pos_sumup", "paypal", "contanti", "carta_stripe", "assegno"],
+  gingy: ["bonifico", "pos_sumup", "carta_stripe", "booking", "airbnb", "contanti", "paypal"],
+  avantifiori: ["bonifico", "contanti", "assegno"],
+};
+
 export const STATI: Record<string, { label: string; cls: string }> = {
   bozza: { label: "Bozza", cls: "bg-muted text-muted-foreground" },
   in_invio: { label: "In invio allo SdI…", cls: "bg-sky-100 text-sky-800" },
+  // modalità manuale (Gingy / Avantifiori senza fornitore SdI automatico): XML pronto da caricare a mano
+  da_trasmettere: { label: "Da trasmettere (XML)", cls: "bg-orange-500/15 text-orange-800 dark:text-orange-300" },
   inviata: { label: "Inviata allo SdI", cls: "bg-blue-500/15 text-blue-700 dark:text-blue-300" },
   consegnata: { label: "Consegnata", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" },
   non_consegnata: { label: "Nel cassetto fiscale", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-300" },
@@ -26,6 +35,8 @@ export const MODALITA_LABEL: Record<string, string> = {
   bonifico: "Bonifico",
   assegno: "Assegno",
   non_pagato: "Da pagare",
+  booking: "Booking.com",
+  airbnb: "Airbnb",
 };
 
 export const TIPI_LABEL: Record<string, string> = {

@@ -26,7 +26,7 @@ export function Chiusure({ societa }: { societa: string }) {
   const [d, setD] = useState<(Dati & { _k: string }) | null>(null);
   const [err, setErr] = useState<{ k: string; m: string } | null>(null);
   const [tentativo, setTentativo] = useState(0);
-  const soc = societa || "genius";
+  const soc = societa;
   const chiave = `${soc}|${periodo}|${giorno}`;
   const errore = err?.k === chiave ? err.m : "";
   const loading = d?._k !== chiave && !errore;

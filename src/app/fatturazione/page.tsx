@@ -9,10 +9,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Banknote, Download, FileText, ListFilter, Loader2, Plus, RefreshCw, RotateCcw, Search, Send, Truck, Wallet, X } from "lucide-react";
+import { Banknote, Building2, Download, FileText, ListFilter, Loader2, Plus, RefreshCw, RotateCcw, Search, Send, Truck, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import {
-  fattConfig, fattElenco, fattPagamentoMultiplo, fattUrlExport, type FattModalita, fattEsiti, fattRiepilogo, fattSincronizza, fattRicevuteStato, fattRicevuteViste, type FattRicevuteStato,
+  fattElenco, fattEmetti, fattPagamentoMultiplo, fattUrlExport, fattUrlPacchetto, fattUrlChiusura, type FattModalita, fattEsiti, fattRiepilogo, fattSincronizza, fattRicevuteStato, fattRicevuteViste, type FattRicevuteStato,
   incElenco, type DaSpedire, type FattSocieta, type Fattura,
 } from "@/lib/api";
 import Link from "next/link";
@@ -23,17 +23,20 @@ import { DaIncassare, calcolaPeriodo } from "./DaIncassare";
 import { Chiusure } from "./Chiusure";
 import { Commercialista } from "./Commercialista";
 import { Coerenza } from "./Coerenza";
+import { ScontriniArchivio } from "./ScontriniArchivio";
+import { useSocietaFatturazione } from "./societa";
+import { useOperatore } from "@/components/Operatore";
 import { usePermessi } from "@/components/permessi";
 import { BadgeAttivita, FiltroAttivita } from "@/components/attivita";
 import type { FattAnagrafica } from "@/lib/api";
 import { Dettaglio } from "./Dettaglio";
 import { RigheTrovate, StoricoPrezzi, paroleRicerca } from "./RicercaRighe";
 import type { FattStoricoPrezzo } from "@/lib/api";
-import { MODALITA_LABEL, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
+import { MODALITA_LABEL, MODALITA_SOCIETA, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
 import { annoRoma, oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 
-type Tab = "emessa" | "ricevuta" | "incassare" | "pagare" | "clienti" | "fornitori" | "chiusure" | "esiti" | "commercialista" | "sessioni";
+type Tab = "emessa" | "ricevuta" | "incassare" | "pagare" | "clienti" | "fornitori" | "chiusure" | "esiti" | "commercialista" | "sessioni" | "scontrini";
 interface Esito { id: string; tipo: string; descrizione: string; data: string;
   fatture?: { id: string; numero: string | null; societa: string; controparte_nome: string | null } | null }
 // per l'operatore (livelli di accesso 01/10/2026) i totali riservati arrivano null e riservato=true
@@ -42,14 +45,18 @@ interface Riepilogo { emesse: number; ricevute: number; fatturato: number | null
   mesi?: { mese: number; fatturato: number; acquisti: number }[]; riservato?: boolean }
 /** Importo o «riservato» quando il backend non lo manda all'operatore. */
 const eurR = (v: number | null | undefined) => (v === null || v === undefined ? "riservato" : eur(v));
-interface Config { ambiente: string; configurato: boolean }
 
 function Pagina() {
   const router = useRouter();
   const sp = useSearchParams();
   const [tab, setTab] = useState<Tab>("emessa");
   const { admin } = usePermessi();
-  const [societa, setSocieta] = useState<string>("");
+  // società selezionata (15/10/2026): pilota tutte le schede, default Genius, ricordata nel browser
+  const { societa, setSocieta, cfg, info, permesse } = useSocietaFatturazione();
+  const genius = societa === "genius";
+  const [operatore] = useOperatore();
+  const [daVatican, setDaVatican] = useState(false);   // Gingy: bozze arrivate da Vatican Suite
+  const [emettendo, setEmettendo] = useState(false);
   const [attivitaF, setAttivitaF] = useState("");
   const [stato, setStato] = useState("");
   const [pagamento, setPagamento] = useState("");
@@ -61,7 +68,6 @@ function Pagina() {
   const [righe, setRighe] = useState<Fattura[]>([]);
   const [esiti, setEsiti] = useState<Esito[]>([]);
   const [rie, setRie] = useState<Riepilogo | null>(null);
-  const [cfg, setCfg] = useState<Config | null>(null);
   const [loading, setLoading] = useState(false);
   const [aperta, setAperta] = useState<string | null>(null);
   // dall'editor (05/10/2026): «Salva e registra pagamento» / «Salva come da pagare» → la bozza si apre sul passo giusto
@@ -90,8 +96,7 @@ function Pagina() {
   }, []);
   useEffect(() => { caricaIncassi(); }, [caricaIncassi]);
 
-  useEffect(() => { fattConfig().then(setCfg).catch(() => undefined); }, []);
-  const caricaRicStato = useCallback(() => { fattRicevuteStato().then(setRicStato).catch(() => undefined); }, []);
+  const caricaRicStato = useCallback(() => { fattRicevuteStato(societa).then(setRicStato).catch(() => undefined); }, [societa]);
   useEffect(() => { caricaRicStato(); }, [caricaRicStato]);
   useEffect(() => {
     const id = sp.get("id");
@@ -107,12 +112,13 @@ function Pagina() {
     setLoading(true);
     try {
       if (tab === "esiti") {
-        const r = await fattEsiti(150);
+        const r = await fattEsiti(150, societa);
         setEsiti(r.esiti || []);
       } else if (tab === "emessa" || tab === "ricevuta") {
         const ultimo = mese ? new Date(anno || annoRoma(), mese, 0).getDate() : 0;
         const conPeriodo = periodo !== "tutto";
-        const r = await fattElenco({ direzione: tab, societa, stato, pagamento, q, q_righe: qRighe.trim(), attivita: attivitaF, anno: anno && !conPeriodo ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
+        const vat = daVatican && tab === "emessa" && societa === "gingy";
+        const r = await fattElenco({ direzione: tab, societa, stato: vat ? "bozza" : stato, origine: vat ? "vatican" : "", pagamento, q, q_righe: qRighe.trim(), attivita: genius ? attivitaF : "", anno: anno && !conPeriodo ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
           da: conPeriodo ? per.dal : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-01` : "",
           a: conPeriodo ? per.al : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimo}` : "" });
         const oggiIso = oggiRoma();
@@ -122,7 +128,7 @@ function Pagina() {
         setSel({});
         // aperta la scheda Ricevute: le nuove restano evidenziate in questa vista, il badge si azzera
         if (tab === "ricevuta" && (r.fatture || []).some((f: Fattura) => !f.vista_il)) {
-          fattRicevuteViste().then(caricaRicStato).catch(() => undefined);
+          fattRicevuteViste(societa).then(caricaRicStato).catch(() => undefined);
         }
       }
       // il riepilogo non deve bloccare l'elenco (es. operatore: totali riservati)
@@ -132,7 +138,7 @@ function Pagina() {
     } finally {
       setLoading(false);
     }
-  }, [tab, societa, stato, pagamento, q, qRighe, attivitaF, anno, prove, mese, periodo, per.dal, per.al, soloScadute, caricaRicStato]);
+  }, [tab, societa, genius, daVatican, stato, pagamento, q, qRighe, attivitaF, anno, prove, mese, periodo, per.dal, per.al, soloScadute, caricaRicStato]);
 
   useEffect(() => {
     const t = setTimeout(carica, q || qRighe ? 300 : 0);
@@ -161,10 +167,10 @@ function Pagina() {
   function azzera() {
     setTab("emessa"); setStato(""); setPagamento(""); setQ(""); setQRighe(""); setMese(0); setProve(false); setSel({});
     setPeriodo("tutto"); setPGiorno(""); setPDal(""); setPAl(""); setSoloScadute(false); setCercaCrediti("");
-    setAnno(annoRoma()); setSocieta(""); setAttivitaF("");
+    setAnno(annoRoma()); setAttivitaF(""); setDaVatican(false);   // la società scelta resta
     if (sp.toString()) router.replace("/fatturazione");
   }
-  const filtriAttivi = !!(stato || pagamento || q || qRighe || mese || prove || periodo !== "tutto" || soloScadute || societa || attivitaF || anno !== annoRoma() || tab !== "emessa");
+  const filtriAttivi = !!(stato || pagamento || q || qRighe || mese || prove || periodo !== "tutto" || soloScadute || daVatican || attivitaF || anno !== annoRoma() || tab !== "emessa");
 
   function chiudiDettaglio() {
     setAperta(null);
@@ -191,9 +197,33 @@ function Pagina() {
     try { await fattPagamentoMultiplo({ ids: selIds, modalita: modMulti }); toast.success(`${selIds.length} fatture aggiornate`); carica(); }
     catch (e) { toastErrore(e); }
   }
+  /** Gingy (15/10/2026): bozze arrivate da Vatican Suite → «Emetti selezionate» (una alla volta, si ferma sugli errori). */
+  async function emettiSelezionate() {
+    const bozze = righe.filter((f) => sel[f.id] && f.stato === "bozza");
+    if (!bozze.length) { toast.error("Seleziona almeno una bozza"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (in alto nella fattura o nell'editor) prima di emettere"); return; }
+    const manuale = !!info?.manuale;
+    if (!confirm(`Emettere ${bozze.length} ${bozze.length === 1 ? "fattura" : "fatture"} ${SOCIETA_LABEL[societa]}?\n\n`
+      + (manuale ? "Modalità manuale: ricevono il numero definitivo e l'XML da caricare a mano su Fatture e Corrispettivi."
+        : "Vengono numerate e trasmesse allo SdI."))) return;
+    setEmettendo(true);
+    let ok = 0;
+    const errori: string[] = [];
+    for (const f of bozze) {
+      try {
+        const r = await fattEmetti(f.id, operatore);
+        if (r.ok) ok += 1; else errori.push(`${f.controparte_nome}: ${r.errore}`);
+      } catch (e) { errori.push(`${f.controparte_nome}: ${(e as Error).message}`); }
+    }
+    setEmettendo(false);
+    if (ok) toast.success(`${ok} ${ok === 1 ? "fattura emessa" : "fatture emesse"}${manuale ? ": scarica gli XML da trasmettere" : ""}`);
+    if (errori.length) toast.error(`${errori.length} non emesse`, { description: errori.slice(0, 5).join(" · "), duration: 15000 });
+    carica();
+  }
   const conPeriodoExp = periodo !== "tutto";
   const ultimoExp = mese ? new Date(anno || annoRoma(), mese, 0).getDate() : 0;
   const exportUrl = fattUrlExport({ direzione: tab === "ricevuta" ? "ricevuta" : "emessa", societa, anno: anno && !conPeriodoExp ? String(anno) : "", stato, pagamento, q,
+    origine: daVatican && societa === "gingy" && tab === "emessa" ? "vatican" : "",
     prove: prove ? "true" : "",
     da: conPeriodoExp ? per.dal : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-01` : "",
     a: conPeriodoExp ? per.al : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimoExp}` : "" });
@@ -203,7 +233,7 @@ function Pagina() {
       <div className="flex flex-wrap items-center gap-3">
         <FileText className="size-6" />
         <h1 className="text-2xl font-semibold">Fatturazione</h1>
-        {cfg?.ambiente === "sandbox" && (
+        {info?.ambiente === "sandbox" && (
           <span className="rounded bg-orange-500/15 px-2 py-0.5 text-xs font-medium text-orange-700 dark:text-orange-300"
             title="Le fatture vanno all'ambiente di prova Openapi: nulla arriva davvero all'Agenzia delle Entrate">
             AMBIENTE DI PROVA
@@ -214,24 +244,50 @@ function Pagina() {
             {Array.from({ length: Math.max(4, annoRoma() - 2022) }, (_, i) => annoRoma() - i).map((a) => <option key={a} value={a}>{a}</option>)}
             <option value={0}>Tutti gli anni</option>
           </select>
-          <select className={sel_cls} value={societa} onChange={(e) => setSocieta(e.target.value)}>
-            <option value="">Tutte le società</option>
-            {Object.entries(SOCIETA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-          <FiltroAttivita value={attivitaF} onChange={setAttivitaF} />
+          {genius && <FiltroAttivita value={attivitaF} onChange={setAttivitaF} />}
           {filtriAttivi && <Button variant="ghost" onClick={azzera} title="Torna alla pagina base della fatturazione"><RotateCcw /> Azzera</Button>}
-          <Button variant="outline" onClick={() => setIncassiAperti(true)} title="Bonifici, POS, PayPal, Stripe arrivati">
-            <Banknote /> Verifica pagamenti
-            {nIncassi > 0 && <span className="rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white">{nIncassi}</span>}
-          </Button>
-          <Button variant="outline" onClick={sincronizza} disabled={sync}>
-            {sync ? <Loader2 className="animate-spin" /> : <RefreshCw />} Aggiorna da SdI
-          </Button>
+          {/* verifica automatica dei pagamenti: conti Genius (SumUp, PayPal, Stripe) — solo Genius */}
+          {genius && (
+            <Button variant="outline" onClick={() => setIncassiAperti(true)} title="Bonifici, POS, PayPal, Stripe arrivati">
+              <Banknote /> Verifica pagamenti
+              {nIncassi > 0 && <span className="rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white">{nIncassi}</span>}
+            </Button>
+          )}
+          {!info?.manuale && (
+            <Button variant="outline" onClick={sincronizza} disabled={sync}>
+              {sync ? <Loader2 className="animate-spin" /> : <RefreshCw />} Aggiorna da SdI
+            </Button>
+          )}
           <Button onClick={() => setEditor({ f: null })}><Plus /> Nuova fattura</Button>
         </div>
       </div>
 
-      {daSpedire.length > 0 && (
+      {/* Selettore della società (15/10/2026): pilota elenco, editor, incassi, chiusure, anagrafiche… */}
+      {permesse.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
+          <Building2 className="size-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Società</span>
+          <div className="flex flex-wrap gap-1" role="tablist" aria-label="Società">
+            {(cfg?.societa || []).map((s) => (
+              <button key={s.codice} role="tab" aria-selected={societa === s.codice}
+                onClick={() => { setSocieta(s.codice); setSel({}); setDaVatican(false); if ((tab === "sessioni" && s.codice !== "genius") || (tab === "scontrini" && s.codice !== "gingy")) setTab("emessa"); }}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${societa === s.codice ? "bg-primary text-primary-foreground shadow" : "bg-background hover:bg-muted"}`}>
+                {s.codice === "avantifiori" ? "Avantifiori Immobiliare" : SOCIETA_LABEL[s.codice]}
+              </button>
+            ))}
+          </div>
+          {info && (
+            <span className="text-xs text-muted-foreground">
+              {info.denominazione} · P.IVA {info.piva}{info.sezionale ? ` · sezionale ${info.sezionale}` : ""} ·{" "}
+              {info.manuale
+                ? <span className="font-medium text-orange-700 dark:text-orange-300" title="Nessun fornitore SdI automatico per questa società: l'emissione assegna il numero e prepara l'XML da caricare a mano su Fatture e Corrispettivi (o SimplyFatt)">invio SdI manuale (XML)</span>
+                : `SdI: ${info.fornitore} (${info.ambiente})`}
+            </span>
+          )}
+        </div>
+      )}
+
+      {genius && daSpedire.length > 0 && (
         <Card className="flex flex-wrap items-center gap-2 border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           <Truck className="size-4" /> <b>{daSpedire.length} {daSpedire.length === 1 ? "sessione pagata da spedire" : "sessioni pagate da spedire"}:</b>
           {daSpedire.slice(0, 6).map((d) => (
@@ -287,7 +343,9 @@ function Pagina() {
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-b">
-        {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["incassare", "Da incassare"], ["pagare", "Da pagare"], ["clienti", "Clienti"], ["fornitori", "Fornitori"], ["chiusure", "Chiusure"], ["sessioni", "Sessioni ↔ fatture"], ["esiti", "Esiti SdI"], ...(admin ? [["commercialista", "Commercialista"]] : [])] as [Tab, string][]).map(([k, l]) => (
+        {([["emessa", "Emesse"], ["ricevuta", "Ricevute"], ["incassare", "Da incassare"], ["pagare", "Da pagare"], ["clienti", "Clienti"], ["fornitori", "Fornitori"], ["chiusure", "Chiusure"],
+          ...(genius ? [["sessioni", "Sessioni ↔ fatture"]] : []), ...(societa === "gingy" ? [["scontrini", "Scontrini (archivio)"]] : []),
+          ["esiti", "Esiti SdI"], ...(admin ? [["commercialista", "Commercialista"]] : [])] as [Tab, string][]).map(([k, l]) => (
           <button key={k} onClick={() => { if (k === "incassare" || k === "pagare") setCercaCrediti(q); setTab(k); setStato(""); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === k ? "border-primary font-medium" : "border-transparent text-muted-foreground"}`}>
             {l}
@@ -299,6 +357,12 @@ function Pagina() {
         {(tab === "emessa" || tab === "ricevuta") && (
           <div className="ml-auto flex flex-wrap items-center gap-2 pb-2">
             {mese > 0 && <Button size="xs" variant="secondary" onClick={() => setMese(0)}>mese {mese}/{anno} ✕</Button>}
+            {tab === "emessa" && societa === "gingy" && (
+              <Button size="xs" variant={daVatican ? "default" : "outline"} onClick={() => { setDaVatican(!daVatican); setSel({}); }}
+                title="Bozze create automaticamente da Vatican Suite (prenotazioni): controllale e «Emetti selezionate»">
+                Da Vatican (bozze)
+              </Button>
+            )}
             <select className={sel_cls} value={periodo} onChange={(e) => { setPeriodo(e.target.value as typeof periodo); setMese(0); }} title="Periodo (data fattura)">
               <option value="tutto">Tutto l&apos;anno scelto</option>
               <option value="mese">Mese in corso</option>
@@ -354,17 +418,19 @@ function Pagina() {
       {loading && <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>}
 
       {(tab === "incassare" || tab === "pagare") && (
-        <DaIncassare key={`${tab}-${cercaCrediti}`} societa={societa || "genius"} anno={0} direzione={tab === "incassare" ? "emessa" : "ricevuta"}
+        <DaIncassare key={`${tab}-${societa}-${cercaCrediti}`} societa={societa} anno={0} direzione={tab === "incassare" ? "emessa" : "ricevuta"}
           cercaIniziale={cercaCrediti} onApriFattura={(id) => setAperta(id)} onCambiato={() => { carica(); caricaIncassi(); }} />
       )}
 
       {tab === "chiusure" && <Chiusure societa={societa} />}
-      {tab === "sessioni" && <Coerenza anno={anno || annoRoma()} />}
+      {tab === "sessioni" && genius && <Coerenza anno={anno || annoRoma()} />}
+      {tab === "scontrini" && societa === "gingy" && <ScontriniArchivio societa={societa} anno={anno} />}
 
-      {tab === "commercialista" && admin && <Commercialista periodoIniziale={sp.get("periodo") || undefined} />}
+      {tab === "commercialista" && admin && genius && <Commercialista periodoIniziale={sp.get("periodo") || undefined} />}
+      {tab === "commercialista" && admin && !genius && <PacchettoSocieta societa={societa} />}
 
       {(tab === "clienti" || tab === "fornitori") && (
-        <Anagrafiche societa={societa || "genius"} tipo={tab === "clienti" ? "cliente" : "fornitore"}
+        <Anagrafiche key={societa} societa={societa} tipo={tab === "clienti" ? "cliente" : "fornitore"}
           onNuovaFattura={(a) => setEditor({ f: null, anag: a })}
           onApriFattura={(id) => setAperta(id)} />
       )}
@@ -373,9 +439,14 @@ function Pagina() {
         <Card className="flex flex-wrap items-center gap-2 p-2 text-sm">
           <span><b>{selIds.length}</b> selezionate · {eur(righe.filter((f) => sel[f.id]).reduce((t, f) => t + Number(f.totale) * (f.tipo_documento === "TD04" ? -1 : 1), 0))}</span>
           <select className={sel_cls} value={modMulti} onChange={(e) => setModMulti(e.target.value as FattModalita)}>
-            {(["bonifico", "pos_sumup", "paypal", "contanti", "carta_stripe"] as FattModalita[]).map((m) => <option key={m} value={m}>{MODALITA_LABEL[m]}</option>)}
+            {((MODALITA_SOCIETA[societa] || MODALITA_SOCIETA.genius).filter((m) => m !== "assegno") as FattModalita[]).map((m) => <option key={m} value={m}>{MODALITA_LABEL[m]}</option>)}
           </select>
           <Button size="sm" onClick={incassaSelezionate}><Wallet /> Segna {tab === "emessa" ? "incassate" : "pagate"}</Button>
+          {tab === "emessa" && !genius && righe.some((f) => sel[f.id] && f.stato === "bozza") && (
+            <Button size="sm" variant="default" disabled={emettendo} onClick={emettiSelezionate}>
+              {emettendo ? <Loader2 className="animate-spin" /> : <Send />} Emetti selezionate
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={() => setSel({})}>Deseleziona</Button>
         </Card>
       )}
@@ -404,7 +475,7 @@ function Pagina() {
                   checked={!!righe.length && righe.every((f) => sel[f.id])}
                   onChange={(e) => setSel(Object.fromEntries(righe.map((f) => [f.id, e.target.checked])))} /></th>
                 <th className="p-2">Numero</th><th className="p-2">Data</th><th className="p-2">{tab === "emessa" ? "Cliente" : "Fornitore"}</th>
-                {!societa && <th className="p-2">Società</th>}
+
                 <th className="p-2 text-right">Imponibile</th><th className="p-2 text-right">Totale</th>
                 <th className="p-2">Stato SdI</th><th className="p-2">Pagamento</th>
                 {tab === "emessa" && <th className="p-2" title="Operatore">Op.</th>}
@@ -428,15 +499,16 @@ function Pagina() {
                       {f.ambiente === "sandbox" && <span className="ml-1 rounded bg-orange-500/15 px-1 text-[10px] text-orange-700 dark:text-orange-300">PROVA</span>}
                       {tab === "ricevuta" && !f.vista_il && <span className="ml-1 rounded bg-red-600 px-1 text-[10px] font-semibold text-white" title="Arrivata dallo SdI, non ancora vista">NUOVA</span>}
                       {f.origine === "simplyfatt" && <span className="ml-1 rounded bg-muted px-1 text-[10px] text-muted-foreground" title="Importata dallo storico SimplyFatt">SF</span>}
+                      {f.origine === "vatican" && <span className="ml-1 rounded bg-indigo-500/15 px-1 text-[10px] text-indigo-800 dark:text-indigo-200" title="Creata da Vatican Suite (prenotazione)">Vatican</span>}
                       {f.session_number != null && <span className="ml-1 rounded bg-sky-500/15 px-1 text-[10px] text-sky-800 dark:text-sky-200" title="Sessione di taratura collegata">Sess. {f.session_number}</span>}
-                      <div><BadgeAttivita a={f.attivita} /></div>
+                      {genius && <div><BadgeAttivita a={f.attivita} /></div>}
                     </td>
                     <td className="p-2 whitespace-nowrap">{dataIt(f.data)}</td>
                     <td className="p-2">
                       <div>{f.controparte_nome}</div>
                       <div className="text-xs text-muted-foreground">{f.controparte_piva || f.controparte_cf || ""}</div>
                     </td>
-                    {!societa && <td className="p-2 text-xs">{SOCIETA_LABEL[f.societa]}</td>}
+
                     <td className="p-2 text-right tabular-nums">{nc ? "−" : ""}{eur(f.imponibile)}</td>
                     <td className="p-2 text-right font-medium tabular-nums">{nc ? "−" : ""}{eur(f.totale)}</td>
                     <td className="p-2"><span className={`rounded px-1.5 py-0.5 text-xs ${st.cls}`}>{st.label}</span></td>
@@ -502,11 +574,29 @@ function Pagina() {
           onApriFattura={(id) => setAperta(id)} onCambiato={() => { carica(); caricaIncassi(); }} />
       )}
       {editor && (
-        <Editor iniziale={editor.f} anagrafica={editor.anag} societaDefault={(societa as FattSocieta) || "genius"}
+        <Editor iniziale={editor.f} anagrafica={editor.anag} societaDefault={societa as FattSocieta} societaDisponibili={permesse}
           onClose={() => setEditor(null)}
           onSaved={(id, passo) => { setEditor(null); carica(); setIntento(passo || null); setAperta(id); }} />
       )}
     </div>
+  );
+}
+
+/** Commercialista per Gingy / Avantifiori (15/10/2026): l'invio automatico allo studio è solo Genius; qui il
+ *  pacchetto del mese (XML emesse e ricevute + registro CSV + riepilogo) da scaricare e mandare. */
+function PacchettoSocieta({ societa }: { societa: string }) {
+  const [mese, setMese] = useState(() => oggiRoma().slice(0, 7));
+  const giorno = `${mese}-01`;
+  return (
+    <Card className="space-y-3 p-4 text-sm">
+      <div className="font-medium">Pacchetto per il commercialista — {SOCIETA_LABEL[societa]}</div>
+      <p className="text-muted-foreground">L&apos;invio automatico allo studio vale solo per Genius Lab. Per questa società scarica il pacchetto del mese: XML delle fatture emesse e ricevute, registro CSV e riepilogo.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="month" className="h-8 rounded-md border border-input bg-background px-2 text-sm" value={mese} onChange={(e) => setMese(e.target.value)} />
+        <a href={fattUrlPacchetto(societa, giorno)}><Button size="sm"><Download /> Pacchetto ZIP del mese</Button></a>
+        <a href={fattUrlChiusura(societa, "mese", giorno)} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><FileText /> Riepilogo mensile</Button></a>
+      </div>
+    </Card>
   );
 }
 
