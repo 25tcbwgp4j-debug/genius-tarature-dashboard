@@ -709,6 +709,7 @@ function InvioSdi({ f, residuo, operatore, busy, intento, onCambiato, manuale = 
 
 const REGOLAZIONI: [NcRegolazione, string, string][] = [
   ["rimborso_bonifico", "Rimborso al cliente con bonifico", "La fattura era stata pagata e restituiamo i soldi con un bonifico. L'incasso resta sulla fattura stornata; qui si segna il bonifico di rimborso (lascia la data vuota se è ancora da fare)."],
+  ["rimborso_paypal", "Rimborso al cliente con PayPal", "La fattura era stata pagata con PayPal: il rimborso si fa dalla stessa transazione PayPal (lascia la data vuota se è ancora da fare; nel riferimento l'id del rimborso PayPal)."],
   ["rimborso_contanti", "Rimborso al cliente in contanti", "Restituiti i contanti al banco: se è oggi entra nella cassa del giorno come uscita (riga «reso»)."],
   ["nessun_rimborso", "Nessun rimborso", "La fattura non era stata pagata: la nota di credito chiude solo il credito, non escono soldi."],
   ["rifacimento", "Fattura da rifare", "La fattura era sbagliata e si rifà: l'incasso torna «da abbinare» e si collega alla fattura nuova."],
@@ -754,13 +755,13 @@ function RegolazioneNC({ f, operatore, busy, onCambiato }: { f: Fattura; operato
           </label>
         ))}
       </div>
-      {(modo === "rimborso_bonifico" || modo === "rimborso_contanti") && (
+      {(modo === "rimborso_bonifico" || modo === "rimborso_paypal" || modo === "rimborso_contanti") && (
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-xs">Data del rimborso{modo === "rimborso_bonifico" ? " (vuota = da fare)" : ""}
+          <label className="text-xs">Data del rimborso{modo !== "rimborso_contanti" ? " (vuota = da fare)" : ""}
             <input type="date" className="mt-0.5 block h-8 rounded-md border border-input bg-background px-2 text-sm" value={data} onChange={(e) => setData(e.target.value)} />
           </label>
-          {modo === "rimborso_bonifico" && (
-            <label className="min-w-0 flex-1 text-xs">Riferimento del bonifico (CRO / TRN)
+          {modo !== "rimborso_contanti" && (
+            <label className="min-w-0 flex-1 text-xs">{modo === "rimborso_paypal" ? "Id del rimborso PayPal" : "Riferimento del bonifico (CRO / TRN)"}
               <input className="mt-0.5 block h-8 w-full rounded-md border border-input bg-background px-2 text-sm" value={rif} onChange={(e) => setRif(e.target.value)} placeholder="facoltativo" />
             </label>
           )}

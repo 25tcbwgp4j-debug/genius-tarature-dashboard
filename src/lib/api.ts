@@ -1269,7 +1269,7 @@ export async function fattPagamento(id: string, body: { modalita?: FattModalita;
   return fetchAPI(`/api/fatturazione/fatture/${id}/pagamento`, { method: 'POST', body: JSON.stringify(body) });
 }
 export async function fattLinkStripe(id: string, importo?: number) { return fetchAPI(`/api/fatturazione/fatture/${id}/link-stripe`, { method: 'POST', body: JSON.stringify(importo ? { importo } : {}) }); }
-export type NcRegolazione = 'rimborso_bonifico' | 'rimborso_contanti' | 'nessun_rimborso' | 'rifacimento';
+export type NcRegolazione = 'rimborso_bonifico' | 'rimborso_paypal' | 'rimborso_contanti' | 'nessun_rimborso' | 'rifacimento';
 /** Nota di credito (15/10/2026): rimborso con bonifico (data vuota = da fare), in contanti, nessun rimborso o fattura da rifare */
 export async function fattRegolazione(id: string, body: { modo: NcRegolazione; data?: string; riferimento?: string; operatore: string }): Promise<{ ok: boolean; descrizione: string; avvisi: string[] }> {
   return fetchAPI(`/api/fatturazione/fatture/${id}/regolazione`, { method: 'POST', body: JSON.stringify(body) });
