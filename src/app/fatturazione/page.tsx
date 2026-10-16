@@ -119,9 +119,20 @@ function Pagina() {
         const ultimo = mese ? new Date(anno || annoRoma(), mese, 0).getDate() : 0;
         const conPeriodo = periodo !== "tutto";
         const vat = daVatican && tab === "emessa" && societa === "gingy";
-        const r = await fattElenco({ direzione: tab, societa, stato: vat ? "bozza" : stato, origine: vat ? "vatican" : "", pagamento, q, q_righe: qRighe.trim(), attivita: genius ? attivitaF : "", anno: anno && !conPeriodo ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
+        const parametri = { direzione: tab, societa, stato: vat ? "bozza" : stato, origine: vat ? "vatican" : "", pagamento, q, q_righe: qRighe.trim(), attivita: genius ? attivitaF : "", anno: anno && !conPeriodo ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
           da: conPeriodo ? per.dal : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-01` : "",
-          a: conPeriodo ? per.al : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimo}` : "" });
+          a: conPeriodo ? per.al : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimo}` : "" };
+        const r = await fattElenco(parametri);
+        // 16/10/2026: il backend dà al massimo 500 righe per volta; senza ricerca nelle righe si leggono le pagine successive
+        // (tutta la storia di Avantifiori supera le 500 fatture), fino a 20 pagine
+        if (!parametri.q_righe && Array.isArray(r.fatture) && r.fatture.length === 500) {
+          for (let pag = 1; pag < 20; pag++) {
+            const altre = await fattElenco({ ...parametri, offset: String(pag * 500) });
+            const lista = Array.isArray(altre.fatture) ? altre.fatture : [];
+            r.fatture = [...r.fatture, ...lista];
+            if (lista.length < 500) break;
+          }
+        }
         const oggiIso = oggiRoma();
         setStorico(r.storico_prezzi ?? null);
         setTroncato(!!r.troncato);
@@ -133,7 +144,9 @@ function Pagina() {
         }
       }
       // il riepilogo non deve bloccare l'elenco (es. operatore: totali riservati)
-      setRie(await fattRiepilogo(societa, anno).catch(() => null));
+      // 16/10/2026: i riquadri seguono il periodo scelto (tutta la storia, anno, mese, intervallo)
+      const conPer = periodo !== "tutto" && (per.dal || per.al);
+      setRie(await fattRiepilogo(societa, conPer ? 0 : anno, conPer ? per.dal : "", conPer ? per.al : "").catch(() => null));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -241,9 +254,10 @@ function Pagina() {
           </span>
         )}
         <div className="ml-auto flex flex-wrap gap-2">
-          <select className={sel_cls} value={anno} onChange={(e) => setAnno(Number(e.target.value))}>
-            {Array.from({ length: Math.max(4, annoRoma() - 2022) }, (_, i) => annoRoma() - i).map((a) => <option key={a} value={a}>{a}</option>)}
-            <option value={0}>Tutti gli anni</option>
+          {/* 16/10/2026: anni dal primo documento della società (Avantifiori ha lo storico SimplyFatt dal 2013) + tutta la storia */}
+          <select className={sel_cls} value={anno} onChange={(e) => setAnno(Number(e.target.value))} title="Anno (o tutta la storia)">
+            <option value={0}>Tutta la storia (tutti gli anni)</option>
+            {Array.from({ length: Math.max(1, annoRoma() - (PRIMO_ANNO[societa] ?? 2023) + 1) }, (_, i) => annoRoma() - i).map((a) => <option key={a} value={a}>{a}{a === annoRoma() ? " (anno in corso)" : a === annoRoma() - 1 ? " (anno precedente)" : ""}</option>)}
           </select>
           {genius && <FiltroAttivita value={attivitaF} onChange={setAttivitaF} />}
           {filtriAttivi && <Button variant="ghost" onClick={azzera} title="Torna alla pagina base della fatturazione"><RotateCcw /> Azzera</Button>}
@@ -368,7 +382,7 @@ function Pagina() {
               </Button>
             )}
             <select className={sel_cls} value={periodo} onChange={(e) => { setPeriodo(e.target.value as typeof periodo); setMese(0); }} title="Periodo (data fattura)">
-              <option value="tutto">Tutto l&apos;anno scelto</option>
+              <option value="tutto">{anno ? "Tutto l'anno scelto" : "Tutta la storia"}</option>
               <option value="mese">Mese in corso</option>
               <option value="mese_prec">Mese precedente</option>
               <option value="anno">Anno in corso</option>
@@ -603,6 +617,9 @@ function PacchettoSocieta({ societa }: { societa: string }) {
     </Card>
   );
 }
+
+// 16/10/2026: primo anno con documenti, per società (storico importato da SimplyFatt)
+const PRIMO_ANNO: Record<string, number> = { genius: 2025, gingy: 2024, avantifiori: 2013 };
 
 export default function FatturazionePage() {
   return (

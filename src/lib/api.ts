@@ -1228,8 +1228,9 @@ export async function fattElenco(params: Record<string, string>) {
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
   return fetchAPI(`/api/fatturazione/fatture?${q}`);
 }
-export async function fattRiepilogo(societa = '', anno = 0) {
-  return fetchAPI(`/api/fatturazione/riepilogo?societa=${societa}&anno=${anno || 0}`);
+/** Totali del periodo (16/10/2026): anno=0 = tutta la storia; da/a = periodo libero (mese, anno precedente, intervallo). */
+export async function fattRiepilogo(societa = '', anno = 0, da = '', a = '') {
+  return fetchAPI(`/api/fatturazione/riepilogo?societa=${societa}&anno=${anno || 0}${da ? `&da=${da}` : ''}${a ? `&a=${a}` : ''}`);
 }
 export async function fattEsiti(limit = 100, societa = '') { return fetchAPI(`/api/fatturazione/esiti?limit=${limit}&societa=${encodeURIComponent(societa)}`); }
 /** Configurazione per società (15/10/2026): fornitore SdI, modalità manuale, WhatsApp, verifica pagamenti automatica. */
