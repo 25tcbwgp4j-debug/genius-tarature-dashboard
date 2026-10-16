@@ -125,7 +125,7 @@ export function Sidebar() {
   const setMobileOpen = (v: boolean) => setApertoSu(v ? pathname : null);
   const { theme, toggleTheme } = useTheme();
   const push = usePushNotifications();
-  const { admin, nInAttesa } = usePermessi();
+  const { admin, nInAttesa, permessi } = usePermessi();
   // finché i permessi non arrivano si mostrano solo le voci del banco (niente lampo delle voci del titolare)
   const { attivita } = useAttivita();
   // schede di assistenza Apple (02/10/2026): in prova le vede solo il titolare, gli operatori dopo l'ok di Christian
@@ -135,7 +135,9 @@ export function Sidebar() {
     fetchAPI("/api/assistenza/config").then((c: { operatori_abilitati?: boolean }) => setAssistenzaOperatori(!!c.operatori_abilitati)).catch(() => undefined);
   }, [admin, pathname]);
   const voci = (attivita === "apple" ? MENU_APPLE : MENU_TARATURE).filter((v) => (admin || !paginaDelTitolare(v.href))
-    && (!DELLE_SCHEDE.has(v.href) || admin || assistenzaOperatori));
+    && (!DELLE_SCHEDE.has(v.href) || admin || assistenzaOperatori)
+    // buste paga (16/10/2026): solo l'account del titolare, non ogni amministratore
+    && (v.href !== "/buste-paga" || !!permessi?.puo?.buste_paga));
   // cambiando divisione da una pagina che nell'altra non c'è (es. Sessioni → Apple) si va alla sua home
   const router = useRouter();
   const cambiaDivisione = (a: "tarature" | "apple") => {

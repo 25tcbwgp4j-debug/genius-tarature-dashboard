@@ -109,7 +109,7 @@ export async function fetchAPI(path: string, opzioni: OpzioniAPI = {}, conDialog
 
 export interface Permessi {
   ruolo: string; admin: boolean;
-  puo: { statistiche: boolean; fatturato: boolean; magazzino_modifica: boolean; utenti: boolean; senza_autorizzazione: boolean };
+  puo: { statistiche: boolean; fatturato: boolean; magazzino_modifica: boolean; utenti: boolean; senza_autorizzazione: boolean; buste_paga?: boolean };
   richiedono_autorizzazione?: string[];
 }
 export interface Autorizzazione {

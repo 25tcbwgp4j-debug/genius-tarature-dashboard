@@ -61,6 +61,11 @@ export async function proxy(request: NextRequest) {
   if (!isApiCall && paginaDelTitolare(pathname) && payload.role !== "admin") {
     return NextResponse.rewrite(new URL("/riservato", request.url));
   }
+  // Buste paga del lavoro domestico (16/10/2026): SOLO l'account del titolare, non ogni amministratore
+  if (!isApiCall && (pathname === "/buste-paga" || pathname.startsWith("/buste-paga/"))
+      && String(payload.email || "").toLowerCase() !== "info@avantifiori.it") {
+    return NextResponse.rewrite(new URL("/riservato", request.url));
+  }
 
   // Espone i dati utente alle pagine via header di RICHIESTA.
   //
