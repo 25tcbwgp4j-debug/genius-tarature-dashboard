@@ -27,6 +27,7 @@ import { ScontriniArchivio } from "./ScontriniArchivio";
 import { useSocietaFatturazione } from "./societa";
 import { useOperatore } from "@/components/Operatore";
 import { usePermessi } from "@/components/permessi";
+import { PulsanteBustePaga } from "@/components/BarraTitolare";
 import { BadgeAttivita, FiltroAttivita } from "@/components/attivita";
 import type { FattAnagrafica } from "@/lib/api";
 import { Dettaglio } from "./Dettaglio";
@@ -275,6 +276,8 @@ function Pagina() {
                 {s.codice === "avantifiori" ? "Avantifiori Immobiliare" : SOCIETA_LABEL[s.codice]}
               </button>
             ))}
+            {/* 16/10/2026: le Buste paga stanno qui, accanto alle società, solo per il titolare */}
+            <PulsanteBustePaga />
           </div>
           {info && (
             <span className="text-xs text-muted-foreground">

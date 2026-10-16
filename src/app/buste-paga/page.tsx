@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, HandCoins, Loader2, TriangleAlert } from "lucide-react";
 import { usePermessi } from "@/components/permessi";
 import { RiservatoTitolare } from "@/components/RiservatoTitolare";
+import { BarraTitolare } from "@/components/BarraTitolare";
 import { bpAvvisi, bpDatori, bpLavoratori, type BpAvviso, type BpDatore, type BpLavoratore } from "@/lib/buste-paga";
 import { annoRoma, oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
@@ -76,6 +77,8 @@ function Pagina() {
 
   return (
     <div className="space-y-4 p-1 md:p-2">
+      {/* 16/10/2026: stessa riga della Fatturazione (società + Buste paga), solo titolare */}
+      <BarraTitolare attiva="buste-paga" />
       <div className="flex flex-wrap items-center gap-3">
         <HandCoins className="size-6" />
         <h1 className="text-2xl font-semibold">Buste paga</h1>
