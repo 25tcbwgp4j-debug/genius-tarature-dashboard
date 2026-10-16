@@ -37,36 +37,15 @@ import {
   type Fattura,
   type Scontrino,
 } from "@/lib/api";
+import { CANONI_AVANTIFIORI, periodoCanoni, righeCanoni } from "./canoni";
 import { MODALITA_LABEL, MODALITA_SOCIETA, NATURE_IVA, SOCIETA_LABEL, TIPI_LABEL, eur, ivaMargine, stimaTotali } from "./util";
 
-// Modello «Canoni locazione Avantifiori → Gingy» (15/10/2026): stesso contenuto delle fatture 1/EL e 2/EL 2026
-// (SimplyFatt) — cliente GINGY, una riga per appartamento con quantità = mesi e canone mensile, IVA 10%, codice
-// articolo 0007/0008/0009, più la riga descrittiva del periodo a 0,00. Solo il modello: la fattura si controlla e si emette a mano.
+// Modello «Canoni locazione Avantifiori → Gingy»: contratti, canoni, decorrenze e sospensione D3 in ./canoni.ts
+// (16/10/2026: D4 1.350 al posto del «D3 1.350» delle fatture 1/EL e 2/EL; D2 da 02/2025; D3 sospeso fino al 12/2027).
 const GINGY_CLIENTE: FattControparte = {
   denominazione: "GINGY s.r.l.s.", piva: "17817061009", cf: "17817061009", sdi: "WP7SE2Q", pec: "",
   indirizzo: "Viale Libia, 167", cap: "00199", comune: "ROMA", provincia: "RM", paese: "IT", email: "",
 };
-const CANONI_AVANTIFIORI = [
-  { codice: "0007", app: "D1", canone: 1500, testo: (a: string) => `Contratto di locazione appartamento D1, Viale di Valle Aurelia 118, Roma - Annualità ${a}` },
-  { codice: "0008", app: "D2", canone: 1000, testo: (a: string) => `Contratto di locazione appartamento D2, Viale di Valle Aurelia 118, Roma Annualità ${a}` },
-  { codice: "0009", app: "D3", canone: 1350, testo: (a: string) => `Contratto di locazione appartamento D3, Viale di Valle Aurelia 118, Roma Annualità ${a}` },
-];
-const MESI = ["GENNAIO", "FEBBRAIO", "MARZO", "APRILE", "MAGGIO", "GIUGNO", "LUGLIO", "AGOSTO", "SETTEMBRE", "OTTOBRE", "NOVEMBRE", "DICEMBRE"];
-const TRIMESTRI = ["PRIMO", "SECONDO", "TERZO", "QUARTO"];
-/** Mesi fra «da» e «a» (YYYY-MM inclusi) ed etichetta del periodo come in 2/EL («PRIMO TRIMESTRE 2026»). */
-export function periodoCanoni(da: string, a: string): { mesi: number; etichetta: string; anni: string } {
-  const [y1, m1] = da.split("-").map(Number);
-  const [y2, m2] = a.split("-").map(Number);
-  const mesi = (y2 - y1) * 12 + (m2 - m1) + 1;
-  if (!y1 || !y2 || mesi < 1) return { mesi: 0, etichetta: "", anni: "" };
-  const anni = y1 === y2 ? String(y1) : `${y1}-${y2}`;
-  let etichetta: string;
-  if (y1 === y2 && mesi === 12 && m1 === 1) etichetta = `ANNUALITÀ ${y1}`;
-  else if (y1 === y2 && mesi === 3 && (m1 - 1) % 3 === 0) etichetta = `${TRIMESTRI[(m1 - 1) / 3]} TRIMESTRE ${y1}`;
-  else if (mesi === 1) etichetta = `${MESI[m1 - 1]} ${y1}`;
-  else etichetta = `DA ${MESI[m1 - 1]} ${y1} A ${MESI[m2 - 1]} ${y2}`;
-  return { mesi, etichetta, anni };
-}
 
 type TipoCliente = "azienda" | "privato" | "estero";
 interface ClienteAnagrafica { id: string; company_name?: string; vat_number?: string; tax_id?: string; sdi_code?: string;
@@ -287,14 +266,10 @@ export function Editor({
       setAnagraficaId(r.anagrafiche?.[0]?.id || null);
     } catch { setAnagraficaId(null); }
     setPrezziIvati(false);
-    setRighe([
-      ...CANONI_AVANTIFIORI.filter((c) => Number(canoni[c.codice] || 0) > 0).map((c) => ({
-        descrizione: c.testo(p.anni), quantita: p.mesi, prezzo_unitario: Number(canoni[c.codice]), prezzo_ivato: null,
-        aliquota: 10, sconto: 0, codice_articolo: c.codice })),
-      { descrizione: p.etichetta, quantita: 1, prezzo_unitario: 0, prezzo_ivato: null, aliquota: 10, sconto: 0 },
-    ]);
+    const { righe: rc } = righeCanoni(canDa, canA, canoni);
+    setRighe(rc);
     setModalita("bonifico");
-    setCausale("");
+    setCausale(`Canoni di locazione Viale di Valle Aurelia 118, Roma — ${p.etichetta.toLowerCase()}`);
     setSporco(true);
     toast.success(`Modello canoni: ${p.mesi} ${p.mesi === 1 ? "mese" : "mesi"} (${p.etichetta.toLowerCase()}). Controlla e salva la bozza.`);
   }
@@ -405,14 +380,14 @@ export function Editor({
           {societa === "avantifiori" && !iniziale?.numero && (
             <div className="space-y-2 rounded-lg border border-dashed border-sky-400/60 bg-sky-50/40 p-3 dark:bg-sky-950/20">
               <div className="flex items-center gap-2 text-sm font-medium"><Building2 className="size-4" /> Modello rapido: canoni locazione Avantifiori → Gingy</div>
-              <p className="text-xs text-muted-foreground">Come le fatture 1/EL e 2/EL: cliente GINGY, una riga per appartamento (mesi × canone mensile, IVA 10%) e la riga del periodo. Precompila soltanto: controlla, salva la bozza ed emetti quando vuoi.</p>
+              <p className="text-xs text-muted-foreground">Stile 1/EL e 2/EL: cliente GINGY, una riga per appartamento (mesi × canone mensile, IVA 10%) e la riga del periodo. Appartamenti veri: D1, D2 (dal 02/2025), D4; il D3 è sospeso fino al 12/2027 e non entra prima del 2028. Precompila soltanto: controlla, salva la bozza ed emetti quando vuoi.</p>
               <div className="flex flex-wrap items-end gap-2">
                 <label className="space-y-1"><div className={lab}>Dal mese</div>
                   <input type="month" className={`${campo} w-40`} value={canDa} onChange={(e) => setCanDa(e.target.value)} /></label>
                 <label className="space-y-1"><div className={lab}>Al mese</div>
                   <input type="month" className={`${campo} w-40`} value={canA} onChange={(e) => setCanA(e.target.value)} /></label>
                 {CANONI_AVANTIFIORI.map((c) => (
-                  <label key={c.codice} className="space-y-1"><div className={lab}>Canone {c.app} / mese</div>
+                  <label key={c.codice} className="space-y-1" title={c.nota || `RLI ${c.rli}, dal ${c.da}`}><div className={lab}>Canone {c.app} / mese{c.nota ? " (sospeso)" : ""}</div>
                     <DecInput className={`${campo} w-28`} value={canoni[c.codice] ?? null} onValue={(v) => setCanoni((p) => ({ ...p, [c.codice]: v }))} /></label>
                 ))}
                 <Button size="sm" variant="outline" onClick={modelloCanoni}>Precompila</Button>
