@@ -43,7 +43,9 @@ interface Esito { id: string; tipo: string; descrizione: string; data: string;
 // per l'operatore (livelli di accesso 01/10/2026) i totali riservati arrivano null e riservato=true
 interface Riepilogo { emesse: number; ricevute: number; fatturato: number | null; iva_vendite: number | null; acquisti: number | null;
   iva_acquisti: number | null; da_incassare: number | null; da_pagare: number | null; scartate: number; bozze: number; non_consegnate: number;
-  mesi?: { mese: number; fatturato: number; acquisti: number }[]; riservato?: boolean }
+  // 16/10/2026: corrispettivi certificati con scontrino (Gingy, archivio SimplyFatt) nello stesso periodo
+  scontrini?: number; corrispettivi?: number | null; iva_corrispettivi?: number | null;
+  mesi?: { mese: number; fatturato: number; acquisti: number; corrispettivi?: number }[]; riservato?: boolean }
 /** Importo o «riservato» quando il backend non lo manda all'operatore. */
 const eurR = (v: number | null | undefined) => (v === null || v === undefined ? "riservato" : eur(v));
 
@@ -119,7 +121,10 @@ function Pagina() {
         const ultimo = mese ? new Date(anno || annoRoma(), mese, 0).getDate() : 0;
         const conPeriodo = periodo !== "tutto";
         const vat = daVatican && tab === "emessa" && societa === "gingy";
+        // 16/10/2026: Gingy — gli scontrini SimplyFatt stanno nella stessa lista delle fatture, ordinati per data
+        const conScontrini = tab === "emessa" && societa === "gingy" && !vat;
         const parametri = { direzione: tab, societa, stato: vat ? "bozza" : stato, origine: vat ? "vatican" : "", pagamento, q, q_righe: qRighe.trim(), attivita: genius ? attivitaF : "", anno: anno && !conPeriodo ? String(anno) : "", prove: prove ? "true" : "", limit: "500",
+          scontrini: conScontrini ? "true" : "",
           da: conPeriodo ? per.dal : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-01` : "",
           a: conPeriodo ? per.al : mese && anno ? `${anno}-${String(mese).padStart(2, "0")}-${ultimo}` : "" };
         const r = await fattElenco(parametri);
@@ -195,16 +200,21 @@ function Pagina() {
   const vai = (t: Tab, extra?: { stato?: string; pagamento?: string }) => {
     setTab(t); setStato(extra?.stato || ""); setPagamento(extra?.pagamento || ""); setMese(0);
   };
+  const nScontrini = rie?.scontrini || 0;
+  const corr = rie?.corrispettivi ?? 0;
   const kpi = rie ? [
-    { l: `Fatturato ${anno || ""} (imponibile)`, v: eurR(rie.fatturato), s: `${rie.emesse} fatture emesse`, go: () => vai("emessa") },
+    nScontrini > 0
+      ? { l: `Fatturato + corrispettivi ${anno || ""} (imponibile)`, v: rie.fatturato === null ? "riservato" : eur((rie.fatturato || 0) + (corr || 0)),
+          s: `${rie.emesse} fatture (${eurR(rie.fatturato)}) + ${nScontrini} scontrini (${eurR(rie.corrispettivi)})`, go: () => vai("emessa") }
+      : { l: `Fatturato ${anno || ""} (imponibile)`, v: eurR(rie.fatturato), s: `${rie.emesse} fatture emesse`, go: () => vai("emessa") },
     { l: "Da incassare", v: eurR(rie.da_incassare), s: rie.bozze ? `${rie.bozze} bozze` : "per cliente →", go: () => vai("incassare") },
     { l: `Acquisti ${anno || ""} (imponibile)`, v: eurR(rie.acquisti), s: `${rie.ricevute} fatture ricevute`, go: () => vai("ricevuta") },
     { l: "Da pagare ai fornitori", v: eurR(rie.da_pagare), s: "per fornitore →", go: () => vai("pagare") },
-    { l: "IVA vendite − acquisti", v: rie.iva_vendite === null || rie.iva_acquisti === null ? "riservato" : eur((rie.iva_vendite || 0) - (rie.iva_acquisti || 0)), s: "stima, non liquidazione", go: () => vai("emessa") },
+    { l: "IVA vendite − acquisti", v: rie.iva_vendite === null || rie.iva_acquisti === null ? "riservato" : eur((rie.iva_vendite || 0) + (rie.iva_corrispettivi || 0) - (rie.iva_acquisti || 0)), s: nScontrini ? "stima con gli scontrini, non liquidazione" : "stima, non liquidazione", go: () => vai("emessa") },
     { l: "Da sistemare", v: String((rie.scartate || 0) + (rie.non_consegnate || 0)), s: `${rie.scartate} scartate · ${rie.non_consegnate} nel cassetto`, go: () => vai("emessa", { stato: "scartata" }) },
   ] : [];
-  const maxMese = Math.max(1, ...(rie?.mesi || []).map((m) => Math.max(m.fatturato, m.acquisti)));
-  const selIds = Object.keys(sel).filter((k) => sel[k]);
+  const maxMese = Math.max(1, ...(rie?.mesi || []).map((m) => Math.max(m.fatturato + (m.corrispettivi || 0), m.acquisti)));
+  const selIds = Object.keys(sel).filter((k) => sel[k] && !k.startsWith("scontrino:"));   // gli scontrini sono in sola lettura
   async function incassaSelezionate() {
     if (!selIds.length) return;
     if (!confirm(`Segnare ${selIds.length} fatture come ${tab === "emessa" ? "incassate" : "pagate"} (${modMulti}, oggi)?`)) return;
@@ -331,15 +341,15 @@ function Pagina() {
         <Card className="p-3">
           <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
             <span>Imponibile per mese {anno} — clicca un mese per filtrare</span>
-            <span><span className="mr-1 inline-block size-2 rounded-sm bg-primary" />fatturato <span className="ml-2 mr-1 inline-block size-2 rounded-sm bg-muted-foreground/40" />acquisti</span>
+            <span><span className="mr-1 inline-block size-2 rounded-sm bg-primary" />fatturato{nScontrini > 0 ? " + scontrini" : ""} <span className="ml-2 mr-1 inline-block size-2 rounded-sm bg-muted-foreground/40" />acquisti</span>
           </div>
           <div className="flex h-28 items-end gap-1">
             {(rie.mesi || []).map((m) => (
-              <button key={m.mese} title={`${m.mese}/${anno}: fatturato ${eur(m.fatturato)} · acquisti ${eur(m.acquisti)}`}
+              <button key={m.mese} title={`${m.mese}/${anno}: fatturato ${eur(m.fatturato)}${m.corrispettivi ? ` + scontrini ${eur(m.corrispettivi)}` : ""} · acquisti ${eur(m.acquisti)}`}
                 onClick={() => { setMese(mese === m.mese ? 0 : m.mese); if (tab !== "emessa" && tab !== "ricevuta") setTab("emessa"); }}
                 className={`flex h-full flex-1 flex-col items-center justify-end gap-0.5 rounded ${mese === m.mese ? "bg-muted" : ""}`}>
                 <div className="flex w-full flex-1 items-end justify-center gap-0.5">
-                  <div className="w-2/5 rounded-t bg-primary" style={{ height: `${(m.fatturato / maxMese) * 100}%` }} />
+                  <div className="w-2/5 rounded-t bg-primary" style={{ height: `${((m.fatturato + (m.corrispettivi || 0)) / maxMese) * 100}%` }} />
                   <div className="w-2/5 rounded-t bg-muted-foreground/40" style={{ height: `${(m.acquisti / maxMese) * 100}%` }} />
                 </div>
                 <span className="text-[10px] text-muted-foreground">{["G","F","M","A","M","G","L","A","S","O","N","D"][m.mese - 1]}</span>
@@ -490,8 +500,8 @@ function Pagina() {
             <thead>
               <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="w-8 p-2" onClick={(e) => e.stopPropagation()}><input type="checkbox"
-                  checked={!!righe.length && righe.every((f) => sel[f.id])}
-                  onChange={(e) => setSel(Object.fromEntries(righe.map((f) => [f.id, e.target.checked])))} /></th>
+                  checked={!!righe.length && righe.filter((f) => !f.scontrino_archivio).every((f) => sel[f.id])}
+                  onChange={(e) => setSel(Object.fromEntries(righe.filter((f) => !f.scontrino_archivio).map((f) => [f.id, e.target.checked])))} /></th>
                 <th className="p-2">Numero</th><th className="p-2">Data</th><th className="p-2">{tab === "emessa" ? "Cliente" : "Fornitore"}</th>
 
                 <th className="p-2 text-right">Imponibile</th><th className="p-2 text-right">Totale</th>
@@ -507,9 +517,11 @@ function Pagina() {
                 const trovate = qRighe.trim() && f.righe_trovate?.length ? f.righe_trovate : null;
                 return (
                   <Fragment key={f.id}>
-                  <tr className={`cursor-pointer hover:bg-muted/50 ${trovate ? "" : "border-b last:border-0"}`} onClick={() => setAperta(f.id)}>
+                  <tr className={`${f.scontrino_archivio ? "bg-teal-500/5" : "cursor-pointer hover:bg-muted/50"} ${trovate ? "" : "border-b last:border-0"}`}
+                    onClick={() => { if (!f.scontrino_archivio) setAperta(f.id); }}
+                    title={f.scontrino_archivio ? "Scontrino (documento commerciale) emesso con SimplyFatt e trasmesso all'Agenzia delle Entrate — dettaglio nella scheda «Scontrini (archivio)»" : undefined}>
                     <td className="p-2" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={!!sel[f.id]} onChange={(e) => setSel((p) => ({ ...p, [f.id]: e.target.checked }))} />
+                      {!f.scontrino_archivio && <input type="checkbox" checked={!!sel[f.id]} onChange={(e) => setSel((p) => ({ ...p, [f.id]: e.target.checked }))} />}
                     </td>
                     <td className="p-2 font-medium">
                       {f.numero || <span className="text-muted-foreground">bozza</span>}

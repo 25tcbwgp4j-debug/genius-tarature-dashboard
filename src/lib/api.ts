@@ -1148,6 +1148,8 @@ export interface Fattura {
   /** Genius Lab Gestionale: tarature | apple (solo indicazione, numerazione unica) */
   attivita?: 'tarature' | 'apple' | null; attivita_nota?: string | null;
   esiti?: { id: string; tipo: string; descrizione: string; data: string }[];
+  /** 16/10/2026: riga «scontrino» dell'archivio SimplyFatt (Gingy) nell'elenco delle emesse — sola lettura */
+  scontrino_archivio?: boolean; stato_ade?: string | null;
   controlli?: string[];
   collegata?: { id: string; numero: string; data: string; totale: number } | null;
   note_credito?: { id: string; numero: string; data: string; totale: number; stato: string }[];

@@ -25,6 +25,8 @@ export const STATI: Record<string, { label: string; cls: string }> = {
   scartata: { label: "Scartata", cls: "bg-red-500/15 text-red-700 dark:text-red-300" },
   errore: { label: "Errore invio", cls: "bg-red-500/15 text-red-700 dark:text-red-300" },
   ricevuta: { label: "Ricevuta", cls: "bg-violet-500/15 text-violet-700 dark:text-violet-300" },
+  // 16/10/2026: scontrini Gingy (archivio SimplyFatt) mostrati tra le emesse — documento commerciale già trasmesso all'AdE
+  scontrino: { label: "Scontrino (AdE)", cls: "bg-teal-500/15 text-teal-800 dark:text-teal-200" },
 };
 
 export const MODALITA_LABEL: Record<string, string> = {
@@ -41,6 +43,7 @@ export const MODALITA_LABEL: Record<string, string> = {
 
 export const TIPI_LABEL: Record<string, string> = {
   TD01: "Fattura",
+  SCONTRINO: "Scontrino",
   TD04: "Nota di credito",
   TD05: "Nota di debito",
   TD06: "Parcella",
