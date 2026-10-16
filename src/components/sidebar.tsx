@@ -39,6 +39,7 @@ import {
   Truck,
   LayoutDashboard,
   ListChecks,
+  HandCoins,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -58,6 +59,8 @@ type Voce = { href: string; label: string; icon: typeof ClipboardList };
 // sezioni comuni alle due divisioni (stesso ordine nei due menu)
 const COMUNI: Voce[] = [
   { href: "/fatturazione", label: "Fatturazione", icon: Receipt },
+  // buste paga del lavoro domestico (16/10/2026): solo amministratore, è tra le pagine del titolare
+  { href: "/buste-paga", label: "Buste paga", icon: HandCoins },
   { href: "/cassa", label: "Scontrino (registratore)", icon: ShoppingCart },
   { href: "/cassa/giornata", label: "Cassa del giorno", icon: Calculator },
   { href: "/spedizioni", label: "Spedizioni", icon: Truck },
