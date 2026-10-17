@@ -1090,7 +1090,7 @@ export const spedStampaBanco = (id: string): Promise<{ id: string; copie: number
 // === FATTURAZIONE (Openapi SDI) — 30/09/2026 ===
 export type FattSocieta = 'genius' | 'gingy' | 'avantifiori';
 export type FattModalita = 'contanti' | 'pos_sumup' | 'carta_stripe' | 'paypal' | 'bonifico' | 'assegno' | 'non_pagato' | 'booking' | 'airbnb'
-  | 'carta_credito' | 'carta_debito' | 'addebito_diretto' | 'f24' | 'compensazione' | 'nota_credito' | 'chiusura_ufficio';
+  | 'carta_credito' | 'carta_debito' | 'addebito_diretto' | 'addebito_conto' | 'f24' | 'compensazione' | 'nota_credito' | 'chiusura_ufficio';
 export interface FattRiga {
   descrizione: string;
   quantita: number;

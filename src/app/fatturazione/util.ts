@@ -43,6 +43,7 @@ export const MODALITA_LABEL: Record<string, string> = {
   carta_credito: "Carta di credito",
   carta_debito: "Carta di debito",
   addebito_diretto: "Addebito diretto SDD",
+  addebito_conto: "Addebito in conto (banca)",
   f24: "F24",
   compensazione: "Compensazione",
   nota_credito: "Nota di credito",
@@ -50,7 +51,7 @@ export const MODALITA_LABEL: Record<string, string> = {
 };
 
 /** Modalità per segnare pagata una fattura RICEVUTA: va scelta quella vera dell'estratto, mai un default (17/10/2026). */
-export const MODALITA_RICEVUTE = ["bonifico", "carta_credito", "carta_debito", "addebito_diretto", "paypal", "pos_sumup", "contanti",
+export const MODALITA_RICEVUTE = ["bonifico", "carta_credito", "carta_debito", "addebito_diretto", "addebito_conto", "paypal", "pos_sumup", "contanti",
   "f24", "compensazione", "nota_credito", "assegno"];
 
 export const TIPI_LABEL: Record<string, string> = {
