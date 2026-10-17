@@ -128,6 +128,17 @@ export function Dettaglio({
     { k: "paypal", label: "PayPal", icon: Wallet },
     { k: "bonifico", label: "Bonifico", icon: Receipt },
   ];
+  // 17/10/2026: fatture ricevute → modalità del pagamento al fornitore come da estratto conto
+  const modalitaFornitore: { k: FattModalita; label: string; icon: typeof Banknote }[] = [
+    { k: "bonifico", label: "Bonifico", icon: Receipt },
+    { k: "carta_credito", label: "Carta di credito", icon: CreditCard },
+    { k: "carta_debito", label: "Carta di debito", icon: CreditCard },
+    { k: "addebito_diretto", label: "Addebito diretto SDD", icon: Receipt },
+    { k: "paypal", label: "PayPal", icon: Wallet },
+    { k: "contanti", label: "Contanti", icon: Banknote },
+    { k: "f24", label: "F24", icon: Receipt },
+    { k: "compensazione", label: "Compensazione", icon: Wallet },
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
@@ -418,10 +429,10 @@ export function Dettaglio({
                 </div>
               ) : (
                 <>
-                  <input className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" placeholder="Riferimento (CRO bonifico, n. ricevuta POS…) — facoltativo"
+                  <input className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" placeholder={emessa ? "Riferimento (CRO bonifico, n. ricevuta POS…) — facoltativo" : "Conto e movimento (es. AMEX 31007 del 12/03, BPM 15555 SDD…)"}
                     value={rif} onChange={(e) => setRif(e.target.value)} />
                   <div className="flex flex-wrap gap-2">
-                    {modalitaPagamento.filter((m) => !(emessa && Number(f.totale) > 0 && (m.k === "pos_sumup" || m.k === "paypal"))).map((m) => (
+                    {(emessa ? modalitaPagamento : modalitaFornitore).filter((m) => !(emessa && Number(f.totale) > 0 && (m.k === "pos_sumup" || m.k === "paypal"))).map((m) => (
                       <Button key={m.k} size="sm" variant="outline" disabled={!!busy}
                         onClick={() => azione("pag", () => fattPagamento(f.id, { modalita: m.k, riferimento: rif }), () => toast.success(`Segnata ${emessa ? "incassata" : "pagata"}: ${m.label}`))}>
                         <m.icon /> {m.label}

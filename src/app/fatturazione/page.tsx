@@ -33,7 +33,7 @@ import type { FattAnagrafica } from "@/lib/api";
 import { Dettaglio } from "./Dettaglio";
 import { RigheTrovate, StoricoPrezzi, paroleRicerca } from "./RicercaRighe";
 import type { FattStoricoPrezzo } from "@/lib/api";
-import { MODALITA_LABEL, MODALITA_SOCIETA, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
+import { MODALITA_LABEL, MODALITA_RICEVUTE, MODALITA_SOCIETA, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
 import { annoRoma, oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 
@@ -80,7 +80,7 @@ function Pagina() {
   const [prove, setProve] = useState(false);
   const [mese, setMese] = useState(0);
   const [sel, setSel] = useState<Record<string, boolean>>({});
-  const [modMulti, setModMulti] = useState<FattModalita>("bonifico");
+  const [modMulti, setModMulti] = useState<FattModalita | "">("");   // 17/10/2026: nessun default, va scelta
   const [sync, setSync] = useState(false);
   const [ricStato, setRicStato] = useState<FattRicevuteStato | null>(null);
   const [periodo, setPeriodo] = useState<Parameters<typeof calcolaPeriodo>[0]>("tutto");
@@ -217,8 +217,9 @@ function Pagina() {
   const selIds = Object.keys(sel).filter((k) => sel[k] && !k.startsWith("scontrino:"));   // gli scontrini sono in sola lettura
   async function incassaSelezionate() {
     if (!selIds.length) return;
+    if (!modMulti) { toast.error("Scegli come sono state pagate (come risulta dall'estratto)"); return; }
     if (!confirm(`Segnare ${selIds.length} fatture come ${tab === "emessa" ? "incassate" : "pagate"} (${modMulti}, oggi)?`)) return;
-    try { await fattPagamentoMultiplo({ ids: selIds, modalita: modMulti }); toast.success(`${selIds.length} fatture aggiornate`); carica(); }
+    try { await fattPagamentoMultiplo({ ids: selIds, modalita: modMulti as FattModalita }); toast.success(`${selIds.length} fatture aggiornate`); carica(); }
     catch (e) { toastErrore(e); }
   }
   /** Gingy (15/10/2026): bozze arrivate da Vatican Suite → «Emetti selezionate» (una alla volta, si ferma sugli errori). */
@@ -467,7 +468,8 @@ function Pagina() {
         <Card className="flex flex-wrap items-center gap-2 p-2 text-sm">
           <span><b>{selIds.length}</b> selezionate · {eur(righe.filter((f) => sel[f.id]).reduce((t, f) => t + Number(f.totale) * (f.tipo_documento === "TD04" ? -1 : 1), 0))}</span>
           <select className={sel_cls} value={modMulti} onChange={(e) => setModMulti(e.target.value as FattModalita)}>
-            {((MODALITA_SOCIETA[societa] || MODALITA_SOCIETA.genius).filter((m) => m !== "assegno") as FattModalita[]).map((m) => <option key={m} value={m}>{MODALITA_LABEL[m]}</option>)}
+            <option value="">— come è stata pagata? —</option>
+            {((tab === "ricevuta" ? MODALITA_RICEVUTE : (MODALITA_SOCIETA[societa] || MODALITA_SOCIETA.genius).filter((m) => m !== "assegno")) as FattModalita[]).map((m) => <option key={m} value={m}>{MODALITA_LABEL[m]}</option>)}
           </select>
           <Button size="sm" onClick={incassaSelezionate}><Wallet /> Segna {tab === "emessa" ? "incassate" : "pagate"}</Button>
           {tab === "emessa" && !genius && righe.some((f) => sel[f.id] && f.stato === "bozza") && (

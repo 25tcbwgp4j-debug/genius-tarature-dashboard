@@ -39,7 +39,19 @@ export const MODALITA_LABEL: Record<string, string> = {
   non_pagato: "Da pagare",
   booking: "Booking.com",
   airbnb: "Airbnb",
+  // 17/10/2026: pagamenti ai fornitori (fatture ricevute), come risultano dall'estratto
+  carta_credito: "Carta di credito",
+  carta_debito: "Carta di debito",
+  addebito_diretto: "Addebito diretto SDD",
+  f24: "F24",
+  compensazione: "Compensazione",
+  nota_credito: "Nota di credito",
+  chiusura_ufficio: "Chiusa d'ufficio (non riscontrata)",
 };
+
+/** Modalità per segnare pagata una fattura RICEVUTA: va scelta quella vera dell'estratto, mai un default (17/10/2026). */
+export const MODALITA_RICEVUTE = ["bonifico", "carta_credito", "carta_debito", "addebito_diretto", "paypal", "pos_sumup", "contanti",
+  "f24", "compensazione", "nota_credito", "assegno"];
 
 export const TIPI_LABEL: Record<string, string> = {
   TD01: "Fattura",
