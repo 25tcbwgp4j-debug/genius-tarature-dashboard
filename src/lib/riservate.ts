@@ -16,6 +16,7 @@ export const PAGINE_DEL_TITOLARE = [
   "/rubrica",          // contatti della chat
   "/nuovi-clienti",    // prospect e campagne
   "/partner",          // partner B2B e outreach
+  "/campagna",         // campagna offerte: contatti raggiunti, esiti, risposte (18/10/2026)
   "/buste-paga",       // buste paga del lavoro domestico: dati personali della famiglia (16/10/2026)
   "/riservato",
 ];

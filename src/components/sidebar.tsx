@@ -39,6 +39,7 @@ import {
   Truck,
   LayoutDashboard,
   ListChecks,
+  Megaphone,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -82,6 +83,8 @@ export const MENU_TARATURE: Voce[] = [
   { href: "/clienti", label: "Clienti", icon: Users },
   { href: "/nuovi-clienti", label: "Nuovi Clienti", icon: UserPlus },
   { href: "/partner", label: "Partner B2B", icon: Handshake },
+  // campagna offerte (18/10/2026): invii email/WhatsApp, esiti e risposte — solo titolare (lib/riservate.ts)
+  { href: "/campagna", label: "Campagna offerte", icon: Megaphone },
   { href: "/rapporti", label: "Rapporti", icon: FileText },
   ...COMUNI,
   { href: "/scadenzario", label: "Scadenzario", icon: CalendarClock },
