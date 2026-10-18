@@ -44,7 +44,7 @@ function Barcode({ value }: { value: string }) {
 const PAGINA = 100;
 const GIACENZE: { v: FiltroGiacenza; l: string }[] = [
   { v: "tutti", l: "Tutti" }, { v: "disponibili", l: "Disponibili" }, { v: "esauriti", l: "Esauriti" },
-  { v: "sotto_scorta", l: "Sotto scorta" }, { v: "negativi", l: "Negativi" },
+  { v: "sotto_scorta", l: "Sotto scorta" }, { v: "da_riordinare", l: "Da riordinare" }, { v: "negativi", l: "Negativi" },
 ];
 const nomeCat = (c: string) => (c === MAG_SENZA_CATEGORIA ? "Senza categoria" : c);
 const num = (v: number) => new Intl.NumberFormat("it-IT", { maximumFractionDigits: 2 }).format(v || 0);
@@ -220,7 +220,7 @@ function Magazzino() {
         <Kpi etichetta="Valore a prezzo di vendita" valore={t ? eur(t.valore_vendita) : "…"} nota={t && t.valore_costo > 0 ? `a costo ${eur(t.valore_costo)}` : ""} />
         <Kpi etichetta="Disponibili" valore={t ? num(t.disponibili) : "…"} attivo={filtri.giacenza === "disponibili"} onClick={() => vai({ giac: filtri.giacenza === "disponibili" ? "" : "disponibili" })} />
         <Kpi etichetta="Esauriti" valore={t ? num(t.esauriti) : "…"} tono="ambra" attivo={filtri.giacenza === "esauriti"} onClick={() => vai({ giac: filtri.giacenza === "esauriti" ? "" : "esauriti" })} />
-        <Kpi etichetta="Sotto scorta minima" valore={t ? num(t.sotto_scorta) : "…"} tono="rosso" nota={t && t.negativi ? `${t.negativi} negativi` : ""} attivo={filtri.giacenza === "sotto_scorta"} onClick={() => vai({ giac: filtri.giacenza === "sotto_scorta" ? "" : "sotto_scorta" })} />
+        <Kpi etichetta="Da riordinare" valore={t ? num(t.da_riordinare ?? t.sotto_scorta) : "…"} tono="rosso" nota={t ? `sotto scorta ${num(t.sotto_scorta)} + finiti dopo vendite${t.negativi ? ` · ${t.negativi} negativi` : ""}` : ""} attivo={filtri.giacenza === "da_riordinare"} onClick={() => vai({ giac: filtri.giacenza === "da_riordinare" ? "" : "da_riordinare" })} />
       </div>
 
       {/* chip delle categorie (telefono e schermi stretti) */}

@@ -45,6 +45,17 @@ const STATO: Record<string, string> = {
   da_stampare: "in coda", in_stampa: "in stampa", emesso: "emesso", errore: "ERRORE", simulato: "simulato (non fiscale)", annullato: "annullato",
 };
 
+/** 18/10/2026 (Christian): quando aggiungo un articolo allo scontrino mi devi dire se è l'ultimo, se ne restano 2
+ *  o se va sotto la scorta minima — senza dover andare a guardare il magazzino. `dopo` = pezzi nel carrello. */
+function avvisaScorta(p: Prodotto, dopo: number) {
+  if (!p.gestisce_giacenza || p.serializzato) return;
+  const resta = Number(p.giacenza) - dopo, smin = Number(p.scorta_minima) || 0;
+  if (resta < 0) toast.warning(`${p.descrizione}: in magazzino ne risultano ${Number(p.giacenza)} (ne stai vendendo ${dopo}) — controlla la giacenza`, { duration: 9000 });
+  else if (resta === 0) toast.warning(`⚠️ ${p.descrizione}: è l'ULTIMO pezzo — dopo questa vendita è esaurito, da riordinare`, { duration: 9000 });
+  else if (resta <= 2) toast.warning(`${p.descrizione}: dopo questa vendita ne ${resta === 1 ? "resta 1" : `restano ${resta}`} — da riordinare`, { duration: 9000 });
+  else if (smin > 0 && resta <= smin) toast.warning(`${p.descrizione}: ne restano ${resta}, sotto la scorta minima di ${smin} — da riordinare`, { duration: 9000 });
+}
+
 export default function CassaPage() {
   const router = useRouter();
   // prezzo_magazzino: prezzo dell'articolo quando è entrato nel carrello (per «Aggiorna anche il prezzo in magazzino», 08/10/2026)
@@ -215,6 +226,7 @@ export default function CassaPage() {
       setQ(""); setTrovati([]);
       return;
     }
+    avvisaScorta(p, carrello.filter((r) => r.prodotto_id === p.id).reduce((t, r) => t + r.quantita, 0) + 1);
     setCarrello((c) => {
       const i = c.findIndex((r) => r.prodotto_id === p.id);
       if (i >= 0) return c.map((r, j) => (j === i ? { ...r, quantita: r.quantita + 1 } : r));
@@ -225,7 +237,7 @@ export default function CassaPage() {
                       plu_rt: p.plu_rt ?? null, prezzo_magazzino: Number(p.prezzo), ...reg }];
     });
     setQ(""); setTrovati([]);
-  }, []);
+  }, [carrello]);
   const scansiona = useCallback(async (codice: string) => {
     try { aggiungi(await magPerCodice(codice)); } catch (e) { toast.error((e as Error).message); }
   }, [aggiungi]);
@@ -265,6 +277,8 @@ export default function CassaPage() {
                              ...(!sessione && !ordine && attScelta ? { attivita: attScelta } : {}) });
       esito = { id: sc.id, descrizione: `Scontrino ${eur(tot)}${ordine ? ` (ordine ${ordine.sigla})` : ""} — ${carrello.map((r) => r.descrizione).join(", ")}`.slice(0, 280) };
       toast.success(`Scontrino da ${eur(tot)} inviato alla cassa (${come} · ${operatore})${sc.resto ? ` — RESTO ${eur(sc.resto)}` : ""}`, { duration: sc.resto ? 15000 : 5000 });
+      // 18/10/2026: cosa resta in magazzino degli articoli appena venduti (anche su Telegram)
+      (sc.avvisi_scorta || []).forEach((a) => toast.warning(`📦 ${a.testo}`, { duration: 12000 }));
       setCarrello([]); ricarica(); setRiemissione(null);
       if (scheda) {
         await collegaScheda({ scontrino_id: sc.id, ...(scheda.acconto ? { acconto: String(scheda.acconto) } : {}) });

@@ -1537,7 +1537,7 @@ export async function magProdotti(q = '', sottoScorta = false, limit = 300, atti
   return fetchAPI(`/api/magazzino/prodotti?q=${encodeURIComponent(q)}&sotto_scorta=${sottoScorta}&limit=${limit}&attivita=${attivita}&categoria_merce=${categoriaMerce}`);
 }
 /** Pagina Magazzino (08/10/2026): filtri lato server, riepilogo con albero delle categorie, sposta in categoria, export. */
-export type FiltroGiacenza = 'tutti' | 'disponibili' | 'esauriti' | 'sotto_scorta' | 'negativi';
+export type FiltroGiacenza = 'tutti' | 'disponibili' | 'esauriti' | 'sotto_scorta' | 'negativi' | 'da_riordinare';
 export interface MagFiltri {
   q?: string; categoria?: string; sottocategoria?: string; giacenza?: FiltroGiacenza | ''; attivita?: string; marca?: string;
   ordina?: string; verso?: 'asc' | 'desc'; limit?: number; offset?: number;
@@ -1545,7 +1545,7 @@ export interface MagFiltri {
 export interface MagNodo { categoria: string; articoli: number; pezzi: number; sottocategorie: { nome: string; articoli: number; pezzi: number }[] }
 export interface MagRiepilogo {
   albero: MagNodo[]; marche: string[];
-  totali: { articoli: number; pezzi: number; valore_vendita: number; valore_costo: number; disponibili: number; esauriti: number; negativi: number; sotto_scorta: number };
+  totali: { articoli: number; pezzi: number; valore_vendita: number; valore_costo: number; disponibili: number; esauriti: number; negativi: number; sotto_scorta: number; da_riordinare?: number };
 }
 export const MAG_SENZA_CATEGORIA = '__nessuna__';
 function magQuery(f: MagFiltri & Record<string, string | number | undefined>) {
@@ -1586,8 +1586,11 @@ export function magUrlEtichettePdf(percorso: string) { return `${API_PROXY}${per
 export async function magMovimento(id: string, body: { tipo: string; quantita: number; causale?: string; costo?: number }) {
   return fetchAPI(`/api/magazzino/prodotti/${id}/movimento`, { method: 'POST', body: JSON.stringify(body) });
 }
+/** Dopo la vendita (18/10/2026): articolo che resta con pochi pezzi, esaurito o sotto scorta → da riordinare */
+export interface AvvisoScorta { prodotto_id: string; descrizione: string; codice: string | null; giacenza: number; scorta_minima: number;
+  livello: 'negativo' | 'esaurito' | 'ultimo' | 'pochi' | 'sotto_scorta'; da_riordinare: number; testo: string }
 export async function cassaScontrino(body: { righe: RigaCassa[]; pagamenti: PagamentoScontrino[]; codice_lotteria?: string; pos_incasso_id?: string; operatore: string; session_id?: string; attivita?: string; scheda_id?: string;
-  /** incasso di un ordine cliente (/cassa?ordine=…): lo scontrino diventa acconto/saldo dell'ordine */ documento_id?: string }): Promise<Scontrino & { ordine?: { id: string; sigla: string } }> {
+  /** incasso di un ordine cliente (/cassa?ordine=…): lo scontrino diventa acconto/saldo dell'ordine */ documento_id?: string }): Promise<Scontrino & { ordine?: { id: string; sigla: string }; avvisi_scorta?: AvvisoScorta[] }> {
   return fetchAPI('/api/cassa/scontrini', { method: 'POST', body: JSON.stringify(body) });
 }
 export async function cassaScontrini(giorno = '', attivita = '') { return fetchAPI(`/api/cassa/scontrini?giorno=${giorno}&attivita=${attivita}`); }
