@@ -76,6 +76,7 @@ import { AssistenzaSessione } from "./AssistenzaSessione";
 import { AvvisoScansioneModal, PromemoriaScansione } from "./ScansioneRapporti";
 import type { StatoScansioneRapporti } from "@/lib/api";
 import { NOMI_OPERATORI, OPERATORI_TARATURE, useOperatore, type Operatore } from "@/components/Operatore";
+import { eProvvisoria } from "@/lib/numeroSessione";
 
 interface InstrumentType {
   id: string;
@@ -617,10 +618,18 @@ export default function SessionDetail() {
   };
 
   const handleDeleteSession = async () => {
-    if (!confirm("Sei sicuro di voler eliminare questa sessione e tutti i suoi strumenti?")) return;
+    // 18/10/2026: una sessione col numero DEFINITIVO cancellata lascia un buco nella numerazione → avviso esplicito.
+    // Quelle con il solo numero provvisorio (P-xxx, in attesa strumenti) si cancellano senza buchi.
+    const definitiva = !eProvvisoria(session);
+    if (definitiva) {
+      if (!confirm(`ATTENZIONE: la sessione N. ${session?.session_number} ha già il numero definitivo.\n\n`
+        + "Eliminarla crea un BUCO nella numerazione delle sessioni. Preferisci annullarla (lasciarla com'è e non lavorarla)?\n\n"
+        + "Premi OK solo se vuoi ELIMINARLA comunque, con tutti i suoi strumenti.")) return;
+    } else if (!confirm(`Eliminare la sessione provvisoria ${session?.provisional_number || ""} e tutti i suoi strumenti?\n`
+      + "(Nessun buco nella numerazione: non ha ancora il numero definitivo.)")) return;
     setActionLoading("delete");
     try {
-      await deleteSession(sessionId);
+      await deleteSession(sessionId, definitiva);
       toast.success("Sessione eliminata");
       router.push("/sessioni");
     } catch (err: any) {
@@ -706,8 +715,15 @@ export default function SessionDetail() {
             Indietro
           </Button>
           <h2 className="text-2xl font-bold text-gray-900">
-            {session.session_number != null ? `Sessione N. ${session.session_number}` : "Dettaglio sessione"}
+            {session.session_number != null ? `Sessione N. ${session.session_number}`
+              : session.provisional_number ? `Sessione ${session.provisional_number}` : "Dettaglio sessione"}
           </h2>
+          {eProvvisoria(session) && session.provisional_number && (
+            <Badge className="border border-orange-400 bg-orange-100 text-orange-800"
+              title="Numero provvisorio: il numero di sessione definitivo nasce quando confermi «Strumenti arrivati»">
+              {session.provisional_number} (provvisorio)
+            </Badge>
+          )}
           {(() => {
             const cfg = getStatusConfig(session.status, session);
             return (
@@ -754,17 +770,29 @@ export default function SessionDetail() {
                 La sessione è già aperta: il cliente deve ancora portare gli strumenti
                 {session.session_date ? ` (arrivo previsto ${new Date(session.session_date).toLocaleDateString("it-IT")})` : ""}.
                 Non va rifatta. Nessuna notifica parte al cliente finché è in attesa.
-                Quando arrivano: premi «Strumenti arrivati» oppure acquisisci il primo strumento con la fotocamera (passa da sola in registrazione).
+                Quando arrivano: premi «Strumenti arrivati – conferma» oppure acquisisci il primo strumento con la fotocamera (passa da sola in registrazione).
               </p>
+              {eProvvisoria(session) && (
+                <p className="mt-1 text-sm font-semibold text-orange-900">
+                  Numero provvisorio {session.provisional_number || ""}: il numero di sessione definitivo si assegna alla conferma dell&apos;arrivo.
+                  Se il cliente non viene, la sessione si può eliminare senza lasciare buchi nella numerazione.
+                </p>
+              )}
             </div>
             <Button
               className="shrink-0 bg-orange-500 text-white hover:bg-orange-600"
               disabled={actionLoading !== null}
-              onClick={() => handleAction("strumenti_arrivati", () => strumentiArrivati(sessionId),
-                "Strumenti arrivati: sessione in registrazione")}
+              onClick={() => {
+                if (eProvvisoria(session) && !confirm("Confermi che gli strumenti sono arrivati?\nLa sessione passa in registrazione e prende il numero di sessione definitivo.")) return;
+                handleAction("strumenti_arrivati", async () => {
+                  const r = await strumentiArrivati(sessionId);
+                  if (r?.session_number != null) toast.success(`Assegnato il numero di sessione definitivo: N. ${r.session_number}`);
+                  return r;
+                }, "Strumenti arrivati: sessione in registrazione");
+              }}
             >
               {actionLoading === "strumenti_arrivati" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <PackageCheck className="w-4 h-4 mr-1" />}
-              Strumenti arrivati
+              Strumenti arrivati – conferma
             </Button>
           </div>
         )}
@@ -1416,7 +1444,10 @@ export default function SessionDetail() {
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
           <div>
             <span className="text-gray-500">N. sessione:</span>
-            <p className="font-mono">{session.session_number ?? "—"}</p>
+            <p className="font-mono">{session.session_number ?? (session.provisional_number ? `${session.provisional_number} (provvisorio)` : "—")}</p>
+            {session.session_number != null && session.provisional_number && (
+              <p className="font-mono text-xs text-gray-400">era {session.provisional_number}</p>
+            )}
             <p className="font-mono text-xs text-gray-400">ID {session.id?.substring(0, 8)}</p>
           </div>
           <div>

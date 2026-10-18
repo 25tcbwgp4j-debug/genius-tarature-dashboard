@@ -233,7 +233,7 @@ export async function aggiungiFotoStrumento(instrumentId: string, immagini: stri
 
 /** «Nuova sessione da foto» (15/10/2026): biglietto da visita, foglio, insegna o nome scritto → campi letti +
  *  clienti candidati (rubrica e prospect F-GAS) + sessione aperta da riusare. L'analisi non salva nulla. */
-export interface SessioneAperta { id: string; session_number?: number; status: string; session_date?: string | null; created_at?: string;
+export interface SessioneAperta { id: string; session_number?: number | null; provisional_number?: string | null; status: string; session_date?: string | null; created_at?: string;
   motivo?: 'attesa_strumenti' | 'registrazione_recente' }
 export interface CandidatoCliente {
   fonte: 'cliente' | 'prospect'; id: string; nome: string | null; piva: string | null; citta: string | null; provincia: string | null;
@@ -251,7 +251,7 @@ export async function analizzaSessioneDaFoto(body: { testo?: string; file_base64
 export async function apriSessioneDaFoto(body: {
   customer_id?: string; prospect_id?: string; cliente?: Partial<CampiEstratti>; session_id?: string;
   attesa_strumenti?: boolean; conferma_duplicato?: boolean;
-}): Promise<{ session: { id: string; session_number?: number; status: string }; riusata: boolean; cliente_creato: boolean }> {
+}): Promise<{ session: { id: string; session_number?: number | null; provisional_number?: string | null; status: string }; riusata: boolean; cliente_creato: boolean }> {
   return fetchAPI('/api/sessions/da-foto/apri', { method: 'POST', body: JSON.stringify(body), timeoutMs: 30000 });
 }
 
@@ -305,8 +305,10 @@ export async function segnaScansioneRapporti(id: string, fatta: boolean, operato
   });
 }
 
-export async function deleteSession(id: string) {
-  return fetchAPI(`/api/sessions/${id}`, { method: 'DELETE' });
+/** confermaBuco: la sessione ha il numero DEFINITIVO e l'operatore ha confermato che eliminarla lascia un buco
+ *  nella numerazione (senza, il backend risponde 409 code «buco_numerazione»). 18/10/2026 */
+export async function deleteSession(id: string, confermaBuco = false) {
+  return fetchAPI(`/api/sessions/${id}${confermaBuco ? '?conferma_buco=1' : ''}`, { method: 'DELETE' });
 }
 
 // === STRUMENTI ===
@@ -435,7 +437,7 @@ export interface ProformaAllineamento {
 }
 export interface ProformaSessioneStato {
   documento: (DocumentoCliente & { righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number; allineamento?: ProformaAllineamento | null }) | null;
-  anteprima: { righe?: RigaDoc[]; session_number?: number | null; righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number; totale: number; causale: string; shipping_by_customer?: boolean } | null;
+  anteprima: { righe?: RigaDoc[]; session_number?: number | null; provisional_number?: string | null; righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number; totale: number; causale: string; shipping_by_customer?: boolean } | null;
 }
 export async function proformaSessioneStato(sessionId: string): Promise<ProformaSessioneStato> {
   return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`, { cache: 'no-store' });
@@ -1154,9 +1156,9 @@ export interface Fattura {
   controlli?: string[];
   collegata?: { id: string; numero: string; data: string; totale: number } | null;
   note_credito?: { id: string; numero: string; data: string; totale: number; stato: string }[];
-  /** sessione di taratura collegata (03/10/2026): stesso stato di pagamento ovunque */
-  session_number?: number | null;
-  sessione?: { id: string; session_number: number | null; status: string; payment_status: string; payment_method: string | null;
+  /** sessione di taratura collegata (03/10/2026): stesso stato di pagamento ovunque (P-xxx se ancora provvisoria) */
+  session_number?: number | string | null;
+  sessione?: { id: string; session_number: number | null; provisional_number?: string | null; status: string; payment_status: string; payment_method: string | null;
     payment_date: string | null; delivered_at: string | null; termini: TerminiCliente } | null;
   da_proforma?: { id: string; numero: number; anno: number; tipo: string; stato: string } | null;
   /** registro pagamenti (03/10/2026): quanto è stato incassato, righe con metodo/data, residuo */
@@ -1305,7 +1307,7 @@ export interface StatoPagamentoSessione {
   riepilogo?: RiepilogoPagamenti | null;
 }
 export async function fattStatoSessione(sessionId: string): Promise<StatoPagamentoSessione> { return fetchAPI(`/api/fatturazione/sessione/${sessionId}`, { cache: 'no-store' }); }
-export interface CoerenzaVoce { session_id: string; session_number: number | null; cliente: string | null; status: string; payment_status: string;
+export interface CoerenzaVoce { session_id: string; session_number: number | string | null; cliente: string | null; status: string; payment_status: string;
   codice: string; testo: string; certo: boolean; fattura: { id: string; numero: string; data: string; totale: number; pagamento_stato: string } | null }
 export async function fattCoerenzaSessioni(anno = 0): Promise<{ anno: number; sessioni: number; voci: CoerenzaVoce[]; per_codice: Record<string, number> }> {
   return fetchAPI(`/api/fatturazione/coerenza-sessioni${anno ? `?anno=${anno}` : ''}`, { cache: 'no-store' });

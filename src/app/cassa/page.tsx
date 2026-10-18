@@ -198,7 +198,7 @@ export default function CassaPage() {
         descrizione: x.descrizione, quantita: Number(x.quantita) || 1, prezzo: Number(x.prezzo_ivato) || 0,
         aliquota: Number(x.aliquota ?? 22), sconto: Number(x.sconto || 0),
       })));
-      const n = r.anteprima?.session_number;
+      const n = r.anteprima?.session_number ?? r.anteprima?.provisional_number;
       setSessione({ id: sid, etichetta: r.documento ? `${r.documento.rif || "sessione di taratura"} · pro forma ${r.documento.sigla}` : `Sessione di taratura${n ? ` n. ${n}` : ""}` });
     }).catch((e: Error) => toast.error("Sessione non caricata: " + e.message));
   }, []);

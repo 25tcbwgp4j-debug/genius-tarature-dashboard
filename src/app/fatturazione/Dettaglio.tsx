@@ -384,7 +384,7 @@ export function Dettaglio({
           {(f.sessione || f.da_proforma) && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-sky-300/60 bg-sky-50 p-2 text-sm dark:bg-sky-950/30">
               {f.sessione && (
-                <a className="font-medium underline" href={`/sessioni/${f.sessione.id}`}>Sessione di taratura n. {f.sessione.session_number ?? "—"}</a>
+                <a className="font-medium underline" href={`/sessioni/${f.sessione.id}`}>Sessione di taratura n. {f.sessione.session_number ?? f.sessione.provisional_number ?? "—"}</a>
               )}
               {f.sessione && (
                 <span className="text-xs text-muted-foreground">

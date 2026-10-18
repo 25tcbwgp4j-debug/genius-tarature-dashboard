@@ -20,6 +20,7 @@ import {
   analizzaSessioneDaFoto, apriSessioneDaFoto,
   type CampiEstratti, type CandidatoCliente, type EsitoAnalisiDaFoto,
 } from "@/lib/api";
+import { etichettaSessione } from "@/lib/numeroSessione";
 
 type Modo = "scelta" | "testo" | "nome";
 type Scelta = { fonte: "cliente" | "prospect"; id: string } | "nuovo" | null;
@@ -132,7 +133,7 @@ export function NuovaDaFoto() {
         if (scelta.fonte === "cliente") body.customer_id = scelta.id; else body.prospect_id = scelta.id;
       }
       const r = await apriSessioneDaFoto(body);
-      toast.success(r.riusata ? `Ripresa la sessione n. ${r.session.session_number ?? ""}`
+      toast.success(r.riusata ? `Ripresa la sessione ${etichettaSessione(r.session)}`
         : r.cliente_creato ? "Cliente creato e sessione aperta" : "Sessione aperta");
       window.location.assign(`/sessioni/${r.session.id}${attesa ? "" : "?acquisisci=1"}`);
     } catch (err) {
@@ -250,7 +251,7 @@ export function NuovaDaFoto() {
                           <p className="text-xs text-emerald-800">{c.motivi.join(" · ")}</p>
                           {c.sessioni_aperte.length > 0 && (
                             <p className="text-xs text-orange-800">
-                              Sessioni aperte: {c.sessioni_aperte.map((s) => `n. ${s.session_number ?? "?"} ${STATO_SESSIONE[s.status] || s.status} dal ${giorno(s.created_at)}`).join(", ")}
+                              Sessioni aperte: {c.sessioni_aperte.map((s) => `${etichettaSessione(s) || "?"} ${STATO_SESSIONE[s.status] || s.status} dal ${giorno(s.created_at)}`).join(", ")}
                             </p>
                           )}
                         </div>
@@ -295,11 +296,11 @@ export function NuovaDaFoto() {
               {proposta && (
                 <section className="space-y-2 rounded-lg border border-orange-300 bg-orange-50 p-2.5">
                   <p className="flex items-center gap-1.5 text-sm font-semibold text-orange-900">
-                    <AlertTriangle className="size-4" /> Sessione già aperta: n. {proposta.session_number} {STATO_SESSIONE[proposta.status] || proposta.status} dal {giorno(proposta.created_at)}
+                    <AlertTriangle className="size-4" /> Sessione già aperta: {etichettaSessione(proposta)} {STATO_SESSIONE[proposta.status] || proposta.status} dal {giorno(proposta.created_at)}
                   </p>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <Button variant={riprendi ? "default" : "outline"} className={`h-11 ${riprendi ? "bg-orange-600 hover:bg-orange-700" : "bg-white"}`} onClick={() => setRiprendi(true)}>
-                      Riprendi la n. {proposta.session_number}
+                      Riprendi la {etichettaSessione(proposta)}
                     </Button>
                     <Button variant={!riprendi ? "default" : "outline"} className="h-11" onClick={() => setRiprendi(false)}>
                       Apri una sessione nuova
@@ -330,7 +331,7 @@ export function NuovaDaFoto() {
                 <Button className="h-14 w-full bg-emerald-600 text-base font-semibold text-white hover:bg-emerald-700"
                   disabled={!scelta || !!busy} onClick={() => apri()}>
                   {busy === "apri" ? <Loader2 className="size-5 animate-spin" /> : <Play className="size-5" />}
-                  {proposta && riprendi ? `Riprendi sessione n. ${proposta.session_number}` : "Apri sessione"}
+                  {proposta && riprendi ? `Riprendi sessione ${etichettaSessione(proposta)}` : "Apri sessione"}
                 </Button>
               )}
             </div>

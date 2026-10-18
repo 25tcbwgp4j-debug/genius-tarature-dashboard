@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getStatusConfig, getPaymentConfig } from "@/lib/constants";
+import { cercaProvvisorio, eProvvisoria } from "@/lib/numeroSessione";
 
 // Chip singolo notifica: verde se inviato, grigio se non ancora fatto
 function NotifChip({ label, sent }: { label: string; sent: boolean }) {
@@ -113,7 +114,10 @@ export default function SessionsPage() {
           const q = search.trim().toLowerCase();
           // "165", "n. 165", "n165": ricerca per numero di sessione
           const qNum = q.replace(/^n\.?\s*/, "");
-          rows = rows.filter((s: { customers?: { company_name?: string; vat_number?: string } | null; operator?: string; session_number?: number }) =>
+          // "P-7", "p007": numero provvisorio delle sessioni in attesa strumenti (18/10/2026)
+          const qProv = cercaProvvisorio(q);
+          rows = rows.filter((s: { customers?: { company_name?: string; vat_number?: string } | null; operator?: string; session_number?: number | null; provisional_number?: string | null }) =>
+            (qProv !== null && s.provisional_number === qProv) ||
             (/^\d+$/.test(qNum) && String(s.session_number ?? "") === qNum) ||
             (s.customers?.company_name || "").toLowerCase().includes(q) ||
             (s.customers?.vat_number || "").toLowerCase().includes(q) ||
@@ -513,7 +517,7 @@ export default function SessionsPage() {
           {/* Search testuale (cliente/operator) */}
           <div className="flex items-center gap-1 flex-1 min-w-[200px]">
             <Input
-              placeholder="Cerca n. sessione / cliente / P.IVA / operatore..."
+              placeholder="Cerca n. sessione (anche P-007) / cliente / P.IVA / operatore..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => {
@@ -695,6 +699,13 @@ export default function SessionsPage() {
                     <p className="font-medium truncate">
                       {s.session_number != null && (
                         <span className="mr-2 font-mono text-sm text-gray-500">N. {s.session_number}</span>
+                      )}
+                      {eProvvisoria(s) && s.provisional_number && (
+                        <span className="mr-2 inline-flex items-center gap-1 font-mono text-sm text-orange-700"
+                          title="Numero provvisorio: il numero di sessione definitivo arriva quando gli strumenti arrivano">
+                          {s.provisional_number}
+                          <span className="rounded bg-orange-100 px-1 font-sans text-[10px] font-semibold uppercase text-orange-800">provvisorio</span>
+                        </span>
                       )}
                       {s.customers?.company_name || "N/D"}
                     </p>
