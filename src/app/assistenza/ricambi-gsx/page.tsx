@@ -60,9 +60,9 @@ export default function RicambiGsx() {
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-6xl">
       <div>
-        <h1 className="text-xl font-semibold flex items-center gap-2"><Wrench className="h-5 w-5" /> Ricambi Mac — prezzi GSX</h1>
+        <h1 className="text-xl font-semibold flex items-center gap-2"><Wrench className="h-5 w-5" /> Ricambi Apple — prezzi GSX</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Costo d&apos;acquisto Genius dal GSX, IVA esclusa (col reso del pezzo guasto; se il pezzo non ha reso, prezzo di stock).
+          Costo d&apos;acquisto Genius dal GSX (Mac, MacBook Neo, iMac, iPad, iPhone 17), IVA esclusa (col reso del pezzo guasto; se il pezzo non ha reso, prezzo di stock).
           Rilevati il {modelli[0] ? new Date(modelli[0].rilevato_il).toLocaleDateString("it-IT") : "…"} · prezzo al cliente = ricarico deciso dal titolare.
         </p>
       </div>
