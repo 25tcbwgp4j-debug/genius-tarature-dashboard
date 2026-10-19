@@ -168,7 +168,7 @@ export function Incassi({ onClose, onApriFattura, onCambiato }: {
             <div className="flex flex-wrap gap-2 text-xs">
               {Object.entries(esito).map(([k, v]) => (
                 <span key={k} className={`rounded px-1.5 py-0.5 ${v.ok ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
-                  {NOME_FONTE[k] || k}: {v.ok ? `${v.nuovi || 0} nuovi` : v.nota}
+                  {NOME_FONTE[k] || k}: {v.ok ? `${v.nuovi || 0} nuovi${v.nota ? ` · ${v.nota}` : ""}` : v.nota}
                 </span>
               ))}
             </div>
