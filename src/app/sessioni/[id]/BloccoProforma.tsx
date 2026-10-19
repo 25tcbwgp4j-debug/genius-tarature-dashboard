@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 import { dataIt, testoPagamento } from "./PagamentoStato";
 import { IncassoSessione } from "./IncassoSessione";
+import { BonificoSessione } from "./BonificoSessione";
 import { EtichettaRitorno } from "./EtichettaRitorno";
 
 type Sess = Record<string, any>;  // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -231,6 +232,10 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
         </Riga>
         <Riga k="Pagamento">
           {tp ? <span className={`inline-block rounded border px-1.5 py-0.5 text-[12px] font-medium leading-snug ${tp.colore}`}>{tp.lungo}</span> : <span className="text-gray-400">—</span>}
+          {/* 19/10/2026: bonifico dichiarato al banco e non ancora visto sul conto SumUp */}
+          {typeof session.payment_notes === "string" && session.payment_notes.includes("DICHIARATO") && (
+            <span className="mt-1 block text-xs font-medium text-amber-700">⚠️ {session.payment_notes}</span>
+          )}
           {!!inc?.incassi.length && (
             <span className="mt-1 block space-y-0.5 text-xs text-gray-600">
               {inc.incassi.map((x) => (
@@ -369,6 +374,11 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
                 {([["bonifico", "BONIFICO"], ["contanti", "CONTANTI"], ["pos", "POS"]] as const).map(([method, label]) => {
                   const isActive = isPaid && session.payment_method === method;
                   const key = `mark_paid_${method}`;
+                  // 19/10/2026: BONIFICO da pagare → prima si cerca il bonifico sul conto SumUp (BonificoSessione)
+                  if (method === "bonifico" && !isPaid) return (
+                    <BonificoSessione key={method} sessionId={sessionId} operatore={operatore} disabled={occupato}
+                      className="h-11 bg-emerald-600 px-1 text-[11px] font-bold text-white hover:bg-emerald-700" onFatto={() => onRicarica?.()} />
+                  );
                   return (
                     <Button key={method} disabled={occupato || isActive}
                       className={`h-11 px-1 text-[11px] font-bold text-white ${isActive ? "bg-emerald-700 ring-2 ring-emerald-900 ring-offset-1" : isPaid ? "bg-emerald-400 opacity-70 hover:bg-emerald-500" : "bg-emerald-600 hover:bg-emerald-700"}`}
