@@ -20,11 +20,12 @@ import { ScannerInput } from "@/components/ScannerInput";
 import { dec0 } from "@/components/DecInput";
 import { toastErrore } from "@/lib/errori";
 import { usePermessi } from "@/components/permessi";
-import { type ApiError, magCrea, magElimina, magModifica, magMovimento, magPerCodice, magProdotto, type Prodotto,
+import { type ApiError, magCaricoSeriali, magStatoSeriali, magCrea, magElimina, magModifica, magMovimento, magPerCodice, magProdotto, type Prodotto,
   CATEGORIE_MERCE, type CategoriaMerce, type FiltroGiacenza, type MagFiltri, type MagRiepilogo, MAG_SENZA_CATEGORIA,
   magElenco, magSposta, magTassonomia, magUrlExport } from "@/lib/api";
 import { BadgeAttivita, FiltroAttivita, SceltaAttivita, useAttivita } from "@/components/attivita";
 import { PezziArticolo } from "./PezziArticolo";
+import { CampoSeriale } from "@/components/CampoSeriale";
 import { StampaEtichette, type VoceEtichetta } from "./StampaEtichette";
 
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
@@ -121,7 +122,20 @@ function Magazzino() {
   // Carico con lo scanner: se l'articolo esiste NON carica da solo (04/10/2026, Christian: una lettura «di controllo»
   // diventava un carico). Mostra articolo e giacenza attuale e chiede «Quanti ne carichi?»; Invio conferma, Esc annulla.
   // Se non esiste apre «nuovo articolo» col codice.
-  const [daCaricare, setDaCaricare] = useState<{ p: Prodotto; qta: string } | null>(null);
+  // 20/10/2026 (Christian): articolo con seriale (AirPods, mouse, tastiere, computer…) → nella stessa finestra, dopo la
+  // quantità, si sparano i seriali di TUTTI i pezzi che entrano; e, se in giacenza ci sono pezzi ancora senza seriale,
+  // anche i loro (facoltativi). Il cursore passa da solo al seriale successivo, poi al pulsante «Carica».
+  const [daCaricare, setDaCaricare] = useState<{ p: Prodotto; qta: string; conSeriale?: boolean; senza?: number; nuovi: string[]; vecchi: string[] } | null>(null);
+  const qtaCarico = daCaricare ? Math.max(0, Math.round(Number(daCaricare.qta.replace(",", ".")) || 0)) : 0;
+  const serialiPieni = (v: string[], n: number) => v.slice(0, n).filter((x) => x?.trim()).length;
+  /** cursore sul primo seriale vuoto (prima i pezzi nuovi, poi quelli in giacenza); finiti → pulsante «Carica» */
+  function prossimoSeriale() {
+    setTimeout(() => {
+      const campi = Array.from(document.querySelectorAll<HTMLInputElement>("[data-seriale-carico]"));
+      const vuoto = campi.find((el) => !el.value.trim());
+      (vuoto || document.getElementById("conferma-carico"))?.focus();
+    }, 50);
+  }
   const [caricando, setCaricando] = useState(false);
   const caricoScanner = useCallback(async (codice: string) => {
     let p: Prodotto;
@@ -133,14 +147,29 @@ function Magazzino() {
       else toastErrore(e);
       return;
     }
-    setDaCaricare({ p, qta: String(caricoQta || 1) });
+    setDaCaricare({ p, qta: String(caricoQta || 1), nuovi: [], vecchi: [] });
+    magStatoSeriali(p.id).then((st) => setDaCaricare((d) => (d && d.p.id === p.id
+      ? { ...d, conSeriale: st.serializzabile, senza: st.senza_seriale } : d))).catch(() => undefined);
   }, [caricoQta, attSelettore]);
   async function confermaCarico(conEtichette = false) {
     if (!daCaricare || caricando) return;
     const n = Number(daCaricare.qta.replace(",", "."));
-    if (!Number.isFinite(n) || n <= 0) { toast.error("Scrivi quanti pezzi carichi (più di 0)"); return; }
+    const vecchi = daCaricare.conSeriale ? daCaricare.vecchi.slice(0, daCaricare.senza || 0).map((x) => x?.trim()).filter(Boolean) : [];
+    if (!Number.isFinite(n) || n < 0 || (n === 0 && !vecchi.length)) { toast.error("Scrivi quanti pezzi carichi (più di 0)"); return; }
+    if (daCaricare.conSeriale && serialiPieni(daCaricare.nuovi, n) < n) {
+      toast.error(`Spara il seriale di tutti i ${n} pezzi (${serialiPieni(daCaricare.nuovi, n)}/${n}) — o togli la spunta «con seriale»`);
+      prossimoSeriale(); return;
+    }
     setCaricando(true);
     try {
+      if (daCaricare.conSeriale) {
+        const r = await magCaricoSeriali({ prodotto_id: daCaricare.p.id, nuovi: daCaricare.nuovi.slice(0, n).map((x) => x.trim()), in_giacenza: vecchi });
+        toast.success(`${daCaricare.p.descrizione}: +${r.nuovi} con seriale${r.in_giacenza ? `, ${r.in_giacenza} seriali dati ai pezzi in giacenza` : ""} → giacenza ${Number(r.giacenza)}`);
+        if (conEtichette && n > 0) stampaEtichetta(daCaricare.p, n, `Etichette per i ${n} pezzi caricati`);
+        setDaCaricare(null);
+        carica();
+        return;
+      }
       const r = await magMovimento(daCaricare.p.id, { tipo: "carico", quantita: n, causale: "Carico con scanner" });
       toast.success(`${daCaricare.p.descrizione}: +${n} → giacenza ${r.giacenza}`);
       if (conEtichette) stampaEtichetta(daCaricare.p, n, `Etichette per i ${n} pezzi caricati`);
@@ -373,14 +402,46 @@ function Magazzino() {
                 <Input autoFocus inputMode="numeric" className="h-11 text-lg" value={daCaricare.qta}
                   onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) => setDaCaricare({ ...daCaricare, qta: e.target.value })}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confermaCarico(); } if (e.key === "Escape") setDaCaricare(null); }} />
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); if (daCaricare.conSeriale) prossimoSeriale(); else confermaCarico(); }
+                    if (e.key === "Escape") setDaCaricare(null);
+                  }} />
               </label>
+              {daCaricare.conSeriale !== undefined && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={!!daCaricare.conSeriale} onChange={(e) => setDaCaricare({ ...daCaricare, conSeriale: e.target.checked })} />
+                  con seriale (uno per ogni pezzo)</label>
+              )}
+              {daCaricare.conSeriale && qtaCarico > 0 && (
+                <div className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2 dark:bg-amber-950/30">
+                  <div className="text-sm font-medium">Spara i seriali dei pezzi che carichi · {serialiPieni(daCaricare.nuovi, qtaCarico)}/{qtaCarico}</div>
+                  <div className="flex max-h-56 flex-wrap gap-1 overflow-y-auto">
+                    {Array.from({ length: qtaCarico }, (_, k) => (
+                      <CampoSeriale key={k} id={`seriale-nuovo-${k}`} value={daCaricare.nuovi[k] || ""}
+                        onChange={(v) => setDaCaricare((d) => { if (!d) return d; const a = [...d.nuovi]; a[k] = v; return { ...d, nuovi: a }; })}
+                        onFatto={prossimoSeriale} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {daCaricare.conSeriale && (daCaricare.senza || 0) > 0 && (
+                <div className="space-y-1 rounded-md border p-2">
+                  <div className="text-sm font-medium">In giacenza ce ne sono {daCaricare.senza} senza seriale: sparali ora (facoltativo) · {serialiPieni(daCaricare.vecchi, daCaricare.senza || 0)}/{daCaricare.senza}</div>
+                  <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
+                    {Array.from({ length: daCaricare.senza || 0 }, (_, k) => (
+                      <CampoSeriale key={k} id={`seriale-vecchio-${k}`} value={daCaricare.vecchi[k] || ""}
+                        onChange={(v) => setDaCaricare((d) => { if (!d) return d; const a = [...d.vecchi]; a[k] = v; return { ...d, vecchi: a }; })}
+                        onFatto={prossimoSeriale} />
+                    ))}
+                  </div>
+                </div>
+              )}
               {Number(daCaricare.qta.replace(",", ".")) > 0 && <div className="text-xs text-muted-foreground">Dopo il carico: {Number(daCaricare.p.giacenza || 0) + Number(daCaricare.qta.replace(",", "."))}</div>}
               <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" className="h-11" disabled={caricando} onClick={() => setDaCaricare(null)}>Annulla (non carico)</Button>
                 <Button variant="outline" className="h-11" disabled={caricando} title="Carica e poi stampa un'etichetta per ogni pezzo (quantità modificabile)"
                   onClick={() => confermaCarico(true)}><Printer className="size-4" /> Carica + etichette</Button>
-                <Button className="h-11" disabled={caricando} onClick={() => confermaCarico()}>{caricando ? <Loader2 className="size-4 animate-spin" /> : <PackagePlus className="size-4" />} Carica</Button>
+                <Button id="conferma-carico" className="h-11" disabled={caricando} onClick={() => confermaCarico()}>{caricando ? <Loader2 className="size-4 animate-spin" /> : <PackagePlus className="size-4" />} Carica</Button>
               </div>
               <button type="button" className="text-xs text-muted-foreground underline" disabled={caricando}
                 onClick={() => { const p = daCaricare.p; setDaCaricare(null); stampaEtichetta(p, Math.max(1, Math.round(Number(daCaricare.qta.replace(",", ".")) || 1))); }}>

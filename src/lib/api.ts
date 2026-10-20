@@ -1884,6 +1884,15 @@ export async function magPezzi(params: { prodotto_id?: string; stato?: string; q
 export async function magCaricaPezzo(body: Partial<Pezzo> & { prodotto_id: string; gia_in_giacenza?: boolean }): Promise<Pezzo> {
   return fetchAPI('/api/magazzino/pezzi', { method: 'POST', body: JSON.stringify(body) });
 }
+/** 20/10/2026: l'articolo vuole il seriale? quanti pezzi in giacenza ne sono ancora senza? */
+export async function magStatoSeriali(prodotto_id: string): Promise<{ serializzabile: boolean; senza_seriale: number; con_seriale: number }> {
+  return fetchAPI(`/api/magazzino/pezzi/stato/${prodotto_id}`);
+}
+/** 20/10/2026: carico dalla finestra dello scanner con i seriali di tutti i pezzi (nuovi = +1 ciascuno; in_giacenza = giacenza invariata) */
+export async function magCaricoSeriali(body: { prodotto_id: string; nuovi: string[]; in_giacenza: string[]; causale?: string }):
+  Promise<{ ok: boolean; nuovi: number; in_giacenza: number; giacenza: number }> {
+  return fetchAPI('/api/magazzino/pezzi/lotto', { method: 'POST', body: JSON.stringify(body) });
+}
 export async function magModificaPezzo(id: string, body: Partial<Pezzo>): Promise<Pezzo> {
   return fetchAPI(`/api/magazzino/pezzi/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
