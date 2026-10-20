@@ -80,13 +80,31 @@ function Magazzino() {
     router.replace(s ? `/magazzino?${s}` : "/magazzino", { scroll: false });
   }, [sp, router]);
 
+  // 20/10/2026 (Christian: «sparo un altro barcode e resta sull'articolo vecchio, come se si incantasse»): l'URL
+  // aggiornato in ritardo col codice VECCHIO riscriveva il campo sopra quello nuovo. Ora il campo si riallinea all'URL
+  // solo se l'URL cambia da fuori (indietro, «Azzera filtri», link), mai per una ricerca partita da qui.
   const [testo, setTesto] = useState(filtri.q || "");
-  useEffect(() => { setTesto(filtri.q || ""); }, [filtri.q]);
+  const inviato = useRef<string | null>(null);   // ultima ricerca mandata all'URL da questo campo
   useEffect(() => {
-    if (testo === (filtri.q || "")) return;
-    const t = setTimeout(() => vai({ q: testo.trim() }), 350);
+    const q = filtri.q || "";
+    if (inviato.current !== null) {
+      if (q === inviato.current) inviato.current = null;   // è arrivata la nostra: il campo è già giusto
+      return;
+    }
+    setTesto(q);
+  }, [filtri.q]);
+  const cerca = useCallback((t: string) => {
+    const q = t.trim();
+    if (q === (filtri.q || "")) { inviato.current = null; return false; }
+    inviato.current = q;
+    vai({ q });
+    return true;
+  }, [filtri.q, vai]);
+  useEffect(() => {
+    if (testo.trim() === (filtri.q || "")) return;
+    const t = setTimeout(() => cerca(testo), 350);
     return () => clearTimeout(t);
-  }, [testo, filtri.q, vai]);
+  }, [testo, filtri.q, cerca]);
 
   const { attivita: attSelettore } = useAttivita();
   const [righe, setRighe] = useState<Prodotto[]>([]);
@@ -109,12 +127,16 @@ function Magazzino() {
   const puoModificare = !!permessi?.puo.magazzino_modifica;
 
   useEffect(() => { magTassonomia().then((r) => setTasso(r.tassonomia)).catch(() => undefined); }, []);
+  // una risposta lenta di una ricerca vecchia non deve sovrascrivere quella nuova: vale solo l'ultima richiesta
+  const richiesta = useRef(0);
   const carica = useCallback(async () => {
+    const mia = ++richiesta.current;
     setLoading(true);
     try {
       const r = await magElenco(filtri);
+      if (mia !== richiesta.current) return;
       setRighe(r.prodotti || []); setTotale(r.totale_righe || 0); setRiep(r.riepilogo);
-    } catch (e) { toastErrore(e); } finally { setLoading(false); }
+    } catch (e) { if (mia === richiesta.current) toastErrore(e); } finally { if (mia === richiesta.current) setLoading(false); }
   }, [filtri]);
   useEffect(() => { carica(); }, [carica]);
   useEffect(() => { if (filtri.categoria) setEspansa(filtri.categoria); }, [filtri.categoria]);
@@ -306,7 +328,9 @@ function Magazzino() {
             <div className="relative w-full rounded-lg border-2 border-sky-400 bg-sky-50/70 p-1.5 sm:w-80 dark:bg-sky-950/20">
               <div className="mb-1 px-0.5 text-[11px] font-bold uppercase tracking-wide text-sky-800 dark:text-sky-300">Cerca un articolo (non carica nulla)</div>
               <Search className="absolute left-3.5 top-[2.15rem] size-4 text-muted-foreground" />
-              <Input className="h-9 w-full bg-background pl-8" placeholder="Descrizione, codice, barcode, marca…" value={testo} onChange={(e) => setTesto(e.target.value)} /></div>
+              <Input className="h-9 w-full bg-background pl-8" placeholder="Descrizione, codice, barcode, marca…" value={testo} onChange={(e) => setTesto(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (!cerca(testo)) carica(); } }}
+                onFocus={(e) => e.currentTarget.select()} /></div>
             <select className={sel8} value={filtri.categoria} aria-label="Categoria" onChange={(e) => vai({ cat: e.target.value, sub: "" })}>
               <option value="">Tutte le categorie</option>
               {categorieMenu.map((c) => <option key={c} value={c}>{nomeCat(c)} ({contaCat(c)})</option>)}
@@ -326,7 +350,7 @@ function Magazzino() {
               <option value="">Tutte le marche</option>
               {(riep?.marche || []).map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
-            {filtriAttivi && <Button variant="ghost" size="sm" onClick={() => { setTesto(""); router.replace("/magazzino", { scroll: false }); }}><X /> Azzera filtri</Button>}
+            {filtriAttivi && <Button variant="ghost" size="sm" onClick={() => { setTesto(""); inviato.current = null; router.replace("/magazzino", { scroll: false }); }}><X /> Azzera filtri</Button>}
           </div>
 
           {sel.size > 0 && (
