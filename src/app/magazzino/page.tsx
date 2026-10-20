@@ -124,7 +124,7 @@ function Magazzino() {
   // Se non esiste apre «nuovo articolo» col codice.
   // 20/10/2026 (Christian): articolo con seriale (AirPods, mouse, tastiere, computer…) → nella stessa finestra, dopo la
   // quantità, si sparano i seriali di TUTTI i pezzi che entrano; e, se in giacenza ci sono pezzi ancora senza seriale,
-  // anche i loro (facoltativi). Il cursore passa da solo al seriale successivo, poi al pulsante «Carica».
+  // anche i loro (obbligatori anche questi, Christian 20/10). Il cursore passa da solo al seriale successivo, poi a «Carica».
   const [daCaricare, setDaCaricare] = useState<{ p: Prodotto; qta: string; conSeriale?: boolean; senza?: number; nuovi: string[]; vecchi: string[] } | null>(null);
   const qtaCarico = daCaricare ? Math.max(0, Math.round(Number(daCaricare.qta.replace(",", ".")) || 0)) : 0;
   const serialiPieni = (v: string[], n: number) => v.slice(0, n).filter((x) => x?.trim()).length;
@@ -158,6 +158,11 @@ function Magazzino() {
     if (!Number.isFinite(n) || n < 0 || (n === 0 && !vecchi.length)) { toast.error("Scrivi quanti pezzi carichi (più di 0)"); return; }
     if (daCaricare.conSeriale && serialiPieni(daCaricare.nuovi, n) < n) {
       toast.error(`Spara il seriale di tutti i ${n} pezzi (${serialiPieni(daCaricare.nuovi, n)}/${n}) — o togli la spunta «con seriale»`);
+      prossimoSeriale(); return;
+    }
+    const senza = daCaricare.senza || 0;
+    if (daCaricare.conSeriale && vecchi.length < senza) {
+      toast.error(`In giacenza ${senza === 1 ? "c'è 1 pezzo" : `ci sono ${senza} pezzi`} senza seriale: spara anche ${senza === 1 ? "il suo" : "i loro"} (${vecchi.length}/${senza})`);
       prossimoSeriale(); return;
     }
     setCaricando(true);
@@ -425,8 +430,8 @@ function Magazzino() {
                 </div>
               )}
               {daCaricare.conSeriale && (daCaricare.senza || 0) > 0 && (
-                <div className="space-y-1 rounded-md border p-2">
-                  <div className="text-sm font-medium">In giacenza ce ne sono {daCaricare.senza} senza seriale: sparali ora (facoltativo) · {serialiPieni(daCaricare.vecchi, daCaricare.senza || 0)}/{daCaricare.senza}</div>
+                <div className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2 dark:bg-amber-950/30">
+                  <div className="text-sm font-medium">Pezzi già in giacenza senza seriale: spara anche i loro · {serialiPieni(daCaricare.vecchi, daCaricare.senza || 0)}/{daCaricare.senza}</div>
                   <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
                     {Array.from({ length: daCaricare.senza || 0 }, (_, k) => (
                       <CampoSeriale key={k} id={`seriale-vecchio-${k}`} value={daCaricare.vecchi[k] || ""}
