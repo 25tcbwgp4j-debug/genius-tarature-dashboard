@@ -72,6 +72,7 @@ import { ShipmentsPanel } from "./ShipmentsPanel";
 import { ProformaDialog } from "./FatturaPanel";
 import { SpedizioneSessione } from "./SpedizioneSessione";
 import { ProntoProgrammato } from "./ProntoProgrammato";
+import { DelegaRitiro } from "./DelegaRitiro";
 import { AssistenzaSessione } from "./AssistenzaSessione";
 import { AvvisoScansioneModal, PromemoriaScansione } from "./ScansioneRapporti";
 import type { StatoScansioneRapporti } from "@/lib/api";
@@ -757,6 +758,9 @@ export default function SessionDetail() {
         </div>
         {/* Avvisi di coerenza pagamento/fattura (03/10/2026): pronto senza fattura né pro forma, consegnata non pagata… */}
         <AvvisiPagamento st={statoPag} />
+        {/* Delega al ritiro (20/10/2026, migr. 122): chi ritira al posto del cliente, sempre in vista */}
+        <DelegaRitiro key={[session.delega_ritiro_nome, session.delega_ritiro_documento, session.delega_ritiro_nota].join("|")}
+          sessionId={sessionId} session={session} onSalvato={loadSession} />
         {/* Scansione dei rapporti firmati richiesta dal cliente/destinatario: promemoria finché non è fatta (08/10/2026) */}
         <PromemoriaScansione sessionId={sessionId} stato={scansione} operatore={opNota !== "operatore non scelto" ? opNota : undefined}
           onAggiornato={loadSession} />
