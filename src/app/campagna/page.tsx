@@ -219,6 +219,68 @@ function Anteprima({ id, onChiudi }: { id: string | null; onChiudi: () => void }
 }
 
 /* ---------- pagina ---------- */
+/* ---------- recapito (20/10/2026): tutte le mail, non solo la campagna ---------- */
+type CanaleRec = { inviate?: number; consegnate?: number | null; respinte: number; temporanee: number; permanenti: number;
+  ritardi: number; spam: number; reinviate: number; di_cui_campagna: number; copie_nostre: number };
+type Recapito = { ore: number; resend: CanaleRec; smtp: CanaleRec; blocchi: number;
+  aperti: { canale: string; destinatario: string; oggetto: string; stato: string; codice_breve: string | null; created_at: string }[] };
+const STATO_REC: Record<string, string> = { reinvio_programmato: "reinvio programmato", reinvio_fallito: "reinvio fallito",
+  da_correggere: "indirizzo da correggere", da_reinviare_a_mano: "da reinviare a mano" };
+
+function CardRecapito() {
+  const [r, setR] = useState<Recapito | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    fetchAPI("/api/recapito/riepilogo?ore=24", { timeoutMs: 90000 })
+      .then((x: Recapito) => setR(x))
+      .catch((e: Error) => setErr(e.message));
+  }, []);
+  return (
+    <section className="space-y-2">
+      <h2 className="text-lg font-semibold">Recapito (ultime 24 ore, tutte le mail)</h2>
+      {err && <p className="text-sm text-red-600">Recapito non disponibile: {err}</p>}
+      {!r && !err && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Caricamento…</p>}
+      {r && (
+        <>
+          {r.blocchi > 0 && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+              <AlertTriangle className="mr-1.5 inline h-4 w-4" /><strong>{r.blocchi} rifiuti del nostro dominio mittente</strong> (5.1.8 / «sender domain»): il provider blocca i nostri invii.
+            </div>
+          )}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {([["resend", "Resend (dashboard e campagna)"], ["smtp", "Caselle (SMTP Aruba)"]] as const).map(([k, titolo]) => {
+              const c = r[k];
+              return (
+                <div key={k} className="rounded-lg border bg-card p-3">
+                  <div className="text-sm font-semibold">{titolo}</div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <Numero label="Consegnate" valore={k === "resend" ? (c.consegnate == null ? "n.d." : n(c.consegnate)) : "—"} sotto={k === "resend" && c.inviate != null ? `su ${n(c.inviate)} inviate` : undefined} icon={CheckCircle2} colore="text-green-600" />
+                    <Numero label="Respinte" valore={n(c.respinte)} sotto={k === "resend" && c.di_cui_campagna ? `${n(c.di_cui_campagna)} di campagna` : undefined} icon={XCircle} colore="text-red-500" />
+                    <Numero label="Temporanee" valore={n(c.temporanee)} sotto={c.reinviate ? `${n(c.reinviate)} reinviate` : undefined} icon={Clock} colore="text-orange-500" />
+                    <Numero label="Permanenti" valore={n(c.permanenti)} sotto={k === "smtp" && c.copie_nostre ? `+${n(c.copie_nostre)} copie CCN` : undefined} icon={Ban} colore="text-red-600" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {r.aperti.length > 0 && (
+            <ul className="space-y-1 text-sm">
+              {r.aperti.map((a, i) => (
+                <li key={i} className="flex flex-wrap gap-x-2 rounded border px-2 py-1">
+                  <span className="font-medium">{STATO_REC[a.stato] || a.stato}</span>
+                  <span className="break-all">{a.destinatario}</span>
+                  <span className="text-muted-foreground">{(a.oggetto || "").slice(0, 70)}</span>
+                  <span className="text-xs text-muted-foreground">{a.canale}{a.codice_breve ? ` · ${a.codice_breve}` : ""}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function CampagnaPage() {
   const [cr, setCr] = useState<Cruscotto | null>(null);
   const [pi, setPi] = useState<Piano | null>(null);
@@ -335,6 +397,9 @@ export default function CampagnaPage() {
           </>
         )}
       </section>
+
+      {/* 1b. Recapito di tutte le mail (monitor recapito, 20/10/2026) */}
+      <CardRecapito />
 
       {/* 2. Mittenti */}
       <section className="space-y-2">
