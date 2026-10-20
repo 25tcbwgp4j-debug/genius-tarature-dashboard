@@ -217,8 +217,8 @@ export default function CassaPage() {
 
   // articolo serializzato (iPhone, Mac…): si sceglie il pezzo; letto il suo IMEI/seriale con lo scanner, è già scelto
   const [sceltaPezzo, setSceltaPezzo] = useState<Prodotto | null>(null);
-  const aggiungi = useCallback((p: Prodotto) => {
-    if (p.serializzato) {
+  const aggiungi = useCallback((p: Prodotto, senzaSeriale = false) => {
+    if (p.serializzato && !senzaSeriale) {
       if (p.pezzo) {
         const pz = p.pezzo;
         setCarrello((c) => (c.some((r) => r.pezzo_id === pz.id) ? c : [...c, rigaDaPezzo(p, pz)]));
@@ -574,7 +574,8 @@ export default function CassaPage() {
         </DialogContent>
       </Dialog>
       {sceltaPezzo && <SceltaPezzo prodotto={sceltaPezzo} esclusi={carrello.map((r) => r.pezzo_id || "").filter(Boolean)} onClose={() => setSceltaPezzo(null)}
-        onScelto={(pz) => { const p = sceltaPezzo; setSceltaPezzo(null); setCarrello((c) => [...c, rigaDaPezzo(p, pz)]); }} />}
+        onScelto={(pz) => { const p = sceltaPezzo; setSceltaPezzo(null); setCarrello((c) => [...c, rigaDaPezzo(p, pz)]); }}
+        onSenzaSeriale={() => { const p = sceltaPezzo; setSceltaPezzo(null); aggiungi(p, true); }} />}
     </div>
   );
 }

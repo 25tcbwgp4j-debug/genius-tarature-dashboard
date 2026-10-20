@@ -1830,15 +1830,17 @@ export async function docDaFattura(fid: string, body: { a: 'ordine' | 'preventiv
 
 // === MAGAZZINO: carico con scanner, riconoscimento barcode, inventario — 30/09/2026 ===
 export interface InfoBarcode { descrizione: string | null; marca?: string | null; categoria?: string | null; fonte?: string | null; certezza?: string | null }
-export interface Riconoscimento { barcode: string; trovato: 'magazzino' | 'online' | null; prodotto?: Prodotto; info?: InfoBarcode; quantita?: number }
+export interface Riconoscimento { barcode: string; trovato: 'magazzino' | 'online' | null; prodotto?: Prodotto; info?: InfoBarcode; quantita?: number;
+  /** 20/10/2026: articolo con seriale (AirPods, mouse, tastiere, computer…): al carico si chiede il seriale di ogni pezzo */
+  serializzabile?: boolean }
 export async function magRiconosci(codice: string): Promise<Riconoscimento> {
   return fetchAPI(`/api/magazzino/riconosci/${encodeURIComponent(codice)}`);
 }
 export async function magImportTesto(testo: string): Promise<{ righe: Riconoscimento[]; codici: number; pezzi: number }> {
   return fetchAPI('/api/magazzino/import-testo', { method: 'POST', body: JSON.stringify({ testo }) });
 }
-export async function magCaricoLotto(body: { modo: 'carico' | 'inventario'; causale?: string; righe: { barcode: string; quantita: number; descrizione?: string; marca?: string | null; prezzo?: number; costo?: number; aliquota?: number }[] }):
-  Promise<{ esiti: { barcode: string; ok: boolean; errore?: string; creato?: boolean; prodotto_id?: string; descrizione?: string; giacenza?: number }[]; ok: number; errori: number }> {
+export async function magCaricoLotto(body: { modo: 'carico' | 'inventario'; causale?: string; righe: { barcode: string; quantita: number; descrizione?: string; marca?: string | null; prezzo?: number; costo?: number; aliquota?: number; seriali?: string[] }[] }):
+  Promise<{ esiti: { barcode: string; ok: boolean; errore?: string; creato?: boolean; prodotto_id?: string; descrizione?: string; giacenza?: number; seriali?: number }[]; ok: number; errori: number }> {
   return fetchAPI('/api/magazzino/carico-lotto', { method: 'POST', body: JSON.stringify(body) });
 }
 
@@ -1878,7 +1880,8 @@ export async function magPezzi(params: { prodotto_id?: string; stato?: string; q
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== false).map(([k, v]) => [k, String(v)])).toString();
   return fetchAPI(`/api/magazzino/pezzi?${q}`);
 }
-export async function magCaricaPezzo(body: Partial<Pezzo> & { prodotto_id: string }): Promise<Pezzo> {
+/** `gia_in_giacenza`: seriale dato a un pezzo già in giacenza (la giacenza non cambia) */
+export async function magCaricaPezzo(body: Partial<Pezzo> & { prodotto_id: string; gia_in_giacenza?: boolean }): Promise<Pezzo> {
   return fetchAPI('/api/magazzino/pezzi', { method: 'POST', body: JSON.stringify(body) });
 }
 export async function magModificaPezzo(id: string, body: Partial<Pezzo>): Promise<Pezzo> {

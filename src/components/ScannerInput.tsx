@@ -11,8 +11,10 @@ type Detector = { detect: (src: HTMLVideoElement) => Promise<{ rawValue: string 
 
 export type AnteprimaCodice = { titolo: string; dettaglio?: string } | null;
 
-export function ScannerInput({ onCodice, anteprima, autoInvio = false, placeholder = "Spara il codice a barre o scrivilo e premi Invio" }: {
+export function ScannerInput({ onCodice, anteprima, autoInvio = false, inputId, placeholder = "Spara il codice a barre o scrivilo e premi Invio" }: {
   onCodice: (c: string) => void; placeholder?: string;
+  /** id del campo, per riportarci il cursore da fuori (carico: dopo l'ultimo seriale si torna al codice a barre) */
+  inputId?: string;
   /** 08/10/2026: scanner che NON manda l'Invio. Se il codice arriva «sparato» (tasti a meno di 50 ms l'uno dall'altro)
    *  si invia da solo dopo 300 ms di pausa; scritto a mano resta com'è (serve Invio). */
   autoInvio?: boolean;
@@ -84,7 +86,7 @@ export function ScannerInput({ onCodice, anteprima, autoInvio = false, placehold
       <div className="flex gap-2">
         <div className="relative flex-1">
           <ScanBarcode className="absolute left-2 top-2.5 size-4 text-muted-foreground" />
-          <input ref={inp} value={v} onChange={(e) => { const ora = Date.now(); tempi.current = e.target.value.length <= 1 ? [ora] : [...tempi.current, ora]; setV(e.target.value); }} placeholder={placeholder}
+          <input ref={inp} id={inputId} value={v} onChange={(e) => { const ora = Date.now(); tempi.current = e.target.value.length <= 1 ? [ora] : [...tempi.current, ora]; setV(e.target.value); }} placeholder={placeholder}
             className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm"
             onKeyDown={(e) => { if (e.key === "Enter" && v.trim()) { onCodice(v.trim()); setV(""); setPrev(null); tempi.current = []; } }} />
         </div>

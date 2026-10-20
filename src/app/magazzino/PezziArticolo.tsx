@@ -2,9 +2,11 @@
 
 // MAGAZZINO APPLE (02/10/2026): pezzi serializzati di un articolo (iPhone, Mac, iPad…) — seriale/IMEI, condizione,
 // costo d'acquisto (per il margine N5), fornitore, stato. La giacenza dell'articolo = pezzi disponibili.
+// 20/10/2026 (Christian): articoli caricati a quantità prima di avere il seriale (es. 2 AirPods in giacenza): «Assegna
+// seriale» lo scrive per ognuno dei pezzi già in giacenza, senza cambiare la giacenza; «Carica pezzo nuovo» fa +1.
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -26,14 +28,18 @@ export function PezziArticolo({ prodotto, solaLettura, onCambiato }: { prodotto:
   }, [prodotto.id]);
   useEffect(() => { carica(); }, [carica]);
 
-  async function aggiungi() {
+  const disponibili = (pezzi || []).filter((x) => x.stato === "in_stock" || x.stato === "in_conto_vendita").length;
+  const senzaSeriale = pezzi === null ? 0 : Math.max(0, Math.round(Number(prodotto.giacenza) || 0) - disponibili);
+
+  async function aggiungi(giaInGiacenza = false) {
     if (busy) return;
     if (!nuovo.seriale.trim() && !nuovo.imei.trim()) { toast.error("Scrivi il seriale o l'IMEI"); return; }
-    setBusy("nuovo");
+    setBusy(giaInGiacenza ? "assegna" : "nuovo");
     try {
       await magCaricaPezzo({ prodotto_id: prodotto.id, seriale: nuovo.seriale.trim() || null, imei: nuovo.imei.trim() || null,
-        condizione: nuovo.condizione.trim() || null, costo: nuovo.costo.trim() ? dec0(nuovo.costo) : (Number(prodotto.costo) || null), note: nuovo.note.trim() || null });
-      toast.success("Pezzo caricato");
+        condizione: nuovo.condizione.trim() || null, costo: nuovo.costo.trim() ? dec0(nuovo.costo) : (Number(prodotto.costo) || null), note: nuovo.note.trim() || null,
+        gia_in_giacenza: giaInGiacenza });
+      toast.success(giaInGiacenza ? "Seriale assegnato al pezzo in giacenza" : "Pezzo caricato");
       setNuovo(VUOTO); carica(); onCambiato();
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
@@ -49,7 +55,7 @@ export function PezziArticolo({ prodotto, solaLettura, onCambiato }: { prodotto:
   return (
     <Card className="space-y-2 p-3">
       <div className="flex items-center justify-between text-sm font-medium">
-        <span>Pezzi · disponibili <b>{(pezzi || []).filter((x) => x.stato === "in_stock" || x.stato === "in_conto_vendita").length}</b></span>
+        <span>Pezzi · disponibili con seriale <b>{disponibili}</b>{senzaSeriale > 0 && <> · <b className="text-amber-700 dark:text-amber-300">{senzaSeriale} in giacenza senza seriale</b></>}</span>
         <label className="flex items-center gap-1 text-xs font-normal text-muted-foreground"><input type="checkbox" checked={tutti} onChange={(e) => setTutti(e.target.checked)} /> anche venduti e resi</label>
       </div>
       {pezzi === null ? <Loader2 className="size-4 animate-spin" /> : (
@@ -72,11 +78,17 @@ export function PezziArticolo({ prodotto, solaLettura, onCambiato }: { prodotto:
       {!solaLettura && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <input className={campo} placeholder="IMEI" value={nuovo.imei} onChange={(e) => setNuovo({ ...nuovo, imei: e.target.value })} />
-          <input className={campo} placeholder="Seriale" value={nuovo.seriale} onChange={(e) => setNuovo({ ...nuovo, seriale: e.target.value })} />
+          <input className={campo} placeholder="Seriale" value={nuovo.seriale} onChange={(e) => setNuovo({ ...nuovo, seriale: e.target.value })}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); aggiungi(senzaSeriale > 0); } }} />
           <input className={campo} placeholder="Condizione (es. grado A, batt. 89%)" value={nuovo.condizione} onChange={(e) => setNuovo({ ...nuovo, condizione: e.target.value })} />
           <input className={campo} inputMode="decimal" placeholder={`Costo (${eur(Number(prodotto.costo) || 0)})`} value={nuovo.costo} onChange={(e) => setNuovo({ ...nuovo, costo: e.target.value })} />
-          <input className={`${campo} col-span-2 sm:col-span-3`} placeholder="Note" value={nuovo.note} onChange={(e) => setNuovo({ ...nuovo, note: e.target.value })} />
-          <Button size="sm" onClick={aggiungi} disabled={!!busy}>{busy === "nuovo" ? <Loader2 className="animate-spin" /> : <Plus />} Carica pezzo</Button>
+          <input className={`${campo} col-span-2 sm:col-span-4`} placeholder="Note" value={nuovo.note} onChange={(e) => setNuovo({ ...nuovo, note: e.target.value })} />
+          <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-4">
+            {senzaSeriale > 0 && <Button size="sm" onClick={() => aggiungi(true)} disabled={!!busy} title="Il pezzo c'è già in giacenza: si scrive solo il suo seriale (giacenza invariata)">
+              {busy === "assegna" ? <Loader2 className="animate-spin" /> : <Tag />} Assegna seriale a un pezzo in giacenza ({senzaSeriale})</Button>}
+            <Button size="sm" variant={senzaSeriale > 0 ? "outline" : "default"} onClick={() => aggiungi(false)} disabled={!!busy} title="Pezzo appena arrivato: giacenza +1">
+              {busy === "nuovo" ? <Loader2 className="animate-spin" /> : <Plus />} Carica pezzo nuovo</Button>
+          </div>
         </div>
       )}
     </Card>

@@ -587,7 +587,7 @@ function Scheda({ p, nuovo, setNuovo, onClose, onSalvaNuovo, onCambiato, campo, 
           <label className="col-span-2 flex items-center gap-2 text-sm">
             <input type="checkbox" disabled={solaLettura || (!!p?.serializzato && Number(p?.giacenza) > 0)} checked={!!dati.serializzato}
               onChange={(e) => set("serializzato", e.target.checked)} />
-            Si vende per pezzo con seriale / IMEI (iPhone, Mac, iPad…)</label>
+            Ha il seriale / IMEI: si carica e si vende per pezzo (iPhone, Mac, iPad, AirPods, mouse, tastiere, trackpad…)</label>
           {nuovo && !nuovo.serializzato && <label className="space-y-1"><div className="text-xs text-muted-foreground">Giacenza iniziale</div>
             <input type="number" className={campo} value={nuovo.giacenza_iniziale ?? 0} onChange={(e) => set("giacenza_iniziale", Number(e.target.value))} /></label>}
         </div>

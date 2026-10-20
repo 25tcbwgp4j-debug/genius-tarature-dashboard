@@ -23,14 +23,17 @@ export function rigaDaPezzo(p: Prodotto, pz: Pezzo): RigaCassa & { giacenza?: nu
   };
 }
 
-export function SceltaPezzo({ prodotto, esclusi, onScelto, onClose }: {
+export function SceltaPezzo({ prodotto, esclusi, onScelto, onSenzaSeriale, onClose }: {
   prodotto: Prodotto; esclusi: string[]; onScelto: (pz: Pezzo) => void; onClose: () => void;
+  /** 20/10/2026: pezzi in giacenza a cui non è ancora stato scritto il seriale → si vendono come riga normale */
+  onSenzaSeriale?: () => void;
 }) {
   const [pezzi, setPezzi] = useState<Pezzo[] | null>(null);
+  const [conSeriale, setConSeriale] = useState(0);
   const chiaveEsclusi = esclusi.join(",");   // stabile tra i render del carrello
   useEffect(() => {
     const via = chiaveEsclusi.split(",");
-    magPezzi({ prodotto_id: prodotto.id, disponibili: true }).then((r) => setPezzi(r.pezzi.filter((x) => !via.includes(x.id))))
+    magPezzi({ prodotto_id: prodotto.id, disponibili: true }).then((r) => { setConSeriale(r.pezzi.length); setPezzi(r.pezzi.filter((x) => !via.includes(x.id))); })
       .catch((e) => { toastErrore(e); setPezzi([]); });
   }, [prodotto.id, chiaveEsclusi]);
   return (
@@ -40,6 +43,12 @@ export function SceltaPezzo({ prodotto, esclusi, onScelto, onClose }: {
           <div><div className="text-xs text-muted-foreground">Quale pezzo vendi?</div><h2 className="font-semibold">{prodotto.descrizione}</h2></div>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Chiudi"><X /></Button>
         </div>
+        {pezzi !== null && onSenzaSeriale && Number(prodotto.giacenza) > conSeriale && (
+          <div className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-sm dark:bg-amber-950/30">
+            <span>{Math.round(Number(prodotto.giacenza) - conSeriale)} in giacenza senza seriale</span>
+            <Button size="sm" variant="outline" className="ml-auto" onClick={onSenzaSeriale}>Vendi senza seriale</Button>
+          </div>
+        )}
         {pezzi === null ? <Loader2 className="animate-spin" /> : pezzi.length === 0 ? (
           <div className="text-sm text-muted-foreground">Nessun pezzo disponibile: caricalo prima in Magazzino (scheda dell&apos;articolo → Pezzi).</div>
         ) : (

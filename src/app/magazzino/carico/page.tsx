@@ -5,8 +5,10 @@
 // (banche dati + ricerca web) e si completa descrizione e prezzo. Oppure si importa un file di testo con una riga
 // per articolo «BARCODE QUANTITÀ». In modalità INVENTARIO la quantità è quella contata e sostituisce la giacenza.
 // 08/10/2026: dopo il carico «Stampa etichette» dei pezzi caricati (Brother del banco, come le etichette di taratura).
+// 20/10/2026 (Christian): per gli articoli con seriale (AirPods, mouse, tastiere, trackpad, computer…) dopo il codice
+// dell'articolo si spara il SERIALE di ogni pezzo: un campo per pezzo, il cursore passa da solo al successivo.
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,16 +24,40 @@ import { StampaEtichette, type VoceEtichetta } from "../StampaEtichette";
 type Riga = {
   barcode: string; quantita: number; stato: "magazzino" | "online" | "sconosciuto" | "in_ricerca";
   descrizione: string; marca: string; prezzo: string; costo: string; giacenza: number | null; fonte: string;
+  /** l'articolo ha un seriale: al carico serve quello di ogni pezzo */
+  conSeriale: boolean; seriali: string[];
 };
+const ID_SCANNER = "scanner-carico";
+const idSeriale = (barcode: string, i: number) => `seriale-${barcode}-${i}`;
+
+/** Campo del seriale: va avanti da solo con l'Invio dello scanner o, per gli scanner senza Invio, quando il codice
+ *  arriva «sparato» (tasti a meno di 50 ms) e poi c'è una pausa di 300 ms. */
+function CampoSeriale({ id, value, onChange, onFatto }: { id: string; value: string; onChange: (v: string) => void; onFatto: () => void }) {
+  const tempi = useRef<number[]>([]);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  return (
+    <Input id={id} className="h-8 w-44 font-mono text-xs uppercase" placeholder="seriale" value={value}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (value.trim()) onFatto(); } }}
+      onChange={(e) => {
+        const v = e.target.value, ora = Date.now();
+        tempi.current = v.length <= 1 ? [ora] : [...tempi.current, ora];
+        onChange(v);
+        if (timer.current) clearTimeout(timer.current);
+        const t = tempi.current;
+        if (v.trim().length >= 8 && t.length >= 6 && t.slice(1).every((x, i) => x - t[i] < 50)) timer.current = setTimeout(onFatto, 300);
+      }} />
+  );
+}
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
 
 function daRiconoscimento(r: Riconoscimento, q: number): Riga {
   if (r.trovato === "magazzino" && r.prodotto) {
     return { barcode: r.barcode, quantita: q, stato: "magazzino", descrizione: r.prodotto.descrizione, marca: r.prodotto.marca || "",
-      prezzo: String(r.prodotto.prezzo ?? ""), costo: String(r.prodotto.costo ?? ""), giacenza: Number(r.prodotto.giacenza), fonte: "magazzino" };
+      prezzo: String(r.prodotto.prezzo ?? ""), costo: String(r.prodotto.costo ?? ""), giacenza: Number(r.prodotto.giacenza), fonte: "magazzino",
+      conSeriale: !!r.serializzabile, seriali: [] };
   }
   return { barcode: r.barcode, quantita: q, stato: r.trovato === "online" ? "online" : "sconosciuto", descrizione: r.info?.descrizione || "",
-    marca: r.info?.marca || "", prezzo: "", costo: "", giacenza: null, fonte: r.info?.fonte || "" };
+    marca: r.info?.marca || "", prezzo: "", costo: "", giacenza: null, fonte: r.info?.fonte || "", conSeriale: !!r.serializzabile, seriali: [] };
 }
 
 export default function CaricoMagazzinoPage() {
@@ -50,6 +76,27 @@ export default function CaricoMagazzinoPage() {
   const [stampa, setStampa] = useState(false);
 
   const aggiorna = (i: number, p: Partial<Riga>) => setRighe((rr) => rr.map((r, j) => (j === i ? { ...r, ...p } : r)));
+  const modoRef = useRef(modo);
+  useEffect(() => { modoRef.current = modo; }, [modo]);
+  const scriviSeriale = (barcode: string, k: number, v: string) => setRighe((rr) => rr.map((r) => {
+    if (r.barcode !== barcode) return r;
+    const s = [...r.seriali]; s[k] = v;
+    return { ...r, seriali: s };
+  }));
+  /** cursore sul primo seriale vuoto (prima della riga indicata, poi di tutte); se sono tutti scritti, torna al codice a barre */
+  function vaiAvanti(barcode?: string) {
+    setTimeout(() => {
+      const rr = righeRef.current.filter((r) => r.conSeriale && modoRef.current === "carico");
+      const ordine = barcode ? [...rr.filter((r) => r.barcode === barcode), ...rr.filter((r) => r.barcode !== barcode)] : rr;
+      for (const r of ordine) {
+        for (let k = 0; k < r.quantita; k++) {
+          const el = document.getElementById(idSeriale(r.barcode, k)) as HTMLInputElement | null;
+          if (el && !el.value.trim()) { el.focus(); return; }
+        }
+      }
+      document.getElementById(ID_SCANNER)?.focus();
+    }, 50);
+  }
 
   async function scansiona(codice: string) {
     const c = codice.trim();
@@ -60,14 +107,18 @@ export default function CaricoMagazzinoPage() {
       righeRef.current = righeRef.current.map((r) => (r.barcode === c ? { ...r, quantita: nuovaQ } : r));
       setRighe((rr) => rr.map((r) => (r.barcode === c ? { ...r, quantita: r.quantita + qScan } : r)));
       toast.success(`${esistente.descrizione || c}: ${nuovaQ}`);
+      if (esistente.conSeriale && modoRef.current === "carico") vaiAvanti(c);
       return;
     }
-    const riga: Riga = { barcode: c, quantita: qScan, stato: "in_ricerca", descrizione: "", marca: "", prezzo: "", costo: "", giacenza: null, fonte: "" };
+    const riga: Riga = { barcode: c, quantita: qScan, stato: "in_ricerca", descrizione: "", marca: "", prezzo: "", costo: "", giacenza: null, fonte: "",
+      conSeriale: false, seriali: [] };
     righeRef.current = [riga, ...righeRef.current];
     setRighe((rr) => (rr.some((r) => r.barcode === c) ? rr : [riga, ...rr]));
     try {
       const r = await magRiconosci(c);
       setRighe((rr) => rr.map((x) => (x.barcode === c && x.stato === "in_ricerca" ? daRiconoscimento(r, x.quantita) : x)));
+      righeRef.current = righeRef.current.map((x) => (x.barcode === c && x.stato === "in_ricerca" ? daRiconoscimento(r, x.quantita) : x));
+      if (r.serializzabile && modoRef.current === "carico") { toast.info("Articolo con seriale: spara il seriale di ogni pezzo"); vaiAvanti(c); }
       if (r.trovato === "magazzino") toast.success(`${r.prodotto?.descrizione} · in magazzino: ${Number(r.prodotto?.giacenza)}`);
       else if (r.trovato === "online") toast.info(`Nuovo articolo riconosciuto: ${r.info?.descrizione} — metti il prezzo`);
       else toast.warning(`Codice ${c} non trovato: scrivi tu la descrizione`);
@@ -104,6 +155,13 @@ export default function CaricoMagazzinoPage() {
     const mancano = righe.filter((r) => r.stato !== "magazzino" && !r.descrizione.trim());
     if (mancano.length) { toast.error(`Manca la descrizione per ${mancano.length} articoli nuovi`); return; }
     if (righe.some((r) => r.stato === "in_ricerca")) { toast.error("Aspetta che finisca il riconoscimento"); return; }
+    if (modo === "carico") {
+      const senza = righe.find((r) => r.conSeriale && r.seriali.slice(0, r.quantita).filter((x) => x?.trim()).length < r.quantita);
+      if (senza) { toast.error(`Mancano i seriali di ${senza.descrizione || senza.barcode}: uno per ogni pezzo (o togli la spunta «con seriale»)`); vaiAvanti(senza.barcode); return; }
+      const tutti = righe.flatMap((r) => (r.conSeriale ? r.seriali.slice(0, r.quantita).map((x) => x.trim().toUpperCase()) : []));
+      const doppio = tutti.find((x, k) => tutti.indexOf(x) !== k);
+      if (doppio) { toast.error(`Il seriale ${doppio} è scritto due volte`); return; }
+    }
     if (!confirm(modo === "carico" ? `Caricare ${righe.reduce((s, r) => s + r.quantita, 0)} pezzi di ${righe.length} articoli?`
       : `Registrare l'inventario di ${righe.length} articoli? La giacenza verrà sostituita con le quantità contate.`)) return;
     lock.current = true;
@@ -111,7 +169,8 @@ export default function CaricoMagazzinoPage() {
     try {
       const elenco = righe;
       const r = await magCaricoLotto({ modo, righe: righe.map((x) => ({ barcode: x.barcode, quantita: x.quantita, descrizione: x.descrizione,
-        marca: x.marca || null, prezzo: parseDec(x.prezzo) ?? undefined, costo: parseDec(x.costo) ?? undefined })) });
+        marca: x.marca || null, prezzo: parseDec(x.prezzo) ?? undefined, costo: parseDec(x.costo) ?? undefined,
+        seriali: modo === "carico" && x.conSeriale ? x.seriali.slice(0, x.quantita).map((y) => y.trim()) : undefined })) });
       if (modo === "carico") {
         const voci: VoceEtichetta[] = [];
         for (const e of r.esiti) {
@@ -149,13 +208,13 @@ export default function CaricoMagazzinoPage() {
 
       <Card className="space-y-2 p-3">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[280px] flex-1"><ScannerInput onCodice={scansiona} autoInvio placeholder="Spara il codice a barre (o scrivilo e premi Invio)" /></div>
+          <div className="min-w-[280px] flex-1"><ScannerInput inputId={ID_SCANNER} onCodice={scansiona} autoInvio placeholder="Spara il codice a barre (o scrivilo e premi Invio)" /></div>
           <label className="text-sm">Quantità per lettura
             <Input type="number" min={1} className="h-9 w-20" value={qScan} onChange={(e) => setQScan(Math.max(1, parseInt(e.target.value || "1", 10)))} />
           </label>
         </div>
         <div className="text-xs text-muted-foreground">
-          {modo === "carico" ? "Ogni lettura aggiunge i pezzi. Gli articoli nuovi vengono riconosciuti online: controlla la descrizione e metti il prezzo."
+          {modo === "carico" ? "Ogni lettura aggiunge i pezzi. Gli articoli nuovi vengono riconosciuti online: controlla la descrizione e metti il prezzo. Per gli articoli con seriale (AirPods, mouse, tastiere, computer…) dopo il codice spara il seriale di ogni pezzo."
             : "Conta gli articoli sparandoli uno per uno (o scrivi la quantità contata): a fine conteggio la giacenza viene sostituita."}
         </div>
       </Card>
@@ -197,8 +256,10 @@ export default function CaricoMagazzinoPage() {
             {righe.map((r, i) => {
               const g = r.giacenza ?? 0;
               const dopo = modo === "carico" ? g + r.quantita : r.quantita - g;
+              const serialiQui = modo === "carico" && r.conSeriale;
               return (
-                <tr key={r.barcode} className={`border-t ${r.stato === "sconosciuto" && !r.descrizione ? "bg-red-50 dark:bg-red-950/20" : r.stato === "online" ? "bg-sky-50/60 dark:bg-sky-950/20" : ""}`}>
+                <Fragment key={r.barcode}>
+                <tr className={`border-t ${r.stato === "sconosciuto" && !r.descrizione ? "bg-red-50 dark:bg-red-950/20" : r.stato === "online" ? "bg-sky-50/60 dark:bg-sky-950/20" : ""}`}>
                   <td className="px-2 py-1 font-mono text-xs">{r.barcode}</td>
                   <td className="py-1 pr-2">
                     {r.stato === "in_ricerca" ? <span className="flex items-center gap-1 text-muted-foreground"><Loader2 className="size-3 animate-spin" />riconosco…</span>
@@ -219,6 +280,24 @@ export default function CaricoMagazzinoPage() {
                     onChange={(e) => aggiorna(i, { costo: e.target.value })} /></td>
                   <td className="px-2"><button className="text-muted-foreground hover:text-red-600" title="Togli dalla lista" onClick={() => setRighe((rr) => rr.filter((_, j) => j !== i))}><Trash2 className="size-4" /></button></td>
                 </tr>
+                {modo === "carico" && r.stato !== "in_ricerca" && (
+                  <tr className={serialiQui ? "bg-amber-50/60 dark:bg-amber-950/20" : ""}>
+                    <td />
+                    <td colSpan={7} className="pb-2 pr-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <input type="checkbox" checked={r.conSeriale} onChange={(e) => { aggiorna(i, { conSeriale: e.target.checked }); if (e.target.checked) vaiAvanti(r.barcode); }} />
+                          con seriale</label>
+                        {serialiQui && Array.from({ length: r.quantita }, (_, k) => (
+                          <CampoSeriale key={k} id={idSeriale(r.barcode, k)} value={r.seriali[k] || ""}
+                            onChange={(v) => scriviSeriale(r.barcode, k, v)} onFatto={() => vaiAvanti(r.barcode)} />
+                        ))}
+                        {serialiQui && <span className="text-xs text-muted-foreground">{r.seriali.slice(0, r.quantita).filter((x) => x?.trim()).length}/{r.quantita} seriali</span>}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
