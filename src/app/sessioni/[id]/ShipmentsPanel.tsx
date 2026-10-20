@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ExternalLink, FileText, Loader2, Package, Printer, Truck, X } from "lucide-react";
 import { toast } from "sonner";
-import { COSTO_AR, COSTO_SOLA, CostoSpedizione, ETICHETTA_AR, ETICHETTA_SOLA, costoDaSessione, eur, type Costo, type SessioneSpedizione } from "./SpedizioneSessione";
+import { COSTO_SOLA, CostoSpedizione, costoArPer, ETICHETTA_AR, ETICHETTA_SOLA, costoDaSessione, eur, type Costo, type SessioneSpedizione } from "./SpedizioneSessione";
 import {
   updateSession,
   cancelShipment,
@@ -133,7 +133,7 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
     // proposta: quello già scritto in sessione, altrimenti A/R (ritiro) o sola riconsegna (metà)
     const salvato = session ? costoDaSessione(session) : null;
     setCosto(salvato?.incluso ? salvato : dir === "ritiro"
-      ? { incluso: true, importo: COSTO_AR, etichetta: ETICHETTA_AR }
+      ? { incluso: true, importo: costoArPer((session?.instruments || []).map((i) => i.instrument_name)), etichetta: ETICHETTA_AR }
       : { incluso: true, importo: COSTO_SOLA, etichetta: ETICHETTA_SOLA });
     await aggiornaAnteprima(base);
   };
@@ -386,7 +386,8 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
                 <p className="text-muted-foreground">La sessione è segnata «spedizione a carico del cliente»: nessun costo in fattura.</p>
               ) : costo && (
                 <>
-                  <CostoSpedizione valore={costo} onChange={setCosto} />
+                  <CostoSpedizione valore={costo} onChange={setCosto}
+                    consigliato={session?.instruments?.length ? costoArPer(session.instruments.map((i) => i.instrument_name)) : undefined} />
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     Solo riconsegna = metà dell&apos;andata e ritorno. Si salva in sessione alla conferma, oppure ora:
                     <Button size="sm" variant="outline" className="h-7" onClick={salvaCosto}>Salva costo</Button>

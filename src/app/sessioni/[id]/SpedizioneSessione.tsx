@@ -4,7 +4,8 @@
 // - flag «arrivato con corriere», «da rispedire con corriere», «spedizione a carico del cliente»
 //   (il cliente ritira e riconsegna con il SUO corriere → nessun costo in fattura, nota su ricevuta e pro forma);
 // - costo della spedizione da mettere in fattura/pro forma, modificabile, con scelte rapide:
-//   ritiro + riconsegna (fino a 5 pezzi) 30+IVA = 36,60 · sola riconsegna (metà) 15+IVA = 18,30 · importo libero.
+//   ritiro + riconsegna 1-4 strumenti leggeri 28,00 IVA incl. · kit 5 pezzi o pesanti (recuperatore, bilancia)
+//   30+IVA = 36,60 (Christian 20/10/2026) · sola riconsegna (metà) 15+IVA = 18,30 · importo libero.
 
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
@@ -14,7 +15,15 @@ import { Loader2, Save, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { updateSession } from "@/lib/api";
 
-export const COSTO_AR = 36.6;
+export const COSTO_AR = 36.6;          // kit da 5 strumenti o strumenti pesanti
+export const COSTO_AR_LEGGERO = 28;    // 1-4 strumenti non pesanti (20/10/2026)
+const PESANTI = ["RECUPERATORE", "BILANCIA"];
+
+/** Tariffa A/R per questi strumenti: 36,60 con 5+ pezzi o un recuperatore/bilancia, altrimenti 28,00. */
+export function costoArPer(nomi: (string | null | undefined)[]): number {
+  const n = nomi.map((x) => String(x || "").toUpperCase());
+  return n.length >= 5 || n.some((x) => PESANTI.some((p) => x.includes(p))) ? COSTO_AR : COSTO_AR_LEGGERO;
+}
 export const COSTO_SOLA = 18.3;
 export const ETICHETTA_AR = "Spese di spedizione corriere (ritiro e riconsegna)";
 export const ETICHETTA_SOLA = "Spese di spedizione corriere (sola riconsegna)";
@@ -31,6 +40,8 @@ export interface SessioneSpedizione {
   shipping_by_customer?: boolean | null;
   /** 08/10/2026: solo il RITORNO a carico del cliente (ci manda l'etichetta del suo corriere) */
   return_by_customer?: boolean | null;
+  /** per proporre la tariffa giusta del corriere (28,00 o 36,60) */
+  instruments?: { instrument_name?: string | null }[] | null;
 }
 
 export const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
@@ -41,17 +52,19 @@ export function costoDaSessione(s: SessioneSpedizione): Costo {
   return { incluso: !!s.shipping_included && importo > 0 && !s.shipping_by_customer, importo, etichetta: s.shipping_label || ETICHETTA_AR };
 }
 
-/** Scelta del costo di spedizione: nessuno · A/R 36,60 · sola riconsegna 18,30 · importo libero. */
-export function CostoSpedizione({ valore, onChange, disabilitato }: { valore: Costo; onChange: (c: Costo) => void; disabilitato?: boolean }) {
-  const scelto = !valore.incluso ? "no" : Math.abs(valore.importo - COSTO_AR) < 0.005 ? "ar" : Math.abs(valore.importo - COSTO_SOLA) < 0.005 ? "sola" : "libero";
+/** Scelta del costo di spedizione: nessuno · A/R 28,00 (1-4 leggeri) · A/R 36,60 (kit/pesanti) · sola riconsegna 18,30 · libero. */
+export function CostoSpedizione({ valore, onChange, disabilitato, consigliato }: { valore: Costo; onChange: (c: Costo) => void; disabilitato?: boolean; consigliato?: number }) {
+  const scelto = !valore.incluso ? "no" : Math.abs(valore.importo - COSTO_AR) < 0.005 ? "ar" : Math.abs(valore.importo - COSTO_AR_LEGGERO) < 0.005 ? "arl" : Math.abs(valore.importo - COSTO_SOLA) < 0.005 ? "sola" : "libero";
   // testo dell'importo libero: si tiene solo mentre si scrive; con le scelte rapide si svuota
   const [libero, setLibero] = useState(scelto === "libero" ? valore.importo.toFixed(2).replace(".", ",") : "");
   const btn = (k: string) => `h-8 rounded-md border px-2 text-xs ${scelto === k ? "border-amber-700 bg-amber-100 font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" : "bg-background hover:bg-muted"}`;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <button type="button" disabled={disabilitato} className={btn("no")} onClick={() => { setLibero(""); onChange({ incluso: false, importo: 0, etichetta: valore.etichetta }); }}>Nessun costo</button>
+      <button type="button" disabled={disabilitato} className={btn("arl")} onClick={() => { setLibero(""); onChange({ incluso: true, importo: COSTO_AR_LEGGERO, etichetta: ETICHETTA_AR }); }}>
+        Ritiro + riconsegna 1-4 strumenti leggeri {eur(COSTO_AR_LEGGERO)}{consigliato === COSTO_AR_LEGGERO ? " ✓ consigliato" : ""}</button>
       <button type="button" disabled={disabilitato} className={btn("ar")} onClick={() => { setLibero(""); onChange({ incluso: true, importo: COSTO_AR, etichetta: ETICHETTA_AR }); }}>
-        Ritiro + riconsegna (fino a 5 pezzi) {eur(COSTO_AR)}</button>
+        Ritiro + riconsegna kit 5 pezzi o pesanti {eur(COSTO_AR)}{consigliato === COSTO_AR ? " ✓ consigliato" : ""}</button>
       <button type="button" disabled={disabilitato} className={btn("sola")} onClick={() => { setLibero(""); onChange({ incluso: true, importo: COSTO_SOLA, etichetta: ETICHETTA_SOLA }); }}>
         Sola riconsegna (metà) {eur(COSTO_SOLA)}</button>
       <span className="flex items-center gap-1 text-xs">
@@ -129,7 +142,8 @@ export function SpedizioneSessione({ sessionId, session, onSalvato }: { sessionI
       ) : (
         <div className="space-y-1">
           <div className="text-xs text-muted-foreground">Costo della spedizione da mettere in fattura / pro forma (IVA inclusa)</div>
-          <CostoSpedizione valore={costo} onChange={setCosto} />
+          <CostoSpedizione valore={costo} onChange={setCosto}
+            consigliato={session.instruments?.length ? costoArPer(session.instruments.map((i) => i.instrument_name)) : undefined} />
           {costo.incluso && (
             <label className="flex items-center gap-1 text-xs">
               <span className="text-muted-foreground">Descrizione in fattura</span>
