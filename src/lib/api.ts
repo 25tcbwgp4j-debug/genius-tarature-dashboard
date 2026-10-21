@@ -265,8 +265,10 @@ export async function listSessions(params?: {
   date?: string;
   limit?: number;
   offset?: number;
+  q?: string;   // 21/10/2026: ricerca su tutte le sessioni (numero, P-xxx, cliente, P.IVA, operatore)
 }) {
   const qs = new URLSearchParams();
+  if (params?.q) qs.set('q', params.q);
   if (params?.status) qs.set('status', params.status);
   if (params?.date) qs.set('date', params.date);
   if (params?.limit) qs.set('limit', String(params.limit));

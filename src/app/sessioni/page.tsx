@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getStatusConfig, getPaymentConfig } from "@/lib/constants";
-import { cercaProvvisorio, eProvvisoria } from "@/lib/numeroSessione";
+import { eProvvisoria } from "@/lib/numeroSessione";
 
 // Chip singolo notifica: verde se inviato, grigio se non ancora fatto
 function NotifChip({ label, sent }: { label: string; sent: boolean }) {
@@ -54,7 +54,11 @@ function NotificationChips({ s }: { s: Record<string, unknown> }) {
   );
 }
 
-const PAGE_SIZE = 50;
+// 21/10/2026 (Christian): scelta di quante sessioni per pagina, anche «tutte» in una pagina sola (salvata nel browser)
+const DIMENSIONI = [50, 200, 2000] as const;
+const leggiDimensione = (): number => {
+  try { const v = Number(localStorage.getItem("sessioni_per_pagina")); return (DIMENSIONI as readonly number[]).includes(v) ? v : 50; } catch { return 50; }
+};
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -68,6 +72,8 @@ export default function SessionsPage() {
   // non si risolve (risolve bug sessioni duplicate create entro 200ms).
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [PAGE_SIZE, setPageSize] = useState<number>(50);
+  useEffect(() => { setPageSize(leggiDimensione()); }, []);
   const [total, setTotal] = useState(0);
   // Filtri sessioni (audit P1.14): chip status + data + search testuale
   const [statusFilter, setStatusFilter] = useState<string>(""); // "" = tutti
@@ -106,24 +112,13 @@ export default function SessionsPage() {
     };
     if (statusFilter) opts.status = statusFilter;
     if (dateFilter) opts.date = dateFilter;
+    // 21/10/2026: la ricerca la fa il SERVER su tutte le sessioni (prima filtrava solo la pagina aperta:
+    // la sessione 165 «non esisteva» finché non si andava alla pagina giusta)
+    if (search.trim()) opts.q = search.trim();
     listSessions(opts as Parameters<typeof listSessions>[0])
       .then((data) => {
         if (annullato) return;
-        let rows = data.sessions || [];
-        if (search.trim()) {
-          const q = search.trim().toLowerCase();
-          // "165", "n. 165", "n165": ricerca per numero di sessione
-          const qNum = q.replace(/^n\.?\s*/, "");
-          // "P-7", "p007": numero provvisorio delle sessioni in attesa strumenti (18/10/2026)
-          const qProv = cercaProvvisorio(q);
-          rows = rows.filter((s: { customers?: { company_name?: string; vat_number?: string } | null; operator?: string; session_number?: number | null; provisional_number?: string | null }) =>
-            (qProv !== null && s.provisional_number === qProv) ||
-            (/^\d+$/.test(qNum) && String(s.session_number ?? "") === qNum) ||
-            (s.customers?.company_name || "").toLowerCase().includes(q) ||
-            (s.customers?.vat_number || "").toLowerCase().includes(q) ||
-            (s.operator || "").toLowerCase().includes(q),
-          );
-        }
+        const rows = data.sessions || [];
         setSessions(rows);
         setTotal(data.total ?? data.count ?? 0);
       })
@@ -137,7 +132,7 @@ export default function SessionsPage() {
     return () => {
       annullato = true;
     };
-  }, [page, statusFilter, dateFilter, search]);
+  }, [page, statusFilter, dateFilter, search, PAGE_SIZE]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -740,14 +735,22 @@ export default function SessionsPage() {
         </div>
       </Card>
 
-      {/* Paginazione - fix F11 */}
-      {!loading && total > PAGE_SIZE && (
-        <div className="flex justify-between items-center text-sm text-gray-600">
-          <span>
-            {(page - 1) * PAGE_SIZE + 1}-
-            {Math.min(page * PAGE_SIZE, total)} di {total} sessioni
+      {/* Paginazione - fix F11 · 21/10/2026: scelta 50 / 200 / tutte */}
+      {!loading && total > 0 && (
+        <div className="flex flex-wrap justify-between items-center gap-2 text-sm text-gray-600">
+          <span className="flex flex-wrap items-center gap-2">
+            {total > PAGE_SIZE ? `${(page - 1) * PAGE_SIZE + 1}-${Math.min(page * PAGE_SIZE, total)} di ${total} sessioni` : `${total} sessioni`}
+            <label className="flex items-center gap-1 text-xs">
+              per pagina
+              <select className="h-7 rounded border bg-background px-1 text-xs" value={PAGE_SIZE}
+                onChange={(e) => { const v = Number(e.target.value); setPageSize(v); setPage(1); try { localStorage.setItem("sessioni_per_pagina", String(v)); } catch {} }}>
+                <option value={50}>50</option>
+                <option value={200}>200</option>
+                <option value={2000}>tutte</option>
+              </select>
+            </label>
           </span>
-          <div className="flex gap-2">
+          {total > PAGE_SIZE && <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -767,7 +770,7 @@ export default function SessionsPage() {
             >
               Successiva <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
-          </div>
+          </div>}
         </div>
       )}
     </div>
