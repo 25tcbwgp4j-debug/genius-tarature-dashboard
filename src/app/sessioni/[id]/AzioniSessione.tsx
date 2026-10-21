@@ -110,6 +110,9 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
   const okScansione = () => !mancaScansione
     || confirm("⚠️ Manca la scansione dei rapporti: questo cliente vuole i PDF dei rapporti firmati prima della consegna.\n\nOK = procedo lo stesso");
 
+  // 21/10/2026 (Christian): se gli strumenti tornano col NOSTRO corriere il pulsante di chiusura si chiama
+  // «STRUMENTI SPEDITI» (stessa operazione: chiude la sessione e aggiorna lo scadenzario)
+  const spedita = !!session.return_by_courier && !session.shipping_by_customer && !session.return_by_customer;
   return (
     <Card className="p-3 sm:p-4">
       <div className="mb-2 flex flex-wrap items-baseline gap-x-3">
@@ -190,10 +193,12 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
             if (!isPaid && !differito && session.payment_status !== "non_richiesto"
               && !confirm(`⚠️ Il pagamento non risulta arrivato${fattura?.numero ? ` (fattura ${fattura.numero} da pagare)` : ""}.\nDi solito pagano e poi ritirano.\n\nOK = riconsegno lo stesso`)) return;
             if (!okScansione()) return;
-            if (!confirm("Chiudere la sessione e marcare gli strumenti come riconsegnati? (operazione interna, nessuna comunicazione al cliente)")) return;
-            handleAction("delivered", () => markDelivered(sessionId), "Sessione completata! Strumenti riconsegnati.");
+            if (!confirm(spedita
+              ? "Chiudere la sessione e marcare gli strumenti come SPEDITI al cliente con il corriere? (operazione interna, nessuna comunicazione al cliente: il tracking è già partito con la spedizione)"
+              : "Chiudere la sessione e marcare gli strumenti come riconsegnati? (operazione interna, nessuna comunicazione al cliente)")) return;
+            handleAction("delivered", () => markDelivered(sessionId), spedita ? "Sessione completata! Strumenti spediti." : "Sessione completata! Strumenti riconsegnati.");
           }}>
-          {actionLoading === "delivered" ? <Loader2 className="size-4 animate-spin" /> : <PackageCheck className="size-4" />} STRUMENTI RICONSEGNATI
+          {actionLoading === "delivered" ? <Loader2 className="size-4 animate-spin" /> : <PackageCheck className="size-4" />} {spedita ? "STRUMENTI SPEDITI" : "STRUMENTI RICONSEGNATI"}
           {session.delivered_at ? <span className="font-normal opacity-90">· ✓ {breve(session.delivered_at)}</span> : null}
         </Button>
       </div>
