@@ -2,8 +2,9 @@
 
 // PREZZI ASSISTENZA UFFICIALE MACBOOK (19/10/2026) — backend prezzi_ufficiali.py (solo titolare).
 // Per ogni MacBook, dal più vecchio al più nuovo: scheda logica, Touch ID, display, top case, batteria, trackpad.
-//   costo GSX col reso → × 1,10 (Bagnetti) × 1,22 (IVA) = quanto lo paghiamo → proposto (finale 49/79/99, margine > 50 €)
-//   → «scontato da» (+70 arrotondato alla decina). Touch ID: +10%. Batteria: poco sopra il prezzo Apple.
+//   costo GSX col reso → × 1,10 (Bagnetti) × 1,22 (IVA) = quanto lo paghiamo → proposto (21/10/2026: × 1,1396 come
+//   394 → 449, finale 29/49/79/99) → «scontato da» = prezzo di listino (+11%, tra 50 e 90 €, alla decina piena).
+//   Batteria: mai sotto il prezzo Apple. 1ª ipotesi già proposta (storico schede): da convalidare.
 // Il titolare convalida la proposta o scrive il suo prezzo; per scheda logica, display e top case imposta anche i prezzi
 // della 1ª ipotesi (riparazione scheda, solo pannello, sola tastiera / Touch Bar / trackpad). Sotto, le righe del preventivo.
 
@@ -69,7 +70,7 @@ function RigaComponente({ m, c, onSalvato }: { m: Modello; c: Componente; onSalv
         <td className="p-2 text-right font-medium whitespace-nowrap">{eur(c.pagato)}</td>
         <td className="p-2 text-right whitespace-nowrap">
           {c.componente === "touch_id" ? <span className="text-xs text-gray-500">+10%</span> :
-            <input className={input} value={margine} onChange={(e) => setMargine(e.target.value)} placeholder="50" title="Margine minimo (vuoto = 50 €)" />}
+            <input className={input} value={margine} onChange={(e) => setMargine(e.target.value)} placeholder="—" title="Margine minimo in € (vuoto = regola proporzionale 394 → 449)" />}
         </td>
         <td className="p-2 text-right whitespace-nowrap">
           {eur(c.proposto)}
@@ -160,8 +161,9 @@ export default function PrezziUfficiali() {
       <div>
         <h1 className="text-xl font-semibold flex items-center gap-2"><Tags className="h-5 w-5" /> Prezzi assistenza ufficiale MacBook</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Costo GSX col reso × 1,10 (Bagnetti) × 1,22 (IVA) = quanto lo paghi · proposto: finale 49/79/99 con margine sopra 50 €
-          (o il margine minimo che scrivi) · scontato da: +70 alla decina · Touch ID +10% · batteria poco sopra il prezzo Apple.
+          Costo GSX col reso × 1,10 (Bagnetti) × 1,22 (IVA) = quanto lo paghi · proposto: × 1,1396 (come 394 → 449), finale 29/49/79/99
+          (o il margine minimo che scrivi) · scontato da = prezzo di listino: +11% (tra 50 e 90 €) alla decina piena · batteria mai sotto il prezzo Apple ·
+          1ª ipotesi già proposta dallo storico delle schede: controlla e convalida.
           «Convalida» se ti va bene, altrimenti scrivi il prezzo e «Salva».
         </p>
       </div>
@@ -196,7 +198,7 @@ export default function PrezziUfficiali() {
               <tr>
                 <th className="p-2">Pezzo</th><th className="p-2 text-right">GSX col reso</th><th className="p-2 text-right">Lo paghi</th>
                 <th className="p-2 text-right">Margine min</th><th className="p-2 text-right">Proposto</th><th className="p-2 text-right">Prezzo</th>
-                <th className="p-2 text-right">Scontato da</th><th className="p-2 text-right">Margine</th><th className="p-2">Stato</th><th className="p-2" />
+                <th className="p-2 text-right">Listino (scontato da)</th><th className="p-2 text-right">Margine</th><th className="p-2">Stato</th><th className="p-2" />
               </tr>
             </thead>
             <tbody>
