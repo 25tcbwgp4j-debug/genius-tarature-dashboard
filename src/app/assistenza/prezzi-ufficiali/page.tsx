@@ -1,6 +1,7 @@
 "use client";
 
-// PREZZI ASSISTENZA UFFICIALE MACBOOK (19/10/2026) — backend prezzi_ufficiali.py (solo titolare).
+// PREZZI ASSISTENZA UFFICIALE MACBOOK (19/10/2026) E iMAC (22/10/2026) — backend prezzi_ufficiali.py (solo titolare).
+// iMac: scheda logica, display, alimentatore, SSD/hard disk, ventola, altoparlanti, fotocamera — stesse regole di prezzo.
 // Per ogni MacBook, dal più vecchio al più nuovo: scheda logica, Touch ID, display, top case, batteria, trackpad.
 //   costo GSX col reso → × 1,10 (Bagnetti) × 1,22 (IVA) = quanto lo paghiamo → proposto (21/10/2026: × 1,1396 come
 //   394 → 449, finale 29/49/79/99) → «scontato da» = prezzo di listino (+11%, tra 50 e 90 €, alla decina piena).
@@ -23,7 +24,7 @@ interface Componente {
   prezzo_apple: number | null; totale_con_touch_id?: number; testi: { prima: string[]; seconda: string };
 }
 interface Modello {
-  modello: string; nome_apple: string | null; anno: number | null; seriale: string | null; batteria_apple: string | null;
+  modello: string; famiglia?: "macbook" | "imac"; nome_apple: string | null; anno: number | null; seriale: string | null; batteria_apple: string | null;
   applecare: string | null; top_case_con_batteria: boolean; touch_bar: boolean; componenti: Componente[];
 }
 
@@ -139,6 +140,7 @@ export default function PrezziUfficiali() {
   const [errore, setErrore] = useState("");
   const [q, setQ] = useState("");
   const [soloDaConvalidare, setSoloDaConvalidare] = useState(false);
+  const [fam, setFam] = useState<"macbook" | "imac">("macbook");
 
   const carica = useCallback(async () => {
     try {
@@ -149,17 +151,18 @@ export default function PrezziUfficiali() {
   useEffect(() => { carica(); }, [carica]);
 
   const visibili = useMemo(() => modelli.filter((m) => {
+    if ((m.famiglia || "macbook") !== fam) return false;
     const testo = `${m.modello} ${m.nome_apple || ""}`.toLowerCase();
     if (q && !q.toLowerCase().split(/\s+/).every((t) => testo.includes(t))) return false;
     if (soloDaConvalidare && m.componenti.every((c) => c.stato === "convalidato" && !c.costo_cambiato)) return false;
     return true;
-  }), [modelli, q, soloDaConvalidare]);
-  const daConvalidare = modelli.reduce((n, m) => n + m.componenti.filter((c) => c.stato !== "convalidato").length, 0);
+  }), [modelli, q, soloDaConvalidare, fam]);
+  const daConvalidare = modelli.filter((m) => (m.famiglia || "macbook") === fam).reduce((n, m) => n + m.componenti.filter((c) => c.stato !== "convalidato").length, 0);
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-7xl">
       <div>
-        <h1 className="text-xl font-semibold flex items-center gap-2"><Tags className="h-5 w-5" /> Prezzi assistenza ufficiale MacBook</h1>
+        <h1 className="text-xl font-semibold flex items-center gap-2"><Tags className="h-5 w-5" /> Prezzi assistenza ufficiale {fam === "imac" ? "iMac" : "MacBook"}</h1>
         <p className="text-sm text-gray-500 mt-1">
           Costo GSX col reso × 1,10 (Bagnetti) × 1,22 (IVA) = quanto lo paghi · proposto: × 1,1396 (come 394 → 449), finale 29/49/79/99
           (o il margine minimo che scrivi) · scontato da = prezzo di listino: +11% (tra 50 e 90 €) alla decina piena · batteria mai sotto il prezzo Apple ·
@@ -169,9 +172,17 @@ export default function PrezziUfficiali() {
       </div>
 
       <Card className="p-3 flex flex-wrap gap-3 items-center">
+        <div className="inline-flex rounded-md border overflow-hidden text-sm">
+          {(["macbook", "imac"] as const).map((f) => (
+            <button key={f} type="button" onClick={() => setFam(f)}
+              className={`px-3 py-1.5 ${fam === f ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-900"}`}>
+              {f === "imac" ? "iMac" : "MacBook"} ({modelli.filter((m) => (m.famiglia || "macbook") === f).length})
+            </button>
+          ))}
+        </div>
         <div className="relative flex-1 min-w-[200px]">
           <Search className="h-4 w-4 absolute left-2 top-2.5 text-gray-400" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca modello (es. Air M1, Pro 16 2019)"
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={fam === "imac" ? "Cerca modello (es. 27 5K 2019, 24 M1)" : "Cerca modello (es. Air M1, Pro 16 2019)"}
             className="w-full border rounded-md pl-8 pr-2 py-1.5 text-sm bg-white dark:bg-gray-900" />
         </div>
         <label className="text-sm flex items-center gap-2">
