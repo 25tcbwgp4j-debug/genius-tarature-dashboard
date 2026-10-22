@@ -103,6 +103,7 @@ export const MENU_APPLE: Voce[] = [
   { href: "/assistenza/voci", label: "Voci di preventivo", icon: ListChecks },
   { href: "/assistenza/ricambi-gsx", label: "Ricambi GSX (costi)", icon: Wrench },
   { href: "/assistenza/prezzi-ufficiali", label: "Prezzi assistenza ufficiale", icon: Tags },
+  { href: "/assistenza/magazzino-ricambi", label: "Magazzino ricambi (display, schede)", icon: Boxes },
   { href: "/", label: "Panoramica Apple", icon: LayoutDashboard },
   { href: "/rubrica-apple", label: "Rubrica clienti Apple", icon: BookUser },
   ...COMUNI,
@@ -111,7 +112,7 @@ export const MENU_APPLE: Voce[] = [
 ];
 
 // voci che si vedono solo a chi vede le schede di assistenza (in prova: solo il titolare)
-const DELLE_SCHEDE = new Set(["/assistenza", "/assistenza/voci", "/assistenza/ricambi-gsx", "/assistenza/prezzi-ufficiali", "/rubrica-apple"]);
+const DELLE_SCHEDE = new Set(["/assistenza", "/assistenza/voci", "/assistenza/ricambi-gsx", "/assistenza/prezzi-ufficiali", "/assistenza/magazzino-ricambi", "/rubrica-apple"]);
 
 /** La pagina appartiene solo all'altra divisione? (serve per tornare alla home quando si cambia divisione) */
 function soloDellAltra(pathname: string, menu: Voce[]): boolean {
