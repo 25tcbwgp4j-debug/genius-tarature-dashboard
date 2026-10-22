@@ -6,6 +6,10 @@
 // In magazzino: si SPARA il codice col lettore nel riquadro in alto (il lettore scrive il codice e preme Invio) → la pagina
 // va sulla riga, la evidenzia e apre la CONTA: si contano i pezzi e si conferma la quantità (resta nei movimenti).
 // Su ogni riga: + carica, − togli (la quantità si aggiorna), modifica, storico, elimina (si può ripristinare).
+// Il lettore lavora in tre modi (scelta accanto al riquadro): CONTA (inventario), CARICA (arriva merce: se il codice non
+// c'è, si apre «nuovo articolo» già compilato con descrizione e modelli dai ricambi GSX), TOGLI.
+// Posizione (Christian 22/10/2026): REPARTO/ripiano (A1, H3, F…) · SCAFFALE (1°/2°/3°, lo scaffale grande a tre
+// cassettoni) · CONFEZIONE (busta, busta sciolta…). Accanto alla descrizione l'esito dell'ultima verifica sul GSX.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Boxes, Check, History, Loader2, Minus, Pencil, Plus, RotateCcw, ScanLine, Search, Trash2, X } from "lucide-react";
@@ -16,7 +20,9 @@ import { fetchAPI } from "@/lib/api";
 type Tipo = "ricambio" | "display" | "scheda_logica";
 interface Riga {
   id: number; tipo: Tipo; codice: string | null; mpn: string | null; descrizione: string; modelli: string | null;
-  qta_nuovo: number; qta_usato: number; posizione: string | null; scaffale: string | null; stato: string | null;
+  qta_nuovo: number; qta_usato: number; posizione: string | null; scaffale: string | null; confezione: string | null;
+  codici_alt: string | null; gsx_descrizione: string | null; gsx_stato: string | null; gsx_costo?: number | null;
+  gsx_sostituito_da: string | null; gsx_verificato_il: string | null; stato: string | null;
   condizioni: string | null; seriale: string | null; costo?: number | null; note: string | null; attivo: boolean;
   inventario_il: string | null; inventario_da: string | null; updated_at: string;
 }
@@ -36,6 +42,9 @@ const COLORE_STATO: Record<string, string> = {
   da_verificare: "bg-gray-100 text-gray-700", nuovo: "bg-blue-100 text-blue-800", riservato: "bg-purple-100 text-purple-800",
 };
 const inp = "border rounded px-2 py-1 text-sm bg-white dark:bg-gray-900";
+const dove = (r: Partial<Riga>) => [r.posizione && `reparto ${r.posizione}`, r.scaffale, r.confezione?.toLowerCase()].filter(Boolean).join(" · ");
+const norm = (t: string | null | undefined) => (t || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+type Modo = "conta" | "carico" | "scarico";
 const data = (s: string | null) => (s ? new Date(s).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
 
 function Finestra({ titolo, onChiudi, children }: { titolo: string; onChiudi: () => void; children: React.ReactNode }) {
@@ -75,7 +84,7 @@ function Conta({ r, onFatto, onChiudi }: { r: Riga; onFatto: () => void; onChiud
     <Finestra titolo={`Conta: ${r.codice || ""} ${r.descrizione}`} onChiudi={onChiudi}>
       <p className="text-sm text-gray-600 mb-3">
         A sistema: <b>{r.qta_nuovo}</b> nuovi{r.qta_usato ? <> · <b>{r.qta_usato}</b> usati</> : null}
-        {r.posizione || r.scaffale ? <> · posizione <b>{[r.posizione, r.scaffale].filter(Boolean).join(" · ")}</b></> : null}
+        {dove(r) ? <> · <b>{dove(r)}</b></> : null}
         {r.inventario_il ? <span className="block text-xs mt-1">Ultima conta {data(r.inventario_il)} ({r.inventario_da})</span> : null}
       </p>
       <div className="flex gap-4 items-end">
@@ -100,19 +109,23 @@ function Movimenta({ r, tipo, onFatto, onChiudi }: { r: Riga; tipo: "carico" | "
   const [q, setQ] = useState("1");
   const [campo, setCampo] = useState<"nuovo" | "usato">("nuovo");
   const [nota, setNota] = useState("");
+  const [pos, setPos] = useState({ posizione: r.posizione || "", scaffale: r.scaffale || "", confezione: r.confezione || "" });
   const [salvo, setSalvo] = useState(false);
   const invia = async () => {
     const n = Number(q);
     if (!Number.isInteger(n) || n <= 0) { toast.error("Quantità non valida"); return; }
     setSalvo(true);
     try {
+      if (tipo === "carico" && (pos.posizione !== (r.posizione || "") || pos.scaffale !== (r.scaffale || "") || pos.confezione !== (r.confezione || ""))) {
+        await fetchAPI(`/api/ricambi-apple/${r.id}`, { method: "PATCH", body: JSON.stringify(pos) });
+      }
       await fetchAPI(`/api/ricambi-apple/${r.id}/movimento`, { method: "POST", body: JSON.stringify({ tipo, campo, quantita: n, nota: nota || null }) });
       toast.success(tipo === "carico" ? `Aggiunti ${n}` : `Tolti ${n}`); onFatto();
     } catch (e) { toast.error(String((e as Error)?.message || e)); } finally { setSalvo(false); }
   };
   return (
     <Finestra titolo={`${tipo === "carico" ? "Aggiungi" : "Togli"}: ${r.codice || ""} ${r.descrizione}`} onChiudi={onChiudi}>
-      <p className="text-sm text-gray-600 mb-3">Ora: {r.qta_nuovo} nuovi · {r.qta_usato} usati</p>
+      <p className="text-sm text-gray-600 mb-3">Ora: {r.qta_nuovo} nuovi · {r.qta_usato} usati{dove(r) ? ` · ${dove(r)}` : ""}</p>
       <div className="flex flex-wrap gap-3 items-end">
         <label className="text-sm">Quanti<br /><input autoFocus className={`${inp} w-20 text-right`} value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") invia(); }} /></label>
@@ -121,6 +134,13 @@ function Movimenta({ r, tipo, onFatto, onChiudi }: { r: Riga; tipo: "carico" | "
             <option value="nuovo">nuovi</option><option value="usato">usati</option>
           </select>
         </label>
+        {tipo === "carico" && (
+          <div className="w-full grid grid-cols-3 gap-2">
+            <label className="text-sm">Reparto / ripiano<br /><input className={`${inp} w-full`} placeholder="A1, H3…" value={pos.posizione} onChange={(e) => setPos({ ...pos, posizione: e.target.value.toUpperCase() })} /></label>
+            <label className="text-sm">Scaffale<br /><input className={`${inp} w-full`} placeholder="1° SCAFFALE" value={pos.scaffale} onChange={(e) => setPos({ ...pos, scaffale: e.target.value.toUpperCase() })} /></label>
+            <label className="text-sm">Confezione<br /><input className={`${inp} w-full`} placeholder="BUSTA, BUSTA SCIOLTA" value={pos.confezione} onChange={(e) => setPos({ ...pos, confezione: e.target.value.toUpperCase() })} /></label>
+          </div>
+        )}
         <label className="text-sm flex-1 min-w-[180px]">Nota (es. scheda 63207, ordine Bagnetti)<br />
           <input className={`${inp} w-full`} value={nota} onChange={(e) => setNota(e.target.value)} /></label>
         <button type="button" disabled={salvo} onClick={invia}
@@ -138,7 +158,7 @@ function Scheda({ r, tipo, titolare, stati, onFatto, onChiudi }: {
   const nuovo = !r?.id;
   const [v, setV] = useState<Record<string, string>>(() => {
     const o: Record<string, string> = {};
-    for (const k of ["codice", "mpn", "descrizione", "modelli", "posizione", "scaffale", "stato", "condizioni", "seriale", "note", "costo", "qta_nuovo", "qta_usato"]) {
+    for (const k of ["codice", "codici_alt", "mpn", "descrizione", "modelli", "posizione", "scaffale", "confezione", "stato", "condizioni", "seriale", "note", "costo", "qta_nuovo", "qta_usato", "gsx_descrizione", "gsx_sostituito_da", "gsx_costo", "gsx_sostituzione"]) {
       const x = (r as Record<string, unknown> | null)?.[k];
       o[k] = x == null ? "" : String(x);
     }
@@ -150,6 +170,7 @@ function Scheda({ r, tipo, titolare, stati, onFatto, onChiudi }: {
     setSalvo(true);
     try {
       const corpo: Record<string, unknown> = { ...v, tipo: r?.tipo || tipo };
+      if (!nuovo) { delete corpo.gsx_descrizione; delete corpo.gsx_sostituito_da; delete corpo.gsx_costo; delete corpo.gsx_sostituzione; }
       if (!titolare) delete corpo.costo;
       else corpo.costo = v.costo === "" ? null : Number(v.costo.replace(",", "."));
       if (nuovo) await fetchAPI("/api/ricambi-apple", { method: "POST", body: JSON.stringify(corpo) });
@@ -169,11 +190,19 @@ function Scheda({ r, tipo, titolare, stati, onFatto, onChiudi }: {
       <div className="grid grid-cols-2 gap-3">
         {campo("codice", "Codice (APN)")}
         {campo("mpn", "MPN / codice produttore")}
+        {campo("codici_alt", "Altri codici dello stesso pezzo", "col-span-2")}
         {campo("descrizione", "Descrizione", "col-span-2")}
+        {v.gsx_descrizione && norm(v.gsx_descrizione) !== norm(v.descrizione) && (
+          <div className="col-span-2 text-xs -mt-2 flex items-center gap-2">
+            <span className="text-gray-500">GSX: {v.gsx_descrizione}</span>
+            <button type="button" className="underline text-blue-600" onClick={() => setV({ ...v, descrizione: v.gsx_descrizione })}>usa questa</button>
+          </div>
+        )}
         <label className="text-sm col-span-2">Modelli interessati<br />
           <textarea className={`${inp} w-full`} rows={2} value={v.modelli} onChange={set("modelli")} /></label>
-        {campo("posizione", "Posizione (busta/cassetto)")}
-        {campo("scaffale", "Scaffale")}
+        {campo("posizione", "Reparto / ripiano (A1, H3…)")}
+        {campo("scaffale", "Scaffale (1°/2°/3°)")}
+        {campo("confezione", "Confezione (busta, sciolta…)")}
         {(pezzo || v.stato) && (
           <label className="text-sm">Stato<br />
             <select className={`${inp} w-full`} value={v.stato} onChange={set("stato")}>
@@ -235,6 +264,7 @@ export default function MagazzinoRicambi() {
   const [carico, setCarico] = useState(true);
   const [evid, setEvid] = useState<number | null>(null);
   const [scan, setScan] = useState("");
+  const [modo, setModo] = useState<Modo>("conta");
   const [scelte, setScelte] = useState<Riga[] | null>(null);
   const [conta, setConta] = useState<Riga | null>(null);
   const [mov, setMov] = useState<{ r: Riga; t: "carico" | "scarico" } | null>(null);
@@ -259,12 +289,22 @@ export default function MagazzinoRicambi() {
     });
   }, [righe, q]);
 
-  const vaiA = (r: Riga, apriConta = true) => {
+  const vaiA = (r: Riga, m: Modo = modo) => {
     setScelte(null); setQ(""); setEliminati(false);
     if (r.tipo !== tipo) setTipo(r.tipo);
     setEvid(r.id);
     setTimeout(() => document.getElementById(`riga-${r.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 400);
-    if (apriConta) setConta(r);
+    if (m === "conta") setConta(r); else setMov({ r, t: m });
+  };
+  const nuovoDaCatalogo = async (codice: string) => {
+    try {
+      const c = await fetchAPI(`/api/ricambi-apple/catalogo/${encodeURIComponent(codice)}`);
+      const g = c.gsx;
+      if (g) toast.success(`Trovato fra i ricambi GSX: ${g.descrizione}`);
+      else toast.info(`${c.codice}: non è fra i ricambi GSX letti — scrivi tu la descrizione`);
+      setMod({ r: { codice: c.codice, tipo, descrizione: g?.descrizione || "", modelli: g?.modelli || null, gsx_descrizione: g?.descrizione || null,
+        gsx_sostituito_da: g?.sostituito_da || null, gsx_costo: g?.gsx_costo ?? null, qta_nuovo: 1 } as Partial<Riga> });
+    } catch (e) { toast.error(String((e as Error)?.message || e)); }
   };
 
   const spara = async () => {
@@ -275,10 +315,9 @@ export default function MagazzinoRicambi() {
       setScan("");
       if (r.righe.length === 1) vaiA(r.righe[0]);
       else if (r.righe.length > 1) setScelte(r.righe);
+      else if (modo === "carico") nuovoDaCatalogo(r.codice);
       else {
-        toast.error(`${r.codice}: non c'è in magazzino`, {
-          action: { label: "Aggiungilo", onClick: () => setMod({ r: { codice: r.codice, tipo } }) },
-        });
+        toast.error(`${r.codice}: non c'è in magazzino`, { action: { label: "Caricalo", onClick: () => nuovoDaCatalogo(r.codice) } });
       }
     } catch (e) { toast.error(String((e as Error)?.message || e)); }
   };
@@ -303,8 +342,9 @@ export default function MagazzinoRicambi() {
       <div>
         <h1 className="text-xl font-semibold flex items-center gap-2"><Boxes className="h-5 w-5" /> Magazzino ricambi Apple</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Spara il codice col lettore (o scrivilo e premi Invio): la pagina va sulla riga e apre la conta — conta i pezzi e conferma.
-          Con + e − aggiungi o togli: la quantità si aggiorna e resta nello storico.
+          Scegli cosa fai (Conta, Carica, Togli) e spara il codice col lettore (o scrivilo e premi Invio): la pagina va sulla riga.
+          Conta: conti i pezzi e confermi. Carica: dici quanti e dove li metti (se il codice è nuovo si compila da solo dai ricambi GSX).
+          Ogni cambio resta nello Storico.
         </p>
       </div>
 
@@ -312,6 +352,12 @@ export default function MagazzinoRicambi() {
         <ScanLine className="h-5 w-5 text-blue-600" />
         <input ref={scanRef} value={scan} onChange={(e) => setScan(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") spara(); }}
           placeholder="Spara qui il codice (APN, MPN o seriale)" className="flex-1 min-w-[220px] border rounded-md px-3 py-2 text-base font-mono bg-white dark:bg-gray-900" />
+        <div className="inline-flex rounded-md border overflow-hidden text-sm">
+          {([["conta", "Conta"], ["carico", "Carica"], ["scarico", "Togli"]] as [Modo, string][]).map(([k, t]) => (
+            <button key={k} type="button" onClick={() => { setModo(k); scanRef.current?.focus(); }}
+              className={`px-3 py-2 ${modo === k ? (k === "carico" ? "bg-green-600 text-white" : k === "scarico" ? "bg-amber-600 text-white" : "bg-blue-600 text-white") : "bg-white dark:bg-gray-900"}`}>{t}</button>
+          ))}
+        </div>
         <button type="button" onClick={spara} className="px-3 py-2 rounded bg-blue-600 text-white text-sm">Trova</button>
       </Card>
 
@@ -360,17 +406,22 @@ export default function MagazzinoRicambi() {
                 <th className="p-2">Codice</th><th className="p-2">Descrizione / modelli</th>
                 {pezzi && <th className="p-2">Stato</th>}
                 <th className="p-2 text-right">Nuovi</th><th className="p-2 text-right">Usati</th>
-                <th className="p-2">Posizione</th>{titolare && <th className="p-2 text-right">Costo</th>}
+                <th className="p-2">Dove</th>{titolare && <th className="p-2 text-right">Costo</th>}
                 <th className="p-2">Ultima conta</th><th className="p-2" />
               </tr>
             </thead>
             <tbody>
               {visibili.map((r) => (
                 <tr key={r.id} id={`riga-${r.id}`} className={`border-t align-top ${evid === r.id ? "bg-yellow-100 dark:bg-yellow-900/40" : ""}`}>
-                  <td className="p-2 font-mono whitespace-nowrap">{r.codice}{r.mpn ? <div className="text-xs text-gray-500">{r.mpn}</div> : null}
+                  <td className="p-2 font-mono whitespace-nowrap">{r.codice}{r.codici_alt ? <div className="text-xs text-gray-500">= {r.codici_alt}</div> : null}
+                    {r.mpn ? <div className="text-xs text-gray-500">{r.mpn}</div> : null}
+                    {r.gsx_stato && <div className={`text-[10px] mt-0.5 ${r.gsx_stato === "in_vendita" ? "text-green-700" : "text-gray-400"}`}
+                      title={r.gsx_verificato_il ? `verificato sul GSX il ${data(r.gsx_verificato_il)}` : ""}>{r.gsx_stato === "in_vendita" ? "GSX: in vendita" : "GSX: fuori vendita"}</div>}
                     {r.seriale ? <div className="text-xs text-gray-500">SN {r.seriale}</div> : null}</td>
                   <td className="p-2">
                     <div className="font-medium">{r.descrizione}</div>
+                    {r.gsx_descrizione && norm(r.gsx_descrizione) !== norm(r.descrizione) && <div className="text-xs text-blue-700">GSX: {r.gsx_descrizione}</div>}
+                    {r.gsx_sostituito_da && <div className="text-xs text-amber-700">sostituito da {r.gsx_sostituito_da}</div>}
                     {r.modelli && <div className="text-xs text-gray-500 whitespace-pre-line line-clamp-2" title={r.modelli}>{r.modelli}</div>}
                     {r.condizioni && <div className="text-xs text-amber-700">{r.condizioni}</div>}
                     {r.note && <div className="text-xs text-gray-500 italic">{r.note}</div>}
@@ -378,18 +429,19 @@ export default function MagazzinoRicambi() {
                   {pezzi && <td className="p-2">{r.stato ? <span className={`text-xs px-2 py-0.5 rounded-full ${COLORE_STATO[r.stato] || "bg-gray-100"}`}>{STATI_TESTO[r.stato] || r.stato}</span> : "—"}</td>}
                   <td className={`p-2 text-right text-base font-semibold ${r.qta_nuovo === 0 ? "text-gray-400" : ""}`}>{r.qta_nuovo}</td>
                   <td className={`p-2 text-right ${r.qta_usato === 0 ? "text-gray-400" : ""}`}>{r.qta_usato}</td>
-                  <td className="p-2 whitespace-nowrap">{r.posizione}{r.scaffale ? <div className="text-xs text-gray-500">{r.scaffale}</div> : null}</td>
+                  <td className="p-2 whitespace-nowrap">{r.posizione ? <span className="font-semibold">{r.posizione}</span> : null}
+                    {r.scaffale ? <div className="text-xs">{r.scaffale}</div> : null}{r.confezione ? <div className="text-xs text-gray-500">{r.confezione.toLowerCase()}</div> : null}</td>
                   {titolare && <td className="p-2 text-right">{r.costo != null ? `€ ${Number(r.costo).toFixed(2).replace(".", ",")}` : ""}</td>}
                   <td className="p-2 text-xs text-gray-500 whitespace-nowrap">{data(r.inventario_il)}</td>
                   <td className="p-2 whitespace-nowrap">
                     {r.attivo ? (
                       <div className="flex gap-1">
-                        <button type="button" title="Conta e conferma" onClick={() => { setEvid(r.id); setConta(r); }} className="px-2 py-1 rounded border text-xs">Conta</button>
-                        <button type="button" title="Aggiungi" onClick={() => setMov({ r, t: "carico" })} className="p-1 rounded border"><Plus className="h-3.5 w-3.5" /></button>
-                        <button type="button" title="Togli" onClick={() => setMov({ r, t: "scarico" })} className="p-1 rounded border"><Minus className="h-3.5 w-3.5" /></button>
-                        <button type="button" title="Modifica" onClick={() => setMod({ r })} className="p-1 rounded border"><Pencil className="h-3.5 w-3.5" /></button>
-                        <button type="button" title="Storico" onClick={() => setSto(r)} className="p-1 rounded border"><History className="h-3.5 w-3.5" /></button>
-                        <button type="button" title="Elimina" onClick={() => elimina(r)} className="p-1 rounded border text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                        <button type="button" title="Conta i pezzi e conferma la quantità" onClick={() => { setEvid(r.id); setConta(r); }} className="px-2 py-1 rounded border text-xs">Conta</button>
+                        <button type="button" title="Carica: arrivano pezzi" onClick={() => setMov({ r, t: "carico" })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5 text-green-700"><Plus className="h-3 w-3" />Carica</button>
+                        <button type="button" title="Togli: pezzi usati o venduti" onClick={() => setMov({ r, t: "scarico" })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5 text-amber-700"><Minus className="h-3 w-3" />Togli</button>
+                        <button type="button" title="Modifica i dati" onClick={() => setMod({ r })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5"><Pencil className="h-3 w-3" />Modifica</button>
+                        <button type="button" title="Storico: chi ha cambiato cosa e quando" onClick={() => setSto(r)} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5"><History className="h-3 w-3" />Storico</button>
+                        <button type="button" title="Elimina (si può ripristinare)" onClick={() => elimina(r)} className="px-2 py-1 rounded border text-xs text-red-600 inline-flex items-center gap-0.5"><Trash2 className="h-3 w-3" />Elimina</button>
                       </div>
                     ) : (
                       <button type="button" onClick={() => ripristina(r)} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-1"><RotateCcw className="h-3 w-3" /> Ripristina</button>
