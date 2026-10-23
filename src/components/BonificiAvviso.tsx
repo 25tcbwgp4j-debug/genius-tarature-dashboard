@@ -463,7 +463,7 @@ export function useBonificoDelDocumento(...ids: (string | null | undefined)[]): 
   return { bonifico: tocca ? b : null, correggi: tocca && corr === id };
 }
 
-const AZIONI_FATTURA = new Set(["bozza", "pf", "proforma", "ordine", "preventivo", "sessione"]);
+const AZIONI_FATTURA = new Set(["bozza", "pf", "proforma", "ordine", "preventivo", "sessione", "scheda"]);
 
 function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
   const router = useRouter();

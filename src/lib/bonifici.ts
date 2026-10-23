@@ -1,7 +1,7 @@
 // BONIFICI IN ENTRATA sul conto SumUp (02/10/2026): pulsante rosso in tutta la dashboard → /api/bonifici
 import { fetchAPI } from "@/lib/api";
 
-export type BonTipo = "fattura" | "fatture" | "bozza" | "proforma" | "pf" | "sessione" | "ordine" | "preventivo";
+export type BonTipo = "fattura" | "fatture" | "bozza" | "proforma" | "pf" | "sessione" | "ordine" | "preventivo" | "scheda";
 
 export interface BonProposta {
   tipo: BonTipo;
@@ -74,7 +74,7 @@ export interface BonRichiesta {
 
 export const NOME_TIPO: Record<BonTipo, string> = {
   fattura: "Fattura", fatture: "Fatture", bozza: "Fattura in bozza", proforma: "Pro forma (sessione)", pf: "Pro forma",
-  sessione: "Sessione di taratura", ordine: "Ordine cliente", preventivo: "Preventivo",
+  sessione: "Sessione di taratura", ordine: "Ordine cliente", preventivo: "Preventivo", scheda: "Scheda di assistenza",
 };
 
 export const bonStato = (): Promise<BonStato> => fetchAPI("/api/bonifici/stato");
