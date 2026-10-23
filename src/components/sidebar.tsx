@@ -112,7 +112,8 @@ export const MENU_APPLE: Voce[] = [
 ];
 
 // voci che si vedono solo a chi vede le schede di assistenza (in prova: solo il titolare)
-const DELLE_SCHEDE = new Set(["/assistenza", "/assistenza/voci", "/assistenza/ricambi-gsx", "/assistenza/prezzi-ufficiali", "/assistenza/magazzino-ricambi", "/rubrica-apple"]);
+const DELLE_SCHEDE = new Set(["/assistenza", "/assistenza/voci", "/assistenza/ricambi-gsx", "/assistenza/prezzi-ufficiali", "/rubrica-apple"]);
+// il Magazzino ricambi (23/10/2026, Christian) lo vedono e lo modificano tutti: non è in DELLE_SCHEDE
 
 /** La pagina appartiene solo all'altra divisione? (serve per tornare alla home quando si cambia divisione) */
 function soloDellAltra(pathname: string, menu: Voce[]): boolean {
