@@ -258,7 +258,9 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
   s: Scheda; operatore: string; iniziale?: ModoCorriere; onClose: () => void; onFatta: () => void; onCorriereCliente: () => Promise<void>;
 }) {
   const [modo, setModo] = useState<ModoCorriere>(iniziale);
-  const [corriere, setCorriere] = useState<"UPS" | "DHL">("UPS");
+  // 24/10/2026: il corriere abituale del cliente (anagrafica), es. Archimedia → DHL
+  const [corriere, setCorriere] = useState<"UPS" | "DHL">(
+    (s.anagrafica as { corriere_default?: string | null } | null)?.corriere_default === "DHL" ? "DHL" : "UPS");
   const [ind, setInd] = useState<Record<string, string>>({});
   const [ante, setAnte] = useState<AnteSped | null>(null);
   const [giorno, setGiorno] = useState("");
