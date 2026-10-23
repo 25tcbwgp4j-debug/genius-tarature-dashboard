@@ -11,6 +11,7 @@
 // Posizione (Christian 22/10/2026): REPARTO/ripiano (A1, H3, F…) · SCAFFALE (1°/2°/3°, lo scaffale grande a tre
 // cassettoni) · CONFEZIONE (busta, busta sciolta…). Accanto alla descrizione l'esito dell'ultima verifica sul GSX.
 
+import { corrisponde } from "@/lib/ricercaRicambi";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Boxes, Check, History, Loader2, Minus, Pencil, Plus, RotateCcw, ScanLine, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -278,6 +279,8 @@ export default function MagazzinoRicambi() {
   const [stati, setStati] = useState<string[]>([]);
   const [titolare, setTitolare] = useState(false);
   const [q, setQ] = useState("");
+  // 24/10/2026: display e schede logiche filtrabili per modello
+  const [modello, setModello] = useState("");
   const [eliminati, setEliminati] = useState(false);
   const [carico, setCarico] = useState(true);
   const [evid, setEvid] = useState<number | null>(null);
@@ -304,12 +307,14 @@ export default function MagazzinoRicambi() {
     const ordinate = righe.some((r) => r.etichetta)
       ? [...righe].sort((a, b) => (a.etichetta || "~").localeCompare(b.etichetta || "~", "it", { numeric: true }))
       : righe;
-    if (!t.length) return ordinate;
-    return ordinate.filter((r) => {
-      const s = [r.codice, r.mpn, r.descrizione, r.modelli, r.posizione, r.scaffale, r.seriale, r.note, r.stato, r.etichetta, r.colore, r.grado, r.condizioni, r.codici_alt].join(" ").toLowerCase();
-      return t.every((x) => s.includes(x));
-    });
-  }, [righe, q]);
+    const perModello = modello ? ordinate.filter((r) => (r.modelli || "").trim() === modello) : ordinate;
+    if (!t.length) return perModello;
+    // 24/10/2026: italiano e inglese («dissipatore» = «Heat Sink»), senza badare a spazi e trattini
+    return perModello.filter((r) => corrisponde(
+      [r.codice, r.mpn, r.descrizione, r.modelli, r.posizione, r.scaffale, r.seriale, r.note, r.stato, r.etichetta, r.colore, r.grado, r.condizioni, r.codici_alt].join(" "), q));
+  }, [righe, q, modello]);
+  const modelliTipo = useMemo(() => [...new Set(righe.map((r) => (r.modelli || "").trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "it", { numeric: true })), [righe]);
 
   const vaiA = (r: Riga, m: Modo = modo) => {
     setScelte(null); setQ(""); setEliminati(false);
@@ -337,6 +342,15 @@ export default function MagazzinoRicambi() {
       setScan("");
       if (r.righe.length === 1) vaiA(r.righe[0]);
       else if (r.righe.length > 1) setScelte(r.righe);
+      else if (/[a-zàèéìòù]{3,}/i.test(c)) {
+        // 24/10/2026: non è un codice ma una parola («dissipatore», «heatsink», «MacBook Pro 15 2011»): si cerca in
+        // tutto il magazzino, in italiano e in inglese
+        const tutte: Riga[] = (await fetchAPI(`/api/ricambi-apple?${new URLSearchParams({ eliminati: "false" })}`)).righe || [];
+        const trovate = tutte.filter((x) => corrisponde([x.codice, x.mpn, x.descrizione, x.modelli, x.etichetta, x.codici_alt, x.note, x.posizione].join(" "), c));
+        if (trovate.length === 1) vaiA(trovate[0]);
+        else if (trovate.length > 1) setScelte(trovate);
+        else toast.error(`Nessun ricambio per «${c}»`);
+      }
       else if (modo === "carico") nuovoDaCatalogo(r.codice);
       else {
         toast.error(`${r.codice}: non c'è in magazzino`, { action: { label: "Caricalo", onClick: () => nuovoDaCatalogo(r.codice) } });
@@ -374,7 +388,7 @@ export default function MagazzinoRicambi() {
       <Card className="p-3 flex flex-wrap gap-3 items-center border-2 border-blue-200">
         <ScanLine className="h-5 w-5 text-blue-600" />
         <input ref={scanRef} value={scan} onChange={(e) => setScan(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") spara(); }}
-          placeholder="Spara qui il codice (APN, MPN o seriale)" className="flex-1 min-w-[220px] border rounded-md px-3 py-2 text-base font-mono bg-white dark:bg-gray-900" />
+          placeholder="Spara il codice (APN, MPN, seriale) o scrivi cosa cerchi: dissipatore, heatsink, 820-2850…" className="flex-1 min-w-[220px] border rounded-md px-3 py-2 text-base font-mono bg-white dark:bg-gray-900" />
         <div className="inline-flex rounded-md border overflow-hidden text-sm">
           {([["conta", "Conta"], ["carico", "Carica"], ["scarico", "Togli"]] as [Modo, string][]).map(([k, t]) => (
             <button key={k} type="button" onClick={() => { setModo(k); scanRef.current?.focus(); }}
@@ -400,7 +414,7 @@ export default function MagazzinoRicambi() {
       <div className="flex flex-wrap gap-3 items-center">
         <div className="inline-flex rounded-md border overflow-hidden text-sm">
           {TIPI.map((x) => (
-            <button key={x.k} type="button" onClick={() => { setTipo(x.k); setEvid(null); }}
+            <button key={x.k} type="button" onClick={() => { setTipo(x.k); setEvid(null); setModello(""); }}
               className={`px-3 py-1.5 ${tipo === x.k ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-900"}`}>
               {x.t} ({conteggi[x.k] ?? 0})
             </button>
@@ -408,9 +422,16 @@ export default function MagazzinoRicambi() {
         </div>
         <div className="relative flex-1 min-w-[200px]">
           <Search className="h-4 w-4 absolute left-2 top-2.5 text-gray-400" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtra (codice, descrizione, modello, posizione…)"
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtra in italiano o inglese (dissipatore = heat sink), codice, scheda 820-…, modello…"
             className="w-full border rounded-md pl-8 pr-2 py-1.5 text-sm bg-white dark:bg-gray-900" />
         </div>
+        {(tipo === "display" || tipo === "scheda_logica") && modelliTipo.length > 0 && (
+          <select value={modello} onChange={(e) => setModello(e.target.value)} aria-label="Modello"
+            className="border rounded-md px-2 py-1.5 text-sm bg-white dark:bg-gray-900 max-w-[280px]">
+            <option value="">Tutti i modelli ({modelliTipo.length})</option>
+            {modelliTipo.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        )}
         <label className="text-sm flex items-center gap-2"><input type="checkbox" checked={eliminati} onChange={(e) => setEliminati(e.target.checked)} /> Eliminati</label>
         <button type="button" onClick={() => setMod({ r: null })} className="px-3 py-1.5 rounded bg-green-600 text-white text-sm inline-flex items-center gap-1">
           <Plus className="h-4 w-4" /> Aggiungi
