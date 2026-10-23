@@ -1,8 +1,8 @@
 "use client";
 
-// Chi gestisce cassa (scontrini), stampe A4 e bonifici SumUp al negozio (23/10/2026): PC HP «server» o iMac di sinistra.
+// Chi gestisce cassa (scontrini) e bonifici SumUp al negozio (23/10/2026): PC HP «server» o iMac di sinistra.
 // Visibile e modificabile da TUTTI gli operatori: se il PC HP si guasta si passa all'iMac con un clic, senza chiamare nessuno.
-// Le etichette (Brother QL-700 in USB sull'iMac) escono sempre dall'iMac. Lo scanner Ricoh resta collegato al PC HP.
+// Stampe A4 ed etichette escono sempre dall'iMac di sinistra (decisione di Christian 23/10). Lo scanner Ricoh resta sul PC HP.
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,7 @@ export function PostazioneNegozio() {
     try {
       const r = await fetchAPI("/api/negozio/postazione", { method: "POST", body: JSON.stringify({ attiva: scelta }) });
       setStato(r);
-      toast.success(`Ora cassa e stampe A4 le gestisce: ${nome(scelta)}`);
+      toast.success(`Ora cassa e bonifici li gestisce: ${nome(scelta)}`);
       setScelta(null);
     } catch {
       toast.error("Cambio non riuscito: riprova");
@@ -60,7 +60,7 @@ export function PostazioneNegozio() {
       ? "border-red-300 bg-red-50 text-red-900 dark:bg-red-950/30 dark:text-red-100"
       : "border-muted bg-muted/30"}`}>
       <Monitor className="size-4" />
-      <span>Cassa e stampe A4 gestite da: <b>{nome(stato.attiva)}</b></span>
+      <span>Cassa e bonifici SumUp gestiti da: <b>{nome(stato.attiva)}</b></span>
       {attivoAcceso === false && <span className="font-medium">⚠️ non risponde da più di un minuto: passa all&apos;altro computer</span>}
       <div className="ml-auto flex gap-1">
         {(["server", "imac"] as const).map((p) => {
@@ -79,8 +79,8 @@ export function PostazioneNegozio() {
           <DialogHeader>
             <DialogTitle>Passare a «{scelta ? nome(scelta) : ""}»?</DialogTitle>
             <DialogDescription>
-              Scontrini al registratore, ricevute e rapporti A4 e controllo dei bonifici SumUp li farà {scelta ? nome(scelta) : ""}.
-              Le etichette escono sempre dall&apos;iMac di sinistra. Usalo quando l&apos;altro computer è spento o guasto.
+              Scontrini al registratore e controllo dei bonifici SumUp li farà {scelta ? nome(scelta) : ""}.
+              Ricevute, rapporti A4 ed etichette escono sempre dall&apos;iMac di sinistra. Usalo quando l&apos;altro computer è spento o guasto.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
