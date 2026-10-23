@@ -28,6 +28,7 @@ import { attivitaDaTesto, BadgeAttivita, FiltroAttivita, SceltaAttivita, type At
 import { SceltaPezzo, rigaDaPezzo } from "@/components/SceltaPezzo";
 import { toast } from "sonner";
 import { ScannerInput } from "@/components/ScannerInput";
+import { PostazioneNegozio } from "@/components/PostazioneNegozio";
 import { AggiornaPrezzoMagazzino, prezzoDiversoDaMagazzino } from "@/components/AggiornaPrezzoMagazzino";
 import { DecInput, parseDec } from "@/components/DecInput";
 import { oggiRoma } from "@/lib/date";
@@ -322,6 +323,7 @@ export default function CassaPage() {
       <div className="space-y-4">
         <div className="flex items-center gap-3"><ShoppingCart className="size-6" /><h1 className="text-2xl font-semibold">Cassa</h1>
           <span className="text-sm text-muted-foreground">GENIUS LAB · registratore CUSTOM</span></div>
+        <PostazioneNegozio />
         {cassaChiusa && (
           <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200">
             ⚠️ La cassa del giorno di oggi è CHIUSA: gli scontrini emessi adesso cambierebbero una giornata già chiusa.{" "}
