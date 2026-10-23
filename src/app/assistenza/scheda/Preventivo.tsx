@@ -13,8 +13,7 @@ import { BookText, Copy, Plus, Search, Send, Sparkles, Trash2, Truck, X } from "
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import {
-  assPreventivi, assTesti, dataOra, eur, SPEDIZIONI, type Combo, type Scheda, type SchedaBreve, type TestoStandard, type VoceProposta,
-} from "@/lib/assistenza";
+  assPreventivi, assTesti, dataOra, eur, SPEDIZIONI, type Combo, type Scheda, type SchedaBreve, type TestoStandard, type VoceProposta, type ApparecchioAttuale } from "@/lib/assistenza";
 import {
   blocchi, blocco, ipotesiDelBlocco, NOTE_RECUPERO, nuovoOpt, parseEstimate, rowTotal, scegliIpotesi, totaleConSpedizione, type EstimateLine,
 } from "@/lib/assistenza-preventivo";
@@ -23,8 +22,8 @@ import { VociPreventivo } from "./VociPreventivo";
 
 export type BozzaPreventivo = { righe: EstimateLine[]; diagnosi: string; note: string; spedizione_tipo: string; spedizione_importo: number | string };
 
-export function Preventivo({ s, bz, setBz, ro, onInvia, onNotaInterna, onStessoModello, spedDefault }: {
-  s: Scheda; bz: BozzaPreventivo; setBz: (f: (b: BozzaPreventivo) => BozzaPreventivo) => void; ro: boolean;
+export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, onStessoModello, spedDefault }: {
+  s: Scheda; attuale: ApparecchioAttuale; bz: BozzaPreventivo; setBz: (f: (b: BozzaPreventivo) => BozzaPreventivo) => void; ro: boolean;
   onInvia: () => void; onNotaInterna: (t: string) => void; onStessoModello: () => void; spedDefault: number;
 }) {
   const righe = bz.righe;
@@ -106,7 +105,8 @@ export function Preventivo({ s, bz, setBz, ro, onInvia, onNotaInterna, onStessoM
         </Campo>
 
         {!ro && (
-          <VociPreventivo idScheda={s.id} modelloScheda={s.modello || s.prodotto || ""} chiave={`${s.modello}|${s.prodotto}|${s.famiglia}|${s.anno}`}
+          <VociPreventivo idScheda={s.id} modelloScheda={attuale.modello || attuale.prodotto || ""} attuale={attuale}
+            chiave={`${attuale.modello}|${attuale.prodotto}|${attuale.famiglia}|${attuale.anno}`}
             accettato={accettato} bloccoAggiuntivo={bloccoAttivo > 0} onCombo={inserisciCombo} onVoce={aggiungiVoce} />
         )}
 

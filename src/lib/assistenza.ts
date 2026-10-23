@@ -109,8 +109,12 @@ export const assDocUrl = (id: string, doc: DocPdf, scarica = false) => `/api/bac
 export const assSchedaCliente = (id: string): Promise<SchedaCliente> => fetchAPI(`/api/assistenza/clienti/${id}`);
 export const assSalvaCliente = (id: string | null, b: Partial<Anagrafica>): Promise<SchedaCliente> =>
   id ? fetchAPI(`/api/assistenza/clienti/${id}`, { method: "PATCH", body: JSON.stringify(b) }) : fetchAPI("/api/assistenza/clienti", j(b));
-export const assProposte = (id: string, intervento = "", f: { q?: string; modello?: string; pollici?: string; anno?: string } = {}): Promise<Proposte> =>
-  fetchAPI(`/api/assistenza/schede/${id}/proposte?${new URLSearchParams({ intervento, q: f.q || "", modello: f.modello || "", pollici: f.pollici || "", anno: f.anno || "" })}`);
+export type ApparecchioAttuale = { modello: string; prodotto: string; famiglia: string; anno: string };
+// `attuale` (24/10/2026): modello/prodotto/famiglia/anno che il banco ha sullo schermo, anche non salvati (es. dopo «Decodifica»)
+export const assProposte = (id: string, intervento = "", f: { q?: string; modello?: string; pollici?: string; anno?: string } = {},
+  attuale?: ApparecchioAttuale): Promise<Proposte> =>
+  fetchAPI(`/api/assistenza/schede/${id}/proposte?${new URLSearchParams({ intervento, q: f.q || "", modello: f.modello || "", pollici: f.pollici || "", anno: f.anno || "",
+    ...(attuale ? { scheda_modello: attuale.modello, scheda_prodotto: attuale.prodotto, scheda_famiglia: attuale.famiglia, scheda_anno: attuale.anno } : {}) })}`);
 export const assTesti = (famiglia = "", intervento = ""): Promise<{ testi: TestoStandard[] }> => fetchAPI(`/api/assistenza/testi?famiglia=${famiglia}&intervento=${intervento}`);
 /** Pagina pubblica di tracciamento (servita dal backend: nessun login, nessun dato personale). */
 export const assTrackUrl = (token: string) => `${process.env.NEXT_PUBLIC_API_URL || "https://tarature-api-production.up.railway.app"}/api/assistenza/pubblico/${token}/pagina`;

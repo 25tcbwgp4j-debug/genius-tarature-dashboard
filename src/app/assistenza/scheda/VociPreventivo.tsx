@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
-import { assProposte, eur, type Combo, type Proposte, type VoceProposta } from "@/lib/assistenza";
+import { assProposte, eur, type Combo, type Proposte, type VoceProposta, type ApparecchioAttuale } from "@/lib/assistenza";
 import { cn } from "@/lib/utils";
 import { Pill, campo } from "./ui";
 
@@ -22,8 +22,8 @@ const FONTE: Record<string, string> = {
   vicino: "del modello più vicino", ricerca: "trovate con la ricerca", modello_scelto: "del modello scelto", filtro: "dei modelli filtrati",
 };
 
-export function VociPreventivo({ idScheda, modelloScheda, chiave, accettato, bloccoAggiuntivo, onCombo, onVoce }: {
-  idScheda: string; modelloScheda: string; chiave: string; accettato: boolean; bloccoAggiuntivo: boolean;
+export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accettato, bloccoAggiuntivo, onCombo, onVoce }: {
+  idScheda: string; modelloScheda: string; attuale: ApparecchioAttuale; chiave: string; accettato: boolean; bloccoAggiuntivo: boolean;
   onCombo: (c: Combo) => void; onVoce: (v: VoceProposta, come: "ipotesi" | "aggiungibile" | "fissa") => void;
 }) {
   const [f, setF] = useState<Filtri>(VUOTI);
@@ -39,7 +39,7 @@ export function VociPreventivo({ idScheda, modelloScheda, chiave, accettato, blo
   const carico = caricata !== richiesta;
   useEffect(() => {
     let vivo = true;
-    assProposte(idScheda, intervento, f).then((p) => { if (vivo) setProp(p); }).catch((e) => { if (vivo) toastErrore(e); })
+    assProposte(idScheda, intervento, f, attuale).then((p) => { if (vivo) setProp(p); }).catch((e) => { if (vivo) toastErrore(e); })
       .finally(() => { if (vivo) setCaricata(richiesta); });
     return () => { vivo = false; };
   }, [idScheda, intervento, f, richiesta]);

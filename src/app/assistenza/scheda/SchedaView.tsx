@@ -252,7 +252,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       </div>
 
       <div ref={refPrev} className="scroll-mt-28">
-        <Preventivo s={s} bz={bz} setBz={setBz} ro={ro} spedDefault={cfg?.spedizione_default?.ar ?? 28}
+        <Preventivo s={s} attuale={{ modello: String(v("modello") || ""), prodotto: String(v("prodotto") || ""),
+          famiglia: String(v("famiglia") || ""), anno: v("anno") == null ? "" : String(v("anno")) }} bz={bz} setBz={setBz} ro={ro} spedDefault={cfg?.spedizione_default?.ar ?? 28}
           onInvia={() => apriInvio(s.preventivo_stato && s.preventivo_stato !== "da_fare" ? "aggiornamento" : "preventivo")}
           onNotaInterna={(t) => set("note_interne", ((v("note_interne") as string) ? `${v("note_interne")}\n` : "") + t)}
           onStessoModello={() => setDlg({ k: "stesso" })} />
