@@ -17,12 +17,14 @@ import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { fetchAPI } from "@/lib/api";
 
-type Tipo = "ricambio" | "display" | "scheda_logica";
+type Tipo = "ricambio" | "display" | "scheda_logica" | "top_case" | "garanzia";
 interface Riga {
   id: number; tipo: Tipo; codice: string | null; mpn: string | null; descrizione: string; modelli: string | null;
   qta_nuovo: number; qta_usato: number; posizione: string | null; scaffale: string | null; confezione: string | null;
   codici_alt: string | null; gsx_descrizione: string | null; gsx_stato: string | null; gsx_costo?: number | null;
   gsx_sostituito_da: string | null; gsx_verificato_il: string | null; stato: string | null;
+  etichetta: string | null; grado: string | null; colore: string | null; anno: string | null;
+  data_riparazione: string | null; scadenza: string | null;
   condizioni: string | null; seriale: string | null; costo?: number | null; note: string | null; attivo: boolean;
   inventario_il: string | null; inventario_da: string | null; updated_at: string;
 }
@@ -33,18 +35,22 @@ interface Movimento {
 
 const TIPI: { k: Tipo; t: string }[] = [
   { k: "ricambio", t: "Ricambi Apple" }, { k: "display", t: "Display" }, { k: "scheda_logica", t: "Schede logiche" },
+  { k: "top_case", t: "Top case" }, { k: "garanzia", t: "Dispositivi in garanzia" },
 ];
 const STATI_TESTO: Record<string, string> = {
   funzionante: "Funzionante", rotto: "Rotto", usato: "Usato", da_verificare: "Da verificare", nuovo: "Nuovo", riservato: "Riservato",
+  x_sostituzione: "Per sostituzione", da_riparare: "Da riparare",
 };
 const COLORE_STATO: Record<string, string> = {
   funzionante: "bg-green-100 text-green-800", rotto: "bg-red-100 text-red-800", usato: "bg-amber-100 text-amber-800",
   da_verificare: "bg-gray-100 text-gray-700", nuovo: "bg-blue-100 text-blue-800", riservato: "bg-purple-100 text-purple-800",
+  x_sostituzione: "bg-orange-100 text-orange-800", da_riparare: "bg-pink-100 text-pink-800",
 };
 const inp = "border rounded px-2 py-1 text-sm bg-white dark:bg-gray-900";
 const dove = (r: Partial<Riga>) => [r.posizione && `reparto ${r.posizione}`, r.scaffale, r.confezione?.toLowerCase()].filter(Boolean).join(" · ");
 const norm = (t: string | null | undefined) => (t || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 type Modo = "conta" | "carico" | "scarico";
+const giorno = (s: string | null) => (s ? new Date(s + "T00:00:00").toLocaleDateString("it-IT") : "");
 const data = (s: string | null) => (s ? new Date(s).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
 
 function Finestra({ titolo, onChiudi, children }: { titolo: string; onChiudi: () => void; children: React.ReactNode }) {
@@ -158,7 +164,7 @@ function Scheda({ r, tipo, titolare, stati, onFatto, onChiudi }: {
   const nuovo = !r?.id;
   const [v, setV] = useState<Record<string, string>>(() => {
     const o: Record<string, string> = {};
-    for (const k of ["codice", "codici_alt", "mpn", "descrizione", "modelli", "posizione", "scaffale", "confezione", "stato", "condizioni", "seriale", "note", "costo", "qta_nuovo", "qta_usato", "gsx_descrizione", "gsx_sostituito_da", "gsx_costo", "gsx_sostituzione"]) {
+    for (const k of ["codice", "codici_alt", "mpn", "descrizione", "modelli", "posizione", "scaffale", "confezione", "stato", "condizioni", "seriale", "note", "costo", "qta_nuovo", "qta_usato", "gsx_descrizione", "gsx_sostituito_da", "gsx_costo", "gsx_sostituzione", "etichetta", "grado", "colore", "anno", "data_riparazione", "scadenza"]) {
       const x = (r as Record<string, unknown> | null)?.[k];
       o[k] = x == null ? "" : String(x);
     }
@@ -184,11 +190,14 @@ function Scheda({ r, tipo, titolare, stati, onFatto, onChiudi }: {
   const campo = (k: string, t: string, cls = "") => (
     <label className={`text-sm ${cls}`}>{t}<br /><input className={`${inp} w-full`} value={v[k]} onChange={set(k)} /></label>
   );
-  const pezzo = (r?.tipo || tipo) !== "ricambio";
+  const t = r?.tipo || tipo;
+  const pezzo = t !== "ricambio" && t !== "garanzia";
+  const gar = t === "garanzia";
   return (
     <Finestra titolo={nuovo ? `Nuovo: ${TIPI.find((x) => x.k === tipo)?.t}` : `Modifica ${r?.codice || ""}`} onChiudi={onChiudi}>
       <div className="grid grid-cols-2 gap-3">
-        {campo("codice", "Codice (APN)")}
+        {(pezzo || gar || v.etichetta) && campo("etichetta", gar ? "Riferimento (n. scheda)" : "Sigla sul pezzo (AIR1, DLR5, TP2…)")}
+        {campo("codice", t === "scheda_logica" ? "Codice scheda (820-…)" : "Codice (APN)")}
         {campo("mpn", "MPN / codice produttore")}
         {campo("codici_alt", "Altri codici dello stesso pezzo", "col-span-2")}
         {campo("descrizione", "Descrizione", "col-span-2")}
@@ -211,10 +220,19 @@ function Scheda({ r, tipo, titolare, stati, onFatto, onChiudi }: {
             </select>
           </label>
         )}
-        {(pezzo || v.seriale) && campo("seriale", "Seriale")}
-        {(pezzo || v.condizioni) && campo("condizioni", "Condizioni (graffi, righe, pixel…)", "col-span-2")}
-        {nuovo && campo("qta_nuovo", "Quantità nuovi")}
-        {nuovo && campo("qta_usato", "Quantità usati")}
+        {(pezzo || gar || v.seriale) && campo("seriale", "Seriale")}
+        {(pezzo || gar || v.colore) && campo("colore", "Colore")}
+        {(pezzo || v.grado) && campo("grado", "Grado (A++, A+, A, A-, rotto)")}
+        {(pezzo || v.anno) && campo("anno", "Anno / codice A del modello")}
+        {gar && (
+          <>
+            <label className="text-sm">Data riparazione<br /><input type="date" className={`${inp} w-full`} value={v.data_riparazione} onChange={set("data_riparazione")} /></label>
+            <label className="text-sm">Scadenza garanzia<br /><input type="date" className={`${inp} w-full`} value={v.scadenza} onChange={set("scadenza")} /></label>
+          </>
+        )}
+        {(pezzo || gar || v.condizioni) && campo("condizioni", gar ? "Garanzia AppleCare" : "Condizioni (graffi, righe, pixel…)", "col-span-2")}
+        {nuovo && !gar && campo("qta_nuovo", "Quantità nuovi")}
+        {nuovo && !gar && campo("qta_usato", "Quantità usati")}
         {titolare && campo("costo", "Costo € (solo titolare)")}
         {campo("note", "Note", "col-span-2")}
       </div>
@@ -282,9 +300,13 @@ export default function MagazzinoRicambi() {
 
   const visibili = useMemo(() => {
     const t = q.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!t.length) return righe;
-    return righe.filter((r) => {
-      const s = [r.codice, r.mpn, r.descrizione, r.modelli, r.posizione, r.scaffale, r.seriale, r.note, r.stato].join(" ").toLowerCase();
+    // display, schede, top case: in ordine di sigla (AIR1, AIR2… AIR10), i ricambi per codice
+    const ordinate = righe.some((r) => r.etichetta)
+      ? [...righe].sort((a, b) => (a.etichetta || "~").localeCompare(b.etichetta || "~", "it", { numeric: true }))
+      : righe;
+    if (!t.length) return ordinate;
+    return ordinate.filter((r) => {
+      const s = [r.codice, r.mpn, r.descrizione, r.modelli, r.posizione, r.scaffale, r.seriale, r.note, r.stato, r.etichetta, r.colore, r.grado, r.condizioni, r.codici_alt].join(" ").toLowerCase();
       return t.every((x) => s.includes(x));
     });
   }, [righe, q]);
@@ -334,7 +356,8 @@ export default function MagazzinoRicambi() {
     try { await fetchAPI(`/api/ricambi-apple/${r.id}/ripristina`, { method: "POST" }); toast.success("Ripristinato"); carica(); }
     catch (e) { toast.error(String((e as Error)?.message || e)); }
   };
-  const pezzi = tipo !== "ricambio";
+  const pezzi = tipo !== "ricambio" && tipo !== "garanzia";
+  const gar = tipo === "garanzia";
   const totNuovi = visibili.reduce((n, r) => n + r.qta_nuovo, 0), totUsati = visibili.reduce((n, r) => n + r.qta_usato, 0);
 
   return (
@@ -405,7 +428,8 @@ export default function MagazzinoRicambi() {
               <tr>
                 <th className="p-2">Codice</th><th className="p-2">Descrizione / modelli</th>
                 {pezzi && <th className="p-2">Stato</th>}
-                <th className="p-2 text-right">Nuovi</th><th className="p-2 text-right">Usati</th>
+                {gar ? <><th className="p-2">Riparato il</th><th className="p-2">Scadenza</th></>
+                  : <><th className="p-2 text-right">Nuovi</th><th className="p-2 text-right">Usati</th></>}
                 <th className="p-2">Dove</th>{titolare && <th className="p-2 text-right">Costo</th>}
                 <th className="p-2">Ultima conta</th><th className="p-2" />
               </tr>
@@ -413,7 +437,7 @@ export default function MagazzinoRicambi() {
             <tbody>
               {visibili.map((r) => (
                 <tr key={r.id} id={`riga-${r.id}`} className={`border-t align-top ${evid === r.id ? "bg-yellow-100 dark:bg-yellow-900/40" : ""}`}>
-                  <td className="p-2 font-mono whitespace-nowrap">{r.codice}{r.codici_alt ? <div className="text-xs text-gray-500">= {r.codici_alt}</div> : null}
+                  <td className="p-2 font-mono whitespace-nowrap">{r.etichetta ? <div className="font-bold">{r.etichetta}</div> : null}{r.codice}{r.codici_alt ? <div className="text-xs text-gray-500">= {r.codici_alt}</div> : null}
                     {r.mpn ? <div className="text-xs text-gray-500">{r.mpn}</div> : null}
                     {r.gsx_stato && <div className={`text-[10px] mt-0.5 ${r.gsx_stato === "in_vendita" ? "text-green-700" : "text-gray-400"}`}
                       title={r.gsx_verificato_il ? `verificato sul GSX il ${data(r.gsx_verificato_il)}` : ""}>{r.gsx_stato === "in_vendita" ? "GSX: in vendita" : "GSX: fuori vendita"}</div>}
@@ -423,12 +447,18 @@ export default function MagazzinoRicambi() {
                     {r.gsx_descrizione && norm(r.gsx_descrizione) !== norm(r.descrizione) && <div className="text-xs text-blue-700">GSX: {r.gsx_descrizione}</div>}
                     {r.gsx_sostituito_da && <div className="text-xs text-amber-700">sostituito da {r.gsx_sostituito_da}</div>}
                     {r.modelli && <div className="text-xs text-gray-500 whitespace-pre-line line-clamp-2" title={r.modelli}>{r.modelli}</div>}
+                    {(r.colore || r.grado || r.anno) && <div className="text-xs text-gray-600">{[r.colore, r.grado && `grado ${r.grado}`, r.anno].filter(Boolean).join(" · ")}</div>}
                     {r.condizioni && <div className="text-xs text-amber-700">{r.condizioni}</div>}
                     {r.note && <div className="text-xs text-gray-500 italic">{r.note}</div>}
                   </td>
                   {pezzi && <td className="p-2">{r.stato ? <span className={`text-xs px-2 py-0.5 rounded-full ${COLORE_STATO[r.stato] || "bg-gray-100"}`}>{STATI_TESTO[r.stato] || r.stato}</span> : "—"}</td>}
-                  <td className={`p-2 text-right text-base font-semibold ${r.qta_nuovo === 0 ? "text-gray-400" : ""}`}>{r.qta_nuovo}</td>
-                  <td className={`p-2 text-right ${r.qta_usato === 0 ? "text-gray-400" : ""}`}>{r.qta_usato}</td>
+                  {gar ? <>
+                    <td className="p-2 whitespace-nowrap">{giorno(r.data_riparazione)}</td>
+                    <td className={`p-2 whitespace-nowrap ${r.scadenza && r.scadenza < new Date().toISOString().slice(0, 10) ? "text-gray-400 line-through" : "font-semibold"}`}>{giorno(r.scadenza)}</td>
+                  </> : <>
+                    <td className={`p-2 text-right text-base font-semibold ${r.qta_nuovo === 0 ? "text-gray-400" : ""}`}>{r.qta_nuovo}</td>
+                    <td className={`p-2 text-right ${r.qta_usato === 0 ? "text-gray-400" : ""}`}>{r.qta_usato}</td>
+                  </>}
                   <td className="p-2 whitespace-nowrap">{r.posizione ? <span className="font-semibold">{r.posizione}</span> : null}
                     {r.scaffale ? <div className="text-xs">{r.scaffale}</div> : null}{r.confezione ? <div className="text-xs text-gray-500">{r.confezione.toLowerCase()}</div> : null}</td>
                   {titolare && <td className="p-2 text-right">{r.costo != null ? `€ ${Number(r.costo).toFixed(2).replace(".", ",")}` : ""}</td>}
@@ -436,9 +466,11 @@ export default function MagazzinoRicambi() {
                   <td className="p-2 whitespace-nowrap">
                     {r.attivo ? (
                       <div className="flex gap-1">
+                        {!gar && (<>
                         <button type="button" title="Conta i pezzi e conferma la quantità" onClick={() => { setEvid(r.id); setConta(r); }} className="px-2 py-1 rounded border text-xs">Conta</button>
                         <button type="button" title="Carica: arrivano pezzi" onClick={() => setMov({ r, t: "carico" })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5 text-green-700"><Plus className="h-3 w-3" />Carica</button>
                         <button type="button" title="Togli: pezzi usati o venduti" onClick={() => setMov({ r, t: "scarico" })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5 text-amber-700"><Minus className="h-3 w-3" />Togli</button>
+                        </>)}
                         <button type="button" title="Modifica i dati" onClick={() => setMod({ r })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5"><Pencil className="h-3 w-3" />Modifica</button>
                         <button type="button" title="Storico: chi ha cambiato cosa e quando" onClick={() => setSto(r)} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5"><History className="h-3 w-3" />Storico</button>
                         <button type="button" title="Elimina (si può ripristinare)" onClick={() => elimina(r)} className="px-2 py-1 rounded border text-xs text-red-600 inline-flex items-center gap-0.5"><Trash2 className="h-3 w-3" />Elimina</button>
