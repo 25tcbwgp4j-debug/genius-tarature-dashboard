@@ -25,6 +25,16 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
     <Sezione titolo="Lavorazione" icona={<Wrench />} sottotitolo={s.preventivo_stato === "accettato" ? <Pill tono="verde">in riparazione</Pill> : null}>
       <datalist id="tecnici-assistenza">{tecnici.map((t) => <option key={t} value={t} />)}</datalist>
       <div className="space-y-3">
+        {/* 24/10/2026: dispositivo lasciato in CONTO VENDITA (sezione del cruscotto) */}
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
+          <label className="flex items-center gap-1.5 text-sm font-medium">
+            <input type="checkbox" className="size-4" disabled={ro} checked={!!v("conto_vendita")} onChange={(e) => set("conto_vendita", e.target.checked)} />
+            In conto vendita
+          </label>
+          {!!v("conto_vendita") && (
+            <div className="w-36">{T("conto_vendita_prezzo", "Prezzo di vendita €", { type: "number", min: 0, step: 1 })}</div>
+          )}
+        </div>
         <div className="space-y-2 rounded-lg border p-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">Ricambi</span>
