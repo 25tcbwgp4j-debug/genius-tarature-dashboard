@@ -101,6 +101,12 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     return () => window.removeEventListener("beforeunload", h);
   }, [sporca]);
 
+  // 24/10/2026: prima di aprire la finestra d'invio o un PDF si salva la bozza, così anteprima, PDF e invio mostrano
+  // le stesse voci che il banco vede sullo schermo (prima l'anteprima leggeva solo il preventivo già salvato)
+  async function apriInvio(tipo: string) {
+    if (sporca && !(await salva(true))) return;
+    setDlg({ k: "invio", tipo } as typeof dlg);
+  }
   async function azione(nome: string, body: Record<string, unknown>, msg: string) {
     if (!s) return null;
     if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return null; }
@@ -130,7 +136,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   function onAzione(a: string) {
     if (a === "arrivato") azione("arrivato", {}, "Dispositivo arrivato · ricevuta inviata");
     else if (a === "preventivo") refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    else if (a === "invia_preventivo") setDlg({ k: "invio", tipo: s?.preventivo_stato && s.preventivo_stato !== "da_fare" ? "aggiornamento" : "preventivo" });
+    else if (a === "invia_preventivo") apriInvio(s?.preventivo_stato && s.preventivo_stato !== "da_fare" ? "aggiornamento" : "preventivo");
     else if (a === "esito") setDlg({ k: "esito" });
     else if (a === "pronto") setDlg({ k: "pronto" });
     else if (a === "incassa") { refDoc.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }
@@ -195,7 +201,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {!ro && st !== "in_arrivo" && st !== "consegnato" && <Button size="sm" variant={(st === "accettato" && s.riparazione_stato === "finita") || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
         {!ro && st === "pronto" && <Button size="sm" variant={s.pagata || s.saldo <= 0 ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "consegna" })}>CONSEGNA</Button>}
         <span className="mx-0.5 hidden h-6 w-px bg-border sm:block" />
-        <MenuPdf id={s.id} />
+        <MenuPdf id={s.id} prima={() => salva(true)} />
         <Button size="sm" variant="outline" onClick={() => stampa("etichetta")} title="Etichetta Brother"><Tag />Etichetta</Button>
         <Button size="sm" variant="outline" onClick={() => stampa("accettazione")} title="Stampa A4 al banco"><Printer />A4</Button>
         <span className="ml-auto" />
@@ -247,7 +253,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
 
       <div ref={refPrev} className="scroll-mt-28">
         <Preventivo s={s} bz={bz} setBz={setBz} ro={ro} spedDefault={cfg?.spedizione_default?.ar ?? 28}
-          onInvia={() => setDlg({ k: "invio", tipo: s.preventivo_stato && s.preventivo_stato !== "da_fare" ? "aggiornamento" : "preventivo" })}
+          onInvia={() => apriInvio(s.preventivo_stato && s.preventivo_stato !== "da_fare" ? "aggiornamento" : "preventivo")}
           onNotaInterna={(t) => set("note_interne", ((v("note_interne") as string) ? `${v("note_interne")}\n` : "") + t)}
           onStessoModello={() => setDlg({ k: "stesso" })} />
       </div>
@@ -326,16 +332,22 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   );
 }
 
-function MenuPdf({ id }: { id: string }) {
+function MenuPdf({ id, prima }: { id: string; prima: () => Promise<boolean> }) {
   const [doc, setDoc] = useState<DocPdf>("auto");
+  // la finestra si apre subito (niente blocco dei popup) e carica il PDF dopo il salvataggio della bozza
+  async function apri(scarica: boolean) {
+    const w = scarica ? null : window.open("about:blank", "_blank");
+    if (!(await prima())) { w?.close(); return; }
+    if (w) w.location.href = assDocUrl(id, doc); else window.location.href = assDocUrl(id, doc, true);
+  }
   return (
     <span className="inline-flex items-center gap-1 rounded-md border p-0.5">
       <select className="h-7 rounded bg-transparent px-1 text-xs" value={doc} onChange={(e) => setDoc(e.target.value as DocPdf)} aria-label="Documento PDF">
         <option value="auto">PDF secondo lo stato</option>
         {DOCUMENTI_PDF.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
       </select>
-      <a className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs hover:bg-muted" href={assDocUrl(id, doc)} target="_blank" rel="noreferrer"><FileText className="size-3.5" />Apri</a>
-      <a className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs hover:bg-muted" href={assDocUrl(id, doc, true)}><Download className="size-3.5" />Scarica</a>
+      <button type="button" className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs hover:bg-muted" onClick={() => apri(false)}><FileText className="size-3.5" />Apri</button>
+      <button type="button" className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs hover:bg-muted" onClick={() => apri(true)}><Download className="size-3.5" />Scarica</button>
     </span>
   );
 }

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { CheckCircle2, Copy, Loader2, Mail, MessageCircle, Send, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
-import { assAnteprimaMail, assAzione, assStessoModello, CANALI_RISPOSTA, dataOra, eur, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
+import { assAnteprimaMail, assAzione, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
 import { blocchi, ipotesiDelBlocco, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, Pill, Scelta, area, campo } from "./ui";
@@ -87,7 +87,8 @@ export function DialogoInvio({ s, tipo, onClose, onInvia }: { s: Scheda; tipo: T
           {mail && wa ? "Invia mail + WhatsApp" : mail ? "Invia solo mail" : wa ? "Solo WhatsApp" : "Registra senza inviare"}</Button></>}>
       {fatto ? <EsitoInvio e={fatto} /> : (
         <div className="space-y-3">
-          {(tipo === "preventivo" || tipo === "aggiornamento") && <p className="text-sm text-muted-foreground">Si salva il preventivo, se ne tiene la copia nello storico e si manda al cliente il PDF del preventivo.</p>}
+          {(tipo === "preventivo" || tipo === "aggiornamento") && <p className="text-sm text-muted-foreground">Si salva il preventivo, se ne tiene la copia nello storico e si manda al cliente il PDF del preventivo.{" "}
+            <a className="font-medium text-primary underline" href={assDocUrl(s.id, "preventivo")} target="_blank" rel="noreferrer">Vedi il PDF del preventivo</a></p>}
           {conNota && <Campo label={tipo === "aggiornamento" ? "Nota nel messaggio (facoltativa)" : "Cosa comunicare al cliente *"}>
             <textarea className={area} rows={2} autoFocus value={nota} onChange={(e) => setNota(e.target.value)}
               placeholder={tipo === "aggiornamento" ? "es. TROVA IL MIO IPHONE ATTIVO DA DISABILITARE" : "es. il ricambio arriva giovedì, la riparazione sarà pronta venerdì"} /></Campo>}
