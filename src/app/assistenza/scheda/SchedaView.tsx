@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { SceltaOperatore, type Operatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
 import {
-  assAzione, assDocUrl, assEtichettaUrl, assModifica, assScheda, assTrackUrl, dataOra, DOCUMENTI_PDF, eur, type ConfigAssistenza, type DocPdf, type Esito, type Scheda,
+  assAzione, assDocUrl, assEtichettaUrl, assModifica, assScheda, assTrackUrl, dataOra, DOCUMENTI_PDF, eur, pagaFineMese, type ConfigAssistenza, type DocPdf, type Esito, type Scheda,
 } from "@/lib/assistenza";
 import type { EstimateLine } from "@/lib/assistenza-preventivo";
 import { Apparecchio, type ValoriApparecchio } from "./Apparecchio";
@@ -301,7 +301,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       {dlg?.k === "pagato" && <DialogoPagato s={s} onClose={() => setDlg(null)} onPagato={async (body) => !!(await azione("pagamento", body, "Pagamento registrato"))} />}
       {dlg?.k === "consegna" && <DialogoConsegna s={s} onClose={() => setDlg(null)} onConsegna={async (modo) => {
         // 14/10/2026: con un saldo aperto il backend ferma la consegna; si va avanti solo con conferma esplicita
-        const daPagare = ["ritiro", "spedizione", "corriere_cliente"].includes(modo) && !s.pagata && s.saldo > 0;
+        const daPagare = ["ritiro", "spedizione", "corriere_cliente"].includes(modo) && !s.pagata && s.saldo > 0 && !pagaFineMese(s);
         if (daPagare && !confirm(`Risulta ancora da pagare ${eur(s.saldo)}. Consegnare lo stesso senza pagamento?`)) return false;
         return !!(await azione("consegna", { modo, forza: daPagare || undefined }, "Consegnata: scheda chiusa"));
       }} />}

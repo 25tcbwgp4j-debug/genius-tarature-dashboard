@@ -19,7 +19,7 @@ export interface Anagrafica { id: string; denominazione: string; piva?: string |
   sdi?: string | null; pec?: string | null; tipo_cliente?: "privato" | "azienda" | "rivenditore" | null; vuole_fattura?: boolean | null;
   cellulare?: string | null; cellulare_whatsapp?: string | null; email_contabilita?: string | null; email_altre?: string | null;
   sped_presso?: string | null; sped_indirizzo?: string | null; sped_cap?: string | null; sped_comune?: string | null; sped_provincia?: string | null;
-  note_cliente?: string | null; origine?: string | null }
+  note_cliente?: string | null; origine?: string | null; corriere_default?: string | null; pagamento_default?: string | null }
 export interface SchedaCliente extends Anagrafica { schede: { id: string; sigla: string; prodotto: string | null; modello: string | null; difetto: string | null; stato: string; created_at: string }[] }
 export interface Scheda extends SchedaBreve {
   anagrafica_id: string | null; referente: string | null; telefono_referente: string | null; indirizzo_spedizione: string | null; imei: string | null;
@@ -172,3 +172,8 @@ export const CANALI_RISPOSTA: [string, string][] = [["telefono", "Telefono"], ["
 /** Nome del tecnico dal codice (ALEX → Alex). */
 export const nomeTecnico = (cod: string | null | undefined, tecnici: { codice: string; nome: string }[] = []) =>
   !cod ? "" : tecnici.find((t) => t.codice.toUpperCase() === cod.toUpperCase())?.nome || cod;
+
+/** 24/10/2026: rivenditore con riepilogo mensile (rete iGroup): resta da pagare, ma consegna e spedizione non si fermano
+ *  (stessa regola del backend `paga_fine_mese`). */
+export const pagaFineMese = (s: { anagrafica: Anagrafica | null }): boolean =>
+  /mensil|fine\s*mese|\bf\.?m\.?\b/i.test(s.anagrafica?.pagamento_default || "");

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { CheckCircle2, Copy, Loader2, Mail, MessageCircle, Send, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
-import { assAnteprimaMail, assAzione, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
+import { assAnteprimaMail, assAzione, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, pagaFineMese, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
 import { blocchi, ipotesiDelBlocco, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, Pill, Scelta, area, campo } from "./ui";
@@ -208,16 +208,24 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
 export function DialogoPagato({ s, onClose, onPagato }: { s: Scheda; onClose: () => void; onPagato: (b: Record<string, unknown>) => Promise<boolean> }) {
   const [modo, setModo] = useState(s.pagamento_modo || "contanti");
   const [imp, setImp] = useState(String(s.saldo || ""));
+  const [data, setData] = useState(new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" }));
+  const [nota, setNota] = useState("");
   const [busy, setBusy] = useState(false);
   return (
     <Modale titolo={`Pagamento ricevuto — scheda ${s.sigla}`} onClose={onClose}
       piedi={<><Button variant="outline" onClick={onClose}>Annulla</Button>
-        <Button disabled={busy} onClick={async () => { setBusy(true); try { if (await onPagato({ pagamento_modo: modo, importo: imp })) onClose(); } finally { setBusy(false); } }}>
+        <Button disabled={busy} onClick={async () => { setBusy(true); try { if (await onPagato({ pagamento_modo: modo, importo: imp, data, nota })) onClose(); } finally { setBusy(false); } }}>
           {busy && <Loader2 className="animate-spin" />}PAGATO</Button></>}>
       <div className="space-y-3">
         <Scelta valore={modo} opzioni={[["contanti", "Contanti"], ["pos", "POS"], ["bonifico", "Bonifico"], ["paypal", "PayPal"]]} onChange={setModo} />
-        <Campo label="Importo €"><input className={`${campo} w-40 text-right`} inputMode="decimal" value={imp} onChange={(e) => setImp(e.target.value.replace(",", "."))} /></Campo>
-        <p className="text-xs text-muted-foreground">Segna solo che il pagamento è arrivato. Il documento fiscale si fa con Scontrino o Fattura (lo scontrino dalla cassa segna da solo il pagamento).</p>
+        <div className="flex flex-wrap gap-3">
+          <Campo label="Importo €"><input className={`${campo} w-40 text-right`} inputMode="decimal" value={imp} onChange={(e) => setImp(e.target.value.replace(",", "."))} /></Campo>
+          <Campo label="Data del pagamento"><input type="date" className={`${campo} w-44`} value={data} onChange={(e) => setData(e.target.value)} /></Campo>
+        </div>
+        <Campo label="Riferimento (facoltativo)"><input className={campo} value={nota} placeholder="es. bonifico di …, transazione PayPal …" onChange={(e) => setNota(e.target.value)} /></Campo>
+        {(modo === "contanti" || modo === "pos") && <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">Contanti e POS: fai lo <b>Scontrino</b> dalla scheda (segna da solo il pagamento). Usa «Pagato» solo se lo scontrino è già stato fatto a parte.</p>}
+        {modo === "bonifico" && <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">Bonifico: meglio abbinarlo da <b>Bonifici</b> (arrivato sul conto SumUp): si fa da sola la fattura pagata e la scheda risulta pagata. Spedisci solo ad accredito avvenuto.</p>}
+        <p className="text-xs text-muted-foreground">Segna che il pagamento è arrivato, con modalità, importo e data. Il documento fiscale si fa con Scontrino o Fattura.</p>
       </div>
     </Modale>
   );
@@ -232,7 +240,7 @@ export function DialogoConsegna({ s, onClose, onConsegna }: { s: Scheda; onClose
   return (
     <Modale titolo={`Consegna — scheda ${s.sigla}`} onClose={onClose}>
       <div className="space-y-2">
-        {!s.pagata && s.saldo > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">Attenzione: risulta ancora da pagare {eur(s.saldo)}. Prima incassa (Scontrino / Fattura / Pagato).</div>}
+        {!s.pagata && s.saldo > 0 && !pagaFineMese(s) && <div className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">Attenzione: risulta ancora da pagare {eur(s.saldo)}. Prima incassa (Scontrino / Fattura / Pagato).</div>}
         {opz.map(([k, l, d]) => (
           <Button key={k} variant={k === (s.consegna_modo === "spedizione" ? (s.consegna_corriere === "cliente" ? "corriere_cliente" : "spedizione") : "ritiro") ? "default" : "outline"}
             className="h-auto w-full justify-start py-2 text-left" disabled={busy}
@@ -260,7 +268,7 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
   const [modo, setModo] = useState<ModoCorriere>(iniziale);
   // 24/10/2026: il corriere abituale del cliente (anagrafica), es. Archimedia → DHL
   const [corriere, setCorriere] = useState<"UPS" | "DHL">(
-    (s.anagrafica as { corriere_default?: string | null } | null)?.corriere_default === "DHL" ? "DHL" : "UPS");
+    s.anagrafica?.corriere_default === "DHL" ? "DHL" : "UPS");
   const [ind, setInd] = useState<Record<string, string>>({});
   const [ante, setAnte] = useState<AnteSped | null>(null);
   const [giorno, setGiorno] = useState("");
@@ -268,6 +276,8 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
   const prenotaDaNoi = daNoi ?? corriere === "DHL";
   const [prova, setProva] = useState(true);
   const [stampa, setStampa] = useState(true);
+  const [avvisaMail, setAvvisaMail] = useState(true);
+  const [avvisaWa, setAvvisaWa] = useState(true);
   const [busy, setBusy] = useState(false);
   const dir = modo === "ritiro" ? "ritiro" : "riconsegna";
   const chiave = JSON.stringify({ dir, ind, corriere, giorno, prenotaDaNoi });
@@ -287,13 +297,14 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
     const conRitiro = dir === "ritiro" ? !!giorno : prenotaDaNoi;
     if (!inProva && !confirm(`Creare l'etichetta ${corriere} VERA (costo sul conto ${corriere})${conRitiro ? " e prenotare il corriere" : ""}?`)) return;
     // 14/10/2026: riconsegna di una scheda non ancora pagata → il backend la ferma; qui si chiede conferma esplicita
-    const nonPagata = dir === "riconsegna" && !inProva && !s.pagata && s.saldo > 0;
+    const nonPagata = dir === "riconsegna" && !inProva && !s.pagata && s.saldo > 0 && !pagaFineMese(s);
     if (nonPagata && !confirm(`ATTENZIONE: risulta ancora da pagare ${eur(s.saldo)}. Spedire lo stesso, senza pagamento?`)) return;
     setBusy(true);
     try {
       const r = await assAzione(s.id, "spedizione", { operatore, corriere, direzione: dir, indirizzo: ind, giorno_ritiro: giorno || undefined, test: inProva,
-        prenota: dir === "riconsegna" ? prenotaDaNoi : undefined, stampa: inProva ? false : stampa, forza: nonPagata || undefined });
-      toast.success(`${r.corriere} ${r.test ? "(PROVA) " : ""}${r.tracking}${r.prn ? ` · ritiro ${r.prn}` : ""}${r.pickup_error ? ` · ERRORE ritiro: ${r.pickup_error}` : ""}` + (r.esito?.mail ? ` · mail ${r.esito.mail}` : ""), { duration: 10000 });
+        prenota: dir === "riconsegna" ? prenotaDaNoi : undefined, stampa: inProva ? false : stampa, forza: nonPagata || undefined,
+        invia_mail: avvisaMail, invia_wa: avvisaWa });
+      toast.success(`${r.corriere} ${r.test ? "(PROVA) " : ""}${r.tracking}${r.prn ? ` · ritiro ${r.prn}` : ""}${r.pickup_error ? ` · ERRORE ritiro: ${r.pickup_error}` : ""}` + (r.esito?.mail ? ` · mail ${r.esito.mail}` : "") + (r.esito?.whatsapp ? ` · WhatsApp ${r.esito.whatsapp}` : ""), { duration: 10000 });
       if (!r.stampa || !r.stampa.agente_attivo) window.open(`/api/backend${r.label_url}`, "_blank");
       onFatta();
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
@@ -349,6 +360,10 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
                 Ambiente di PROVA {corriere} (nessun costo, nessun corriere)</label>
               {!inProva && <label className="flex items-center gap-1.5"><input type="checkbox" checked={stampa} onChange={(e) => setStampa(e.target.checked)} />
                 Stampa l&apos;etichetta al banco ({dir === "ritiro" ? "1 copia" : "2 copie"})</label>}
+              <label className="flex items-center gap-1.5"><input type="checkbox" checked={avvisaMail} onChange={(e) => setAvvisaMail(e.target.checked)} />
+                Mail al cliente con l&apos;etichetta</label>
+              <label className="flex items-center gap-1.5"><input type="checkbox" checked={avvisaWa} onChange={(e) => setAvvisaWa(e.target.checked)} />
+                WhatsApp al cliente{dir === "ritiro" ? " con l'etichetta allegata" : " col tracking"}</label>
             </div>
           </>
         )}
