@@ -1,6 +1,6 @@
 "use client";
 
-// PREZZI ASSISTENZA UFFICIALE MACBOOK (19/10/2026) E iMAC (22/10/2026) — backend prezzi_ufficiali.py (solo titolare).
+// PREZZI ASSISTENZA UFFICIALE MACBOOK (19/10/2026) E iMAC (22/10/2026) — backend prezzi_ufficiali.py (dal 23/10/2026 per tutti).
 // iMac: scheda logica, display, alimentatore, SSD/hard disk, ventola, altoparlanti, fotocamera — stesse regole di prezzo.
 // Per ogni MacBook, dal più vecchio al più nuovo: scheda logica, Touch ID, display, top case, batteria, trackpad.
 //   costo GSX col reso → × 1,10 (Bagnetti) × 1,22 (IVA) = quanto lo paghiamo → proposto (21/10/2026: × 1,1396 come

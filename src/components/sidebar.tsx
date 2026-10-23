@@ -111,7 +111,7 @@ export const MENU_APPLE: Voce[] = [
   ...AMMINISTRAZIONE,
 ];
 
-// voci che si vedono solo a chi vede le schede di assistenza (in prova: solo il titolare)
+// voci che si vedono solo a chi vede le schede di assistenza (titolare + operatori abilitati: dal 23/10/2026 anche GSX, voci e prezzi ufficiali)
 const DELLE_SCHEDE = new Set(["/assistenza", "/assistenza/voci", "/assistenza/ricambi-gsx", "/assistenza/prezzi-ufficiali", "/rubrica-apple"]);
 // il Magazzino ricambi (23/10/2026, Christian) lo vedono e lo modificano tutti: non è in DELLE_SCHEDE
 

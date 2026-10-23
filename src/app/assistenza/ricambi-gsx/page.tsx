@@ -3,7 +3,7 @@
 // RICAMBI GSX (18/10/2026) — backend gsx_ricambi_api.py, dati caricati con scripts/carica_gsx_ricambi.py.
 // Costo d'acquisto Genius dei ricambi Mac letto dal GSX (IVA esclusa): «costo» = prezzo col reso del pezzo guasto,
 // o il prezzo di stock se il pezzo non ha reso. In testa il prezzo ufficiale Apple della batteria (al cliente, IVA
-// inclusa) e le franchigie AppleCare+. Solo titolare: sono costi d'acquisto.
+// inclusa) e le franchigie AppleCare+. Dal 23/10/2026 li vedono tutti (Christian).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Search, Wrench } from "lucide-react";

@@ -11,7 +11,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, ListChecks, Loader2, Pencil, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
-import { usePermessi } from "@/components/permessi";
 import { fetchAPI } from "@/lib/api";
 import { eur } from "@/lib/assistenza";
 
@@ -33,7 +32,7 @@ const FONTI: Record<string, string> = {
   prezzi_pubblici_apple: "prezzi pubblici Apple", nota_christian: "nota Christian", bozza_0210: "bozza 02/10", manuale: "a mano",
 };
 const IPOTESI: Record<string, string> = { "1": "1ª ipotesi", "2": "2ª ipotesi", "3": "3ª ipotesi", aggiuntiva: "aggiuntiva" };
-const msg403 = "Le schede di assistenza sono in prova: le voci di preventivo per ora le vede solo il titolare.";
+const msg403 = "Le voci di preventivo non sono abilitate per questo utente.";
 const giorno = (d: string | null) => (d ? new Date(d).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" }) : "");
 const numero = (t: string) => { const s = t.replace("€", "").replace(",", ".").trim(); return s === "" ? null : Number(s); };
 
@@ -59,7 +58,7 @@ function Chip({ attivo, onClick, children }: { attivo: boolean; onClick: () => v
   );
 }
 
-function RigaVoce({ v, admin, mostraModello, onSalvata }: { v: Voce; admin: boolean; mostraModello: boolean; onSalvata: (v: Voce) => void }) {
+function RigaVoce({ v, mostraModello, onSalvata }: { v: Voce; mostraModello: boolean; onSalvata: (v: Voce) => void }) {
   const [modifica, setModifica] = useState(false);
   const [prezzo, setPrezzo] = useState("");
   const [scontato, setScontato] = useState("");
@@ -124,7 +123,8 @@ function RigaVoce({ v, admin, mostraModello, onSalvata }: { v: Voce; admin: bool
         <span>{FONTI[v.fonte] || v.fonte}{v.prezzo_aggiornato_il ? ` · ${giorno(v.prezzo_aggiornato_il)}` : ""}</span>
         {v.codice_origine && <span>{v.codice_origine}</span>}
         {v.storico_ultima_scheda && <span>ultima scheda {v.storico_ultima_scheda}</span>}
-        {admin && !modifica && (
+        {/* dal 23/10/2026 le voci le correggono tutti, non solo il titolare */}
+        {!modifica && (
           <span className="flex gap-3 ml-auto">
             <button type="button" onClick={apri} className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300 underline min-h-[32px]"><Pencil className="w-3 h-3" /> Modifica</button>
             <button type="button" disabled={salvo} onClick={() => salva({ da_verificare: !v.da_verificare })} className="text-gray-600 dark:text-gray-300 underline min-h-[32px]">
@@ -146,7 +146,6 @@ function RigaVoce({ v, admin, mostraModello, onSalvata }: { v: Voce; admin: bool
 }
 
 export default function VociPreventivo() {
-  const { admin } = usePermessi();
   const [meta, setMeta] = useState<Meta | null>(null);
   const [vista, setVista] = useState<"intervento" | "modello">("intervento");
   const [q, setQ] = useState("");
@@ -234,7 +233,7 @@ export default function VociPreventivo() {
       </div>
       <p className="text-sm text-gray-500">
         I testi e i prezzi con cui si scrivono i preventivi della scheda di assistenza. Per intervento (es. tutte le batterie) o per
-        modello (tutte le voci possibili di un computer, con le ipotesi). {admin ? "Prezzo e testo si correggono dalla riga." : ""}
+        modello (tutte le voci possibili di un computer, con le ipotesi). Prezzo e testo si correggono dalla riga.
       </p>
 
       {errore && <Card className="p-4 text-sm text-gray-600 dark:text-gray-300">{errore}</Card>}
@@ -308,7 +307,7 @@ export default function VociPreventivo() {
               </div>
               <div className="divide-y">
                 {g.voci.map((v) => (
-                  <RigaVoce key={v.id} v={v} admin={admin} onSalvata={aggiorna}
+                  <RigaVoce key={v.id} v={v} onSalvata={aggiorna}
                     mostraModello={vista === "modello" ? !v.modello_chiave || !modello : true} />
                 ))}
               </div>
