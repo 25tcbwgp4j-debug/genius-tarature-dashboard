@@ -87,8 +87,12 @@ export function DialogoInvio({ s, tipo, onClose, onInvia }: { s: Scheda; tipo: T
           {mail && wa ? "Invia mail + WhatsApp" : mail ? "Invia solo mail" : wa ? "Solo WhatsApp" : "Registra senza inviare"}</Button></>}>
       {fatto ? <EsitoInvio e={fatto} /> : (
         <div className="space-y-3">
-          {(tipo === "preventivo" || tipo === "aggiornamento") && <p className="text-sm text-muted-foreground">Si salva il preventivo, se ne tiene la copia nello storico e si manda al cliente il PDF del preventivo.{" "}
-            <a className="font-medium text-primary underline" href={assDocUrl(s.id, "preventivo")} target="_blank" rel="noreferrer">Vedi il PDF del preventivo</a></p>}
+          {(tipo === "preventivo" || tipo === "aggiornamento") && <>
+            <p className="text-sm text-muted-foreground">Controlla il PDF qui sotto: è quello che riceve il cliente. Si salva il preventivo, se ne tiene la copia nello storico e si manda.{" "}
+              <a className="font-medium text-primary underline" href={assDocUrl(s.id, "preventivo")} target="_blank" rel="noreferrer">Apri a schermo intero</a></p>
+            {/* 24/10/2026: anteprima del PDF direttamente nella finestra d'invio (la bozza è già salvata all'apertura) */}
+            <iframe title="Anteprima PDF del preventivo" src={assDocUrl(s.id, "preventivo")} className="h-[60vh] w-full rounded-lg border bg-white" />
+          </>}
           {conNota && <Campo label={tipo === "aggiornamento" ? "Nota nel messaggio (facoltativa)" : "Cosa comunicare al cliente *"}>
             <textarea className={area} rows={2} autoFocus value={nota} onChange={(e) => setNota(e.target.value)}
               placeholder={tipo === "aggiornamento" ? "es. TROVA IL MIO IPHONE ATTIVO DA DISABILITARE" : "es. il ricambio arriva giovedì, la riparazione sarà pronta venerdì"} /></Campo>}
