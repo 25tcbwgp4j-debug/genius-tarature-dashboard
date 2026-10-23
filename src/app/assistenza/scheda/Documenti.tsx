@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { CheckCircle2, FileText, Receipt, Send, ShoppingCart, Truck, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
-import { assAzione, eur, type Scheda } from "@/lib/assistenza";
+import { assAzione, eur, type FatturaCollegata, type Scheda } from "@/lib/assistenza";
 import { Pill, Sezione } from "./ui";
 
 export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAcconto, onVendi, onPagato, onCorriere }: {
@@ -34,9 +34,26 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
             <Button variant="outline" onClick={onCorriere}><Truck />Corriere</Button>
           </div>
         )}
+        {/* 24/10/2026: quando e come è stata pagata, da quale documento */}
+        {c.pagamento ? (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
+            <b>Pagata</b>{c.pagamento.il ? ` il ${dataIt(c.pagamento.il)}` : ""}{c.pagamento.modo ? ` · ${c.pagamento.modo}` : ""}
+            <span className="text-muted-foreground"> · da {c.pagamento.fonte}</span>
+          </div>
+        ) : s.saldo > 0 ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-sm dark:border-amber-900 dark:bg-amber-950/30">
+            <b>Da pagare {eur(s.saldo)}</b> <span className="text-muted-foreground">· nessuno scontrino, fattura pagata o bonifico collegato</span>
+          </div>
+        ) : null}
         <div className="space-y-1 text-sm">
-          {c.scontrino && <div className="flex items-center gap-2"><Receipt className="size-4 text-muted-foreground" />Scontrino {eur(c.scontrino.totale)} <Pill>{c.scontrino.stato}</Pill></div>}
-          {c.fattura && <div className="flex items-center gap-2"><FileText className="size-4 text-muted-foreground" />Fattura <Link className="underline" href={`/fatturazione?id=${c.fattura.id}`}>{c.fattura.numero || "bozza"}</Link> {eur(c.fattura.totale)} <Pill>{c.fattura.stato}</Pill></div>}
+          {c.scontrino && <div className="flex flex-wrap items-center gap-2"><Receipt className="size-4 text-muted-foreground" />Scontrino {c.scontrino.numero_rt || ""} {eur(c.scontrino.totale)}
+            {c.scontrino.data_rt ? <span className="text-muted-foreground">del {dataIt(c.scontrino.data_rt)}</span> : null}
+            {(c.scontrino.pagamenti || []).map((p, i) => <span key={i} className="text-muted-foreground">· {p.modalita} {eur(p.importo)}</span>)}
+            <Pill>{c.scontrino.stato}</Pill></div>}
+          {c.fattura && <RigaFattura f={c.fattura} />}
+          {(c.altre_fatture || []).map((f) => <RigaFattura key={f.id} f={f} altra />)}
+          {(c.bonifici || []).map((b) => <div key={b.id} className="flex flex-wrap items-center gap-2"><Wallet className="size-4 text-muted-foreground" />Bonifico {eur(b.importo)}
+            <span className="text-muted-foreground">del {dataIt(b.data)} da {b.ordinante || "—"}</span> <Pill>{b.stato}</Pill></div>)}
           {c.documento && <div className="flex items-center gap-2"><FileText className="size-4 text-muted-foreground" />
             <Link className="underline" href={c.documento.sigla.startsWith("PF") ? `/proforma?id=${c.documento.id}` : `/ordini?id=${c.documento.id}`}>{c.documento.sigla}</Link> {eur(c.documento.totale)} <Pill>{c.documento.stato}</Pill></div>}
           {Number(s.acconto || 0) > 0 && <div className="text-muted-foreground">Acconto versato {eur(s.acconto)}</div>}
@@ -50,6 +67,21 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
         )}
       </div>
     </Sezione>
+  );
+}
+
+const dataIt = (d: string) => new Date(d.length <= 10 ? `${d}T12:00:00` : d).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" });
+
+function RigaFattura({ f, altra }: { f: FatturaCollegata; altra?: boolean }) {
+  const nc = f.tipo_documento === "TD04";
+  return (
+    <div className="flex flex-wrap items-center gap-2"><FileText className="size-4 text-muted-foreground" />
+      {nc ? "Nota di credito" : altra ? "Altra fattura" : "Fattura"} <Link className="underline" href={`/fatturazione?id=${f.id}`}>{f.numero || "bozza"}</Link> {eur(f.totale)}
+      {f.data ? <span className="text-muted-foreground">del {dataIt(f.data)}</span> : null}
+      {f.pagamento_stato === "pagata" ? <Pill tono="verde">pagata{f.pagato_il ? ` il ${dataIt(f.pagato_il)}` : ""}{f.pagamento_modalita ? ` · ${f.pagamento_modalita}` : ""}</Pill>
+        : f.pagamento_stato ? <Pill tono="ambra">{f.pagamento_stato}</Pill> : null}
+      <Pill>{f.stato}</Pill>
+    </div>
   );
 }
 

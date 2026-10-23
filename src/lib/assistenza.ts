@@ -32,8 +32,12 @@ export interface Scheda extends SchedaBreve {
     pickup_location: "cliente" | "lab" | null; status: string | null; test_mode: boolean; tracking_url: string | null; created_at: string; pickup_error: string | null;
     cost: number | null }[];
   precedente: { id: string; sigla: string } | null; successiva: { id: string; sigla: string } | null;
-  collegamenti: { scontrino?: { id: string; stato: string; totale: number } | null; fattura?: { id: string; numero: string | null; stato: string; totale: number } | null;
-    documento?: { id: string; sigla: string; stato: string; totale: number } | null };
+  collegamenti: {
+    scontrino?: { id: string; stato: string; totale: number; numero_rt?: string | null; data_rt?: string | null; pagamenti?: { importo: number; modalita: string }[] } | null;
+    fattura?: FatturaCollegata | null; documento?: { id: string; sigla: string; stato: string; totale: number } | null;
+    /** 24/10/2026: altre fatture che citano la scheda, bonifici arrivati con la scheda in causale, come risulta pagata */
+    altre_fatture?: FatturaCollegata[]; bonifici?: { id: string; data: string; importo: number; ordinante: string | null; causale: string | null; stato: string }[];
+    pagamento?: { il: string | null; modo: string | null; fonte: string } | null };
   anagrafica: Anagrafica | null; etichetta_stato: string; prova: boolean;
   // v2 (04-05/10/2026)
   famiglia: string | null; modello_fonte: string | null; modello_da_scheda: string | null; con_alimentatore: boolean | null;
@@ -64,6 +68,8 @@ export interface Proposte { modello_chiave: string | null; famiglia: string | nu
   filtri?: { pollici: number[]; anni: number[]; modelli: ModelloVoci[] };
   interventi: { codice: string; etichetta: string; voci: number }[] }
 export interface GruppoProdotti { gruppo: string; famiglia: string; voci: string[] }
+export type FatturaCollegata = { id: string; numero: string | null; stato: string; totale: number; data?: string | null; pagamento_stato?: string | null;
+  pagamento_modalita?: string | null; pagato_il?: string | null; tipo_documento?: string | null };
 export interface FaseCruscotto { codice: string; etichetta: string; n: number; tecnici: { tecnico: string; n: number }[];
   /** 24/10/2026: sottosezioni cliccabili (in arrivo, da ritirare, da spedire) */
   sotto?: { codice: string; etichetta: string; n: number }[] }
