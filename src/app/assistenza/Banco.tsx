@@ -66,13 +66,18 @@ export function Banco() {
   // 04/10/2026 (Christian): come in FileMaker la ricerca vale su TUTTE le schede (non solo sul filtro scelto)
   // e porta TUTTI i risultati: così si vedono tutte le schede di un cliente, anche le storiche.
   const inRicerca = q.trim().length > 0;
+  // 24/10/2026: ogni ricerca ha un numero; arriva in elenco SOLO la risposta dell'ultima. Prima una ricerca lenta
+  // fatta a metà parola («B», «Bal»: migliaia di schede) arrivava dopo quella giusta («Baldi») e la sovrascriveva.
+  const ultimaRicerca = useRef(0);
   const carica = useCallback(() => {
+    const mia = ++ultimaRicerca.current;
     const st = q.trim() ? "tutte" : filtro;
     // con 1-2 lettere si mostrano le prime 500 (il resto con «Mostra tutte»); da 3 lettere tutti i risultati.
     // Una fase del cruscotto scelta (senza ricerca) mostra solo quelle schede (e del tecnico, se scelto).
     const p = !q.trim() && fase ? assElencoFase(fase.fase, fase.tecnico)
       : q.trim().length >= 3 ? tutteLeSchede(q, st) : assElenco(q, st, "", q.trim() ? 500 : 150);
-    p.then((r) => { setElenco(r.schede); setTotale(r.totale); }).catch((e) => { toastErrore(e); setElenco([]); });
+    p.then((r) => { if (mia !== ultimaRicerca.current) return; setElenco(r.schede); setTotale(r.totale); })
+      .catch((e) => { if (mia !== ultimaRicerca.current) return; toastErrore(e); setElenco([]); });
     assCruscotto().then((r) => { setCruscotto(r.fasi); setTecniciCr(r.tecnici); }).catch(() => undefined);
   }, [q, filtro, fase]);
   useEffect(() => { const t = setTimeout(carica, 250); return () => clearTimeout(t); }, [carica]);
@@ -92,7 +97,9 @@ export function Banco() {
     if (!elenco || altreInCarico) return;
     setAltreInCarico(true);
     try {
+      const mia = ultimaRicerca.current;
       const r = !q.trim() && fase ? await assElencoFase(fase.fase, fase.tecnico) : await tutteLeSchede(q, q.trim() ? "tutte" : filtro);
+      if (mia !== ultimaRicerca.current) return;
       setElenco(r.schede); setTotale(r.totale);
     } catch (e) { toastErrore(e); } finally { setAltreInCarico(false); }
   }
