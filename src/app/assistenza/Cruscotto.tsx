@@ -18,7 +18,7 @@ export function Cruscotto({ fasi, tecnici, scelta, onScegli }: {
   return (
     <div className="flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible" data-testid="cruscotto">
       {fasi.map((f) => {
-        const attiva = scelta?.fase === f.codice;
+        const attiva = scelta?.fase === f.codice || !!f.sotto?.some((x) => x.codice === scelta?.fase);
         const urgente = DA_FARE.has(f.codice) && f.n > 0;
         return (
           <div key={f.codice} role="button" tabIndex={0} data-fase={f.codice}
@@ -30,6 +30,22 @@ export function Cruscotto({ fasi, tecnici, scelta, onScegli }: {
                   : f.n ? "bg-card hover:bg-muted/60" : "bg-card text-muted-foreground opacity-70 hover:opacity-100")}>
             <div className="text-xl font-bold tabular-nums leading-tight">{f.n}</div>
             <div className="text-[11px] font-medium leading-tight">{f.etichetta}</div>
+            {/* 24/10/2026: sottosezioni (ritirati da noi / dal cliente · da pagare / pagati · chi spedisce) */}
+            {!!f.sotto?.length && (
+              <div className="mt-1 flex flex-col gap-0.5">
+                {f.sotto.map((x) => {
+                  const sel = scelta?.fase === x.codice;
+                  return (
+                    <button key={x.codice} type="button" data-fase={x.codice}
+                      onClick={(e) => { e.stopPropagation(); onScegli(sel ? { fase: f.codice, tecnico: "" } : { fase: x.codice, tecnico: "" }); }}
+                      className={cn("flex items-center justify-between gap-1 rounded border px-1.5 text-left text-[10px] font-semibold leading-4",
+                        sel ? "border-white bg-white text-primary" : attiva ? "border-white/60 text-primary-foreground" : "bg-background",
+                        !x.n && !sel && "opacity-60")}>
+                      <span className="truncate">{x.etichetta}</span><span className="tabular-nums">{x.n}</span></button>
+                  );
+                })}
+              </div>
+            )}
             {f.tecnici.length > 0 && (
               <div className="mt-1 flex flex-wrap gap-1">
                 {f.tecnici.map((t) => {

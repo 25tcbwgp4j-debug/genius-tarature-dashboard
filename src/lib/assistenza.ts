@@ -63,7 +63,9 @@ export interface Proposte { modello_chiave: string | null; famiglia: string | nu
   filtri?: { pollici: number[]; anni: number[]; modelli: ModelloVoci[] };
   interventi: { codice: string; etichetta: string; voci: number }[] }
 export interface GruppoProdotti { gruppo: string; famiglia: string; voci: string[] }
-export interface FaseCruscotto { codice: string; etichetta: string; n: number; tecnici: { tecnico: string; n: number }[] }
+export interface FaseCruscotto { codice: string; etichetta: string; n: number; tecnici: { tecnico: string; n: number }[];
+  /** 24/10/2026: sottosezioni cliccabili (in arrivo, da ritirare, da spedire) */
+  sotto?: { codice: string; etichetta: string; n: number }[] }
 export interface TestoStandard { id: string; titolo: string; categoria: string; uso: "cliente" | "interno"; famiglie: string[]; interventi: string[]; testo: string;
   prezzi_da_verificare: boolean }
 export interface ConfigAssistenza { operatori_abilitati: boolean; numerazione_live: boolean; ultimo_numero_filemaker: number | null; admin: boolean;

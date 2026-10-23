@@ -176,7 +176,8 @@ export function Banco() {
           <div className="flex flex-wrap items-center gap-1 text-xs">
             {fase && (
               <span className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary/10 px-2 py-0.5 font-medium">
-                {cruscotto?.find((f) => f.codice === fase.fase)?.etichetta || fase.fase}{fase.tecnico ? ` · ${nomeTecnico(fase.tecnico, tecniciCr)}` : ""}
+                {(() => { const p = cruscotto?.find((f) => f.codice === fase.fase || f.sotto?.some((x) => x.codice === fase.fase));
+                  const x = p?.sotto?.find((y) => y.codice === fase.fase); return x ? `${p?.etichetta} · ${x.etichetta}` : p?.etichetta || fase.fase; })()}{fase.tecnico ? ` · ${nomeTecnico(fase.tecnico, tecniciCr)}` : ""}
                 <button onClick={() => { setFase(null); setElenco(null); }} aria-label="Togli il filtro della fase" className="ml-0.5">✕</button>
               </span>
             )}
