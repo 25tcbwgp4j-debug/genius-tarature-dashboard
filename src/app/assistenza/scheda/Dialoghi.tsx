@@ -396,3 +396,36 @@ export function DialogoStessoModello({ s, ro, onClose, onApri, onCopia }: { s: S
     </Modale>
   );
 }
+
+/** 24/10/2026 (Christian): il titolare riporta la scheda a qualsiasi stato aperto, anche indietro
+ *  (consegnata → il cliente lascia il dispositivo per altre verifiche; accettato → da rifare il preventivo). */
+const STATI_RIAPRI: [string, string, string][] = [
+  ["in_arrivo", "In arrivo", "il dispositivo non è ancora arrivato (toglie il timbro di accettazione)"],
+  ["da_preventivare", "Da preventivare", "il preventivo è da rifare: toglie invio e accettazione del preventivo"],
+  ["preventivo_inviato", "Preventivo inviato", "in attesa della risposta del cliente: toglie l'accettazione"],
+  ["accettato", "Accettato · in lavorazione", "torna in riparazione (toglie pronto e consegna)"],
+  ["rifiutato", "Rifiutato · da restituire", "il cliente non procede"],
+  ["pronto", "Pronto", "da ritirare / da spedire (toglie la consegna)"],
+];
+export function DialogoCambiaStato({ s, onClose, onConferma }: { s: Scheda; onClose: () => void; onConferma: (b: { stato: string; motivo: string }) => Promise<boolean> }) {
+  const [stato, setStato] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modale titolo={`Cambia stato — scheda ${s.sigla}`} onClose={onClose}
+      piedi={<><Button variant="outline" onClick={onClose}>Annulla</Button>
+        <Button disabled={busy || !stato || !motivo.trim()} onClick={async () => { setBusy(true); try { if (await onConferma({ stato, motivo })) onClose(); } finally { setBusy(false); } }}>
+          {busy && <Loader2 className="animate-spin" />}Riporta la scheda</Button></>}>
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">Stato attuale: <b>{s.etichetta_stato}</b>{s.stato === "annullata" ? " (verrà riaperta)" : ""}. I timbri tolti restano nel registro della scheda.</p>
+        <div className="grid gap-2">
+          {STATI_RIAPRI.filter(([k]) => k !== s.stato).map(([k, l, d]) => (
+            <button key={k} type="button" onClick={() => setStato(k)} className={`rounded-lg border p-2.5 text-left text-sm ${stato === k ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted"}`}>
+              <b className="block">{l}</b><span className="text-xs text-muted-foreground">{d}</span></button>
+          ))}
+        </div>
+        <Campo label="Motivo (resta nel registro) *"><textarea className={area} rows={2} value={motivo} placeholder="es. al ritiro il cliente ha trovato un problema e lo lascia per altre verifiche" onChange={(e) => setMotivo(e.target.value)} /></Campo>
+      </div>
+    </Modale>
+  );
+}

@@ -21,7 +21,7 @@ import { Apparecchio, type ValoriApparecchio } from "./Apparecchio";
 import { Avanzamento } from "./Avanzamento";
 import { CercaCliente, RiepilogoCliente, SchedaClienteModal } from "./Cliente";
 import { Comunicazioni, Registro } from "./Comunicazioni";
-import { DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoStessoModello, type TipoInvio } from "./Dialoghi";
+import { DialogoCambiaStato, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoStessoModello, type TipoInvio } from "./Dialoghi";
 import { Documenti } from "./Documenti";
 import { Lavorazione } from "./Lavorazione";
 import { Preventivo, type BozzaPreventivo } from "./Preventivo";
@@ -30,7 +30,7 @@ import { Badge, Campo, Pill, Sezione, area, campo } from "./ui";
 
 type Bozza = Partial<Scheda>;
 type Dialogo = null | { k: "invio"; tipo: TipoInvio } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
-  | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" };
+  | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "cambia_stato" };
 
 function bozzaPreventivo(m: Partial<Scheda>): BozzaPreventivo {
   return { righe: (m.preventivo_righe as EstimateLine[]) || [], diagnosi: m.preventivo?.diagnosi || "", note: m.preventivo?.note || "",
@@ -211,7 +211,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           try { const n = await assAzione(s.id, "duplica", { operatore, stesso_dispositivo: confirm("Stesso dispositivo? (OK = sì, Annulla = solo stesso cliente)") }); toast.success(`Nuova scheda ${n.sigla}`); onCambiata(); onApri(n.id); }
           catch (e) { toastErrore(e); }
         }}><Copy />Duplica</Button>}
-        {st === "consegnato" && !ro && <Button size="sm" variant="ghost" onClick={() => azione("riapri", {}, "Scheda riaperta")}><RotateCcw />Riapri</Button>}
+        {st === "consegnato" && !ro && !admin && <Button size="sm" variant="ghost" onClick={() => azione("riapri", {}, "Scheda riaperta")}><RotateCcw />Riapri</Button>}
+        {admin && <Button size="sm" variant="ghost" onClick={() => setDlg({ k: "cambia_stato" })} title="Riporta la scheda a qualsiasi stato (anche indietro)"><RotateCcw />Cambia stato</Button>}
         {admin && !ro && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => {
           const m = prompt("Motivo dell'annullamento della scheda?");
           if (m !== null) azione("annulla", { motivo: m }, "Scheda annullata");
@@ -307,6 +308,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         onEsito={async (body) => !!(await azione("esito-preventivo", body, body.esito === "accettato" ? "ACCETTATO: in riparazione, lavorazione precompilata" : "Preventivo RIFIUTATO"))} />}
       {dlg?.k === "pronto" && <DialogoPronto s={s} lavorazione={String(v("lavorazione") || "")} totale={(v("totale_lavorazione") as number | null) ?? null} onClose={() => setDlg(null)}
         onInvia={async (body) => { const r = await azione("pronto", body, "PRONTO"); return r ? (r.esito as Esito) : null; }} />}
+      {dlg?.k === "cambia_stato" && <DialogoCambiaStato s={s} onClose={() => setDlg(null)} onConferma={async (b) => !!(await azione("riapri", b, "Stato della scheda cambiato"))} />}
       {dlg?.k === "pagato" && <DialogoPagato s={s} onClose={() => setDlg(null)} onPagato={async (body) => !!(await azione("pagamento", body, "Pagamento registrato"))} />}
       {dlg?.k === "consegna" && <DialogoConsegna s={s} onClose={() => setDlg(null)} onConsegna={async (modo) => {
         // 14/10/2026: con un saldo aperto il backend ferma la consegna; si va avanti solo con conferma esplicita
