@@ -7,9 +7,10 @@ import { ChatPanel } from "./_components/ChatPanel";
 import { AnalyticsWidget } from "./_components/AnalyticsWidget";
 import { CommandPalette, type Command } from "./_components/CommandPalette";
 import { BroadcastWizard } from "./_components/BroadcastWizard";
-import { ultimoMessaggio } from "@/lib/chat-api";
+import { ultimoMessaggio, usaChatApple } from "@/lib/chat-api";
 
 export default function ChatPage() {
+  usaChatApple(false);   // la chat Apple usa la stessa libreria: qui sempre quella delle tarature
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showPalette, setShowPalette] = useState(false);

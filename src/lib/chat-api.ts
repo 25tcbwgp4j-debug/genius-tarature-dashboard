@@ -3,7 +3,9 @@
  * Tutte le chiamate passano dal proxy /api/backend/* che aggiunge X-API-Key.
  */
 
-const BASE = "/api/backend/api/chat";
+let BASE = "/api/backend/api/chat";
+/** 24/10/2026: la stessa API serve anche la chat WhatsApp APPLE (chatbot Genius, inoltrata da /api/chat-apple). */
+export function usaChatApple(apple: boolean) { BASE = apple ? "/api/backend/api/chat-apple" : "/api/backend/api/chat"; }
 
 // `signal` opzionale: serve a far arrivare davvero l'AbortController dei
 // chiamanti fino a fetch. Senza, una richiesta "annullata" restava in volo e
