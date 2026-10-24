@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Copy, Download, FileText, Loader2, Mail, MessageSquareText, Package, Printer, RefreshCw, RotateCcw, Save, Tag, Trash2, UserRound,
+  ChevronRight, Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SceltaOperatore, type Operatore } from "@/components/Operatore";
@@ -236,16 +237,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
               <Campo label="Referente"><input className={campo} disabled={ro} value={(v("referente") as string) || ""} onChange={(e) => set("referente", e.target.value)} /></Campo>
               <Campo label="Indirizzo di spedizione" className="sm:col-span-2"><input className={campo} disabled={ro} value={(v("indirizzo_spedizione") as string) || ""} onChange={(e) => set("indirizzo_spedizione", e.target.value)} /></Campo>
               <Campo label="Note visibili al cliente" className="sm:col-span-2"><input className={campo} disabled={ro} value={(v("note") as string) || ""} onChange={(e) => set("note", e.target.value)} /></Campo>
-              {/* 24/10/2026: dati che in FileMaker stavano scritti nelle note */}
-              <Campo label="Riferimento del cliente (rif.)"><input className={campo} disabled={ro} placeholder="es. M2479" value={(v("rif_cliente") as string) || ""} onChange={(e) => set("rif_cliente", e.target.value)} /></Campo>
-              <Campo label="Spedizione combinata (stesso pacco)"><input className={campo} disabled={ro} placeholder="es. TA63110" value={(v("spedizione_combinata") as string) || ""} onChange={(e) => set("spedizione_combinata", e.target.value.toUpperCase())} /></Campo>
-              <Campo label="DDT del cliente"><input className={campo} disabled={ro} value={(v("ddt_cliente") as string) || ""} onChange={(e) => set("ddt_cliente", e.target.value)} /></Campo>
-              <Campo label="Schede precedenti (EX)"><input className={campo} disabled={ro} value={(v("schede_precedenti") as string) || ""} onChange={(e) => set("schede_precedenti", e.target.value)} /></Campo>
-              {!!s.collegamenti?.combinata?.length && <div className="text-xs sm:col-span-2">
-                <span className="text-muted-foreground">Nello stesso pacco{s.arrivo_modo === "pony" ? " (pony)" : s.arrivo_modo === "corriere_cliente" ? " (corriere del cliente)" : ""}: </span>
-                {s.collegamenti.combinata.map((c) => <button key={c.id} type="button" className="mr-2 text-blue-700 underline" onClick={() => onApri(c.id)}>
-                  {c.sigla}{c.rif_cliente ? ` (${c.rif_cliente})` : ""}</button>)}</div>}
             </div>
+            {/* 24/10/2026 (Christian): rif. del cliente, pacco combinato, DDT, EX in una riga; si modificano a richiesta */}
+            <RiferimentiScheda s={s} v={v} set={set} ro={ro} operatore={operatore} onApri={onApri} onCambiata={onCambiata} salva={salva} />
           </div>
         </Sezione>
 
@@ -293,9 +287,10 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         </div>
       </div>
 
+      {/* 24/10/2026 (Christian): comunicazioni e fasi si aprono con un clic, così la scheda non è infinita */}
       <div className="grid gap-3 xl:grid-cols-2">
-        <Comunicazioni s={s} />
-        <Registro s={s} />
+        <Apribile titolo="Comunicazioni al cliente" conteggio={(s.comunicazioni || []).length}><Comunicazioni s={s} /></Apribile>
+        <Apribile titolo="Fasi e registro" conteggio={(s.eventi || []).length}><Registro s={s} /></Apribile>
       </div>
 
       {dlg?.k === "invio" && <DialogoInvio s={s} tipo={dlg.tipo} onClose={() => setDlg(null)} onInvia={async (body) => {
@@ -361,5 +356,74 @@ function MenuPdf({ id, prima }: { id: string; prima: () => Promise<boolean> }) {
       <button type="button" className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs hover:bg-muted" onClick={() => apri(false)}><FileText className="size-3.5" />Apri</button>
       <button type="button" className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs hover:bg-muted" onClick={() => apri(true)}><Download className="size-3.5" />Scarica</button>
     </span>
+  );
+}
+
+function Apribile({ titolo, conteggio, children }: { titolo: string; conteggio: number; children: React.ReactNode }) {
+  const [aperto, setAperto] = useState(false);
+  return aperto ? (
+    <div className="space-y-1">
+      <button type="button" className="text-xs text-muted-foreground underline" onClick={() => setAperto(false)}>Chiudi «{titolo}»</button>
+      {children}
+    </div>
+  ) : (
+    <button type="button" onClick={() => setAperto(true)} className="flex w-full items-center gap-2 rounded-xl border bg-card px-4 py-3 text-left text-sm font-semibold shadow-sm hover:bg-muted/50">
+      <ChevronRight className="size-4" />{titolo}<span className="font-normal text-muted-foreground">({conteggio})</span><span className="ml-auto text-xs font-normal text-muted-foreground">apri</span>
+    </button>
+  );
+}
+
+/** Riferimento del cliente, spedizione combinata, DDT, schede precedenti: riepilogo + modifica + «crea schede nello stesso pacco». */
+function RiferimentiScheda({ s, v, set, ro, operatore, onApri, onCambiata, salva }: {
+  s: Scheda; v: (k: keyof Scheda) => unknown; set: (k: keyof Scheda, val: unknown) => void; ro: boolean; operatore: string;
+  onApri: (id: string) => void; onCambiata: () => void; salva: (silenziosa?: boolean) => Promise<boolean>;
+}) {
+  const [modifica, setModifica] = useState(false);
+  const comb = (v("spedizione_combinata") as string) || "";
+  const voci = [["Rif. cliente", v("rif_cliente")], ["DDT", v("ddt_cliente")], ["Schede precedenti", v("schede_precedenti")]].filter(([, x]) => x) as [string, string][];
+  async function creaCodice() {
+    const nome = String(v("azienda") || v("nominativo") || "X").toUpperCase().replace(/[^A-Z]/g, "");
+    const codice = `${nome.slice(0, 2) || "SC"}${s.sigla}`;
+    set("spedizione_combinata", codice);
+    try { await navigator.clipboard.writeText(codice); } catch { /* copia non disponibile */ }
+    toast.success(`Spedizione combinata ${codice} (copiata): salva la scheda`);
+  }
+  async function altraNelPacco() {
+    if (!operatore) { toast.error("Scegli l'operatore"); return; }
+    if (!comb) { toast.error("Prima crea il codice della spedizione combinata"); return; }
+    if (!(await salva(true))) return;
+    try {
+      const n = await assAzione(s.id, "duplica", { operatore, stesso_dispositivo: false });
+      await assModifica(n.id, { spedizione_combinata: comb, arrivo_modo: v("arrivo_modo") || null, operatore });
+      toast.success(`Nuova scheda ${n.sigla} nello stesso pacco ${comb}`); onCambiata(); onApri(n.id);
+    } catch (e) { toastErrore(e); }
+  }
+  const pacco = s.collegamenti?.combinata || [];
+  return (
+    <div className="space-y-2 rounded-lg border p-2.5 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        {comb ? <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-2 py-0.5 font-mono text-xs font-semibold text-indigo-900 dark:bg-indigo-900/40 dark:text-indigo-100">📦 {comb}
+          <button type="button" title="Copia il codice" onClick={() => navigator.clipboard?.writeText(comb).then(() => toast.success("Codice copiato"))}><Copy className="size-3" /></button></span>
+          : <span className="text-xs text-muted-foreground">Nessuna spedizione combinata</span>}
+        {voci.map(([k, x]) => <span key={k} className="text-xs"><span className="text-muted-foreground">{k}:</span> <b>{x}</b></span>)}
+        <span className="ml-auto flex gap-1">
+          {!ro && !comb && <Button size="xs" variant="outline" onClick={creaCodice} title="Più dispositivi nello stesso pacco: crea il codice (iniziali + numero di questa scheda)">📦 Spedizione combinata</Button>}
+          {!ro && comb && <Button size="xs" variant="outline" onClick={altraNelPacco}><Plus />Altra scheda nello stesso pacco</Button>}
+          {!ro && <Button size="xs" variant="ghost" onClick={() => setModifica((x) => !x)}>{modifica ? "Chiudi" : "Modifica"}</Button>}
+        </span>
+      </div>
+      {pacco.length > 0 && (
+        <div className="text-xs"><span className="text-muted-foreground">Nello stesso pacco{s.arrivo_modo === "pony" ? " (pony)" : s.arrivo_modo === "corriere_cliente" ? " (corriere del cliente)" : ""}: </span>
+          {pacco.map((c) => <button key={c.id} type="button" className="mr-2 text-blue-700 underline" onClick={() => onApri(c.id)}>{c.sigla}{c.rif_cliente ? ` (${c.rif_cliente})` : ""}</button>)}</div>
+      )}
+      {modifica && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Campo label="Riferimento del cliente (rif.)"><input className={campo} disabled={ro} placeholder="es. M2479" value={(v("rif_cliente") as string) || ""} onChange={(e) => set("rif_cliente", e.target.value)} /></Campo>
+          <Campo label="Spedizione combinata (stesso pacco)"><input className={campo} disabled={ro} placeholder="es. TA63110" value={comb} onChange={(e) => set("spedizione_combinata", e.target.value.toUpperCase())} /></Campo>
+          <Campo label="DDT del cliente"><input className={campo} disabled={ro} value={(v("ddt_cliente") as string) || ""} onChange={(e) => set("ddt_cliente", e.target.value)} /></Campo>
+          <Campo label="Schede precedenti (EX)"><input className={campo} disabled={ro} value={(v("schede_precedenti") as string) || ""} onChange={(e) => set("schede_precedenti", e.target.value)} /></Campo>
+        </div>
+      )}
+    </div>
   );
 }

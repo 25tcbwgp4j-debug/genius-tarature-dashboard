@@ -86,7 +86,12 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
               <select className={campo} disabled={ro} value={(v("esito") as string) || ""} onChange={(e) => set("esito", e.target.value)}>
                 <option value="">—</option><option value="EFFETTUATO">Effettuato</option><option value="NEGATIVO">Negativo</option><option value="DA ULTIMARE">Da ultimare</option></select>
             </Campo>
-            <div className="rounded-md bg-muted/50 px-2.5 py-2 text-sm">Totale <b>{eur(tot)}</b> · acconto {eur(acc)}<br />SALDO <b className="text-base">{eur(saldo)}</b></div>
+            {/* 24/10/2026: se la scheda risulta pagata (scontrino, fattura, bonifico) il saldo non si mostra come «da pagare» */}
+            {s.pagata ? (
+              <div className="rounded-md bg-emerald-50 px-2.5 py-2 text-sm text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">Totale <b>{eur(tot)}</b> · <b>PAGATA</b><br /><span className="text-xs">vedi «Documenti, pagamento e spedizioni»</span></div>
+            ) : (
+              <div className={`rounded-md px-2.5 py-2 text-sm ${saldo > 0 ? "bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" : "bg-muted/50"}`}>Totale <b>{eur(tot)}</b> · acconto {eur(acc)}<br />{saldo > 0 ? "DA PAGARE" : "SALDO"} <b className="text-base">{eur(saldo)}</b></div>
+            )}
           </div>
         </div>
       </div>

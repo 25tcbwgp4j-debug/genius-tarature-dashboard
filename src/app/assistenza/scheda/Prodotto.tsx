@@ -50,8 +50,9 @@ export function ProdottoCombo({ valore, gruppi, onScelto, disabled, autoFocus }:
     <div ref={box} className="relative">
       <button type="button" disabled={disabled} onClick={() => setAperto((x) => !x)} data-testid="prodotto-combo"
         className={cn(campo, "flex items-center gap-2 text-left", !valore && "text-muted-foreground")}>
-        <span className="min-w-0 flex-1 truncate">{valore || "— scegli il prodotto —"}</span>
-        {valore && !nelMenu && <span className="shrink-0 text-[10px] text-amber-700">storico</span>}
+        {/* 24/10/2026: il prodotto si legge per intero (prima «apple h…» troncato) */}
+        <span className="min-w-0 flex-1 whitespace-normal break-words uppercase leading-snug">{valore || "— scegli il prodotto —"}</span>
+        {valore && !nelMenu && <span className="shrink-0 text-[10px] text-amber-700" title="Scritto in FileMaker, non è una voce del menu: sceglila dal menu se c'è">da FileMaker</span>}
         <ChevronDown className="size-4 shrink-0 opacity-60" />
       </button>
       {aperto && (

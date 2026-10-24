@@ -50,6 +50,7 @@ export function Banco() {
   const [totale, setTotale] = useState(0);
   // 05/10/2026 (§10.6): cruscotto per fase (e tecnico) al posto dei chip filtro
   const [cruscotto, setCruscotto] = useState<FaseCruscotto[] | null>(null);
+  const [mostraCr, setMostraCr] = useState(false);
   const [tecniciCr, setTecniciCr] = useState<{ codice: string; nome: string }[]>([]);
   const faseLink = sp.get("fase");
   const [fase, setFase] = useState<{ fase: string; tecnico: string } | null>(faseLink ? { fase: faseLink, tecnico: sp.get("tecnico") || "" } : null);
@@ -154,6 +155,16 @@ export function Banco() {
         <Button className={cfg?.admin ? "" : "ml-auto"} onClick={() => setNuova(true)} title="F2 o Alt+N"><Plus />NUOVA SCHEDA</Button>
       </div>
 
+      {/* 24/10/2026 (Christian): con una scheda aperta il cruscotto si riduce a una riga (prima occupava mezzo schermo) */}
+      {aperta && !mostraCr ? (
+        <button type="button" onClick={() => setMostraCr(true)} className="flex w-full items-center gap-2 rounded-xl border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm hover:bg-muted/50">
+          <span className="font-semibold text-foreground">Cruscotto</span>
+          {(cruscotto || []).filter((f) => f.n > 0).slice(0, 8).map((f) => <span key={f.codice}>{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
+          <span className="ml-auto underline">mostra</span>
+        </button>
+      ) : (
+      <>
+      {aperta && <div className="flex justify-end"><button type="button" className="text-xs text-muted-foreground underline" onClick={() => setMostraCr(false)}>riduci il cruscotto</button></div>}
       <Cruscotto fasi={cruscotto} tecnici={tecniciCr} scelta={fase}
         onScegli={(x) => {
           setFase(x); setElenco(null); setQ("");
@@ -161,6 +172,8 @@ export function Banco() {
           // su iPhone/iPad in verticale la scheda aperta copre l'elenco: si torna all'elenco della fase
           if (x && aperta && typeof window !== "undefined" && window.innerWidth < 1024) chiudi();
         }} />
+      </>
+      )}
 
       <div className={`grid gap-3 ${elencoChiuso ? "" : "lg:grid-cols-[300px_minmax(0,1fr)]"}`}>
         {/* elenco */}

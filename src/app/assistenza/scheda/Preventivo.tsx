@@ -9,7 +9,7 @@
 // · pulsante chiaro «INVIA PREVENTIVO» → mail + WhatsApp.
 import { useState } from "react";
 import { toast } from "sonner";
-import { BookText, Copy, Plus, Search, Send, Sparkles, Trash2, Truck, X } from "lucide-react";
+import { BookText, ChevronDown, ChevronRight, Copy, ListPlus, Plus, Search, Send, Sparkles, Trash2, Truck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import {
@@ -34,6 +34,8 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
   const [bloccoAttivo, setBloccoAttivo] = useState<number>(Math.max(...bb));
   const [testi, setTesti] = useState<TestoStandard[] | null>(null);
   const [cerca, setCerca] = useState("");
+  // 24/10/2026 (Christian): il catalogo delle voci si apre a richiesta (aperto da solo solo se il preventivo è vuoto)
+  const [listino, setListino] = useState<boolean>(righe.length === 0);
   const [trovati, setTrovati] = useState<{ preventivi: (SchedaBreve & { preventivo_testo: string | null })[]; sintesi: { n: number; min: number; max: number; mediana: number } | null } | null>(null);
 
 
@@ -104,12 +106,6 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
           <input className={campo} disabled={ro} placeholder="es. SCHEDA LOGICA IN CORTO" value={bz.diagnosi} onChange={(e) => setBz((b) => ({ ...b, diagnosi: e.target.value }))} />
         </Campo>
 
-        {!ro && (
-          <VociPreventivo idScheda={s.id} modelloScheda={attuale.modello || attuale.prodotto || ""} attuale={attuale}
-            chiave={`${attuale.modello}|${attuale.prodotto}|${attuale.famiglia}|${attuale.anno}`}
-            accettato={accettato} bloccoAggiuntivo={bloccoAttivo > 0} onCombo={inserisciCombo} onVoce={aggiungiVoce} />
-        )}
-
         {bb.map((b) => (
           <Blocco key={b} b={b} righe={righe} ro={ro} attivo={b === bloccoAttivo} onAttiva={() => setBloccoAttivo(b)}
             accettato={accettato || (b < Math.max(...bb) && s.preventivo_stato !== "da_fare")}
@@ -124,20 +120,47 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
           </div>
         )}
 
-        <div className="grid gap-3 lg:grid-cols-[auto_1fr] lg:items-end">
-          <div>
-            <span className="mb-0.5 block text-xs font-medium text-muted-foreground">Spese di spedizione</span>
-            <div className="flex flex-wrap items-center gap-2">
-              <Scelta piccolo disabled={ro} valore={bz.spedizione_tipo || "nessuna"} opzioni={SPEDIZIONI.map(([k, l]) => [k, l])}
-                onChange={(v) => setBz((x) => ({ ...x, spedizione_tipo: v, spedizione_importo: v === "nessuna" ? x.spedizione_importo : (x.spedizione_importo || spedDefault) }))} />
-              {bz.spedizione_tipo && bz.spedizione_tipo !== "nessuna" && (
-                <span className="inline-flex items-center gap-1 text-sm"><Truck className="size-4 text-muted-foreground" />€
-                  <input className={`${campo} h-8 w-20 text-right`} disabled={ro} inputMode="decimal" value={bz.spedizione_importo ?? ""} onChange={(e) => setBz((x) => ({ ...x, spedizione_importo: e.target.value.replace(",", ".") }))} /></span>
-              )}
+        {/* 24/10/2026 (Christian): la spedizione è una voce del preventivo ben visibile, non un selettore grigio */}
+        {(() => {
+          const attiva = !!bz.spedizione_tipo && bz.spedizione_tipo !== "nessuna";
+          return (
+            <div className={`rounded-xl border-2 p-3 ${attiva ? "border-indigo-300 bg-indigo-50/70 dark:border-indigo-800 dark:bg-indigo-950/30" : "border-dashed"}`}>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="inline-flex items-center gap-2 text-sm font-semibold"><Truck className="size-5 text-indigo-600" />Spedizione con il nostro corriere</span>
+                <Scelta disabled={ro} valore={bz.spedizione_tipo || "nessuna"} opzioni={SPEDIZIONI.map(([k, l]) => [k, l])}
+                  onChange={(v) => setBz((x) => ({ ...x, spedizione_tipo: v, spedizione_importo: v === "nessuna" ? x.spedizione_importo : (x.spedizione_importo || spedDefault) }))} />
+                {attiva && (
+                  <span className="ml-auto inline-flex items-center gap-1.5 text-sm font-semibold">€
+                    <input className={`${campo} h-9 w-24 text-right text-base font-bold`} disabled={ro} inputMode="decimal" value={bz.spedizione_importo ?? ""} onChange={(e) => setBz((x) => ({ ...x, spedizione_importo: e.target.value.replace(",", ".") }))} />
+                    <span className="text-xs font-normal text-muted-foreground">nel totale</span></span>
+                )}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">{attiva ? "Va nel preventivo come voce a parte (di solito 28 € A/R; cambia con dimensioni e peso)." : "Nessuna spedizione: il cliente porta e ritira in negozio, o usa il suo corriere."}</div>
             </div>
-          </div>
-          <div className="text-xs text-muted-foreground lg:text-right">Di solito 28 € A/R; cambia con dimensioni e peso.</div>
+          );
+        })()}
+
+        {/* totale ben in vista */}
+        <div className="flex flex-wrap items-center justify-end gap-3 rounded-xl bg-foreground px-4 py-2.5 text-background">
+          <span className="text-sm opacity-80">{accettato ? "Totale accettato" : "Totale con l'ipotesi proposta"}{bz.spedizione_tipo && bz.spedizione_tipo !== "nessuna" ? " (spedizione compresa)" : ""}</span>
+          <span className="text-2xl font-bold tabular-nums">{eur(tot)}</span>
+          <span className="text-xs opacity-70">IVA compresa</span>
         </div>
+
+        {!ro && (
+          <div className="rounded-xl border">
+            <button type="button" onClick={() => setListino((x) => !x)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium hover:bg-muted/50">
+              {listino ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}<ListPlus className="size-4" />Aggiungi voci dal listino
+              <span className="text-xs font-normal text-muted-foreground">(voci del modello, combinazioni 1ª + 2ª ipotesi)</span></button>
+            {listino && (
+              <div className="border-t p-3">
+                <VociPreventivo idScheda={s.id} modelloScheda={attuale.modello || attuale.prodotto || ""} attuale={attuale}
+                  chiave={`${attuale.modello}|${attuale.prodotto}|${attuale.famiglia}|${attuale.anno}`}
+                  accettato={accettato} bloccoAggiuntivo={bloccoAttivo > 0} onCombo={inserisciCombo} onVoce={aggiungiVoce} />
+              </div>
+            )}
+          </div>
+        )}
 
         <Campo label="Note per il cliente (testi standard)">
           <textarea className={area} rows={bz.note ? Math.min(10, bz.note.split("\n").length + 1) : 2} disabled={ro} value={bz.note} onChange={(e) => setBz((b) => ({ ...b, note: e.target.value }))}
@@ -201,9 +224,16 @@ function Blocco({ b, righe, ro, attivo, onAttiva, upd, togli, setRighe, accettat
   return (
     <div className={`space-y-2 ${b > 0 ? "rounded-lg border-2 border-dashed border-amber-300 p-2" : ""}`} onClick={onAttiva}>
       {b > 0 && <div className="flex items-center gap-2 text-sm font-semibold">Preventivo aggiuntivo {b > 1 ? b : ""}{attivo && !ro && <Pill tono="ambra">le voci nuove vanno qui</Pill>}</div>}
-      {fisse.map(({ r, i }) => <Riga key={i} r={r} i={i} ro={ro} upd={upd} togli={togli} etichetta="voce fissa" />)}
+      {fisse.length > 0 && (
+        <div className="space-y-1.5 rounded-xl border-2 border-amber-300 bg-amber-50/60 p-2.5 dark:border-amber-800 dark:bg-amber-950/20">
+          <div className="text-xs font-semibold">Voci fisse <span className="font-normal text-muted-foreground">— si sommano sempre</span></div>
+          {fisse.map(({ r, i }) => <Riga key={i} r={r} i={i} ro={ro} upd={upd} togli={togli} />)}
+        </div>
+      )}
       {ips.map((ip) => (
-        <div key={ip.opt} className={`rounded-lg border p-2 ${ip.scelta ? (ip.agg ? "border-sky-300 bg-sky-50/50 dark:bg-sky-950/20" : "border-primary/50 bg-primary/[0.03]") : ""}`}>
+        <div key={ip.opt} className={`rounded-xl border-2 p-2.5 ${ip.scelta
+          ? (ip.agg ? "border-violet-300 bg-violet-50/60 dark:bg-violet-950/20" : accettato ? "border-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/30" : "border-blue-400 bg-blue-50/60 dark:bg-blue-950/30")
+          : "border-slate-200 bg-slate-50/50 opacity-90 dark:border-slate-700 dark:bg-slate-900/30"}`}>
           <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs">
             {ip.agg ? (
               <label className="flex items-center gap-1.5 font-semibold"><input type="checkbox" disabled={ro} checked={ip.scelta} onChange={(e) => setRighe((rr) => rr.map((x) => (blocco(x) === b && x.opt === ip.opt ? { ...x, on: e.target.checked } : x)))} />
@@ -213,7 +243,7 @@ function Blocco({ b, righe, ro, attivo, onAttiva, upd, togli, setRighe, accettat
                 {ip.n}ª IPOTESI</label>
             )}
             <span className="text-muted-foreground">{accettato && ip.scelta ? <Pill tono="verde">ACCETTATA</Pill> : ip.agg ? "si somma all'ipotesi scelta" : ip.scelta ? "quella proposta (nel totale)" : "alternativa"}</span>
-            <span className="ml-auto font-semibold tabular-nums">{eur(ip.totale)}</span>
+            <span className={`ml-auto font-bold tabular-nums ${ip.scelta ? "text-lg" : "text-sm text-muted-foreground"}`}>{eur(ip.totale)}</span>
             {!ro && <Button size="xs" variant="ghost" onClick={() => setRighe((rr) => [...rr, { t: "", p: "", opt: ip.opt, on: ip.scelta, agg: ip.agg, b }])} title="Altra voce nella stessa ipotesi"><Plus />voce</Button>}
           </div>
           <div className="space-y-1.5">{ip.righe.map(({ r, i }) => <Riga key={i} r={r} i={i} ro={ro} upd={upd} togli={togli} />)}</div>

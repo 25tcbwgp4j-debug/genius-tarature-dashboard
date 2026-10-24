@@ -62,9 +62,22 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
   }
   const altrePrecedenti = (ser?.precedenti || []).filter((p) => p.id !== idScheda);
 
+  const mancano = [!v.seriale && "seriale", !v.modello && "modello esatto"].filter(Boolean) as string[];
   return (
     <div className="space-y-3">
-      <div className={`grid gap-3 ${compatto ? "" : "sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2"}`}>
+      {/* 24/10/2026 (Christian): che dispositivo è, scritto chiaro in alto */}
+      {!compatto && (
+        <div className="rounded-lg border bg-muted/40 px-3 py-2">
+          <div className="text-base font-semibold uppercase leading-snug">{v.prodotto || "Prodotto non indicato"}</div>
+          <div className="mt-0.5 flex flex-wrap gap-x-4 text-sm text-muted-foreground">
+            <span>{v.modello || "modello esatto non indicato"}</span>
+            {v.anno && <span>anno {v.anno}</span>}
+            <span className="font-mono">{v.seriale ? `S/N ${v.seriale}` : "senza seriale"}</span>
+          </div>
+          {mancano.length > 0 && !ro && <div className="mt-1 text-xs text-amber-700">Manca: {mancano.join(", ")}{v.seriale ? " — premi «Decodifica» o leggilo sul GSX" : " — scrivi il seriale: il modello si compila da solo"}</div>}
+        </div>
+      )}
+      <div className="grid gap-3">
         <div className="grid grid-cols-[1fr_96px] gap-2">
           {/* div e non <label>: dentro c'è il menu a tendina (un label girerebbe i clic al pulsante) */}
           <div className="min-w-0">
