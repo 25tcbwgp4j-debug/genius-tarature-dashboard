@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOperatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
-import { assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, assSetConfig, nomeTecnico, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve } from "@/lib/assistenza";
+import { assRichiestaCollega, type Richiesta, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, assSetConfig, nomeTecnico, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve } from "@/lib/assistenza";
 import { Cruscotto } from "./Cruscotto";
+import { AvvisoRichieste } from "./Richieste";
 import { NuovaScheda } from "./scheda/NuovaScheda";
 import { SchedaView } from "./scheda/SchedaView";
 import { Badge } from "./scheda/ui";
@@ -56,6 +57,9 @@ export function Banco() {
   const [fase, setFase] = useState<{ fase: string; tecnico: string } | null>(faseLink ? { fase: faseLink, tecnico: sp.get("tecnico") || "" } : null);
   const [salto, setSalto] = useState("");
   const [nuova, setNuova] = useState(false);
+  // 24/10/2026: richieste provvisorie da WhatsApp (chatbot / chat staff) e quella da cui si sta aprendo la scheda
+  const [nRichieste, setNRichieste] = useState(0);
+  const [daRichiesta, setDaRichiesta] = useState<Richiesta | null>(null);
   const cerca = useRef<HTMLInputElement>(null);
   const idLink = sp.get("id");
   const [apertaLocale, setAperta] = useState<string | null>(null);
@@ -79,7 +83,7 @@ export function Banco() {
       : q.trim().length >= 3 ? tutteLeSchede(q, st) : assElenco(q, st, "", q.trim() ? 500 : 150);
     p.then((r) => { if (mia !== ultimaRicerca.current) return; setElenco(r.schede); setTotale(r.totale); })
       .catch((e) => { if (mia !== ultimaRicerca.current) return; toastErrore(e); setElenco([]); });
-    assCruscotto().then((r) => { setCruscotto(r.fasi); setTecniciCr(r.tecnici); }).catch(() => undefined);
+    assCruscotto().then((r) => { setCruscotto(r.fasi); setTecniciCr(r.tecnici); setNRichieste(r.richieste_nuove || 0); }).catch(() => undefined);
   }, [q, filtro, fase]);
   useEffect(() => { const t = setTimeout(carica, 250); return () => clearTimeout(t); }, [carica]);
   useEffect(() => {
@@ -155,6 +159,8 @@ export function Banco() {
         <Button className={cfg?.admin ? "" : "ml-auto"} onClick={() => setNuova(true)} title="F2 o Alt+N"><Plus />NUOVA SCHEDA</Button>
       </div>
 
+      <AvvisoRichieste n={nRichieste} operatore={operatore} onCambiate={carica}
+        onApriScheda={(r) => { setDaRichiesta(r); setNuova(true); }} />
       {/* 24/10/2026 (Christian): con una scheda aperta il cruscotto si riduce a una riga (prima occupava mezzo schermo) */}
       {aperta && !mostraCr ? (
         <button type="button" onClick={() => setMostraCr(true)} className="flex w-full items-center gap-2 rounded-xl border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm hover:bg-muted/50">
@@ -235,8 +241,16 @@ export function Banco() {
             : <div className="rounded-xl border bg-card p-8 text-center text-muted-foreground">Scegli una scheda dall&apos;elenco, scrivi il numero, oppure <b>NUOVA SCHEDA</b> (F2).</div>}
         </div>
       </div>
-      {nuova && <NuovaScheda cfg={cfg} operatore={operatore} setOperatore={setOperatore} onClose={() => setNuova(false)}
-        onCreata={(s) => { setNuova(false); carica(); apri(s.id); }} />}
+      {nuova && <NuovaScheda cfg={cfg} operatore={operatore} setOperatore={setOperatore} onClose={() => { setNuova(false); setDaRichiesta(null); }}
+        iniziale={daRichiesta ? { azienda: daRichiesta.cliente?.denominazione || daRichiesta.nome || "", telefono: daRichiesta.telefono || "",
+          email: daRichiesta.email || "", difetto: daRichiesta.problema || "", prodotto: daRichiesta.dispositivo || "", seriale: daRichiesta.seriale || "" } : undefined}
+        onCreata={async (s) => {
+          if (daRichiesta) {
+            try { await assRichiestaCollega(daRichiesta.id, { scheda_id: s.id, operatore }); toast.success(`Richiesta R-${daRichiesta.id.slice(0, 6).toUpperCase()} → scheda ${s.sigla}`); }
+            catch (e) { toastErrore(e); }
+          }
+          setDaRichiesta(null); setNuova(false); carica(); apri(s.id);
+        }} />}
     </div>
   );
 }

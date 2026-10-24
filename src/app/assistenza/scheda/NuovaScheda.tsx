@@ -15,14 +15,16 @@ import { CercaCliente, PillTipo, SchedaClienteModal } from "./Cliente";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, campo } from "./ui";
 
-export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata }: {
+export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, iniziale }: {
   cfg: ConfigAssistenza | null; operatore: string; setOperatore: (o: Operatore) => void; onClose: () => void; onCreata: (s: Scheda) => void;
+  /** 24/10/2026: scheda aperta da una richiesta WhatsApp: cliente e difetto già compilati */
+  iniziale?: { azienda?: string; telefono?: string; email?: string; difetto?: string; prodotto?: string; seriale?: string };
 }) {
   const [cli, setCli] = useState<{ azienda: string; telefono: string; email: string; referente: string; indirizzo_spedizione: string; note: string }>(
-    { azienda: "", telefono: "", email: "", referente: "", indirizzo_spedizione: "", note: "" });
+    { azienda: iniziale?.azienda || "", telefono: iniziale?.telefono || "", email: iniziale?.email || "", referente: "", indirizzo_spedizione: "", note: "" });
   const [anag, setAnag] = useState<Anagrafica | null>(null);
   const [schedaCli, setSchedaCli] = useState(false);
-  const [app, setApp] = useState<ValoriApparecchio>({});
+  const [app, setApp] = useState<ValoriApparecchio>({ difetto: iniziale?.difetto || undefined, seriale: iniziale?.seriale || undefined, prodotto: iniziale?.prodotto || undefined });
   const [stampaA4, setStampaA4] = useState(false);       // SEMPRE spenta di default (Christian 04/10)
   const [stampaEt, setStampaEt] = useState(true);
   const [inArrivo, setInArrivo] = useState(false);

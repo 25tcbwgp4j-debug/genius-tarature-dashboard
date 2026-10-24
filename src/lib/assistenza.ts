@@ -94,7 +94,15 @@ const j = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
 
 export const assConfig = (): Promise<ConfigAssistenza> => fetchAPI("/api/assistenza/config");
 export const assSetConfig = (b: { operatori_abilitati: boolean }): Promise<ConfigAssistenza> => fetchAPI("/api/assistenza/config", { method: "PATCH", body: JSON.stringify(b) });
-export const assCruscotto = (): Promise<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[] }> => fetchAPI("/api/assistenza/cruscotto");
+export const assCruscotto = (): Promise<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[]; richieste_nuove?: number }> => fetchAPI("/api/assistenza/cruscotto");
+/** 24/10/2026: richieste PROVVISORIE dal chatbot / chat WhatsApp, da trasformare in scheda o scartare. */
+export interface Richiesta { id: string; created_at: string; origine: string; telefono: string | null; nome: string | null; email: string | null;
+  dispositivo: string | null; seriale: string | null; problema: string | null; conversazione: string | null; anagrafica_id: string | null;
+  stato: string; cliente?: { id: string; denominazione: string; tipo_cliente: string | null } | null }
+export const assRichieste = (stato = "nuova"): Promise<{ richieste: Richiesta[]; n: number }> => fetchAPI(`/api/assistenza/richieste?stato=${stato}`);
+export const assRichiestaNuova = (b: Partial<Richiesta>) => fetchAPI("/api/assistenza/richieste", j(b));
+export const assRichiestaScarta = (id: string, b: { motivo: string; operatore: string }) => fetchAPI(`/api/assistenza/richieste/${id}/scarta`, j(b));
+export const assRichiestaCollega = (id: string, b: { scheda_id: string; operatore: string }) => fetchAPI(`/api/assistenza/richieste/${id}/collega`, j(b));
 export const assElencoFase = (fase: string, tecnico = ""): Promise<{ schede: SchedaBreve[]; totale: number }> =>
   fetchAPI(`/api/assistenza/schede?${new URLSearchParams({ fase, tecnico, limit: "500" })}`);
 export const assElenco = (q: string, stato: string, origine = "", limit = 150, offset = 0): Promise<{ schede: SchedaBreve[]; totale: number }> =>
