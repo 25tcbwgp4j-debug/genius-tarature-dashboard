@@ -38,9 +38,12 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
             return (<>
               <div className="w-36">{T("conto_vendita_prezzo", "Prezzo di vendita €", { type: "number", min: 0, step: 1 })}</div>
               <div className="w-36">{T("conto_vendita_margine", "Nostro margine €", { type: "number", min: 0, step: 1 })}</div>
+              {s.conto_vendita_valutazione != null && <div className="text-sm"><div className="text-xs text-muted-foreground">Valutazione concordata</div>{eur(Number(s.conto_vendita_valutazione))}</div>}
               {prezzo > 0 && <div className="text-sm">
                 <div className="text-xs text-muted-foreground">Al cliente = vendita {eur(prezzo)} − lavorazione {eur(lav)} − margine {eur(marg)}</div>
                 <b className={prezzo - lav - marg < 0 ? "text-red-700" : ""}>{eur(prezzo - lav - marg)}</b></div>}
+              {s.conto_vendita_sito && <a className="basis-full text-xs text-blue-700 underline" href={s.conto_vendita_sito.url} target="_blank" rel="noreferrer">
+                Sul sito: {s.conto_vendita_sito.descrizione} · {eur(s.conto_vendita_sito.prezzo)}{s.conto_vendita_sito.codice ? ` · Cod. ${s.conto_vendita_sito.codice}` : ""} (agg. {s.conto_vendita_sito.aggiornato.split("-").reverse().join("/")})</a>}
             </>);
           })()}
         </div>

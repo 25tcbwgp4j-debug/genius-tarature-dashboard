@@ -235,6 +235,15 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
               <Campo label="Referente"><input className={campo} disabled={ro} value={(v("referente") as string) || ""} onChange={(e) => set("referente", e.target.value)} /></Campo>
               <Campo label="Indirizzo di spedizione" className="sm:col-span-2"><input className={campo} disabled={ro} value={(v("indirizzo_spedizione") as string) || ""} onChange={(e) => set("indirizzo_spedizione", e.target.value)} /></Campo>
               <Campo label="Note visibili al cliente" className="sm:col-span-2"><input className={campo} disabled={ro} value={(v("note") as string) || ""} onChange={(e) => set("note", e.target.value)} /></Campo>
+              {/* 24/10/2026: dati che in FileMaker stavano scritti nelle note */}
+              <Campo label="Riferimento del cliente (rif.)"><input className={campo} disabled={ro} placeholder="es. M2479" value={(v("rif_cliente") as string) || ""} onChange={(e) => set("rif_cliente", e.target.value)} /></Campo>
+              <Campo label="Spedizione combinata (stesso pacco)"><input className={campo} disabled={ro} placeholder="es. TA63110" value={(v("spedizione_combinata") as string) || ""} onChange={(e) => set("spedizione_combinata", e.target.value.toUpperCase())} /></Campo>
+              <Campo label="DDT del cliente"><input className={campo} disabled={ro} value={(v("ddt_cliente") as string) || ""} onChange={(e) => set("ddt_cliente", e.target.value)} /></Campo>
+              <Campo label="Schede precedenti (EX)"><input className={campo} disabled={ro} value={(v("schede_precedenti") as string) || ""} onChange={(e) => set("schede_precedenti", e.target.value)} /></Campo>
+              {!!s.collegamenti?.combinata?.length && <div className="text-xs sm:col-span-2">
+                <span className="text-muted-foreground">Nello stesso pacco{s.arrivo_modo === "pony" ? " (pony)" : s.arrivo_modo === "corriere_cliente" ? " (corriere del cliente)" : ""}: </span>
+                {s.collegamenti.combinata.map((c) => <button key={c.id} type="button" className="mr-2 text-blue-700 underline" onClick={() => onApri(c.id)}>
+                  {c.sigla}{c.rif_cliente ? ` (${c.rif_cliente})` : ""}</button>)}</div>}
             </div>
           </div>
         </Sezione>
