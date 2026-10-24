@@ -19,7 +19,8 @@ export interface Anagrafica { id: string; denominazione: string; piva?: string |
   sdi?: string | null; pec?: string | null; tipo_cliente?: "privato" | "azienda" | "rivenditore" | null; vuole_fattura?: boolean | null;
   cellulare?: string | null; cellulare_whatsapp?: string | null; email_contabilita?: string | null; email_altre?: string | null;
   sped_presso?: string | null; sped_indirizzo?: string | null; sped_cap?: string | null; sped_comune?: string | null; sped_provincia?: string | null;
-  note_cliente?: string | null; origine?: string | null; corriere_default?: string | null; pagamento_default?: string | null }
+  note_cliente?: string | null; origine?: string | null; corriere_default?: string | null; pagamento_default?: string | null;
+  telefoni_altri?: string | null; consegna_default?: string | null; ritiro_prenotazione?: boolean | null; ritorno_corriere?: string | null }
 export interface SchedaCliente extends Anagrafica { schede: { id: string; sigla: string; prodotto: string | null; modello: string | null; difetto: string | null; stato: string; created_at: string }[] }
 export interface Scheda extends SchedaBreve {
   anagrafica_id: string | null; referente: string | null; telefono_referente: string | null; indirizzo_spedizione: string | null; imei: string | null;

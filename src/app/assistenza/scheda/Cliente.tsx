@@ -118,6 +118,18 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
               {T("email", "Email", { type: "email" })}
               {T("email_contabilita", "Email per la contabilità", { type: "email" })}
               {T("email_altre", "Altre email")}
+              {T("telefoni_altri", "Altri telefoni (moglie, ufficio, referenti…)", { placeholder: "333 1234567 (moglie), 06 1234567 (ufficio)" }, "sm:col-span-2")}
+            </div>
+          </fieldset>
+          {/* 24/10/2026: abitudini di consegna: la scheda nuova e il dialogo corriere le usano come valori iniziali */}
+          <fieldset className="space-y-2 rounded-lg border p-3">
+            <legend className="px-1 text-xs font-semibold text-muted-foreground">Consegna e corriere</legend>
+            <div className="flex flex-wrap items-end gap-4 text-sm">
+              <Campo label="Di solito"><Scelta valore={(f.consegna_default as "ritiro") || null} opzioni={[["ritiro", "Ritira in negozio"], ["spedizione", "Spedizione"]]} onChange={(v) => set("consegna_default", v)} /></Campo>
+              <Campo label="Corriere predefinito"><Scelta valore={(f.corriere_default as "UPS") || null} opzioni={[["UPS", "UPS"], ["DHL", "DHL"]]} onChange={(v) => set("corriere_default", v)} /></Campo>
+              <Campo label="Ritorno"><Scelta valore={(f.ritorno_corriere as "noi") || null} opzioni={[["noi", "Col nostro corriere"], ["cliente", "Corriere / pony del cliente"]]} onChange={(v) => set("ritorno_corriere", v)} /></Campo>
+              <label className="flex items-center gap-2"><input type="checkbox" className="size-4" checked={!!f.ritiro_prenotazione} onChange={(e) => set("ritiro_prenotazione", e.target.checked)} />Ritiro dal cliente con prenotazione</label>
+              {T("pagamento_default", "Pagamento abituale", { placeholder: "es. Bonifico riepilogo mensile, 1 gg FM" }, "min-w-64")}
             </div>
           </fieldset>
           <div className="grid gap-3 lg:grid-cols-2">
