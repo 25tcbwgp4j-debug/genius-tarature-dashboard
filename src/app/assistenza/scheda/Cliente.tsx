@@ -184,8 +184,20 @@ export function RiepilogoCliente({ a, nome, telefono, email }: { a: Anagrafica |
         {a?.cellulare_whatsapp && <span className="inline-flex items-center gap-1"><MessageCircle className="size-3.5" />WhatsApp</span>}
         {email && <span className="inline-flex items-center gap-1"><Mail className="size-3.5" />{email}</span>}
         {a?.piva && <span>P.IVA {a.piva}</span>}
-        {(a?.sped_comune || a?.comune) && <span>{a?.sped_comune || a?.comune}</span>}
+        {a?.referente && <span>Ref. {a.referente}</span>}
       </div>
+      {/* 24/10/2026 (Christian): sulla scheda gli stessi dati della scheda cliente, senza doverla aprire */}
+      {a && (
+        <div className="grid gap-x-4 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-2">
+          {a.indirizzo && <span><b className="font-medium text-foreground/80">Sede:</b> {[a.indirizzo, [a.cap, a.comune].filter(Boolean).join(" "), a.provincia && `(${a.provincia})`].filter(Boolean).join(", ")}</span>}
+          {a.sped_indirizzo && <span><b className="font-medium text-foreground/80">Spedizione:</b> {[a.sped_presso, a.sped_indirizzo, [a.sped_cap, a.sped_comune].filter(Boolean).join(" "), a.sped_provincia && `(${a.sped_provincia})`].filter(Boolean).join(", ")}</span>}
+          {(a.consegna_default || a.corriere_default) && <span><b className="font-medium text-foreground/80">Di solito:</b> {[a.consegna_default === "spedizione" ? "spedizione" : a.consegna_default === "ritiro" ? "ritira in negozio" : null,
+            a.corriere_default, a.ritiro_prenotazione ? "ritiro prenotato" : null, a.ritorno_corriere === "cliente" ? "ritorno col corriere del cliente" : a.ritorno_corriere === "noi" ? "ritorno col nostro corriere" : null].filter(Boolean).join(" · ")}</span>}
+          {a.pagamento_default && <span><b className="font-medium text-foreground/80">Pagamento:</b> {a.pagamento_default}</span>}
+          {a.telefoni_altri && <span className="sm:col-span-2"><b className="font-medium text-foreground/80">Altri numeri:</b> {a.telefoni_altri}</span>}
+          {a.note_cliente && <span className="sm:col-span-2 whitespace-pre-line"><b className="font-medium text-foreground/80">Note cliente:</b> {a.note_cliente}</span>}
+        </div>
+      )}
     </div>
   );
 }
