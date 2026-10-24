@@ -44,7 +44,7 @@ export interface Scheda extends SchedaBreve {
   preventivo: { diagnosi?: string; note?: string } | null; preventivo_stato: string | null; preventivo_operatore: string | null;
   preventivo_inviato_il: string | null; preventivo_inviato_da: string | null; ricambi_stato: string | null; ricambi_arrivo_previsto: string | null;
   ricambi_fornitore: string | null; ricambi_nota: string | null; esito_motivo: string | null;
-  /** 24/10/2026 (migr. 128) */ conto_vendita?: boolean; conto_vendita_prezzo?: number | null; tecnico_verifica: string | null; note_verifica: string | null;
+  /** 24/10/2026 (migr. 128) */ conto_vendita?: boolean; conto_vendita_prezzo?: number | null; conto_vendita_margine?: number | null; tecnico_verifica: string | null; note_verifica: string | null;
   tecnico_riparazione: string | null; note_riparazione: string | null; spedizione_tipo: string | null; spedizione_importo: number | null;
   chiusura: string | null; consegna_corriere: "noi" | "cliente" | null;
   verifica_assegnata_il: string | null; verifica_assegnata_da: string | null; verifica_chiusa_il: string | null; verifica_chiusa_da: string | null;

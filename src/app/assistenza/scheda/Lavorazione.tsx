@@ -31,9 +31,18 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
             <input type="checkbox" className="size-4" disabled={ro} checked={!!v("conto_vendita")} onChange={(e) => set("conto_vendita", e.target.checked)} />
             In conto vendita
           </label>
-          {!!v("conto_vendita") && (
-            <div className="w-36">{T("conto_vendita_prezzo", "Prezzo di vendita €", { type: "number", min: 0, step: 1 })}</div>
-          )}
+          {!!v("conto_vendita") && (() => {
+            // al cliente: prezzo di vendita − lavorazione fatta (es. batteria) − nostro margine (si decide alla vendita)
+            const n = (k: keyof Scheda) => Number(String(v(k) ?? "").replace(",", ".")) || 0;
+            const prezzo = n("conto_vendita_prezzo"), lav = n("totale_lavorazione"), marg = n("conto_vendita_margine");
+            return (<>
+              <div className="w-36">{T("conto_vendita_prezzo", "Prezzo di vendita €", { type: "number", min: 0, step: 1 })}</div>
+              <div className="w-36">{T("conto_vendita_margine", "Nostro margine €", { type: "number", min: 0, step: 1 })}</div>
+              {prezzo > 0 && <div className="text-sm">
+                <div className="text-xs text-muted-foreground">Al cliente = vendita {eur(prezzo)} − lavorazione {eur(lav)} − margine {eur(marg)}</div>
+                <b className={prezzo - lav - marg < 0 ? "text-red-700" : ""}>{eur(prezzo - lav - marg)}</b></div>}
+            </>);
+          })()}
         </div>
         <div className="space-y-2 rounded-lg border p-3">
           <div className="flex flex-wrap items-center gap-2">
