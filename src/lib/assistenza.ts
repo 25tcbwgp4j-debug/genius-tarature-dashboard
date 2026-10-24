@@ -187,3 +187,9 @@ export const nomeTecnico = (cod: string | null | undefined, tecnici: { codice: s
  *  (stessa regola del backend `paga_fine_mese`). */
 export const pagaFineMese = (s: { anagrafica: Anagrafica | null }): boolean =>
   /mensil|fine\s*mese|\bf\.?m\.?\b/i.test(s.anagrafica?.pagamento_default || "");
+
+/** 24/10/2026: linea STAFF Apple 334 (WAHA) in sola lettura, messaggi arrivati dal webhook. */
+export interface StaffMsg { id: string; chat_id: string; telefono: string | null; nome: string | null; da_noi: boolean; testo: string | null; tipo: string | null; media_url: string | null; inviato_il: string | null }
+export interface StaffConv { chat_id: string; telefono: string | null; nome: string | null; ultimo: StaffMsg; n: number }
+export const assStaffConversazioni = (q = ""): Promise<{ conversazioni: StaffConv[] }> => fetchAPI(`/api/chat-apple-staff/conversazioni?q=${encodeURIComponent(q)}`);
+export const assStaffMessaggi = (chat: string): Promise<{ messaggi: StaffMsg[] }> => fetchAPI(`/api/chat-apple-staff/messaggi?chat_id=${encodeURIComponent(chat)}`);

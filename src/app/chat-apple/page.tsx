@@ -10,7 +10,7 @@ import { Loader2, MessageCircle, Search, Send, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { listConversations, listMessages, sendText, usaChatApple, type ChatMessage, type Conversation } from "@/lib/chat-api";
-import { assRichiestaNuova } from "@/lib/assistenza";
+import { assRichiestaNuova, assStaffConversazioni, assStaffMessaggi, type StaffConv, type StaffMsg } from "@/lib/assistenza";
 
 const RE_EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
 
@@ -30,6 +30,81 @@ function datiCliente(msgs: ChatMessage[]): { nome: string | null; email: string 
 const ora = (s: string) => new Date(s).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export default function ChatApple() {
+  // 24/10/2026: due linee — il chatbot (si risponde da qui) e lo STAFF 334 (sola lettura: si invia solo su comando)
+  const [linea, setLinea] = useState<"chatbot" | "staff">("chatbot");
+  return (
+    <div className="space-y-2 p-3">
+      <div className="flex gap-1">
+        {([["chatbot", "Chatbot WhatsApp"], ["staff", "Staff 334 986 7400"]] as const).map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setLinea(k)} className={`rounded-lg border px-3 py-1.5 text-sm ${linea === k ? "bg-foreground text-background" : "bg-card hover:bg-muted"}`}>{l}</button>
+        ))}
+      </div>
+      {linea === "chatbot" ? <ChatChatbot /> : <ChatStaff />}
+    </div>
+  );
+}
+
+function ChatStaff() {
+  const [conv, setConv] = useState<StaffConv[] | null>(null);
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState<string | null>(null);
+  const [msgs, setMsgs] = useState<StaffMsg[] | null>(null);
+  useEffect(() => { const f = () => assStaffConversazioni(q).then((r) => setConv(r.conversazioni)).catch(toastErrore); f(); const t = setInterval(f, 15000); return () => clearInterval(t); }, [q]);
+  useEffect(() => { if (sel) { setMsgs(null); assStaffMessaggi(sel).then((r) => setMsgs(r.messaggi)).catch(toastErrore); } }, [sel]);
+  const c = conv?.find((x) => x.chat_id === sel) || null;
+  const dati = useMemo(() => datiCliente((msgs || []).map((m) => ({ direction: m.da_noi ? "outbound" : "inbound", body: m.testo } as ChatMessage))), [msgs]);
+  async function creaRichiesta() {
+    if (!c) return;
+    const ultimi = (msgs || []).filter((m) => !m.da_noi && m.testo).slice(-8).map((m) => `${m.inviato_il ? ora(m.inviato_il) : ""} ${m.testo}`).join("\n");
+    try {
+      const r = await assRichiestaNuova({ telefono: c.telefono, nome: dati.nome || c.nome, email: dati.email, conversazione: ultimi, origine: "whatsapp_staff" });
+      toast.success(`Richiesta R-${String(r.id).slice(0, 6).toUpperCase()} creata: la trovi in «Schede assistenza» → «Richieste da WhatsApp»`);
+    } catch (e) { toastErrore(e); }
+  }
+  return (
+    <div className="flex h-[calc(100vh-5rem)] gap-3">
+      <div className="flex w-80 shrink-0 flex-col rounded-xl border bg-card">
+        <div className="border-b p-2">
+          <div className="mb-1 px-1 text-xs text-muted-foreground">Messaggi arrivati da quando la linea è collegata al gestionale (24/10/2026). Sola lettura.</div>
+          <input className="h-9 w-full rounded-md border bg-background px-2 text-sm" placeholder="Cerca nome o numero" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {!conv ? <div className="p-4 text-center"><Loader2 className="inline animate-spin" /></div> : !conv.length ? <div className="p-4 text-sm text-muted-foreground">Ancora nessun messaggio.</div> : conv.map((x) => (
+            <button key={x.chat_id} type="button" onClick={() => setSel(x.chat_id)} className={`block w-full border-b px-3 py-2 text-left text-sm hover:bg-muted ${sel === x.chat_id ? "bg-muted" : ""}`}>
+              <div className="flex items-center gap-2"><b className="truncate">{x.nome || `+${x.telefono}`}</b><span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{x.ultimo.inviato_il ? ora(x.ultimo.inviato_il) : ""}</span></div>
+              <div className="truncate text-xs text-muted-foreground">{x.ultimo.da_noi ? "↪ " : ""}{x.ultimo.testo || `[${x.ultimo.tipo}]`}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col rounded-xl border bg-card">
+        {!c ? <div className="m-auto text-sm text-muted-foreground">Scegli una conversazione</div> : (
+          <>
+            <div className="flex flex-wrap items-center gap-3 border-b p-3">
+              <div><div className="font-semibold">{c.nome || `+${c.telefono}`}</div><div className="text-xs text-muted-foreground">+{c.telefono}</div></div>
+              <div className="rounded-lg border bg-muted/40 px-3 py-1.5 text-xs">
+                <div><span className="text-muted-foreground">Nome:</span> <b>{dati.nome || c.nome || "—"}</b></div>
+                <div><span className="text-muted-foreground">Email:</span> <b>{dati.email || "—"}</b></div>
+              </div>
+              <Button size="sm" className="ml-auto" onClick={creaRichiesta}><UserPlus />Crea richiesta di assistenza</Button>
+            </div>
+            <div className="flex-1 space-y-1.5 overflow-y-auto p-3">
+              {!msgs ? <div className="text-center"><Loader2 className="inline animate-spin" /></div> : msgs.map((m) => (
+                <div key={m.id} className={`max-w-[75%] rounded-lg px-3 py-1.5 text-sm ${m.da_noi ? "ml-auto bg-emerald-100 dark:bg-emerald-900/40" : "bg-muted"}`}>
+                  {m.testo ? <div className="whitespace-pre-line break-words">{m.testo}</div> : <div className="italic text-muted-foreground">[{m.tipo}]</div>}
+                  <div className="mt-0.5 text-right text-[10px] text-muted-foreground">{m.inviato_il ? ora(m.inviato_il) : ""}</div>
+                </div>
+              ))}
+            </div>
+            <div className="border-t p-2 text-xs text-muted-foreground">Dalla linea staff 334 si risponde dal telefono del negozio (dal gestionale nessun invio).</div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChatChatbot() {
   usaChatApple(true);
   const [conv, setConv] = useState<Conversation[] | null>(null);
   const [q, setQ] = useState("");
@@ -65,7 +140,7 @@ export default function ChatApple() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-2rem)] gap-3 p-3">
+    <div className="flex h-[calc(100vh-5rem)] gap-3">
       <div className="flex w-80 shrink-0 flex-col rounded-xl border bg-card">
         <div className="border-b p-2">
           <div className="mb-1 flex items-center gap-2 px-1 text-sm font-semibold"><MessageCircle className="size-4" />Chat WhatsApp Apple</div>
