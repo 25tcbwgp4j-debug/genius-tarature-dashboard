@@ -39,6 +39,7 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
             <b>Pagata</b>{c.pagamento.il ? ` il ${dataIt(c.pagamento.il)}` : ""}{c.pagamento.modo ? ` · ${c.pagamento.modo}` : ""}
             <span className="text-muted-foreground"> · da {c.pagamento.fonte}</span>
+            {c.pagamento.rimborso && <div className="mt-1 text-red-700"><b>Rimborsata {eur(c.pagamento.rimborso.importo)}</b> con nota di credito n. {c.pagamento.rimborso.note_credito}</div>}
           </div>
         ) : s.saldo > 0 ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-sm dark:border-amber-900 dark:bg-amber-950/30">

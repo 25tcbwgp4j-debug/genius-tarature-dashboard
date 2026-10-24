@@ -38,7 +38,8 @@ export interface Scheda extends SchedaBreve {
     fattura?: FatturaCollegata | null; documento?: { id: string; sigla: string; stato: string; totale: number } | null;
     /** 24/10/2026: altre fatture che citano la scheda, bonifici arrivati con la scheda in causale, come risulta pagata */
     altre_fatture?: FatturaCollegata[]; combinata?: { id: string; sigla: string; stato: string; prodotto: string | null; rif_cliente: string | null }[]; bonifici?: { id: string; data: string; importo: number; ordinante: string | null; causale: string | null; stato: string }[];
-    pagamento?: { il: string | null; modo: string | null; fonte: string } | null };
+    pagamento?: { il: string | null; modo: string | null; fonte: string; rimborso?: { importo: number; note_credito: string } } | null;
+    note_credito?: { id: string; numero: string; data: string; totale: number }[] };
   anagrafica: Anagrafica | null; etichetta_stato: string; prova: boolean;
   // v2 (04-05/10/2026)
   famiglia: string | null; modello_fonte: string | null; modello_da_scheda: string | null; con_alimentatore: boolean | null;
