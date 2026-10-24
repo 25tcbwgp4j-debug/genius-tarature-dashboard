@@ -57,7 +57,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const sporca = Object.keys(b).length > 0;
   const v = <K extends keyof Scheda>(k: K): Scheda[K] | undefined => (k in b ? (b as Scheda)[k] : s?.[k]);
   const set = useCallback((k: keyof Scheda, val: unknown) => setB((x) => ({ ...x, [k]: val })), []);
-  const ro = !!s?.sola_lettura || s?.stato === "annullata";
+  // 24/10/2026 (Christian): le storiche si correggono; le CHIUSE (consegnate, annullate) solo il titolare, dopo «Cambia stato»
+  const ro = s?.stato === "annullata" || (s?.stato === "consegnato" && !admin);
 
   // bozza del preventivo dentro la bozza della scheda (aggiornamenti funzionali: più modifiche nello stesso clic)
   const setBz = useCallback((f: (bz: BozzaPreventivo) => BozzaPreventivo) => setB((x) => {
@@ -179,7 +180,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           <Button size="icon-xs" variant="outline" disabled={!s.successiva} onClick={() => s.successiva && onApri(s.successiva.id)} title="Successiva (Alt+→)"><ArrowRight /></Button>
           <Badge stato={st} />
           {s.prova && s.origine === "prova" && <Pill tono="ambra">PROVA</Pill>}
-          {s.sola_lettura && <Pill>storica FileMaker · sola lettura</Pill>}
+          {s.sola_lettura && <Pill>storica FileMaker</Pill>}
           <span className="hidden min-w-0 truncate text-sm text-muted-foreground md:inline">{s.azienda || s.nominativo} · {s.modello || s.prodotto}</span>
           <div className="ml-auto flex items-center gap-1">
             <Button size="sm" variant="ghost" onClick={ricarica} title="Ricarica"><RefreshCw /></Button>
@@ -211,8 +212,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           try { const n = await assAzione(s.id, "duplica", { operatore, stesso_dispositivo: confirm("Stesso dispositivo? (OK = sì, Annulla = solo stesso cliente)") }); toast.success(`Nuova scheda ${n.sigla}`); onCambiata(); onApri(n.id); }
           catch (e) { toastErrore(e); }
         }}><Copy />Duplica</Button>}
-        {st === "consegnato" && !ro && !admin && <Button size="sm" variant="ghost" onClick={() => azione("riapri", {}, "Scheda riaperta")}><RotateCcw />Riapri</Button>}
-        {admin && <Button size="sm" variant="ghost" onClick={() => setDlg({ k: "cambia_stato" })} title="Riporta la scheda a qualsiasi stato (anche indietro)"><RotateCcw />Cambia stato</Button>}
+        {(admin || !["consegnato", "annullata"].includes(st)) && <Button size="sm" variant="ghost" onClick={() => setDlg({ k: "cambia_stato" })} title="Riporta la scheda a qualsiasi stato (anche indietro)"><RotateCcw />Cambia stato</Button>}
         {admin && !ro && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => {
           const m = prompt("Motivo dell'annullamento della scheda?");
           if (m !== null) azione("annulla", { motivo: m }, "Scheda annullata");
