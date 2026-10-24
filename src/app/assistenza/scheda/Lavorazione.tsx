@@ -61,7 +61,12 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
           )}
           {v("ricambi_stato") && v("ricambi_stato") !== "non_servono" && T("ricambi_nota", "Nota ricambi (interna)")}
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
+        {/* 24/10/2026 (Christian): tecnici e note tecniche interne a richiesta (sono anche in «Verifica e riparazione») */}
+        <details className="rounded-lg border px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">Dettagli tecnici <span className="font-normal text-muted-foreground">
+            — {[v("tecnico_verifica") && `verifica ${v("tecnico_verifica")}`, v("tecnico_riparazione") && `riparazione ${v("tecnico_riparazione")}`,
+              (v("note_verifica") || v("note_riparazione")) && "con note"].filter(Boolean).join(" · ") || "nessun dato"}</span></summary>
+        <div className="mt-2 grid gap-3 md:grid-cols-2">
           <div className="space-y-2">
             {Tec("tecnico_verifica", "Tecnico della verifica")}
             <Campo label="Note di verifica (interne)"><textarea className={area} rows={2} disabled={ro} value={(v("note_verifica") as string) || ""} onChange={(e) => set("note_verifica", e.target.value)} /></Campo>
@@ -71,6 +76,7 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
             <Campo label="Note di riparazione (interne)"><textarea className={area} rows={2} disabled={ro} value={(v("note_riparazione") as string) || ""} onChange={(e) => set("note_riparazione", e.target.value)} /></Campo>
           </div>
         </div>
+        </details>
         <div className="grid gap-3 md:grid-cols-[1fr_230px]">
           <Campo label="Lavorazione effettuata (va al cliente)" aiuto={s.preventivo_stato === "accettato" ? "Precompilata con l'ipotesi accettata e il suo importo: correggi se serve." : undefined}>
             <textarea className={area} rows={Math.max(3, String(v("lavorazione") || "").split("\n").length)} disabled={ro} value={(v("lavorazione") as string) || ""} onChange={(e) => set("lavorazione", e.target.value)} />
