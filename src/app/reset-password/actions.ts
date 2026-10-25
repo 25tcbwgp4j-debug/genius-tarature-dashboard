@@ -13,8 +13,8 @@ export async function confirmPasswordReset(formData: FormData) {
   const confirmPassword = String(formData.get("confirm_password") || "");
 
   if (!token) redirect("/forgot-password?error=missing_token");
-  if (newPassword.length < 8) redirect(`/reset-password?token=${token}&error=too_short`);
-  if (newPassword !== confirmPassword) redirect(`/reset-password?token=${token}&error=mismatch`);
+  if (newPassword.length < 8) redirect(`/reset-password?token=${encodeURIComponent(token)}&error=too_short`);
+  if (newPassword !== confirmPassword) redirect(`/reset-password?token=${encodeURIComponent(token)}&error=mismatch`);
 
   let ok = false;
   try {
@@ -26,10 +26,10 @@ export async function confirmPasswordReset(formData: FormData) {
     });
     ok = res.ok;
   } catch {
-    redirect(`/reset-password?token=${token}&error=network`);
+    redirect(`/reset-password?token=${encodeURIComponent(token)}&error=network`);
   }
 
-  if (!ok) redirect(`/reset-password?token=${token}&error=invalid`);
+  if (!ok) redirect(`/reset-password?token=${encodeURIComponent(token)}&error=invalid`);
 
   redirect("/login?reset=1");
 }

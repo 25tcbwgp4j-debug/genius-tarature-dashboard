@@ -19,7 +19,8 @@ export async function login(formData: FormData) {
   const email = String(formData.get("email") || "").trim();
   const password = String(formData.get("password") || "");
   const fromRaw = String(formData.get("from") || "/");
-  const from = fromRaw.startsWith("/") && !fromRaw.startsWith("//") ? fromRaw : "/";
+  // 25/10/2026 (audit): solo percorsi interni; «/\\evil.com» e «//evil.com» i browser li leggono come un altro sito
+  const from = /^\/(?![\/\\])[^\s]*$/.test(fromRaw) ? fromRaw : "/";
 
   if (!email || !password) {
     redirect("/login?error=invalid");
