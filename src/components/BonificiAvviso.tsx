@@ -88,6 +88,7 @@ function Avviso() {
   }, [carica, daUrl]);
 
   if (SENZA.some((p) => pathname.startsWith(p))) return null;
+  if (!admin) return null;   // 25/10/2026 (audit): i bonifici sono dati bancari, li gestisce solo il titolare
   const n = st?.da_gestire || 0;
   const problema = st?.ultimo_controllo && st.ultimo_controllo.esito !== "ok";
   const dich = admin ? st?.dichiarati_da_riscontrare || 0 : 0;
