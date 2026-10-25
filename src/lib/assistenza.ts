@@ -193,3 +193,7 @@ export interface StaffMsg { id: string; chat_id: string; telefono: string | null
 export interface StaffConv { chat_id: string; telefono: string | null; nome: string | null; ultimo: StaffMsg; n: number }
 export const assStaffConversazioni = (q = ""): Promise<{ conversazioni: StaffConv[] }> => fetchAPI(`/api/chat-apple-staff/conversazioni?q=${encodeURIComponent(q)}`);
 export const assStaffMessaggi = (chat: string): Promise<{ messaggi: StaffMsg[] }> => fetchAPI(`/api/chat-apple-staff/messaggi?chat_id=${encodeURIComponent(chat)}`);
+/** 25/10/2026: chi è il numero — cliente del gestionale o nome nella rubrica del telefono staff 334. */
+export interface NomeNumero { nome: string; fonte: string; anagrafica_id: string | null; rubrica_334: string | null }
+export const assNomiNumeri = (tel: string[]): Promise<{ nomi: Record<string, NomeNumero> }> =>
+  fetchAPI(`/api/chat-apple-nomi?t=${encodeURIComponent(tel.slice(0, 400).join(","))}`);

@@ -10,7 +10,22 @@ import { Loader2, MessageCircle, Search, Send, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { listConversations, listMessages, sendText, usaChatApple, type ChatMessage, type Conversation } from "@/lib/chat-api";
-import { assRichiestaNuova, assStaffConversazioni, assStaffMessaggi, type StaffConv, type StaffMsg } from "@/lib/assistenza";
+import { assNomiNumeri, assRichiestaNuova, assStaffConversazioni, assStaffMessaggi, type NomeNumero, type StaffConv, type StaffMsg } from "@/lib/assistenza";
+
+/** nomi dei numeri (gestionale o rubrica 334), caricati per l'elenco visibile */
+function useNomi(telefoni: string[]) {
+  const [nomi, setNomi] = useState<Record<string, NomeNumero>>({});
+  const chiave = telefoni.join(",");
+  useEffect(() => { if (telefoni.length) assNomiNumeri(telefoni).then((r) => setNomi(r.nomi)).catch(() => undefined); }, [chiave]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (tel: string | null | undefined) => {
+    const d = String(tel || "").replace(/\D/g, "");
+    return nomi[d.length === 10 && d.startsWith("3") ? `39${d}` : d];
+  };
+}
+function Etichetta({ n }: { n?: NomeNumero }) {
+  if (!n) return null;
+  return <span className={`shrink-0 rounded px-1 text-[10px] ${n.fonte === "gestionale" ? "bg-emerald-100 text-emerald-900" : "bg-slate-100 text-slate-700"}`}>{n.fonte === "gestionale" ? "cliente" : "rubrica 334"}</span>;
+}
 
 const RE_EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
 
@@ -53,6 +68,7 @@ function ChatStaff() {
   useEffect(() => { if (sel) { setMsgs(null); assStaffMessaggi(sel).then((r) => setMsgs(r.messaggi)).catch(toastErrore); } }, [sel]);
   const c = conv?.find((x) => x.chat_id === sel) || null;
   const dati = useMemo(() => datiCliente((msgs || []).map((m) => ({ direction: m.da_noi ? "outbound" : "inbound", body: m.testo } as ChatMessage))), [msgs]);
+  const nomeDi = useNomi((conv || []).map((x) => x.telefono || ""));
   async function creaRichiesta() {
     if (!c) return;
     const ultimi = (msgs || []).filter((m) => !m.da_noi && m.testo).slice(-8).map((m) => `${m.inviato_il ? ora(m.inviato_il) : ""} ${m.testo}`).join("\n");
@@ -71,7 +87,7 @@ function ChatStaff() {
         <div className="flex-1 overflow-y-auto">
           {!conv ? <div className="p-4 text-center"><Loader2 className="inline animate-spin" /></div> : !conv.length ? <div className="p-4 text-sm text-muted-foreground">Ancora nessun messaggio.</div> : conv.map((x) => (
             <button key={x.chat_id} type="button" onClick={() => setSel(x.chat_id)} className={`block w-full border-b px-3 py-2 text-left text-sm hover:bg-muted ${sel === x.chat_id ? "bg-muted" : ""}`}>
-              <div className="flex items-center gap-2"><b className="truncate">{x.nome || `+${x.telefono}`}</b><span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{x.ultimo.inviato_il ? ora(x.ultimo.inviato_il) : ""}</span></div>
+              <div className="flex items-center gap-2"><b className="truncate">{nomeDi(x.telefono)?.nome || x.nome || `+${x.telefono}`}</b><Etichetta n={nomeDi(x.telefono)} /><span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{x.ultimo.inviato_il ? ora(x.ultimo.inviato_il) : ""}</span></div>
               <div className="truncate text-xs text-muted-foreground">{x.ultimo.da_noi ? "↪ " : ""}{x.ultimo.testo || `[${x.ultimo.tipo}]`}</div>
             </button>
           ))}
@@ -122,12 +138,13 @@ function ChatChatbot() {
   }, [sel]);
   const c = conv?.find((x) => x.phone_number === sel) || null;
   const dati = useMemo(() => datiCliente(msgs || []), [msgs]);
+  const nomeDi = useNomi((conv || []).map((x) => x.phone_number));
 
   async function creaRichiesta() {
     if (!sel) return;
     const ultimi = (msgs || []).filter((m) => m.direction === "inbound" && m.body).slice(-8).map((m) => `${ora(m.created_at)} ${m.body}`).join("\n");
     try {
-      const r = await assRichiestaNuova({ telefono: sel, nome: dati.nome || c?.sender_name || null, email: dati.email,
+      const r = await assRichiestaNuova({ telefono: sel, nome: dati.nome || nomeDi(sel)?.nome || c?.sender_name || null, email: dati.email,
         problema: null, conversazione: ultimi, origine: "whatsapp_staff" });
       toast.success(`Richiesta R-${String(r.id).slice(0, 6).toUpperCase()} creata: la trovi in «Schede assistenza» → «Richieste da WhatsApp»`);
     } catch (e) { toastErrore(e); }
@@ -151,7 +168,7 @@ function ChatChatbot() {
           {!conv ? <div className="p-4 text-center"><Loader2 className="inline animate-spin" /></div> : conv.map((x) => (
             <button key={x.phone_number} type="button" onClick={() => setSel(x.phone_number)}
               className={`block w-full border-b px-3 py-2 text-left text-sm hover:bg-muted ${sel === x.phone_number ? "bg-muted" : ""}`}>
-              <div className="flex items-center gap-2"><b className="truncate">{x.sender_name || `+${x.phone_number}`}</b>
+              <div className="flex items-center gap-2"><b className="truncate">{nomeDi(x.phone_number)?.nome || x.sender_name || `+${x.phone_number}`}</b><Etichetta n={nomeDi(x.phone_number)} />
                 {x.unread_count > 0 && <span className="rounded-full bg-emerald-600 px-1.5 text-[10px] text-white">{x.unread_count}</span>}
                 <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{ora(x.last_message_at)}</span></div>
               <div className="truncate text-xs text-muted-foreground">{x.last_direction === "outbound" ? "↪ " : ""}{x.last_message_body || `[${x.last_message_type}]`}</div>
@@ -163,7 +180,7 @@ function ChatChatbot() {
         {!sel ? <div className="m-auto text-sm text-muted-foreground">Scegli una conversazione</div> : (
           <>
             <div className="flex flex-wrap items-center gap-3 border-b p-3">
-              <div><div className="font-semibold">{c?.sender_name || `+${sel}`}</div><div className="text-xs text-muted-foreground">+{sel}</div></div>
+              <div><div className="font-semibold">{nomeDi(sel)?.nome || c?.sender_name || `+${sel}`}</div><div className="text-xs text-muted-foreground">+{sel}{nomeDi(sel)?.rubrica_334 && nomeDi(sel)?.fonte === "gestionale" ? ` · in rubrica 334: ${nomeDi(sel)?.rubrica_334}` : ""}</div></div>
               {/* dati riconosciuti dai messaggi del cliente (QR → nome e cognome → email) */}
               <div className="rounded-lg border bg-muted/40 px-3 py-1.5 text-xs">
                 <div><span className="text-muted-foreground">Nome:</span> <b>{dati.nome || c?.sender_name || "—"}</b></div>
