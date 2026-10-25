@@ -9,6 +9,7 @@ interface LoginPageProps {
 function errorMessage(code?: string): string | null {
   if (!code) return null;
   if (code === "invalid") return "Nome utente/email o password non validi. Riprova.";
+  if (code === "bloccato") return "Troppi tentativi sbagliati: accesso bloccato per 15 minuti. Il titolare è stato avvisato.";
   if (code === "backend_unreachable")
     return "Backend non raggiungibile. Riprova fra qualche istante.";
   if (code === "not_configured")

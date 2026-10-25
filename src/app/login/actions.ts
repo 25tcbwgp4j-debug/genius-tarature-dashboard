@@ -1,6 +1,7 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { createHmac } from "node:crypto";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AUTH_COOKIE_NAME } from "@/lib/auth";
 
@@ -28,9 +29,15 @@ export async function login(formData: FormData) {
 
   let res: Response;
   try {
+    // 25/10/2026 (sicurezza): il backend blocca i tentativi per account E dispositivo; l'IP del dispositivo lo sa solo
+    // Vercel, quindi lo si passa firmato (LOGIN_IP_SECRET, uguale su Vercel e Railway): non si può falsificare
+    const h = await headers();
+    const ip = (h.get("x-real-ip") || h.get("x-forwarded-for")?.split(",")[0] || "").trim().slice(0, 64);
+    const seg = process.env.LOGIN_IP_SECRET || "";
+    const firmati: Record<string, string> = ip && seg ? { "X-Client-IP": ip, "X-Client-IP-Firma": createHmac("sha256", seg).update(ip).digest("hex") } : {};
     res = await fetch(`${BACKEND_URL}/api/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...firmati },
       body: JSON.stringify({ email, password }),
       cache: "no-store",
     });
@@ -38,6 +45,9 @@ export async function login(formData: FormData) {
     redirect("/login?error=backend_unreachable");
   }
 
+  if (res.status === 429) {
+    redirect("/login?error=bloccato");
+  }
   if (res.status === 401) {
     redirect(`/login?error=invalid${fromRaw !== "/" ? `&from=${encodeURIComponent(fromRaw)}` : ""}`);
   }
