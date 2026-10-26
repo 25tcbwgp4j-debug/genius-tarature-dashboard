@@ -17,6 +17,7 @@ import { assRichiestaCollega, type Richiesta, STATI_RIPARAZIONE, assConfig, assC
 import { Cruscotto } from "./Cruscotto";
 import { AvvisoRichieste } from "./Richieste";
 import { PerCliente } from "./PerCliente";
+import { DaGestire } from "./DaGestire";
 import { NuovaScheda } from "./scheda/NuovaScheda";
 import { SchedaView } from "./scheda/SchedaView";
 import { Badge } from "./scheda/ui";
@@ -97,6 +98,11 @@ export function Banco() {
     assCruscotto().then((r) => { setCruscotto(r.fasi); setTecniciCr(r.tecnici); setNRichieste(r.richieste_nuove || 0); }).catch(() => undefined);
   }, [q, filtro, fase]);
   useEffect(() => { const t = setTimeout(carica, 250); return () => clearTimeout(t); }, [carica]);
+  // 26/10/2026: il cruscotto (e il banner «Da gestire adesso») si aggiorna da solo ogni minuto
+  useEffect(() => {
+    const t = setInterval(() => assCruscotto().then((r) => { setCruscotto(r.fasi); setNRichieste(r.richieste_nuove || 0); }).catch(() => undefined), 60000);
+    return () => clearInterval(t);
+  }, []);
   useEffect(() => {
     const n = sp.get("n");
     if (n) assPerNumero(n).then((r) => setAperta(r.id)).catch(toastErrore);
@@ -172,6 +178,7 @@ export function Banco() {
         {perCliente && <PerCliente operatore={operatore} onClose={() => setPerCliente(false)} onApri={(id) => { setPerCliente(false); apri(id); }} />}
       </div>
 
+      <DaGestire fasi={cruscotto} onApri={(f) => { setFase({ fase: f, tecnico: "" }); setElenco(null); setQ(""); }} />
       <AvvisoRichieste n={nRichieste} operatore={operatore} onCambiate={carica}
         onApriScheda={(r) => { setDaRichiesta(r); setNuova(true); }} />
       {/* 24/10/2026 (Christian): con una scheda aperta il cruscotto si riduce a una riga (prima occupava mezzo schermo) */}
