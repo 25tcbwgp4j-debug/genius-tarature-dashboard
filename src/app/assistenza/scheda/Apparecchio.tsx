@@ -16,6 +16,7 @@ export type ValoriApparecchio = {
   famiglia?: string | null; prodotto?: string | null; anno?: number | null; modello?: string | null; modello_fonte?: string | null; modello_da_scheda?: string | null;
   seriale?: string | null; imei?: string | null; difetto?: string | null; accessori?: string | null; con_alimentatore?: boolean | null;
   password_dispositivo?: string | null; apple_id?: string | null; password_apple_id?: string | null;
+  numero_interno?: string | null;   // 26/10/2026 (62588): riferimento del rivenditore/cliente
 };
 type K = keyof ValoriApparecchio;
 
@@ -123,6 +124,11 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
           {v.seriale && <a className="inline-flex h-9 items-center gap-1 rounded-md border px-2 text-xs hover:bg-muted" target="_blank" rel="noreferrer"
             href={`https://gsx2.apple.com/product-details/${encodeURIComponent(String(v.seriale).trim())}`} title="Apri il seriale su GSX (serve essere loggati)"><ExternalLink className="size-3.5" />GSX</a>}
         </div>
+      </Campo>
+
+      <Campo label="Riferimento del rivenditore / cliente (il loro numero interno)" aiuto="Va nell'oggetto delle mail e nei WhatsApp come «Vs. rif.»">
+        <input className={`${campo} font-mono`} disabled={ro} value={v.numero_interno || ""} placeholder="es. RMA 4521 · ordine 18833 · loro n. scheda"
+          onChange={(e) => set("numero_interno", e.target.value)} />
       </Campo>
 
       <Campo label="Difetto indicato dal cliente *">

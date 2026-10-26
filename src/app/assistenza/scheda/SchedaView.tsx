@@ -166,6 +166,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     famiglia: v("famiglia"), prodotto: v("prodotto"), anno: v("anno"), modello: v("modello"), modello_fonte: v("modello_fonte"), modello_da_scheda: v("modello_da_scheda"),
     seriale: v("seriale"), imei: v("imei"), difetto: v("difetto"), accessori: v("accessori"), con_alimentatore: v("con_alimentatore"),
     password_dispositivo: v("password_dispositivo"), apple_id: v("apple_id"), password_apple_id: v("password_apple_id"),
+    numero_interno: v("numero_interno"),
   };
   const bz = bozzaPreventivo({ ...s, ...b });
   const st = s.stato;
@@ -178,6 +179,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           {onChiudi && <Button size="icon-sm" variant="ghost" className="lg:hidden" onClick={onChiudi} title="Torna all'elenco"><ArrowLeft /></Button>}
           <Button size="icon-xs" variant="outline" disabled={!s.precedente} onClick={() => s.precedente && onApri(s.precedente.id)} title="Precedente (Alt+←)"><ArrowLeft /></Button>
           <span className="text-2xl font-bold tabular-nums tracking-tight">{s.sigla}</span>
+          {s.numero_interno && <span className="rounded-md border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:bg-blue-950/30 dark:text-blue-100" title="Riferimento del rivenditore / cliente">Vs. rif. {s.numero_interno}</span>}
           <Button size="icon-xs" variant="outline" disabled={!s.successiva} onClick={() => s.successiva && onApri(s.successiva.id)} title="Successiva (Alt+→)"><ArrowRight /></Button>
           <Badge stato={st} />
           {s.prova && s.origine === "prova" && <Pill tono="ambra">PROVA</Pill>}

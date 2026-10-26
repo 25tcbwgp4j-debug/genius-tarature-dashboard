@@ -164,7 +164,9 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
   const [wa, setWa] = useState(true);
   const [busy, setBusy] = useState(false);
   const [fatto, setFatto] = useState<Esito | null>(null);
-  const pagEff = pag || (cons === "spedizione" ? "bonifico" : "");
+  // 26/10/2026 (Christian, 63118): a costo zero niente pagamento da chiedere (né bonifico, né consuntivo, né fattura)
+  const gratis = (Number(String(tot).replace(",", ".")) || 0) - (Number(s.acconto) || 0) <= 0.009;
+  const pagEff = gratis ? "" : (pag || (cons === "spedizione" ? "bonifico" : ""));
   const corpo = useMemo(() => ({ consegna_modo: cons, pagamento_modo: pagEff, totale_lavorazione: tot, indirizzo_spedizione: ind }), [cons, pagEff, tot, ind]);
   async function invia() {
     setBusy(true);
@@ -185,16 +187,17 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <Campo label="Pagamento">
+              {gratis ? <div className={`${campo} bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-200`}>Nessun pagamento (totale € 0)</div> : (
               <select className={campo} value={pagEff} onChange={(e) => setPag(e.target.value)}>
-                <option value="">Al banco (contanti / POS)</option><option value="bonifico">Bonifico (IBAN)</option><option value="paypal">PayPal (+3%)</option><option value="fine_mese">Fine mese (rivenditore)</option></select>
+                <option value="">Al banco (contanti / POS)</option><option value="bonifico">Bonifico (IBAN)</option><option value="paypal">PayPal (+3%)</option><option value="fine_mese">Fine mese (rivenditore)</option></select>)}
             </Campo>
             <Campo label="Totale € (IVA compresa)"><input className={`${campo} text-right font-semibold`} inputMode="decimal" value={tot} onChange={(e) => setTot(e.target.value.replace(",", "."))} /></Campo>
             <Campo label="Esito">
               <select className={campo} value={esito} onChange={(e) => setEsito(e.target.value)}><option value="EFFETTUATO">Effettuato</option><option value="NEGATIVO">Negativo</option><option value="DA ULTIMARE">Da ultimare</option></select>
             </Campo>
           </div>
-          {cons === "spedizione" && <Campo label="Indirizzo di spedizione (va nella causale del bonifico)"><input className={campo} value={ind} onChange={(e) => setInd(e.target.value)} placeholder="via, CAP, città" /></Campo>}
-          {cons === "spedizione" && <p className="text-xs text-muted-foreground">{pagEff === "bonifico" ? "Al cliente va il CONSUNTIVO con IBAN e causale: dopo il bonifico si segna «Pagato» e si spedisce." : "Per la spedizione di solito si chiede il bonifico (niente commissioni della carta)."}</p>}
+          {cons === "spedizione" && <Campo label={gratis ? "Indirizzo di spedizione" : "Indirizzo di spedizione (va nella causale del bonifico)"}><input className={campo} value={ind} onChange={(e) => setInd(e.target.value)} placeholder="via, CAP, città" /></Campo>}
+          {cons === "spedizione" && <p className="text-xs text-muted-foreground">{gratis ? "Nulla da pagare: al cliente va l'avviso «PRONTO PER LA SPEDIZIONE, nessun importo da pagare, in attesa del ritiro del corriere» — senza consuntivo, IBAN né richiesta di fattura. Poi si fa la spedizione e parte il tracking." : pagEff === "bonifico" ? "Al cliente va il CONSUNTIVO con IBAN e causale: dopo il bonifico si segna «Pagato» e si spedisce." : "Per la spedizione di solito si chiede il bonifico (niente commissioni della carta)."}</p>}
           {!lavorazione && !s.lavorazione && <p className="text-xs text-amber-700">La lavorazione è vuota: si riempie con le righe accettate del preventivo.</p>}
           <Anteprima s={s} corpo={pagEff === "fine_mese" ? { ...corpo, tipo: "pronto" } : corpo} />
           <Canali mail={mail} wa={wa} setMail={setMail} setWa={setWa} />
