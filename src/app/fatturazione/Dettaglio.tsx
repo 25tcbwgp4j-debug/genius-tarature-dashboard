@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  AlertTriangle, Banknote, Copy, CreditCard, FileCode2, FileDown, Link2, Loader2, Mail, MessageCircle, Pencil, Printer,
+  AlertTriangle, Banknote, BookUser, Copy, CreditCard, FileCode2, FileDown, Link2, Loader2, Mail, MessageCircle, Pencil, Printer,
   PackagePlus, Receipt, RotateCcw, Send, Smartphone, Trash2, Undo2, Upload, Wallet, X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -23,9 +23,11 @@ import { apriConfermaBonifico, useBonificoDelDocumento } from "@/components/Boni
 import { toastErrore } from "@/lib/errori";
 import {
   fattConfig, fattDettaglio, fattDuplica, fattElimina, fattEmetti, fattEsitoManuale, fattInvia, fattLinkStripe, fattNotaCredito, fattTrasmessaManuale,
-  fattPagamento, fattRegolazione, fattUrlPdf, fattUrlStampa, fattUrlXml, pagAnnulla, pagIncassaFattura, pagRate, pagTerminiFattura,
+  fattPagamento, fattRegolazione, fattUrlPdf, fattUrlRicevutaSdi, fattUrlStampa, fattUrlXml, pagAnnulla, pagIncassaFattura, pagRate, pagTerminiFattura,
   type FattModalita, type Fattura, type ModalitaIncasso,
 } from "@/lib/api";
+import { fattAnagrafica, fattAnagrafiche, type FattAnagrafica } from "@/lib/api";
+import { Scheda } from "./Anagrafiche";
 import { MODALITA_LABEL, MODALITA_SOCIETA, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
 import { oggiRoma } from "@/lib/date";
 import type { NcRegolazione } from "@/lib/api";
@@ -55,6 +57,8 @@ export function Dettaglio({
   const [errore, setErrore] = useState("");
   const [conv, setConv] = useState<{ numero: string; modalita: string } | null>(null);   // conversione in scontrino
   const [carico, setCarico] = useState(false);   // fattura ricevuta → «Carica in magazzino»
+  // «Apri in rubrica» (26/10/2026): scheda del cliente/fornitore, modificabile, sopra la fattura
+  const [rubrica, setRubrica] = useState<{ a: FattAnagrafica | null; iniziale?: Partial<FattAnagrafica> } | null>(null);
   // società in modalità manuale (15/10/2026): Gingy / Avantifiori senza fornitore SdI automatico
   const [manuali, setManuali] = useState<string[]>([]);
   useEffect(() => { fattConfig().then((c) => setManuali(c.societa.filter((x) => x.manuale).map((x) => x.codice))).catch(() => undefined); }, []);
@@ -121,6 +125,32 @@ export function Dettaglio({
   const passaDalPagamento = emessa && f.stato === "bozza" && f.tipo_documento !== "TD04" && Number(f.totale) > 0.005;
   const c = f.controparte || {};
   const pagata = f.pagamento_stato === "pagata";
+  const piva = f.controparte_piva || c.piva || "";
+  const cf = f.controparte_cf || c.cf || "";
+
+  // Scheda in rubrica: quella collegata alla fattura; altrimenti la cerca per P.IVA / C.F.; se non c'è, nuova precompilata
+  async function apriRubrica() {
+    if (!f) return;
+    setBusy("rubrica");
+    try {
+      if (f.anagrafica_id) { setRubrica({ a: await fattAnagrafica(f.anagrafica_id) }); return; }
+      const chiave = piva || cf;
+      if (chiave) {
+        const r = await fattAnagrafiche(f.societa, emessa ? "cliente" : "fornitore", chiave, 5);
+        const x = (r.anagrafiche || []).find((a: FattAnagrafica) => (piva && a.piva === piva) || (cf && a.cf === cf));
+        if (x) { setRubrica({ a: await fattAnagrafica(x.id) }); return; }
+      }
+      setRubrica({ a: null, iniziale: {
+        denominazione: f.controparte_nome || c.denominazione || "", piva, cf, sdi: c.sdi || "", pec: c.pec || "",
+        indirizzo: [c.indirizzo, c.civico].filter(Boolean).join(" "), cap: c.cap || "", comune: c.comune || "",
+        provincia: c.provincia || "", paese: c.paese || "IT", email: c.email || "", telefono: c.telefono || "",
+      } });
+    } catch (e) {
+      toastErrore(e);
+    } finally {
+      setBusy("");
+    }
+  }
   const modalitaPagamento: { k: FattModalita; label: string; icon: typeof Banknote }[] = [
     { k: "contanti", label: "Contanti", icon: Banknote },
     { k: "pos_sumup", label: "POS SumUp", icon: Smartphone },
@@ -246,6 +276,11 @@ export function Dettaglio({
               </Button>
             )}
             <a href={fattUrlXml(f.id)}><Button size="sm" variant="outline"><FileCode2 /> XML</Button></a>
+            {/* 26/10/2026 (fattura 857): la ricevuta dello SdI da mandare al cliente che dice di non aver ricevuto la fattura */}
+            {f.sdi_uuid?.startsWith("eff:") && ["consegnata", "non_consegnata", "scartata", "inviata"].includes(f.stato) && (<>
+              <a href={fattUrlRicevutaSdi(f.id, "pdf")} target="_blank" rel="noreferrer"><Button size="sm" variant="outline"><FileCode2 /> Ricevuta SdI (PDF)</Button></a>
+              <a href={fattUrlRicevutaSdi(f.id, "xml")}><Button size="sm" variant="ghost"><FileCode2 /> Ricevuta SdI (XML)</Button></a>
+            </>)}
             {/* nota di credito: solo su fatture trasmesse allo SdI (come il backend); per l'operatore serve l'autorizzazione dell'admin */}
             {emessa && f.numero && ["inviata", "consegnata", "non_consegnata"].includes(f.stato) && f.tipo_documento !== "TD04" && (
               <Button size="sm" variant="outline" disabled={!!busy || !operatore}
@@ -326,20 +361,31 @@ export function Dettaglio({
             </div>
           )}
 
-          {/* Controparte */}
+          {/* Controparte — 26/10/2026: tutti i dati (le colonne P.IVA/C.F. della fattura possono essere vuote,
+              la copia completa sta in `controparte`) + «Apri in rubrica» */}
           <div className="rounded-lg border p-3 text-sm">
-            <div className="text-xs text-muted-foreground">{emessa ? "Cliente" : "Fornitore"}</div>
-            <div className="font-medium">{f.controparte_nome}</div>
-            <div className="text-muted-foreground">
-              {[f.controparte_piva && `P.IVA ${f.controparte_piva}`, f.controparte_cf && f.controparte_cf !== f.controparte_piva && `C.F. ${f.controparte_cf}`].filter(Boolean).join(" · ")}
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-xs text-muted-foreground">{emessa ? "Cliente" : "Fornitore"}</div>
+              <Button size="xs" variant="outline" disabled={busy === "rubrica"} onClick={apriRubrica}>
+                {busy === "rubrica" ? <Loader2 className="animate-spin" /> : <BookUser />} Apri in rubrica
+              </Button>
             </div>
-            {emessa && (
-              <div className="text-muted-foreground">
-                {[c.indirizzo, c.cap, c.comune, c.provincia && `(${c.provincia})`, c.paese && c.paese !== "IT" && c.paese].filter(Boolean).join(" ")}
-                {(c.sdi || c.pec) && <div>Recapito SdI: {c.sdi || c.pec}</div>}
-              </div>
-            )}
+            <div className="font-medium">{f.controparte_nome || c.denominazione}</div>
+            <div className="text-muted-foreground">
+              {[piva && `P.IVA ${piva}`, cf && cf !== piva && `C.F. ${cf}`].filter(Boolean).join(" · ")}
+            </div>
+            <div className="text-muted-foreground">
+              {[c.indirizzo, c.civico, c.cap, c.comune, c.provincia && `(${c.provincia})`, c.paese && c.paese !== "IT" && c.paese].filter(Boolean).join(" ")}
+              {(c.sdi || c.pec) && <div>{[c.sdi && `Codice SdI: ${c.sdi}`, c.pec && `PEC: ${c.pec}`].filter(Boolean).join(" · ")}</div>}
+              {(c.email || c.telefono) && <div>{[c.email && `Email: ${c.email}`, c.telefono && `Tel. ${c.telefono}`].filter(Boolean).join(" · ")}</div>}
+            </div>
           </div>
+          {rubrica && (
+            <Scheda a={rubrica.a} iniziale={rubrica.iniziale} societa={f.societa} tipo={emessa ? "cliente" : "fornitore"}
+              onClose={() => setRubrica(null)}
+              onSaved={(a) => { toast.success("Rubrica aggiornata"); fattAnagrafica(a.id).then((x) => setRubrica({ a: x })).catch(() => setRubrica(null)); }}
+              onApriFattura={(id) => { setRubrica(null); if (id !== f.id) onOpen(id); }} />
+          )}
 
           {!emessa && f.societa === "genius" && (f.righe || []).length > 0 && (
             <div className="flex justify-end">

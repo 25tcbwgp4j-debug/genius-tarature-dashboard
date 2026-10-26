@@ -141,14 +141,17 @@ export function Anagrafiche({
   );
 }
 
-function Scheda({
-  a, societa, tipo, onClose, onSaved, onNuovaFattura, onApriFattura,
+// Esportata (26/10/2026): la apre anche il dettaglio fattura con «Apri in rubrica».
+// `iniziale` precompila una scheda nuova (cliente della fattura non ancora in rubrica).
+export function Scheda({
+  a, societa, tipo, onClose, onSaved, onNuovaFattura, onApriFattura, iniziale,
 }: {
   a: FattAnagrafica | null; societa: string; tipo: "cliente" | "fornitore";
   onClose: () => void; onSaved: (a: FattAnagrafica) => void;
-  onNuovaFattura: (a: FattAnagrafica) => void; onApriFattura: (id: string) => void;
+  onNuovaFattura?: (a: FattAnagrafica) => void; onApriFattura: (id: string) => void;
+  iniziale?: Partial<FattAnagrafica>;
 }) {
-  const [f, setF] = useState<Partial<FattAnagrafica>>(a || { paese: "IT" });
+  const [f, setF] = useState<Partial<FattAnagrafica>>(a || { paese: "IT", ...iniziale });
   const [busy, setBusy] = useState(false);
   const campo = "h-8 w-full rounded-md border border-input bg-background px-2 text-sm";
 
@@ -210,7 +213,7 @@ function Scheda({
           )}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={salva} disabled={busy}>{busy ? <Loader2 className="animate-spin" /> : <Save />} Salva</Button>
-            {a && tipo === "cliente" && <Button size="sm" variant="outline" onClick={() => onNuovaFattura(a)}><Receipt /> Nuova fattura</Button>}
+            {a && tipo === "cliente" && onNuovaFattura && <Button size="sm" variant="outline" onClick={() => onNuovaFattura(a)}><Receipt /> Nuova fattura</Button>}
           </div>
           {a?.fatture && (
             <div className="space-y-2">

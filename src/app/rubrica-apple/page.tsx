@@ -4,10 +4,16 @@
 // e di fatture/scontrini con attività Apple, uniti per telefono/email/P.IVA (backend rubrica_apple_api.py).
 // Viste: tutti · con schede aperte · aziende ricorrenti (B2B/rivenditori: P.IVA con almeno 2 fatture Apple).
 // WhatsApp staff Genius 334: solo lo stato della linea (sola lettura), nessun messaggio parte da qui.
+// 26/10/2026: per le aziende il nome è la ragione sociale (i nomi delle schede sono «referenti») e «Scheda»
+// apre l'anagrafica di fatturazione modificabile (la stessa di fatture e schede, anche per i clienti tarature).
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { BookUser, Search, MessageCircle, Building2, Loader2 } from "lucide-react";
+import { BookUser, Search, MessageCircle, Building2, Loader2, Pencil } from "lucide-react";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { Scheda } from "@/app/fatturazione/Anagrafiche";
+import { fattAnagrafica, type FattAnagrafica } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { fetchAPI } from "@/lib/api";
 import { eur } from "@/lib/assistenza";
@@ -16,6 +22,7 @@ interface Cliente {
   chiave: string; nome: string; telefono: string | null; email: string | null; piva: string | null; anagrafica_id: string | null;
   schede: number; schede_aperte: number; ultima_scheda: { id: string; sigla: string } | null; ultima_scheda_il: string | null;
   fatture: number; fatturato: number; ultima_fattura_il: string | null; ultima_attivita: string | null; cellulare: boolean;
+  altri_nomi?: string[];
 }
 interface Riepilogo {
   clienti: number; con_schede: number; con_fatture: number; schede_aperte: number; aziende_ricorrenti: number; con_cellulare: number;
@@ -37,6 +44,9 @@ export default function RubricaApple() {
   const [offset, setOffset] = useState(0);
   const [dati, setDati] = useState<{ clienti: Cliente[]; totale: number } | null>(null);
   const [errore, setErrore] = useState<string | null>(null);
+  const [scheda, setScheda] = useState<FattAnagrafica | null>(null);
+  const router = useRouter();
+  const apriScheda = (id: string) => fattAnagrafica(id).then(setScheda).catch((e) => toast.error((e as Error).message));
 
   useEffect(() => {
     fetchAPI("/api/rubrica-apple/riepilogo", { timeoutMs: 60_000 }, false).then(setRie)
@@ -108,7 +118,14 @@ export default function RubricaApple() {
                 <p className="text-sm text-gray-500 truncate">
                   {[c.telefono, c.email, c.piva && `P.IVA ${c.piva}`].filter(Boolean).join(" · ") || "nessun recapito"}
                 </p>
+                {!!c.altri_nomi?.length && <p className="text-xs text-gray-500 truncate">Referenti: {c.altri_nomi.join(" · ")}</p>}
               </div>
+              {c.anagrafica_id && (
+                <button type="button" onClick={() => apriScheda(c.anagrafica_id!)}
+                  className="self-start sm:self-center inline-flex items-center gap-1 px-2 py-1 rounded border text-xs">
+                  <Pencil className="w-3 h-3" /> Scheda
+                </button>
+              )}
               <div className="text-sm text-gray-600 dark:text-gray-300 flex flex-wrap gap-x-4 gap-y-1 sm:justify-end">
                 {c.schede > 0 && (
                   <span>
@@ -130,6 +147,11 @@ export default function RubricaApple() {
           </div>
         )}
       </Card>
+      {scheda && (
+        <Scheda a={scheda} societa="genius" tipo="cliente" onClose={() => setScheda(null)}
+          onSaved={(a) => { toast.success("Anagrafica salvata"); apriScheda(a.id); }}
+          onApriFattura={(id) => router.push(`/fatturazione?id=${id}`)} />
+      )}
     </div>
   );
 }
