@@ -125,6 +125,13 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
                   onChange={(e) => set("email_cc", e.target.value)} />
               </Campo>
               {T("telefoni_altri", "Altri telefoni (moglie, ufficio, referenti…)", { placeholder: "333 1234567 (moglie), 06 1234567 (ufficio)" }, "sm:col-span-2")}
+              {/* 26/10/2026 (Christian, Altramela): il cliente non vuole schede né comunicazioni su WhatsApp → solo mail */}
+              <div className="sm:col-span-3 rounded-md border border-red-200 bg-red-50/60 p-2 dark:border-red-900 dark:bg-red-950/20">
+                <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" className="size-4" checked={!!f.no_whatsapp}
+                  onChange={(e) => set("no_whatsapp", e.target.checked)} />🚫 Niente WhatsApp: non inviare mai schede né comunicazioni su WhatsApp (solo mail)</label>
+                {f.no_whatsapp && <input className={`${campo} mt-1.5`} value={f.no_whatsapp_nota || ""} placeholder="perché (es. usa il gruppo con noi)"
+                  onChange={(e) => set("no_whatsapp_nota", e.target.value)} />}
+              </div>
             </div>
           </fieldset>
           {/* 24/10/2026: abitudini di consegna: la scheda nuova e il dialogo corriere le usano come valori iniziali */}
@@ -183,6 +190,7 @@ export function RiepilogoCliente({ a, nome, telefono, email }: { a: Anagrafica |
         <span className="text-base font-semibold">{nome || "—"}</span>
         {a && <PillTipo a={a} />}
         {a?.vuole_fattura && <Pill tono="blu">vuole fattura</Pill>}
+        {a?.no_whatsapp && <Pill tono="rosso">🚫 niente WhatsApp</Pill>}
         {!a && <Pill tono="ambra">non collegato alla rubrica</Pill>}
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
