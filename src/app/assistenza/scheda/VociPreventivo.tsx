@@ -137,6 +137,13 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
                     <b className="shrink-0 tabular-nums">{v.prezzo != null ? eur(v.prezzo) : "—"}</b>
                   </div>
                 ))}
+                {c.due && c.due_touch_id && (
+                  <div className="flex items-start gap-2 text-sky-900 dark:text-sky-100">
+                    <span className="mt-0.5 w-9 shrink-0 text-center text-[10px] font-semibold">2ª +</span>
+                    <span className="min-w-0 flex-1 leading-snug">{c.due_touch_id.descrizione}{c.totale_2 != null ? ` · totale 2ª ${eur(c.totale_2)}` : ""}</span>
+                    <b className="shrink-0 tabular-nums">{c.due_touch_id.prezzo != null ? eur(c.due_touch_id.prezzo) : "—"}</b>
+                  </div>
+                )}
               </div>
               <Button size="sm" className="mt-2 w-full" onClick={() => onCombo(c)}>
                 <Sparkles />Inserisci {c.uno && c.due ? "1ª + 2ª" : c.uno ? "1ª" : "2ª"}{c.tre ? " (+ 3ª aggiungibile)" : ""}</Button>

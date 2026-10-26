@@ -58,10 +58,12 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
       const nuove: EstimateLine[] = [];
       if (c.uno) nuove.push({ ...rigaDa(c.uno, b), opt: 0, on: true, agg: false });
       if (c.due) nuove.push({ ...rigaDa(c.due, b), opt: 1, on: !c.uno, agg: false });
+      // 26/10/2026: nella 2ª ipotesi (scheda logica ufficiale) anche il Touch ID, sui modelli che lo hanno
+      if (c.due && c.due_touch_id) nuove.push({ ...rigaDa(c.due_touch_id, b), opt: 1, on: !c.uno, agg: false });
       if (c.tre) nuove.push({ ...rigaDa(c.tre, b), opt: 2, on: false, agg: true });
       return [...resto, ...nuove];
     });
-    toast.success(`Inserita la combinazione «${c.etichetta}»${c.modello ? ` (${c.modello})` : ""}: controlla i prezzi`);
+    toast.success(`Inserita la combinazione «${c.etichetta}»${c.modello ? ` (${c.modello})` : ""}${c.due && c.due_touch_id ? " · nella 2ª ipotesi anche il Touch ID" : ""}: controlla i prezzi`);
   }
   function aggiungiVoce(v: VoceProposta, come: "ipotesi" | "aggiungibile" | "fissa") {
     const b = bloccoAttivo;
