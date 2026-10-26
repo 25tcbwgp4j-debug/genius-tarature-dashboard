@@ -5,7 +5,8 @@
 // preso da lì»), DIFETTO INDICATO in evidenza, accessori consegnati, «con alimentatore» per i non Apple; email,
 // codice/password e Apple ID SEMPRE in chiaro (26/10/2026, Christian): servono subito al banco.
 import { useState } from "react";
-import { Cpu, ExternalLink, History, Loader2, ScanLine } from "lucide-react";
+import { Copy, Cpu, ExternalLink, History, Loader2, ScanLine } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { assSeriale, FAMIGLIE_DEFAULT, type GruppoProdotti, type Seriale } from "@/lib/assistenza";
@@ -19,6 +20,16 @@ export type ValoriApparecchio = {
   numero_interno?: string | null;   // 26/10/2026 (62588): riferimento del rivenditore/cliente
 };
 type K = keyof ValoriApparecchio;
+
+/** 26/10/2026 (Christian): tasto COPIA accanto a seriale, IMEI, codici e Apple ID (si incollano su GSX, eBay, iCloud…). */
+function Copia({ testo, cosa }: { testo?: string | null; cosa: string }) {
+  if (!testo) return null;
+  return (
+    <Button type="button" variant="outline" className="h-9 shrink-0" title={`Copia ${cosa}`}
+      onClick={() => navigator.clipboard?.writeText(String(testo).trim()).then(() => toast.success(`${cosa[0].toUpperCase()}${cosa.slice(1)} copiato`)).catch(() => toast.error("Copia non riuscita"))}>
+      <Copy />Copia</Button>
+  );
+}
 
 const FONTE_TESTO: Record<string, string> = { seriale: "decodificato dal seriale", scheda_precedente: "preso da una scheda precedente", gsx: "letto su GSX", manuale: "scritto a mano" };
 
@@ -90,6 +101,7 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
           <div className="flex gap-1.5">
             <input className={`${campo} font-mono uppercase`} disabled={ro} value={v.seriale || ""} onChange={(e) => set("seriale", e.target.value.toUpperCase())}
               onBlur={() => { if (v.seriale && !ser) decodifica(); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); decodifica(); } }} />
+            <Copia testo={v.seriale} cosa="seriale" />
             <Button type="button" variant="outline" className="h-9" disabled={busy || !v.seriale} onClick={decodifica} title="Decodifica il seriale e cerca le schede precedenti">
               {busy ? <Loader2 className="animate-spin" /> : <ScanLine />}Decodifica</Button>
           </div>
@@ -146,13 +158,17 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
       {/* 26/10/2026 (Christian): codice di sblocco, Apple ID e password SEMPRE in chiaro nella scheda interna (mai sui PDF del cliente) */}
       <div className="grid gap-3 rounded-lg border border-violet-200 bg-violet-50/40 p-3 sm:grid-cols-2 dark:border-violet-900 dark:bg-violet-950/20">
         <Campo label="Codice / password del dispositivo">
-          <input className={`${campo} font-mono text-[15px] font-semibold`} disabled={ro} autoComplete="off" value={v.password_dispositivo || ""} onChange={(e) => set("password_dispositivo", e.target.value)} />
+          <div className="flex gap-1.5"><input className={`${campo} font-mono text-[15px] font-semibold`} disabled={ro} autoComplete="off" value={v.password_dispositivo || ""} onChange={(e) => set("password_dispositivo", e.target.value)} />
+            <Copia testo={v.password_dispositivo} cosa="codice" /></div>
         </Campo>
-        <Campo label="Email / Apple ID"><input className={`${campo} font-mono`} disabled={ro} autoComplete="off" value={v.apple_id || ""} onChange={(e) => set("apple_id", e.target.value)} /></Campo>
+        <Campo label="Email / Apple ID"><div className="flex gap-1.5"><input className={`${campo} font-mono`} disabled={ro} autoComplete="off" value={v.apple_id || ""} onChange={(e) => set("apple_id", e.target.value)} />
+          <Copia testo={v.apple_id} cosa="Apple ID" /></div></Campo>
         <Campo label="Password Apple ID">
-          <input className={`${campo} font-mono text-[15px] font-semibold`} disabled={ro} autoComplete="off" value={v.password_apple_id || ""} onChange={(e) => set("password_apple_id", e.target.value)} />
+          <div className="flex gap-1.5"><input className={`${campo} font-mono text-[15px] font-semibold`} disabled={ro} autoComplete="off" value={v.password_apple_id || ""} onChange={(e) => set("password_apple_id", e.target.value)} />
+            <Copia testo={v.password_apple_id} cosa="password" /></div>
         </Campo>
-        <Campo label="IMEI"><input className={`${campo} font-mono`} disabled={ro} value={v.imei || ""} onChange={(e) => set("imei", e.target.value)} /></Campo>
+        <Campo label="IMEI"><div className="flex gap-1.5"><input className={`${campo} font-mono`} disabled={ro} value={v.imei || ""} onChange={(e) => set("imei", e.target.value)} />
+          <Copia testo={v.imei} cosa="IMEI" /></div></Campo>
         <span className="text-[11px] text-muted-foreground sm:col-span-2">Restano solo nella scheda interna: mai sui PDF né nelle mail al cliente.{telefono ? " Per iPhone è utile l'email dell'Apple ID." : ""}</span>
       </div>
     </div>
