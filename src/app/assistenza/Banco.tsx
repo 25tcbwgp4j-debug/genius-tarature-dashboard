@@ -8,17 +8,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, PanelLeftClose, PanelLeftOpen, Plus, Search, Wrench } from "lucide-react";
+import { Loader2, PanelLeftClose, PanelLeftOpen, Plus, Search, Users, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOperatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
-import { assRichiestaCollega, type Richiesta, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, assSetConfig, nomeTecnico, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve } from "@/lib/assistenza";
+import { assRichiestaCollega, type Richiesta, STATI_RIPARAZIONE, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, assSetConfig, nomeTecnico, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve } from "@/lib/assistenza";
 import { Cruscotto } from "./Cruscotto";
 import { AvvisoRichieste } from "./Richieste";
+import { PerCliente } from "./PerCliente";
 import { NuovaScheda } from "./scheda/NuovaScheda";
 import { SchedaView } from "./scheda/SchedaView";
 import { Badge } from "./scheda/ui";
+
+const STILE_RIP: Record<string, string> = {
+  attesa_ricambi: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100",
+  ricambio_arrivato: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100",
+  finita: "bg-emerald-600 text-white",
+  aggiornamento_cliente: "bg-violet-100 text-violet-900 dark:bg-violet-900/40 dark:text-violet-100",
+  disabilitare_trova: "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100",
+  piu_tempo: "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100",
+};
 
 // Tutte le schede che rispondono a ricerca/filtro, a blocchi da 500 (il massimo del backend), 4 richieste per volta.
 async function tutteLeSchede(q: string, stato: string): Promise<{ schede: SchedaBreve[]; totale: number }> {
@@ -57,6 +67,7 @@ export function Banco() {
   const [fase, setFase] = useState<{ fase: string; tecnico: string } | null>(faseLink ? { fase: faseLink, tecnico: sp.get("tecnico") || "" } : null);
   const [salto, setSalto] = useState("");
   const [nuova, setNuova] = useState(false);
+  const [perCliente, setPerCliente] = useState(false);
   // 24/10/2026: richieste provvisorie da WhatsApp (chatbot / chat staff) e quella da cui si sta aprendo la scheda
   const [nRichieste, setNRichieste] = useState(0);
   const [daRichiesta, setDaRichiesta] = useState<Richiesta | null>(null);
@@ -156,7 +167,9 @@ export function Banco() {
             Visibile agli operatori
           </label>
         )}
-        <Button className={cfg?.admin ? "" : "ml-auto"} onClick={() => setNuova(true)} title="F2 o Alt+N"><Plus />NUOVA SCHEDA</Button>
+        <Button variant="outline" className={cfg?.admin ? "" : "ml-auto"} onClick={() => setPerCliente(true)} title="Tutte le schede aperte di un cliente, per fase, e riepilogo in blocco"><Users />Per cliente</Button>
+        <Button onClick={() => setNuova(true)} title="F2 o Alt+N"><Plus />NUOVA SCHEDA</Button>
+        {perCliente && <PerCliente operatore={operatore} onClose={() => setPerCliente(false)} onApri={(id) => { setPerCliente(false); apri(id); }} />}
       </div>
 
       <AvvisoRichieste n={nRichieste} operatore={operatore} onCambiate={carica}
@@ -221,7 +234,16 @@ export function Banco() {
                 {(s.stato === "da_preventivare" && s.tecnico_verifica) || (s.stato === "accettato" && s.tecnico_riparazione) ? (
                   <div className="truncate text-[11px] font-medium text-sky-800 dark:text-sky-300">
                     {s.stato === "accettato" ? `Riparazione: ${nomeTecnico(s.tecnico_riparazione, tecniciCr)}` : `Verifica: ${nomeTecnico(s.tecnico_verifica, tecniciCr)}${s.verifica_stato === "chiusa" ? " (chiusa)" : ""}`}
+                    {/* 26/10/2026 (Christian): in riparazione si vede anche A CHE PUNTO è (attesa ricambi, ricambio arrivato, finita…) */}
+                    {s.stato === "accettato" && s.riparazione_stato && s.riparazione_stato !== "in_corso" && (
+                      <span className={`ml-1.5 rounded px-1.5 py-px font-semibold ${STILE_RIP[s.riparazione_stato] || "bg-muted text-foreground"}`}>
+                        {STATI_RIPARAZIONE.find(([k]) => k === s.riparazione_stato)?.[1] || s.riparazione_stato}</span>)}
                   </div>) : null}
+                {/* 26/10/2026: che ricambio si aspetta e quando arriva */}
+                {(s.ricambi_attesi || []).filter((r) => r.stato !== "arrivato").map((r, i) => (
+                  <div key={i} className="truncate text-[11px] text-amber-800 dark:text-amber-300">
+                    📦 {r.cosa || "ricambio"}{r.stato === "da_ordinare" ? " · DA ORDINARE" : r.arrivo_previsto ? ` · arrivo ${new Date(`${r.arrivo_previsto}T12:00:00`).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}` : " · ordinato"}
+                  </div>))}
               </button>
             ))}
             {/* 04/10/2026: si aprono le più recenti; «Mostra tutte» porta l'elenco completo (scorrevole) */}

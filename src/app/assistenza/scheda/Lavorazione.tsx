@@ -4,6 +4,7 @@
 // NOTA INTERNA), tecnico della verifica e sue note, tecnico della riparazione e sue note, LAVORAZIONE EFFETTUATA
 // (precompilata dall'ipotesi accettata), totale, esito. Tutto ciò che è interno non va mai sui PDF del cliente.
 import { Wrench } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { eur, type Scheda } from "@/lib/assistenza";
 import { Campo, Pill, Scelta, Sezione, area, campo } from "./ui";
 
@@ -77,10 +78,22 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
           </div>
         </div>
         </details>
-        <div className="grid gap-3 md:grid-cols-[1fr_230px]">
+        {/* 26/10/2026 (Christian): la lavorazione a tutta larghezza (prima stava accanto alla colonna stretta) */}
+        <div className="grid gap-3">
+          <div className="space-y-2">
           <Campo label="Lavorazione effettuata (va al cliente)" aiuto={s.preventivo_stato === "accettato" ? "Precompilata con l'ipotesi accettata e il suo importo: correggi se serve." : undefined}>
-            <textarea className={area} rows={Math.max(3, String(v("lavorazione") || "").split("\n").length)} disabled={ro} value={(v("lavorazione") as string) || ""} onChange={(e) => set("lavorazione", e.target.value)} />
+            {/* 26/10/2026 (Christian, 63079): riquadro grande, si legge tutto il testo (anche le righe lunghe) */}
+            <textarea className={`${area} min-h-[160px] resize-y text-[14px] leading-relaxed`} disabled={ro} value={(v("lavorazione") as string) || ""} onChange={(e) => set("lavorazione", e.target.value)}
+              rows={Math.min(40, Math.max(6, String(v("lavorazione") || "").split("\n").reduce((n, r) => n + Math.max(1, Math.ceil(r.length / 120)), 0) + 1))} />
           </Campo>
+          {/* 26/10/2026 (Christian, 63123): AirPods con cuffia o custodia sostituita → il cliente deve disassociarle e riassociarle */}
+          {!ro && avvisoAirpods(s, String(v("lavorazione") || "")) && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+              <span>🎧 AirPods con un componente sostituito: aggiungo alla lavorazione l&apos;avviso per il cliente (disassociare e riassociare)?</span>
+              <Button size="xs" className="ml-auto" onClick={() => set("lavorazione", `${String(v("lavorazione") || "").trimEnd()}\n${NOTA_AIRPODS}`.trim())}>Aggiungi l&apos;avviso</Button>
+            </div>
+          )}
+          </div>
           <div className="space-y-2">
             <Campo label="Totale lavorazione € (IVA compresa)">
               <input className={`${campo} text-right font-semibold`} inputMode="decimal" disabled={ro} value={v("totale_lavorazione") ?? ""} onChange={(e) => set("totale_lavorazione", e.target.value.replace(",", "."))} />
@@ -103,4 +116,13 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
       </div>
     </Sezione>
   );
+}
+
+
+// 26/10/2026 (Christian): AirPods — sostituita una cuffia o la custodia → il cliente lo deve sapere quando chiediamo il pagamento
+export const NOTA_AIRPODS = "SUL TELEFONO DEVE DISASSOCIARE LE AIRPODS E POI NUOVAMENTE RIASSOCIARLE, ALTRIMENTI LA CUFFIA NUOVA NON VERRA' MAI RICONOSCIUTA.";
+function avvisoAirpods(s: Scheda, lav: string): boolean {
+  const airpods = /airpods/i.test(`${s.famiglia || ""} ${s.prodotto || ""} ${s.modello || ""}`);
+  const sostituzione = /sostitu|cambio|nuov[ao]/i.test(lav) && /cuffi|auricolar|custodia|case|ricarica/i.test(lav);
+  return airpods && sostituzione && !/DISASSOCIARE/i.test(lav);
 }

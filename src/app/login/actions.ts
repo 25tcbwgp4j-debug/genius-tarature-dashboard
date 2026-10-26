@@ -32,7 +32,9 @@ export async function login(formData: FormData) {
     // 25/10/2026 (sicurezza): il backend blocca i tentativi per account E dispositivo; l'IP del dispositivo lo sa solo
     // Vercel, quindi lo si passa firmato (LOGIN_IP_SECRET, uguale su Vercel e Railway): non si può falsificare
     const h = await headers();
-    const ip = (h.get("x-real-ip") || h.get("x-forwarded-for")?.split(",")[0] || "").trim().slice(0, 64);
+    // 25/10/2026 (revisione): solo intestazioni che Vercel scrive e sovrascrive; mai la prima voce di X-Forwarded-For
+    // (la manda il client). Senza, nessun IP: il backend applica il limite più severo.
+    const ip = (h.get("x-vercel-forwarded-for")?.split(",")[0] || h.get("x-real-ip") || "").trim().slice(0, 64);
     const seg = process.env.LOGIN_IP_SECRET || "";
     const firmati: Record<string, string> = ip && seg ? { "X-Client-IP": ip, "X-Client-IP-Firma": createHmac("sha256", seg).update(ip).digest("hex") } : {};
     res = await fetch(`${BACKEND_URL}/api/auth/login`, {

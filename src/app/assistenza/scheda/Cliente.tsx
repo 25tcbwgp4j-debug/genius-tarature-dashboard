@@ -118,6 +118,12 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
               {T("email", "Email", { type: "email" })}
               {T("email_contabilita", "Email per la contabilità", { type: "email" })}
               {T("email_altre", "Altre email")}
+              {/* 25/10/2026: in copia conoscenza su OGNI mail al cliente (preventivi, schede, pagamenti, fatture, riepiloghi) */}
+              <Campo label="Copia conoscenza obbligatoria (CC su ogni mail)" className="sm:col-span-3"
+                aiuto={f.email_cc ? "Messo in CC in automatico su preventivi, schede, richieste di pagamento, fatture e riepiloghi" : undefined}>
+                <input className={campo} value={f.email_cc || ""} placeholder="es. titolare@azienda.it (più indirizzi separati da virgola)"
+                  onChange={(e) => set("email_cc", e.target.value)} />
+              </Campo>
               {T("telefoni_altri", "Altri telefoni (moglie, ufficio, referenti…)", { placeholder: "333 1234567 (moglie), 06 1234567 (ufficio)" }, "sm:col-span-2")}
             </div>
           </fieldset>
@@ -194,6 +200,7 @@ export function RiepilogoCliente({ a, nome, telefono, email }: { a: Anagrafica |
           {(a.consegna_default || a.corriere_default) && <span><b className="font-medium text-foreground/80">Di solito:</b> {[a.consegna_default === "spedizione" ? "spedizione" : a.consegna_default === "ritiro" ? "ritira in negozio" : null,
             a.corriere_default, a.ritiro_prenotazione ? "ritiro prenotato" : null, a.ritorno_corriere === "cliente" ? "ritorno col corriere del cliente" : a.ritorno_corriere === "noi" ? "ritorno col nostro corriere" : null].filter(Boolean).join(" · ")}</span>}
           {a.pagamento_default && <span><b className="font-medium text-foreground/80">Pagamento:</b> {a.pagamento_default}</span>}
+          {a.email_cc && <span className="sm:col-span-2 font-medium text-amber-700 dark:text-amber-400">📧 In copia su ogni mail: {a.email_cc}</span>}
           {a.telefoni_altri && <span className="sm:col-span-2"><b className="font-medium text-foreground/80">Altri numeri:</b> {a.telefoni_altri}</span>}
           {a.note_cliente && <span className="sm:col-span-2 whitespace-pre-line"><b className="font-medium text-foreground/80">Note cliente:</b> {a.note_cliente}</span>}
         </div>

@@ -45,10 +45,17 @@ export function ProdottoCombo({ valore, gruppi, onScelto, disabled, autoFocus }:
     setAperto(false); setQ("");
   }
   const nelMenu = gruppi.some((g) => g.voci.includes(valore));
+  // 26/10/2026 (Christian, 63228): prodotti non Apple / dicitura da FileMaker → si può scrivere (e correggere) a mano
+  const aMano = norm(q);
+  function scriviAMano() {
+    if (!aMano) return;
+    onScelto(aMano, "");
+    setAperto(false); setQ("");
+  }
 
   return (
     <div ref={box} className="relative">
-      <button type="button" disabled={disabled} onClick={() => setAperto((x) => !x)} data-testid="prodotto-combo"
+      <button type="button" disabled={disabled} onClick={() => { if (!aperto && valore && !nelMenu) setQ(valore); setAperto((x) => !x); }} data-testid="prodotto-combo"
         className={cn(campo, "flex items-center gap-2 text-left", !valore && "text-muted-foreground")}>
         {/* 24/10/2026: il prodotto si legge per intero (prima «apple h…» troncato) */}
         <span className="min-w-0 flex-1 whitespace-normal break-words uppercase leading-snug">{valore || "— scegli il prodotto —"}</span>
@@ -64,13 +71,17 @@ export function ProdottoCombo({ valore, gruppi, onScelto, disabled, autoFocus }:
               onKeyDown={(e) => {
                 if (e.key === "ArrowDown") { e.preventDefault(); setAtt((a) => Math.min(filtrate.length - 1, a + 1)); }
                 else if (e.key === "ArrowUp") { e.preventDefault(); setAtt((a) => Math.max(0, a - 1)); }
-                else if (e.key === "Enter") { e.preventDefault(); scegli(att); }
+                else if (e.key === "Enter") { e.preventDefault(); if (filtrate.length) scegli(att); else scriviAMano(); }
                 else if (e.key === "Escape") { e.preventDefault(); setAperto(false); }
               }} />
             {q && <button type="button" className="absolute right-3 top-3.5 text-muted-foreground" onClick={() => setQ("")} aria-label="Pulisci"><X className="size-4" /></button>}
           </div>
           <div ref={lista} className="max-h-80 overflow-y-auto py-1 text-sm">
-            {filtrate.length === 0 && <div className="px-3 py-2 text-muted-foreground">Nessun prodotto: prova con meno parole, oppure «ALTRO NON APPLE».</div>}
+            {aMano && !filtrate.some((x) => norm(x.voce) === aMano) && (
+              <button type="button" onClick={scriviAMano} className="flex w-full items-center gap-2 border-b px-3 py-1.5 text-left font-medium text-blue-700">
+                ✏️ Scrivi a mano: «{aMano}»</button>
+            )}
+            {filtrate.length === 0 && <div className="px-3 py-2 text-muted-foreground">Nessuna voce del menu: usa «Scrivi a mano» qui sopra (es. prodotti non Apple).</div>}
             {filtrate.map((x, i) => (
               <div key={x.voce}>
                 {(i === 0 || filtrate[i - 1].gruppo !== x.gruppo) && (

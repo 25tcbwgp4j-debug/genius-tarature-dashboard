@@ -4,6 +4,12 @@ import type { EstimateLine } from "@/lib/assistenza-preventivo";
 
 export type StatoScheda = "in_arrivo" | "da_preventivare" | "preventivo_inviato" | "accettato" | "rifiutato" | "pronto" | "consegnato" | "annullata";
 export interface Fase { il: string; operatore?: string | null; sede?: string | null }
+/** 26/10/2026: un ricambio della scheda (cosa, link, ordine, arrivo previsto, stato). */
+export interface RicambioAtteso {
+  cosa?: string | null; link?: string | null; ordine?: string | null; fornitore?: string | null; nota?: string | null;
+  ordinato_il?: string | null; arrivo_previsto?: string | null; arrivato_il?: string | null; stato?: "da_ordinare" | "ordinato" | "arrivato";
+}
+
 export interface SchedaBreve {
   id: string; numero: number; sigla: string; origine: string; sola_lettura: boolean; azienda: string | null; nominativo: string | null;
   telefono: string | null; email: string | null; prodotto: string | null; modello: string | null; seriale: string | null; difetto: string | null;
@@ -11,13 +17,13 @@ export interface SchedaBreve {
   ritirato: string | null; consegna_modo: string | null; tecnico: string | null; fasi: Record<string, Fase>; created_at: string;
   // 05/10/2026 (§10, migr. 092)
   famiglia?: string | null; anno?: number | null; tecnico_verifica?: string | null; tecnico_riparazione?: string | null;
-  verifica_stato?: "da_assegnare" | "in_corso" | "chiusa" | null; riparazione_stato?: string | null;
+  verifica_stato?: "da_assegnare" | "in_corso" | "chiusa" | null; riparazione_stato?: string | null; ricambi_attesi?: RicambioAtteso[] | null;
 }
 export interface Evento { id: string; tipo: string; descrizione: string; operatore: string | null; creato_da: string | null; created_at: string; dati?: Record<string, unknown> }
 export interface Anagrafica { id: string; denominazione: string; piva?: string | null; cf?: string | null; telefono?: string | null; email?: string | null;
   referente?: string | null; indirizzo?: string | null; cap?: string | null; comune?: string | null; provincia?: string | null; paese?: string | null;
   sdi?: string | null; pec?: string | null; tipo_cliente?: "privato" | "azienda" | "rivenditore" | null; vuole_fattura?: boolean | null;
-  cellulare?: string | null; cellulare_whatsapp?: string | null; email_contabilita?: string | null; email_altre?: string | null;
+  cellulare?: string | null; cellulare_whatsapp?: string | null; email_contabilita?: string | null; email_altre?: string | null; email_cc?: string | null;
   sped_presso?: string | null; sped_indirizzo?: string | null; sped_cap?: string | null; sped_comune?: string | null; sped_provincia?: string | null;
   note_cliente?: string | null; origine?: string | null; corriere_default?: string | null; pagamento_default?: string | null;
   telefoni_altri?: string | null; consegna_default?: string | null; ritiro_prenotazione?: boolean | null; ritorno_corriere?: string | null }
@@ -25,7 +31,7 @@ export interface SchedaCliente extends Anagrafica { schede: { id: string; sigla:
 export interface Scheda extends SchedaBreve {
   anagrafica_id: string | null; referente: string | null; telefono_referente: string | null; indirizzo_spedizione: string | null; imei: string | null;
   acquistato_il: string | null; anno_garanzia: string | null; password_dispositivo: string | null; apple_id: string | null; password_apple_id: string | null;
-  accessori: string | null; note: string | null; note_interne: string | null; preventivo_righe: EstimateLine[]; preventivo_testo: string | null;
+  accessori: string | null; note: string | null; note_interne: string | null; trova_il_mio?: "attivo" | "risolto" | null; riconsegna_nota?: string | null; promemoria?: string | null; ricevuta_da_inviare?: boolean; comunicazione_cliente?: string | null; recensione_stato?: "inviata" | "non_inviare" | null; recensione_il?: string | null; pronto_prog_il?: string | null; pronto_prog_stato?: string | null; pronto_prog_esito?: string | null; preventivo_righe: EstimateLine[]; preventivo_testo: string | null;
   lavorazione: string | null; esito: string | null; ricambi: string | null; pagamento_modo: string | null; operatore_accettazione: string | null;
   scontrino_id: string | null; fattura_id: string | null; documento_id: string | null; numero_interno: string | null; token_pubblico: string;
   eventi: Evento[]; preventivi: { id: string; tipo: string; testo: string; totale: number; inviato_a: string | null; inviato_il: string | null; operatore: string | null; created_at: string }[];
@@ -55,7 +61,9 @@ export interface Scheda extends SchedaBreve {
   preventivo_totale: number | null;
 }
 export interface Passo { codice: string; etichetta: string; stato: "fatto" | "attuale" | "da_fare" | "saltato"; dettaglio: string }
-export interface Avanzamento { passi: Passo[]; attuale: string | null; prossimo: { azione?: string; testo?: string } }
+export interface Avanzamento { passi: Passo[]; attuale: string | null;
+  /** 26/10/2026: blocco «trova» = «Trova il mio» attivo; riconsegna = cosa si riconsegna davvero (es. solo l'hard disk) */
+  prossimo: { azione?: string; testo?: string; blocco?: string; riconsegna?: string; avviso?: string; poi?: string; alternativa?: string } }
 export interface Comunicazione { id: string; tipo: string; canale: "mail" | "whatsapp"; descrizione: string; created_at: string; operatore: string | null;
   esito: string | null; a: string | null; testo: string | null; link: string | null; oggetto: string | null }
 export interface VoceProposta { id: string; intervento: string; ipotesi: string | null; descrizione: string; prezzo: number | null; scontato_da: number | null;
@@ -175,7 +183,7 @@ export const FAMIGLIE_DEFAULT: { codice: string; etichetta: string }[] = [
   { codice: "altro_apple", etichetta: "Altro Apple" }, { codice: "non_apple", etichetta: "Non Apple" }];
 export const SPEDIZIONI: [string, string][] = [["nessuna", "Nessuna"], ["ar", "A/R (ritiro e riconsegna)"], ["solo_ritiro", "Solo ritiro"], ["solo_ritorno", "Solo ritorno"]];
 export const TIPI_CLIENTE: [string, string][] = [["privato", "Privato"], ["azienda", "Azienda"], ["rivenditore", "Rivenditore"]];
-export const STATI_RIPARAZIONE: [string, string][] = [["in_corso", "In lavorazione"], ["attesa_ricambi", "Attesa ricambi"],
+export const STATI_RIPARAZIONE: [string, string][] = [["in_corso", "In lavorazione"], ["attesa_ricambi", "⏳ In attesa ricambi"], ["ricambio_arrivato", "🔧 Ricambio arrivato"],
   ["aggiornamento_cliente", "Aggiornamento da fare al cliente"], ["piu_tempo", "Serve più tempo"],
   ["disabilitare_trova", "Disabilitare «Trova il mio dispositivo»"], ["finita", "Finita"]];
 export const CANALI_RISPOSTA: [string, string][] = [["telefono", "Telefono"], ["whatsapp", "WhatsApp"], ["mail", "Mail"], ["negozio", "In negozio"], ["online", "Online"]];
@@ -193,6 +201,23 @@ export interface StaffMsg { id: string; chat_id: string; telefono: string | null
 export interface StaffConv { chat_id: string; telefono: string | null; nome: string | null; ultimo: StaffMsg; n: number }
 export const assStaffConversazioni = (q = ""): Promise<{ conversazioni: StaffConv[] }> => fetchAPI(`/api/chat-apple-staff/conversazioni?q=${encodeURIComponent(q)}`);
 export const assStaffMessaggi = (chat: string): Promise<{ messaggi: StaffMsg[] }> => fetchAPI(`/api/chat-apple-staff/messaggi?chat_id=${encodeURIComponent(chat)}`);
+/** 25/10/2026: verifica periodica del 334 — risposta PROPOSTA per chi aspetta; parte solo col clic del titolare. */
+export interface StaffProposta { id: string; created_at: string; chat_id: string; telefono: string | null; nome: string | null; testo_cliente: string | null; proposta: string | null; stato: string }
+export const assStaffProposte = (): Promise<{ proposte: StaffProposta[] }> => fetchAPI(`/api/chat-apple-staff/proposte`);
+export const assStaffInviaProposta = (id: string, testo: string): Promise<{ ok: boolean; messaggio: string }> =>
+  fetchAPI(`/api/chat-apple-staff/proposte/${id}/invia`, { method: "POST", body: JSON.stringify({ testo }) });
+export const assStaffScartaProposta = (id: string): Promise<{ ok: boolean }> => fetchAPI(`/api/chat-apple-staff/proposte/${id}/scarta`, { method: "POST" });
+/** 25/10/2026: chat 334 ↔ clienti e schede — numero vero, cliente in rubrica, schede del numero, risposte ai preventivi lette. */
+export interface StaffSchedaBreve { id: string; numero: number; sigla: string; stato: string; prodotto: string | null; modello: string | null; difetto: string | null; created_at: string }
+export interface StaffEsito { id: string; created_at: string; scheda_id: string; esito: "accettato" | "rifiutato"; ipotesi: number | null; sicurezza: string | null; testo: string | null; motivo: string | null; n_ipotesi?: number }
+export interface StaffContesto { chat_id: string; telefono: string | null; clienti: { id: string; denominazione: string }[]; schede: StaffSchedaBreve[]; esiti_da_confermare: StaffEsito[] }
+export type StaffDati = Record<string, string | null>;
+export const assStaffContesto = (chat: string): Promise<StaffContesto> => fetchAPI(`/api/chat-apple-staff/contesto?chat_id=${encodeURIComponent(chat)}`);
+export const assStaffEstrai = (chat: string): Promise<{ dati: StaffDati; telefono: string | null }> =>
+  fetchAPI(`/api/chat-apple-staff/estrai`, { method: "POST", body: JSON.stringify({ chat_id: chat }) });
+export const assStaffChatDelNumero = (tel: string): Promise<{ chat: string[] }> => fetchAPI(`/api/chat-apple-staff/chat-del-numero?tel=${encodeURIComponent(tel)}`);
+export const assStaffConfermaEsito = (id: string, b: { esito?: string; ipotesi?: number; ignora?: boolean; operatore?: string }): Promise<{ ok: boolean; descrizione?: string }> =>
+  fetchAPI(`/api/chat-apple-staff/esiti/${id}/conferma`, { method: "POST", body: JSON.stringify(b) });
 /** 25/10/2026: chi è il numero — cliente del gestionale o nome nella rubrica del telefono staff 334. */
 export interface NomeNumero { nome: string; fonte: string; anagrafica_id: string | null; rubrica_334: string | null }
 export const assNomiNumeri = (tel: string[]): Promise<{ nomi: Record<string, NomeNumero> }> =>

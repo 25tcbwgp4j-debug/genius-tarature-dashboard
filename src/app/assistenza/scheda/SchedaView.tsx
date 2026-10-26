@@ -9,11 +9,13 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Copy, Download, FileText, Loader2, Mail, MessageSquareText, Package, Printer, RefreshCw, RotateCcw, Save, Tag, Trash2, UserRound,
-  ChevronRight, Plus,
+  ChevronRight, Plus, Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SceltaOperatore, type Operatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
+import type { RicambioAtteso } from "@/lib/assistenza";
+import { fetchAPI } from "@/lib/api";
 import {
   assAzione, assDocUrl, assEtichettaUrl, assModifica, assScheda, assTrackUrl, dataOra, DOCUMENTI_PDF, eur, pagaFineMese, type ConfigAssistenza, type DocPdf, type Esito, type Scheda,
 } from "@/lib/assistenza";
@@ -22,7 +24,7 @@ import { Apparecchio, type ValoriApparecchio } from "./Apparecchio";
 import { Avanzamento } from "./Avanzamento";
 import { CercaCliente, RiepilogoCliente, SchedaClienteModal } from "./Cliente";
 import { Comunicazioni, Registro } from "./Comunicazioni";
-import { DialogoCambiaStato, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoStessoModello, type TipoInvio } from "./Dialoghi";
+import { DialogoCambiaStato, DialogoChiudiTutto, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoStessoModello, type TipoInvio } from "./Dialoghi";
 import { Documenti } from "./Documenti";
 import { Lavorazione } from "./Lavorazione";
 import { Preventivo, type BozzaPreventivo } from "./Preventivo";
@@ -30,8 +32,8 @@ import { DialogoAssegna, DialogoChiudiVerifica, PannelloTecnici } from "./Tecnic
 import { Badge, Campo, Pill, Sezione, area, campo } from "./ui";
 
 type Bozza = Partial<Scheda>;
-type Dialogo = null | { k: "invio"; tipo: TipoInvio } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
-  | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "cambia_stato" };
+type Dialogo = null | { k: "invio"; tipo: TipoInvio } | { k: "chiudi_tutto" } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
+  | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" };
 
 function bozzaPreventivo(m: Partial<Scheda>): BozzaPreventivo {
   return { righe: (m.preventivo_righe as EstimateLine[]) || [], diagnosi: m.preventivo?.diagnosi || "", note: m.preventivo?.note || "",
@@ -122,13 +124,15 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       return r;
     } catch (e) { toastErrore(e); return null; } finally { setBusy(""); }
   }
-  async function stampa(tipo: "accettazione" | "etichetta") {
+  async function stampa(tipo: "accettazione" | "etichetta" | "etichetta_accessori") {
     if (!s) return;
+    // 26/10/2026 (63228): prima si salva, altrimenti l'etichetta esce coi dati vecchi (es. «DA COMPILARE»)
+    if (sporca && !ro && !(await salva(true))) return;
     try {
       const r = await assAzione(s.id, "stampa", { tipo, copie: 1 });
       toast.success(r.simulata ? "Scheda di PROVA: stampa simulata (niente stampanti del negozio), apro il PDF"
-        : r.agente_attivo ? `In stampa al banco (${tipo === "etichetta" ? "etichetta Brother" : "A4"})` : "Messa in coda, ma l'agente di stampa non risponde: apro il PDF");
-      if (!r.agente_attivo) window.open(tipo === "etichetta" ? assEtichettaUrl(s.id) : assDocUrl(s.id, "auto"), "_blank");
+        : r.agente_attivo ? `In stampa al banco (${tipo === "etichetta" ? "etichetta Brother" : tipo === "etichetta_accessori" ? "etichette degli accessori" : "A4"})` : "Messa in coda, ma l'agente di stampa non risponde: apro il PDF");
+      if (!r.agente_attivo) window.open(tipo === "etichetta" ? assEtichettaUrl(s.id) : tipo === "etichetta_accessori" ? assEtichettaUrl(s.id).replace("/etichetta.pdf", "/etichetta-accessori.pdf") : assDocUrl(s.id, "auto"), "_blank");
     } catch (e) { toastErrore(e); }
   }
   async function vendi(tipo: "fattura" | "proforma") {
@@ -149,6 +153,29 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "assegna_riparazione") setDlg({ k: "assegna_riparazione" });
     else if (a === "stato_riparazione") refTec.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (a === "aggiornamento") setDlg({ k: "invio", tipo: "aggiornamento_riparazione" });
+    else if (a === "trova") setDlg({ k: "invio", tipo: "trova" });
+    // 26/10/2026 (63202): rifiutato → chiuso / da rimontare (tecnico) / rimontato → pronto negativo
+    // 26/10/2026 (63118): preventivo negativo → RIFIUTATO subito, senza mandarlo da accettare
+    else if (a === "rifiutato_diretto") { if (confirm("Preventivo NEGATIVO: segnare la scheda come RIFIUTATA senza inviare il preventivo al cliente?\nPoi si va al PRONTO (restituzione).")) azione("esito-preventivo", { esito: "rifiutato", canale: "negozio" }, "Preventivo RIFIUTATO (negativo, non inviato)"); }
+    // 26/10/2026 (63214): la ricevuta d'ingresso si manda a scheda compilata (oppure «Non serve»)
+    else if (a === "ricevuta") apriInvio("ricevuta");
+    else if (a === "ricevuta_no") { if (s && confirm("Non mandare la ricevuta d'ingresso per questa scheda?")) assModifica(s.id, { ricevuta_da_inviare: false, operatore }).then(async () => { await ricarica(); onCambiata(); }).catch(toastErrore); }
+    else if (a === "rimontaggio") setDlg({ k: "assegna_rimontaggio" });
+    else if (a === "rimontaggio_chiuso") azione("rimontaggio", { azione: "non_serve" }, "Dispositivo chiuso: ora invia il PRONTO (negativo)");
+    else if (a === "rimontato") azione("rimontaggio", { azione: "fatto" }, "Richiuso: ora invia il PRONTO (negativo)");
+  }
+  // 26/10/2026: «Trova il mio» attivo / risolto (la riparazione resta bloccata finché il cliente non abilita la riparazione)
+  async function trova(az: "attivo" | "risolto") {
+    await azione("trova", { azione: az }, az === "attivo" ? "«Trova il mio» attivo: riparazione bloccata" : "«Trova il mio» risolto: si procede");
+  }
+  async function riconsegna() {
+    if (!s) return;
+    const x = prompt("Cosa si riconsegna al cliente? (es. «Si riconsegna SOLO l'hard disk con i dati: il MacBook resta a noi»). Vuoto = tutto.",
+      s.riconsegna_nota || "");
+    if (x === null) return;
+    if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
+    try { await assModifica(s.id, { riconsegna_nota: x.trim() || null, operatore }); toast.success(x.trim() ? "Scritto nel prossimo passo" : "Si riconsegna tutto"); await ricarica(); onCambiata(); }
+    catch (e) { toastErrore(e); }
   }
   async function statoRiparazione(stato: string) {
     let nota = "";
@@ -190,10 +217,30 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             {!ro && <Button size="sm" disabled={!sporca} onClick={() => salva()} title="Ctrl/Cmd+S"><Save />Salva{sporca ? " *" : ""}</Button>}
           </div>
         </div>
-        {!ro && <div className="mt-2"><SceltaOperatore value={operatore as Operatore} onChange={setOperatore} compatto /></div>}
+        {/* l'operatore serve anche sulle schede chiuse (Duplica) */}
+        <div className="mt-2"><SceltaOperatore value={operatore as Operatore} onChange={setOperatore} compatto /></div>
       </div>
 
-      <Avanzamento av={s.avanzamento} onAzione={onAzione} disabilitato={!!busy || ro} />
+      <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={() => setDlg({ k: "invio", tipo: "trova" })}
+        onPreventivo={() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+      <Avanzamento av={s.avanzamento} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)}
+        onGiaFatto={ro ? undefined : () => setDlg({ k: "chiudi_tutto" })} onRiconsegna={ro ? undefined : riconsegna} />
+      <DaRicordare key={s.id} s={s} ro={ro} operatore={operatore} onSalvata={async () => { await ricarica(); onCambiata(); }} />
+      {s.pronto_prog_stato === "programmato" && s.pronto_prog_il && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
+          ⏰ PRONTO programmato per {new Date(s.pronto_prog_il).toLocaleString("it-IT", { timeZone: "Europe/Rome", weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+          {!ro && <Button size="xs" variant="outline" className="ml-auto" onClick={async () => {
+            if (!confirm("Annullare il pronto programmato?")) return;
+            try { setS(await fetchAPI(`/api/assistenza/schede/${s.id}/pronto-programmato?operatore=${encodeURIComponent(operatore || "")}`, { method: "DELETE" })); toast.success("Pronto programmato annullato"); onCambiata(); } catch (e) { toastErrore(e); }
+          }}>Annulla</Button>}
+        </div>)}
+      {s.pronto_prog_stato === "errore" && <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-900">⚠️ Il pronto programmato NON è partito: {s.pronto_prog_esito}. Mandalo con PRONTO.</div>}
+      {!ro && s.stato !== "annullata" && <ComunicazioneCliente key={`com-${s.id}`} s={s} operatore={operatore} invia={(b) => azione("comunicazione", b, "Comunicazione inviata al cliente")}
+        togli={async () => { if (!confirm("Togliere la comunicazione dalla scheda? Non comparirà più nelle prossime mail, WhatsApp e PDF.")) return;
+          try { await assModifica(s.id, { comunicazione_cliente: null, operatore }); await ricarica(); onCambiata(); toast.success("Comunicazione tolta"); } catch (e) { toastErrore(e); } }} />}
+      {(s.stato === "accettato" || (s.ricambi_attesi || []).length > 0) && <RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
+        onSalvata={async () => { await ricarica(); onCambiata(); }} />}
+      <BannerRecensione s={s} ro={ro} onScelta={(az) => azione("recensione", { azione: az }, az === "invia" ? "Richiesta di recensione inviata" : "Recensione: non si chiede")} />
 
       {/* azioni e PDF */}
       <div className="flex flex-wrap items-center gap-1.5 rounded-xl border bg-card p-2 shadow-sm">
@@ -207,14 +254,22 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <span className="mx-0.5 hidden h-6 w-px bg-border sm:block" />
         <MenuPdf id={s.id} prima={() => salva(true)} />
         <Button size="sm" variant="outline" onClick={() => stampa("etichetta")} title="Etichetta Brother"><Tag />Etichetta</Button>
+        {/* 26/10/2026 (63228): etichetta a parte per alimentatore e accessori (senza ristampare quella del dispositivo) */}
+        {(v("con_alimentatore") || v("accessori")) && <Button size="sm" variant="outline" onClick={() => stampa("etichetta_accessori")}
+          title="Un'etichetta per ogni accessorio consegnato"><Tag />Etichetta {v("con_alimentatore") && !v("accessori") ? "alimentatore" : "accessori"}</Button>}
         <Button size="sm" variant="outline" onClick={() => stampa("accettazione")} title="Stampa A4 al banco"><Printer />A4</Button>
         <span className="ml-auto" />
         <a className="text-xs text-muted-foreground underline" href={assTrackUrl(s.token_pubblico)} target="_blank" rel="noreferrer" title="Pagina pubblica per il cliente (senza dati personali)">pagina cliente</a>
-        {!ro && <Button size="sm" variant="ghost" onClick={async () => {
-          if (!operatore) { toast.error("Scegli l'operatore"); return; }
-          try { const n = await assAzione(s.id, "duplica", { operatore, stesso_dispositivo: confirm("Stesso dispositivo? (OK = sì, Annulla = solo stesso cliente)") }); toast.success(`Nuova scheda ${n.sigla}`); onCambiata(); onApri(n.id); }
+        {/* 26/10/2026 (62245): DUPLICA anche dalle schede chiuse e storiche (la scheda originale non cambia) */}
+        <Button size="sm" variant="outline" title="Nuova scheda identica (stesso cliente e dispositivo, difetto e accessori): poi correggi quello che serve" onClick={async () => {
+          if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
+          const stesso = confirm("Duplica la scheda.\n\nOK = scheda IDENTICA (stesso cliente, stesso dispositivo, difetto e accessori)\nAnnulla = solo stesso cliente, dispositivo nuovo");
+          try { const n = await assAzione(s.id, "duplica", { operatore, stesso_dispositivo: stesso, identica: stesso }); toast.success(`Nuova scheda ${n.sigla}: correggi quello che serve`); onCambiata(); onApri(n.id); }
           catch (e) { toastErrore(e); }
-        }}><Copy />Duplica</Button>}
+        }}><Copy />Duplica</Button>
+        {/* 25/10/2026: la chat WhatsApp 334 di questo cliente (dati di fatturazione, foto, risposte) */}
+        {s.telefono && <Button size="sm" variant="outline" title="Apri la chat WhatsApp staff 334 di questo numero"
+          onClick={() => { window.location.href = `/chat-apple?tab=staff&tel=${encodeURIComponent(s.telefono || "")}`; }}><MessageSquareText />Chat WhatsApp</Button>}
         {(admin || !["consegnato", "annullata"].includes(st)) && <Button size="sm" variant="ghost" onClick={() => setDlg({ k: "cambia_stato" })} title="Riporta la scheda a qualsiasi stato (anche indietro)"><RotateCcw />Cambia stato</Button>}
         {admin && !ro && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => {
           const m = prompt("Motivo dell'annullamento della scheda?");
@@ -268,7 +323,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       <div className="grid gap-3 xl:grid-cols-[3fr_2fr]">
         <Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} />
         <div ref={refDoc} className="scroll-mt-28 space-y-3">
-          <Documenti s={s} ro={ro} busy={!!busy}
+          <Documenti s={s} ro={ro} busy={!!busy} onFatturaEliminata={async () => { await ricarica(); onCambiata(); }}
             onScontrino={async () => { if (sporca && !(await salva(true))) return; router.push(`/cassa?scheda=${s.id}`); }}
             onAcconto={async () => {
               if (sporca && !(await salva(true))) return;
@@ -295,16 +350,17 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <Apribile titolo="Fasi e registro" conteggio={(s.eventi || []).length}><Registro s={s} /></Apribile>
       </div>
 
+      {dlg?.k === "chiudi_tutto" && <DialogoChiudiTutto s={s} onClose={() => setDlg(null)} onChiudi={async (b) => !!(await azione("chiudi-tutto", b, "Scheda chiusa: già fatto tutto"))} />}
       {dlg?.k === "invio" && <DialogoInvio s={s} tipo={dlg.tipo} onClose={() => setDlg(null)} onInvia={async (body) => {
-        const nome = dlg.tipo === "ricevuta" ? "ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "aggiornamento-riparazione" : "preventivo";
-        const corpo = dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento" ? { ...body, tipo: dlg.tipo } : body;
-        const r = await azione(nome, corpo, dlg.tipo === "ricevuta" ? "Ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "Aggiornamento riparazione" : "Preventivo inviato");
+        const nome = dlg.tipo === "ricevuta" ? "ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "aggiornamento-riparazione" : dlg.tipo === "trova" ? "trova" : "preventivo";
+        const corpo = dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento" ? { ...body, tipo: dlg.tipo } : dlg.tipo === "trova" ? { ...body, azione: "invia" } : body;
+        const r = await azione(nome, corpo, dlg.tipo === "ricevuta" ? "Ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "Aggiornamento riparazione" : dlg.tipo === "trova" ? "Istruzioni «Trova il mio» inviate" : "Preventivo inviato");
         return r ? (r.esito as Esito) : null;
       }} />}
       {dlg?.k === "esito" && <DialogoEsito s={s} righe={bz.righe} onClose={() => setDlg(null)}
         onEsito={async (body) => !!(await azione("esito-preventivo", body, body.esito === "accettato" ? "ACCETTATO: in riparazione, lavorazione precompilata" : "Preventivo RIFIUTATO"))} />}
       {dlg?.k === "pronto" && <DialogoPronto s={s} lavorazione={String(v("lavorazione") || "")} totale={(v("totale_lavorazione") as number | null) ?? null} onClose={() => setDlg(null)}
-        onInvia={async (body) => { const r = await azione("pronto", body, "PRONTO"); return r ? (r.esito as Esito) : null; }} />}
+        onInvia={async (body) => { const r = await azione("pronto", body, body.programma_il ? "PRONTO programmato" : "PRONTO"); return r ? (r.esito as Esito) : null; }} />}
       {dlg?.k === "cambia_stato" && <DialogoCambiaStato s={s} onClose={() => setDlg(null)} onConferma={async (b) => !!(await azione("riapri", b, "Stato della scheda cambiato"))} />}
       {dlg?.k === "pagato" && <DialogoPagato s={s} onClose={() => setDlg(null)} onPagato={async (body) => !!(await azione("pagamento", body, "Pagamento registrato"))} />}
       {dlg?.k === "consegna" && <DialogoConsegna s={s} onClose={() => setDlg(null)} onConsegna={async (modo) => {
@@ -327,6 +383,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       {dlg?.k === "assegna_riparazione" && <DialogoAssegna titolo={`Assegna in riparazione — scheda ${s.sigla}`} tecnici={tecnici} attuale={s.tecnico_riparazione}
         testo="Chi fa la riparazione? Poi si aggiorna lo stato: attesa ricambi, aggiornamento al cliente, serve più tempo, «Trova il mio dispositivo», finita."
         onClose={() => setDlg(null)} onAssegna={async (t) => !!(await azione("assegna-riparazione", { tecnico: t }, `Riparazione assegnata a ${t}`))} />}
+      {dlg?.k === "assegna_rimontaggio" && <DialogoAssegna titolo={`Rifiutato da richiudere — scheda ${s.sigla}`} tecnici={tecnici} attuale={s.tecnico_riparazione}
+        testo="Il preventivo è rifiutato e il dispositivo è stato smontato per la verifica: chi lo richiude? Quando l'ha richiuso il tecnico segna «Richiuso: pronto da ritirare» e si invia il PRONTO negativo."
+        onClose={() => setDlg(null)} onAssegna={async (t) => !!(await azione("rimontaggio", { azione: "serve", tecnico: t }, `Da richiudere: assegnato a ${t}`))} />}
       {dlg?.k === "stesso" && <DialogoStessoModello s={s} ro={ro} onClose={() => setDlg(null)} onApri={onApri}
         onCopia={(r) => { setBz((x) => ({ ...x, righe: r })); setDlg(null); toast.success("Preventivo copiato: controlla i prezzi e salva"); }} />}
       {dlg?.k === "cliente" && <SchedaClienteModal id={s.anagrafica_id}
@@ -393,11 +452,18 @@ function RiferimentiScheda({ s, v, set, ro, operatore, onApri, onCambiata, salva
   async function altraNelPacco() {
     if (!operatore) { toast.error("Scegli l'operatore"); return; }
     if (!comb) { toast.error("Prima crea il codice della spedizione combinata"); return; }
+    // 26/10/2026 (Christian, 63228): quanti ALTRI dispositivi sono nel pacco → altrettante schede VUOTE (numeri progressivi),
+    // stesso cliente e stesso pacco; modello, seriale e difetto si compilano dopo (la ricevuta si manda a scheda compilata)
+    const x = prompt(`Quanti ALTRI dispositivi ci sono nel pacco ${comb}? (oltre a questo)`, "1");
+    if (x === null) return;
+    const quante = Number(x.trim());
+    if (!Number.isInteger(quante) || quante < 1 || quante > 20) { toast.error("Scrivi un numero da 1 a 20"); return; }
     if (!(await salva(true))) return;
     try {
-      const n = await assAzione(s.id, "duplica", { operatore, stesso_dispositivo: false });
-      await assModifica(n.id, { spedizione_combinata: comb, arrivo_modo: v("arrivo_modo") || null, operatore });
-      toast.success(`Nuova scheda ${n.sigla} nello stesso pacco ${comb}`); onCambiata(); onApri(n.id);
+      const r = await assAzione(s.id, "duplica", { operatore, combinata: true, quante });
+      const sigle = ((r.schede as { sigla: string }[]) || []).map((y) => y.sigla).join(", ");
+      toast.success(`${quante === 1 ? "Creata la scheda" : `Create ${quante} schede`} ${sigle} nel pacco ${comb}: compila prodotto, seriale e difetto, poi manda la ricevuta`, { duration: 9000 });
+      onCambiata(); onApri(r.id);
     } catch (e) { toastErrore(e); }
   }
   const pacco = s.collegamenti?.combinata || [];
@@ -410,7 +476,7 @@ function RiferimentiScheda({ s, v, set, ro, operatore, onApri, onCambiata, salva
         {voci.map(([k, x]) => <span key={k} className="text-xs"><span className="text-muted-foreground">{k}:</span> <b>{x}</b></span>)}
         <span className="ml-auto flex gap-1">
           {!ro && !comb && <Button size="xs" variant="outline" onClick={creaCodice} title="Più dispositivi nello stesso pacco: crea il codice (iniziali + numero di questa scheda)">📦 Spedizione combinata</Button>}
-          {!ro && comb && <Button size="xs" variant="outline" onClick={altraNelPacco}><Plus />Altra scheda nello stesso pacco</Button>}
+          {!ro && comb && <Button size="xs" variant="outline" onClick={altraNelPacco}><Plus />Altre schede nello stesso pacco…</Button>}
           {!ro && <Button size="xs" variant="ghost" onClick={() => setModifica((x) => !x)}>{modifica ? "Chiudi" : "Modifica"}</Button>}
         </span>
       </div>
@@ -426,6 +492,188 @@ function RiferimentiScheda({ s, v, set, ro, operatore, onApri, onCambiata, salva
           <Campo label="Schede precedenti (EX)"><input className={campo} disabled={ro} value={(v("schede_precedenti") as string) || ""} onChange={(e) => set("schede_precedenti", e.target.value)} /></Campo>
         </div>
       )}
+    </div>
+  );
+}
+
+
+/** 26/10/2026 (Christian): dopo la consegna (ritirato o spedito) si sceglie se chiedere la recensione su Google
+ *  (mail + WhatsApp, come per le Tarature). Solo per le consegne degli ultimi 30 giorni, una volta per scheda. */
+function BannerRecensione({ s, ro, onScelta }: { s: Scheda; ro: boolean; onScelta: (a: "invia" | "no") => void }) {
+  const consegna = (s.fasi as Record<string, { il?: string } | undefined> | undefined)?.consegna?.il;
+  const recente = !!consegna && Date.now() - new Date(consegna).getTime() < 30 * 86400000;
+  if (s.stato !== "consegnato" || !["RITIRATO", "SPEDITO"].includes(String(s.ritirato || "").toUpperCase())) return null;
+  if (s.recensione_stato === "inviata") return <div className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground">⭐ Recensione su Google chiesta{s.recensione_il ? ` il ${dataOra(s.recensione_il)}` : ""}</div>;
+  if (s.recensione_stato || !recente || ro) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+      <span className="font-semibold">⭐ {s.ritirato === "SPEDITO" ? "Spedito" : "Ritirato"}: chiediamo al cliente una recensione su Google?</span>
+      <span className="text-xs">mail{s.email ? ` a ${s.email}` : " (manca)"} + WhatsApp{s.telefono ? ` a ${s.telefono}` : " (manca)"}</span>
+      <span className="ml-auto flex gap-1">
+        <Button size="sm" onClick={() => onScelta("invia")}>⭐ Sì, chiedi la recensione</Button>
+        <Button size="sm" variant="outline" onClick={() => onScelta("no")}>No</Button>
+      </span>
+    </div>
+  );
+}
+
+
+/** 26/10/2026 (Christian): in cima alla scheda, in chiaro: «Trova il mio» attivo (riparazione bloccata) e come è arrivato /
+ *  come torna il dispositivo (corriere del cliente, nostro corriere, pony: NON si ritira a mano in negozio). */
+function BannerScheda({ s, ro, onTrova, onIstruzioni, onPreventivo }: { s: Scheda; ro: boolean; onTrova: (a: "attivo" | "risolto") => void; onIstruzioni: () => void; onPreventivo: () => void }) {
+  const chiusa = ["consegnato", "annullata"].includes(s.stato);
+  const trovaAttivo = s.trova_il_mio === "attivo" || s.riparazione_stato === "disabilitare_trova";
+  const bloccata = trovaAttivo && s.preventivo_stato === "accettato";   // prima si accetta il preventivo (63144)
+  const arrivo = s.arrivo_modo || "";
+  const sped = s.consegna_modo === "spedizione" || ["corriere_cliente", "pony", "corriere_nostro", "ritiro_nostro"].includes(arrivo);
+  const delCliente = arrivo === "corriere_cliente" || (s.consegna_modo === "spedizione" && s.consegna_corriere === "cliente");
+  const pony = arrivo === "pony";
+  return (
+    <>
+      {trovaAttivo && !chiusa && (
+        <div className={`flex flex-wrap items-center gap-2 rounded-xl border-2 px-3 py-2 text-sm ${bloccata
+          ? "border-red-400 bg-red-50 text-red-950 dark:bg-red-950/30 dark:text-red-100" : "border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"}`}>
+          <b>{bloccata ? "🔒 «TROVA IL MIO» ATTIVO — RIPARAZIONE BLOCCATA." : "🔒 «TROVA IL MIO» ATTIVO — da disattivare DOPO l'accettazione del preventivo."}</b>
+          <span>Il cliente deve abilitare la riparazione (Dov&apos;è → Riparazione o permuta) oppure rimuovere il dispositivo dall&apos;account.</span>
+          {!ro && <span className="ml-auto flex gap-1">
+            {!bloccata && <Button size="xs" variant="outline" onClick={onPreventivo} title="Scrive l'avviso nelle note del preventivo (va nel PDF)">Inserisci nel preventivo</Button>}
+            <Button size="xs" variant="destructive" onClick={onIstruzioni}>Invia istruzioni (mail + WhatsApp)</Button>
+            <Button size="xs" variant="outline" onClick={() => onTrova("risolto")}>Il cliente l&apos;ha fatto: si procede</Button>
+          </span>}
+        </div>
+      )}
+      {!trovaAttivo && !chiusa && !ro && (
+        <div className="-my-1 text-right"><button type="button" className="text-[11px] text-muted-foreground underline" onClick={() => onTrova("attivo")}>
+          🔒 Segna «Trova il mio» attivo{s.trova_il_mio === "risolto" ? " (era stato risolto)" : ""}</button></div>
+      )}
+      {sped && !chiusa && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-sky-400 bg-sky-50 px-3 py-2 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
+          <b>{pony ? "🛵 ARRIVATO CON PONY / CORRIERE DEL CLIENTE" : delCliente ? "📦 SPEDITO DAL CLIENTE (suo corriere)" : "🚚 SPEDIZIONE ORGANIZZATA DA NOI"}</b>
+          <span>— <b>non si ritira a mano in negozio</b>: {pony || delCliente
+            ? "torna con la spedizione organizzata dal cliente (aspettiamo la sua etichetta o il suo pony). Se il cliente ci chiede il ritorno, si crea la spedizione di ritorno qui sotto."
+            : "torna con il nostro corriere (spedizione di ritorno dalla sezione spedizioni)."}</span>
+        </div>
+      )}
+    </>
+  );
+}
+
+
+/** 26/10/2026 (Christian, 63217): nota grande «da ricordare» — cosa va fatto (es. mettere nel pacco la scatola della Pencil). */
+/** 26/10/2026 (Christian, 63201): COMUNICAZIONE CON IL CLIENTE — testo libero (es. «ci serve l'alimentatore originale»)
+ *  per mail e WhatsApp, in qualsiasi stato della scheda, senza cambiare lo stato e senza rimandare la scheda. */
+function ComunicazioneCliente({ s, operatore, invia, togli }: { s: Scheda; operatore: string; invia: (b: Record<string, unknown>) => Promise<unknown>; togli: () => void }) {
+  const [testo, setTesto] = useState("");
+  const [ricorda, setRicorda] = useState(true);
+  // 26/10/2026 (Christian): insieme al testo si può mandare anche la scheda (preventivo, pronto, consuntivo…)
+  const [documento, setDocumento] = useState("auto");
+  const DOC: [string, string][] = [["auto", "la scheda dello stato attuale"],
+    ["", "solo il testo, senza scheda"], ["ricevuta", "ricevuta d'ingresso"], ["preventivo", "preventivo"], ["pronto", "pronto per il ritiro"], ["consuntivo", "consuntivo con bonifico"]];
+  const [mail, setMail] = useState(!!s.email);
+  const [wa, setWa] = useState(!!s.telefono);
+  const [busy, setBusy] = useState(false);
+  const [inviata, setInviata] = useState<string | null>(null);
+  async function manda() {
+    if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
+    if (testo.trim().length < 3) { toast.error("Scrivi la comunicazione"); return; }
+    const allegato = DOC.find(([k]) => k === documento)?.[1] || "";
+    if (!confirm(`Inviare al cliente${mail ? " per mail" : ""}${mail && wa ? " e" : ""}${wa ? " su WhatsApp" : ""}?\n\n«${testo.trim()}»\n\n${documento ? `Insieme a: ${allegato}` : "Solo il testo, senza scheda"}`)) return;
+    setBusy(true);
+    try { if (await invia({ testo: testo.trim(), invia_mail: mail, invia_wa: wa, ricorda, documento: documento || null })) { setInviata(testo.trim()); setTesto(""); } } finally { setBusy(false); }
+  }
+  return (
+    <div className="space-y-1.5 rounded-xl border-2 border-blue-200 bg-blue-50/60 p-2.5 dark:border-blue-900 dark:bg-blue-950/20">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-semibold text-blue-950 dark:text-blue-100">💬 Comunicazione con il cliente</span>
+        <span className="text-xs text-muted-foreground">arriva per mail e WhatsApp con il numero della scheda, in qualsiasi stato (non cambia lo stato)</span>
+      </div>
+      {s.comunicazione_cliente && (
+        <div className="flex flex-wrap items-start gap-2 rounded-lg border border-blue-300 bg-white px-2.5 py-1.5 text-sm dark:bg-blue-950/40">
+          <span className="font-semibold">📌 In evidenza in ogni mail, WhatsApp e PDF:</span><span className="flex-1 whitespace-pre-line">{s.comunicazione_cliente}</span>
+          <Button size="xs" variant="ghost" className="text-red-700" onClick={togli}>Togli</Button>
+        </div>
+      )}
+      <textarea className={`${campo} min-h-[64px]`} placeholder="Es. Per procedere occorre che ci consegni l'alimentatore originale." value={testo} onChange={(e) => setTesto(e.target.value)} />
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <label className="flex items-center gap-1.5"><input type="checkbox" checked={mail} disabled={!s.email} onChange={(e) => setMail(e.target.checked)} />mail{s.email ? ` (${s.email})` : " — manca"}</label>
+        <label className="flex items-center gap-1.5"><input type="checkbox" checked={wa} disabled={!s.telefono} onChange={(e) => setWa(e.target.checked)} />WhatsApp{s.telefono ? ` (${s.telefono})` : " — manca"}</label>
+        <label className="flex items-center gap-1.5">insieme a
+          <select className={`${campo} h-8 w-auto py-0`} value={documento} onChange={(e) => setDocumento(e.target.value)}>
+            {DOC.map(([k, l]) => <option key={k || "nessuno"} value={k}>{l}</option>)}</select></label>
+        <label className="flex items-center gap-1.5" title="Resta sulla scheda: compare in evidenza in tutte le prossime mail, WhatsApp e PDF (preventivo, pronto, consuntivo…)"><input type="checkbox" checked={ricorda} onChange={(e) => setRicorda(e.target.checked)} />resta in tutti i documenti</label>
+        <Button size="sm" className="ml-auto" disabled={busy || testo.trim().length < 3 || !(mail || wa)} onClick={manda}>{busy ? <Loader2 className="animate-spin" /> : <Send />}Invia al cliente</Button>
+      </div>
+      {inviata && <div className="text-xs text-emerald-800">✔ Inviata: «{inviata}» (è anche nel registro della scheda)</div>}
+    </div>
+  );
+}
+
+
+/** 26/10/2026 (Christian): RICAMBI IN ATTESA, chiari: cosa, link del prodotto ordinato, ordine/fornitore, arrivo previsto.
+ *  Salvando, con il preventivo accettato la riparazione va da sola in «attesa ricambi» (o «ricambio arrivato» quando sono tutti arrivati). */
+function RicambiAttesi({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean; operatore: string; onSalvata: () => Promise<void> }) {
+  const vuoto: RicambioAtteso = { cosa: "", link: "", ordine: "", fornitore: "", arrivo_previsto: "", stato: "da_ordinare" };
+  const [righe, setRighe] = useState<RicambioAtteso[]>(() => (s.ricambi_attesi || []).map((r) => ({ ...r })));
+  const [busy, setBusy] = useState(false);
+  const cambiate = JSON.stringify(righe) !== JSON.stringify(s.ricambi_attesi || []);
+  const setR = (i: number, k: keyof RicambioAtteso, v: string) => setRighe((x) => x.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  async function salva() {
+    if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
+    setBusy(true);
+    try {
+      await assModifica(s.id, { ricambi_attesi: righe.filter((r) => (r.cosa || "").trim() || (r.link || "").trim()), operatore });
+      toast.success("Ricambi salvati"); await onSalvata();
+    } catch (e) { toastErrore(e); } finally { setBusy(false); }
+  }
+  const mancano = righe.filter((r) => r.stato !== "arrivato").length;
+  return (
+    <div className="space-y-1.5 rounded-xl border-2 border-amber-200 bg-amber-50/50 p-2.5 dark:border-amber-900 dark:bg-amber-950/20">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-semibold text-amber-950 dark:text-amber-100">📦 Ricambi in attesa</span>
+        <span className="text-xs text-muted-foreground">{righe.length ? `${mancano} da arrivare su ${righe.length}` : "nessun ricambio segnato"}</span>
+        {!ro && <Button size="xs" variant="outline" className="ml-auto" onClick={() => setRighe((x) => [...x, { ...vuoto }])}><Plus />Aggiungi ricambio</Button>}
+      </div>
+      {righe.map((r, i) => (
+        <div key={i} className={`grid gap-1.5 rounded-lg border bg-background p-2 sm:grid-cols-[1.4fr_1fr_0.8fr_0.7fr_0.7fr_auto] ${r.stato === "arrivato" ? "opacity-60" : ""}`}>
+          <input className={campo} disabled={ro} placeholder="Cosa (es. Tastiera Lenovo V15 G2)" value={r.cosa || ""} onChange={(e) => setR(i, "cosa", e.target.value)} />
+          <div className="flex gap-1">
+            <input className={campo} disabled={ro} placeholder="Link del prodotto ordinato" value={r.link || ""} onChange={(e) => setR(i, "link", e.target.value)} />
+            {r.link && /^https?:\/\//.test(r.link) && <a className="inline-flex items-center px-1 text-blue-700 underline" href={r.link} target="_blank" rel="noreferrer">apri</a>}
+          </div>
+          <input className={campo} disabled={ro} placeholder="N. ordine / fornitore" value={r.ordine || ""} onChange={(e) => setR(i, "ordine", e.target.value)} />
+          <input className={campo} type="date" disabled={ro} title="Arrivo previsto" value={(r.arrivo_previsto || "").slice(0, 10)} onChange={(e) => setR(i, "arrivo_previsto", e.target.value)} />
+          <select className={campo} disabled={ro} value={r.stato || "da_ordinare"} onChange={(e) => setR(i, "stato", e.target.value)}>
+            <option value="da_ordinare">Da ordinare</option><option value="ordinato">Ordinato</option><option value="arrivato">✔ Arrivato</option></select>
+          {!ro && <Button size="xs" variant="ghost" className="text-red-700" onClick={() => setRighe((x) => x.filter((_, j) => j !== i))}><Trash2 /></Button>}
+          {r.nota && <div className="text-xs text-muted-foreground sm:col-span-6">{r.nota}</div>}
+        </div>
+      ))}
+      {!ro && cambiate && <div className="flex justify-end"><Button size="sm" disabled={busy} onClick={salva}>{busy ? <Loader2 className="animate-spin" /> : <Save />}Salva ricambi</Button></div>}
+    </div>
+  );
+}
+
+
+function DaRicordare({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean; operatore: string; onSalvata: () => Promise<void> }) {
+  const [testo, setTesto] = useState(s.promemoria || "");
+  const [apri, setApri] = useState(!!s.promemoria);
+  const [busy, setBusy] = useState(false);
+  const cambiata = (testo.trim() || null) !== (s.promemoria || null);
+  async function salva() {
+    if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
+    setBusy(true);
+    try { await assModifica(s.id, { promemoria: testo.trim() || null, operatore }); toast.success(testo.trim() ? "Nota da ricordare salvata" : "Nota tolta"); await onSalvata(); }
+    catch (e) { toastErrore(e); } finally { setBusy(false); }
+  }
+  if (!apri && !ro) return <div className="-mt-1 text-right"><button type="button" className="text-xs font-medium text-orange-700 underline" onClick={() => setApri(true)}>📌 Aggiungi una nota da ricordare</button></div>;
+  if (!apri) return null;
+  return (
+    <div className="space-y-1.5 rounded-xl border-2 border-orange-400 bg-orange-50 p-3 dark:bg-orange-950/30">
+      <div className="text-sm font-bold text-orange-900 dark:text-orange-200">📌 DA RICORDARE</div>
+      <textarea className={`${area} min-h-[72px] border-orange-300 bg-white text-[15px] font-semibold dark:bg-background`} disabled={ro} value={testo}
+        onChange={(e) => setTesto(e.target.value)} placeholder="es. Mettere nel pacco anche la scatola della Pencil già spedita (richiesta Medianet su WhatsApp)"
+        rows={Math.max(2, testo.split("\n").length)} />
+      {!ro && cambiata && <div className="text-right"><Button size="sm" disabled={busy} onClick={salva}>{busy && <Loader2 className="animate-spin" />}Salva la nota</Button></div>}
     </div>
   );
 }

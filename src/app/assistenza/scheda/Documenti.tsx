@@ -6,15 +6,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CheckCircle2, FileText, Receipt, Send, ShoppingCart, Truck, Wallet } from "lucide-react";
+import { CheckCircle2, FileText, Receipt, Send, ShoppingCart, Trash2, Truck, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
+import { fattElimina } from "@/lib/api";
 import { assAzione, eur, type FatturaCollegata, type Scheda } from "@/lib/assistenza";
 import { Pill, Sezione } from "./ui";
 
-export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAcconto, onVendi, onPagato, onCorriere }: {
+export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAcconto, onVendi, onPagato, onCorriere, onFatturaEliminata }: {
   s: Scheda; ro: boolean; busy: boolean; onScontrino: () => void; onAcconto: () => void; onRichiediAcconto: () => void;
   onVendi: (t: "fattura" | "proforma") => void; onPagato: () => void; onCorriere: () => void;
+  /** 26/10/2026 (63197): la bozza di fattura (mai numerata) si elimina dalla scheda */
+  onFatturaEliminata?: () => void;
 }) {
   // 14/10/2026: ultima richiesta d'acconto mandata al cliente (mail + WhatsApp)
   const rich = (s.fasi as Record<string, { il?: string; importo?: number } | undefined> | undefined)?.richiesta_acconto;
@@ -51,7 +54,7 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
             {c.scontrino.data_rt ? <span className="text-muted-foreground">del {dataIt(c.scontrino.data_rt)}</span> : null}
             {(c.scontrino.pagamenti || []).map((p, i) => <span key={i} className="text-muted-foreground">· {p.modalita} {eur(p.importo)}</span>)}
             <Pill>{c.scontrino.stato}</Pill></div>}
-          {c.fattura && <RigaFattura f={c.fattura} />}
+          {c.fattura && <RigaFattura f={c.fattura} onEliminata={ro ? undefined : onFatturaEliminata} />}
           {(c.altre_fatture || []).map((f) => <RigaFattura key={f.id} f={f} altra />)}
           {(c.bonifici || []).map((b) => <div key={b.id} className="flex flex-wrap items-center gap-2"><Wallet className="size-4 text-muted-foreground" />Bonifico {eur(b.importo)}
             <span className="text-muted-foreground">del {dataIt(b.data)} da {b.ordinante || "—"}</span> <Pill>{b.stato}</Pill></div>)}
@@ -73,8 +76,14 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
 
 const dataIt = (d: string) => new Date(d.length <= 10 ? `${d}T12:00:00` : d).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" });
 
-function RigaFattura({ f, altra }: { f: FatturaCollegata; altra?: boolean }) {
+function RigaFattura({ f, altra, onEliminata }: { f: FatturaCollegata; altra?: boolean; onEliminata?: () => void }) {
   const nc = f.tipo_documento === "TD04";
+  const [via, setVia] = useState(false);
+  async function elimina() {
+    if (!confirm(`Eliminare la bozza di fattura da ${eur(f.totale)}? Non è mai stata numerata né inviata allo SdI.`)) return;
+    setVia(true);
+    try { await fattElimina(f.id); toast.success("Bozza di fattura eliminata"); onEliminata?.(); } catch (e) { toastErrore(e); } finally { setVia(false); }
+  }
   return (
     <div className="flex flex-wrap items-center gap-2"><FileText className="size-4 text-muted-foreground" />
       {nc ? "Nota di credito" : altra ? "Altra fattura" : "Fattura"} <Link className="underline" href={`/fatturazione?id=${f.id}`}>{f.numero || "bozza"}</Link> {eur(f.totale)}
@@ -82,6 +91,8 @@ function RigaFattura({ f, altra }: { f: FatturaCollegata; altra?: boolean }) {
       {f.pagamento_stato === "pagata" ? <Pill tono="verde">pagata{f.pagato_il ? ` il ${dataIt(f.pagato_il)}` : ""}{f.pagamento_modalita ? ` · ${f.pagamento_modalita}` : ""}</Pill>
         : f.pagamento_stato ? <Pill tono="ambra">{f.pagamento_stato}</Pill> : null}
       <Pill>{f.stato}</Pill>
+      {onEliminata && f.stato === "bozza" && !f.numero && (
+        <Button size="xs" variant="ghost" className="text-red-700" disabled={via} onClick={elimina}><Trash2 />Elimina bozza</Button>)}
     </div>
   );
 }

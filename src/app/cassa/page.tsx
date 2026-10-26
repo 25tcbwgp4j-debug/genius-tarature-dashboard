@@ -283,7 +283,9 @@ export default function CassaPage() {
       setCarrello([]); ricarica(); setRiemissione(null);
       if (scheda) {
         await collegaScheda({ scontrino_id: sc.id, ...(scheda.acconto ? { acconto: String(scheda.acconto) } : {}) });
-        router.push(`/assistenza?id=${scheda.id}`); setScheda(null);
+        // 26/10/2026 (63178): pagina ricaricata davvero (con router.push si restava sulla cassa o sulla scheda vecchia)
+        toast.success(`Scheda ${scheda.sigla}: pagata con lo scontrino, torno alla scheda`);
+        window.location.assign(`/assistenza?id=${scheda.id}`); return esito;
       }
       if (sessione) { router.push(`/sessioni/${sessione.id}`); setSessione(null); }
       if (ordine) {

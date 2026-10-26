@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  LifeBuoy,
   Calculator,
   ClipboardList,
   Users,
@@ -107,6 +108,8 @@ export const MENU_APPLE: Voce[] = [
   { href: "/", label: "Panoramica Apple", icon: LayoutDashboard },
   { href: "/rubrica-apple", label: "Rubrica clienti Apple", icon: BookUser },
   { href: "/chat-apple", label: "Chat WhatsApp Apple", icon: MessageSquare },
+  // 25/10/2026: copia locale sul PC HP del negozio, per lavorare se server o internet sono giù (solo dalla rete del negozio)
+  { href: "http://10.10.60.180:8090", label: "Gestionale di emergenza (PC negozio)", icon: LifeBuoy },
   ...COMUNI,
   { href: "/statistiche/fatturato", label: "Fatturato negozio", icon: TrendingUp },
   ...AMMINISTRAZIONE,
@@ -248,6 +251,7 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                {...(item.href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"

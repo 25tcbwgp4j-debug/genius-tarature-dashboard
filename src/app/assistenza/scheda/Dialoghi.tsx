@@ -64,8 +64,9 @@ function Canali({ mail, wa, setMail, setWa }: { mail: boolean; wa: boolean; setM
 }
 
 // ---------------------------------------------------------------------------
-export type TipoInvio = "ricevuta" | "preventivo" | "aggiornamento" | "aggiornamento_riparazione";
-const TITOLI: Record<TipoInvio, string> = { ricevuta: "Ricevuta d'ingresso", preventivo: "INVIA PREVENTIVO", aggiornamento: "INVIA AGGIORNAMENTO PREVENTIVO", aggiornamento_riparazione: "Aggiornamento riparazione" };
+export type TipoInvio = "ricevuta" | "preventivo" | "aggiornamento" | "aggiornamento_riparazione" | "trova";
+const TITOLI: Record<TipoInvio, string> = { ricevuta: "Ricevuta d'ingresso", preventivo: "INVIA PREVENTIVO", aggiornamento: "INVIA AGGIORNAMENTO PREVENTIVO",
+  aggiornamento_riparazione: "Aggiornamento riparazione", trova: "Istruzioni «Trova il mio» (abilitare la riparazione)" };
 
 /** Invio al cliente: mail + WhatsApp SEMPRE selezionati (si possono togliere solo apposta). */
 export function DialogoInvio({ s, tipo, onClose, onInvia }: { s: Scheda; tipo: TipoInvio; onClose: () => void; onInvia: (b: Record<string, unknown>) => Promise<Esito | null> }) {
@@ -164,6 +165,18 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
   const [wa, setWa] = useState(true);
   const [busy, setBusy] = useState(false);
   const [fatto, setFatto] = useState<Esito | null>(null);
+  // 26/10/2026 (Christian, 63226): come per le Tarature, il pronto / consuntivo si manda subito o si PROGRAMMA
+  // 26/10/2026: stesse scelte delle Tarature — Adesso · Oggi alle… · Domani alle… · Data e ora a scelta
+  const [quando, setQuando] = useState<"adesso" | "oggi" | "domani" | "libero">("adesso");
+  const [oraOggi, setOraOggi] = useState(prossimaMezzora);
+  const [oraDomani, setOraDomani] = useState("09:30");
+  const [dataLibera, setDataLibera] = useState(() => giornoIso(prossimoLavorativo930()));
+  const [oraLibera, setOraLibera] = useState("09:30");
+  const qs = quando === "oggi" ? { d: giornoIso(new Date()), o: oraOggi } : quando === "domani" ? { d: giornoIso(prossimoLavorativo930()), o: oraDomani }
+    : quando === "libero" ? { d: dataLibera, o: oraLibera } : null;
+  const programma = qs && qs.d && /^\d{2}:\d{2}$/.test(qs.o) ? new Date(`${qs.d}T${qs.o}:00`).toISOString() : null;
+  const passato = !!programma && new Date(programma).getTime() <= Date.now() + 60000;
+  const fuoriOrario = !!qs && !inOrarioNegozio(qs.d, qs.o);
   // 26/10/2026 (Christian, 63118): a costo zero niente pagamento da chiedere (né bonifico, né consuntivo, né fattura)
   const gratis = (Number(String(tot).replace(",", ".")) || 0) - (Number(s.acconto) || 0) <= 0.009;
   const pagEff = gratis ? "" : (pag || (cons === "spedizione" ? "bonifico" : ""));
@@ -171,14 +184,15 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
   async function invia() {
     setBusy(true);
     try {
-      const r = await onInvia({ ...corpo, consegna_corriere: cons === "spedizione" ? corr : null, esito, pagamento_modo: pagEff || null, invia_mail: mail, invia_wa: wa });
+      const r = await onInvia({ ...corpo, consegna_corriere: cons === "spedizione" ? corr : null, esito, pagamento_modo: pagEff || null, invia_mail: mail, invia_wa: wa,
+        ...(programma ? { programma_il: programma } : {}) });
       if (r) setFatto(r);
     } finally { setBusy(false); }
   }
   return (
     <Modale titolo={`PRONTO — scheda ${s.sigla}`} onClose={onClose} largo
       piedi={fatto ? <Button onClick={onClose}>Chiudi</Button> : <><Button variant="outline" onClick={onClose}>Annulla</Button>
-        <Button disabled={busy} onClick={invia}>{busy && <Loader2 className="animate-spin" />}PRONTO{mail || wa ? " e avvisa il cliente" : ""}</Button></>}>
+        <Button disabled={busy || (quando !== "adesso" && (!programma || passato))} onClick={invia}>{busy && <Loader2 className="animate-spin" />}{programma ? `PROGRAMMA il pronto (${new Date(programma).toLocaleString("it-IT", { timeZone: "Europe/Rome", weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })})` : `PRONTO${mail || wa ? " e avvisa il cliente" : ""}`}</Button></>}>
       {fatto ? <EsitoInvio e={fatto} /> : (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -201,6 +215,17 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
           {!lavorazione && !s.lavorazione && <p className="text-xs text-amber-700">La lavorazione è vuota: si riempie con le righe accettate del preventivo.</p>}
           <Anteprima s={s} corpo={pagEff === "fine_mese" ? { ...corpo, tipo: "pronto" } : corpo} />
           <Canali mail={mail} wa={wa} setMail={setMail} setWa={setWa} />
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+            <span className="text-sm font-medium">Quando avvisare il cliente:</span>
+            <Scelta valore={quando} opzioni={[["adesso", "Adesso"], ["oggi", "Oggi alle…"], ["domani", `${etichettaGiorno(prossimoLavorativo930())} alle…`], ["libero", "Data e ora a scelta"]]} onChange={setQuando} />
+            {quando === "oggi" && <input type="time" className={`${campo} w-28`} value={oraOggi} onChange={(e) => setOraOggi(e.target.value)} />}
+            {quando === "domani" && <input type="time" className={`${campo} w-28`} value={oraDomani} onChange={(e) => setOraDomani(e.target.value)} />}
+            {quando === "libero" && <><input type="date" className={`${campo} w-40`} value={dataLibera} onChange={(e) => setDataLibera(e.target.value)} />
+              <input type="time" className={`${campo} w-28`} value={oraLibera} onChange={(e) => setOraLibera(e.target.value)} /></>}
+            {passato && <span className="w-full text-xs font-medium text-red-700">L&apos;orario è già passato: scegline uno nel futuro (oppure «Adesso»).</span>}
+            {!passato && fuoriOrario && <span className="w-full text-xs text-amber-700">Fuori dall&apos;orario del negozio (lun-ven 9:30-13:30 e 15:00-19:00): il cliente riceverà il messaggio a negozio chiuso.</span>}
+            {programma && <span className="w-full text-xs text-muted-foreground">La scheda resta in «Riparazione finita · Pronto programmato»: all&apos;ora scelta parte il {gratis ? (cons === "spedizione" ? "«pronto per la spedizione» (nulla da pagare)" : "pronto") : pagEff === "bonifico" || pagEff === "paypal" ? "consuntivo" : "pronto"} ({[mail && "mail", wa && "WhatsApp"].filter(Boolean).join(" + ") || "nessun canale"}) e la scheda diventa PRONTA.</span>}
+          </div>
         </div>
       )}
     </Modale>
@@ -235,6 +260,35 @@ export function DialogoPagato({ s, onClose, onPagato }: { s: Scheda; onClose: ()
 }
 
 // ---------------------------------------------------------------------------
+/** 26/10/2026 (Christian, 62778): scheda già lavorata e riconsegnata ma rimasta aperta → si chiude in un passo. */
+export function DialogoChiudiTutto({ s, onClose, onChiudi }: { s: Scheda; onClose: () => void; onChiudi: (b: Record<string, unknown>) => Promise<boolean> }) {
+  const [esito, setEsito] = useState<"riparato" | "non_riparato" | "nessun_intervento">("riparato");
+  const [modo, setModo] = useState<"ritiro" | "spedizione" | "corriere_cliente">(s.consegna_modo === "spedizione" ? (s.consegna_corriere === "cliente" ? "corriere_cliente" : "spedizione") : "ritiro");
+  const [fuori, setFuori] = useState(false);
+  const [nota, setNota] = useState("");
+  const [busy, setBusy] = useState(false);
+  const saldo = Number(s.saldo || 0);
+  const daPagare = !s.pagata && saldo > 0.009;
+  async function vai() {
+    if (daPagare && !fuori) { toast.error("Risulta da pagare: incassa prima, oppure spunta «già pagato / non dovuto»"); return; }
+    setBusy(true);
+    try { if (await onChiudi({ esito, modo, nota, pagamento_fuori: fuori })) onClose(); } finally { setBusy(false); }
+  }
+  return (
+    <Modale titolo={`Già fatto tutto — chiudi la scheda ${s.sigla}`} onClose={onClose}
+      piedi={<><Button variant="outline" onClick={onClose}>Annulla</Button><Button disabled={busy} onClick={vai}>{busy && <Loader2 className="animate-spin" />}Chiudi la scheda</Button></>}>
+      <div className="space-y-3 text-sm">
+        <p className="text-muted-foreground">Per le schede già lavorate e riconsegnate ma rimaste a metà: segna pronto e consegna in un colpo solo, saltando i passaggi. Resta tutto nel registro.</p>
+        <Campo label="Com'è andata"><Scelta valore={esito} opzioni={[["riparato", "Riparato"], ["non_riparato", "Non riparato"], ["nessun_intervento", "Nessun intervento"]]} onChange={(x) => setEsito(x as typeof esito)} /></Campo>
+        <Campo label="Come è stato riconsegnato"><Scelta valore={modo} opzioni={[["ritiro", "Ritirato in negozio"], ["spedizione", "Spedito da noi"], ["corriere_cliente", "Corriere del cliente"]]} onChange={(x) => setModo(x as typeof modo)} /></Campo>
+        {daPagare && <label className="flex items-center gap-2 rounded-md bg-amber-50 px-2.5 py-2 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+          <input type="checkbox" className="size-4" checked={fuori} onChange={(e) => setFuori(e.target.checked)} />Risulta da pagare {eur(saldo)}: è già stato pagato / non è dovuto</label>}
+        <Campo label="Nota (facoltativa, resta nelle note interne)"><textarea className={area} rows={2} value={nota} onChange={(e) => setNota(e.target.value)} placeholder="es. ritirato dal cliente il 20/10, riparazione di cortesia" /></Campo>
+      </div>
+    </Modale>
+  );
+}
+
 export function DialogoConsegna({ s, onClose, onConsegna }: { s: Scheda; onClose: () => void; onConsegna: (modo: string) => Promise<boolean> }) {
   const [busy, setBusy] = useState(false);
   const opz: [string, string, string][] = [
@@ -432,3 +486,32 @@ export function DialogoCambiaStato({ s, onClose, onConferma }: { s: Scheda; onCl
     </Modale>
   );
 }
+
+/** Prossimo giorno lun-ven alle 9:30 (ora del computer del negozio = ora di Roma). */
+function prossimoLavorativo930(): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  d.setHours(9, 30, 0, 0);
+  return d;
+}
+const giornoIso = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
+/** Prossima mezz'ora (default di «Oggi alle…», come nelle Tarature). */
+function prossimaMezzora(): string {
+  const p = new Date().toLocaleTimeString("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
+  const t = Math.min(Math.ceil((p[0] * 60 + p[1] + 30) / 30) * 30, 23 * 60 + 30);
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+/** Orari del negozio: lun-ven 9:30-13:30 e 15:00-19:00. */
+function inOrarioNegozio(data: string, ora: string): boolean {
+  const [y, m, g] = data.split("-").map(Number);
+  const wd = new Date(Date.UTC(y, m - 1, g)).getUTCDay();
+  if (wd === 0 || wd === 6) return false;
+  const [h, mi] = ora.split(":").map(Number);
+  const t = h * 60 + mi;
+  return (t >= 570 && t <= 810) || (t >= 900 && t <= 1140);
+}
+const etichettaGiorno = (d: Date) => {
+  const domani = new Date(); domani.setDate(domani.getDate() + 1);
+  return d.toDateString() === domani.toDateString() ? "Domani" : d.toLocaleDateString("it-IT", { weekday: "long" }).replace(/^./, (c) => c.toUpperCase());
+};

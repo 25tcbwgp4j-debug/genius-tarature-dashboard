@@ -3,14 +3,14 @@
 // APPARECCHIO (05/10/2026, specifica §8.3-8.5): prodotto = FAMIGLIA a scelta (menu, non testo libero), modello esatto
 // dalla decodifica con la FONTE detta chiaro («decodificato dal seriale» / «già passato nella scheda 61941: modello
 // preso da lì»), DIFETTO INDICATO in evidenza, accessori consegnati, «con alimentatore» per i non Apple; email,
-// codice/password e Apple ID sono campi secondari, richiusi.
+// codice/password e Apple ID SEMPRE in chiaro (26/10/2026, Christian): servono subito al banco.
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Cpu, ExternalLink, History, Loader2, ScanLine } from "lucide-react";
+import { Cpu, ExternalLink, History, Loader2, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { assSeriale, FAMIGLIE_DEFAULT, type GruppoProdotti, type Seriale } from "@/lib/assistenza";
 import { AnnoInput, ProdottoCombo } from "./Prodotto";
-import { Campo, Pill, area, campo, etich } from "./ui";
+import { Campo, area, campo, etich } from "./ui";
 
 export type ValoriApparecchio = {
   famiglia?: string | null; prodotto?: string | null; anno?: number | null; modello?: string | null; modello_fonte?: string | null; modello_da_scheda?: string | null;
@@ -32,8 +32,6 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
 }) {
   const [ser, setSer] = useState<Seriale | null>(null);
   const [busy, setBusy] = useState(false);
-  const [secondari, setSecondari] = useState(false);
-  const [mostraPw, setMostraPw] = useState(false);
   const fam = v.famiglia || "";
   const nonApple = fam === "non_apple";
   const telefono = fam === "iphone" || fam === "ipad" || fam === "watch";
@@ -84,7 +82,7 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
           <div className="min-w-0">
             <span className={etich}>Prodotto *{fam ? ` · ${etichettaFamiglia(fam, famiglie)}` : ""}</span>
             {/* menu completo con ricerca (lista valori FileMaker + nuovi); la famiglia segue la voce scelta */}
-            <ProdottoCombo valore={v.prodotto || ""} gruppi={prodotti} disabled={ro} onScelto={(p, f) => { set("prodotto", p); set("famiglia", f); }} />
+            <ProdottoCombo valore={v.prodotto || ""} gruppi={prodotti} disabled={ro} onScelto={(p, f) => { set("prodotto", p); if (f) set("famiglia", f); }} />
           </div>
           <Campo label="Anno"><AnnoInput valore={v.anno} disabled={ro} onChange={(a) => set("anno", a)} /></Campo>
         </div>
@@ -145,27 +143,17 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
         )}
       </div>
 
-      <div className="rounded-lg border">
-        <button type="button" className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-medium text-muted-foreground" onClick={() => setSecondari((x) => !x)}>
-          {secondari ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-          Altri dati (IMEI, email/Apple ID, codice di sblocco)
-          {(v.imei || v.apple_id || v.password_dispositivo) && <Pill>compilati</Pill>}
-          {telefono && !secondari && <span className="ml-auto text-[11px]">per iPhone utile l&apos;email</span>}
-        </button>
-        {secondari && (
-          <div className="grid gap-3 border-t p-3 sm:grid-cols-2">
-            <Campo label="IMEI"><input className={campo} disabled={ro} value={v.imei || ""} onChange={(e) => set("imei", e.target.value)} /></Campo>
-            <Campo label="Email / Apple ID"><input className={campo} disabled={ro} value={v.apple_id || ""} onChange={(e) => set("apple_id", e.target.value)} /></Campo>
-            <Campo label="Codice / password del dispositivo">
-              <input className={campo} disabled={ro} type={mostraPw ? "text" : "password"} autoComplete="off" value={v.password_dispositivo || ""} onChange={(e) => set("password_dispositivo", e.target.value)} />
-            </Campo>
-            <Campo label="Password Apple ID">
-              <input className={campo} disabled={ro} type={mostraPw ? "text" : "password"} autoComplete="off" value={v.password_apple_id || ""} onChange={(e) => set("password_apple_id", e.target.value)} />
-            </Campo>
-            <button type="button" className="text-left text-xs text-primary underline" onClick={() => setMostraPw((x) => !x)}>{mostraPw ? "nascondi" : "mostra"} codici</button>
-            <span className="text-[11px] text-muted-foreground sm:text-right">Restano solo nella scheda interna: mai sui PDF del cliente.</span>
-          </div>
-        )}
+      {/* 26/10/2026 (Christian): codice di sblocco, Apple ID e password SEMPRE in chiaro nella scheda interna (mai sui PDF del cliente) */}
+      <div className="grid gap-3 rounded-lg border border-violet-200 bg-violet-50/40 p-3 sm:grid-cols-2 dark:border-violet-900 dark:bg-violet-950/20">
+        <Campo label="Codice / password del dispositivo">
+          <input className={`${campo} font-mono text-[15px] font-semibold`} disabled={ro} autoComplete="off" value={v.password_dispositivo || ""} onChange={(e) => set("password_dispositivo", e.target.value)} />
+        </Campo>
+        <Campo label="Email / Apple ID"><input className={`${campo} font-mono`} disabled={ro} autoComplete="off" value={v.apple_id || ""} onChange={(e) => set("apple_id", e.target.value)} /></Campo>
+        <Campo label="Password Apple ID">
+          <input className={`${campo} font-mono text-[15px] font-semibold`} disabled={ro} autoComplete="off" value={v.password_apple_id || ""} onChange={(e) => set("password_apple_id", e.target.value)} />
+        </Campo>
+        <Campo label="IMEI"><input className={`${campo} font-mono`} disabled={ro} value={v.imei || ""} onChange={(e) => set("imei", e.target.value)} /></Campo>
+        <span className="text-[11px] text-muted-foreground sm:col-span-2">Restano solo nella scheda interna: mai sui PDF né nelle mail al cliente.{telefono ? " Per iPhone è utile l'email dell'Apple ID." : ""}</span>
       </div>
     </div>
   );

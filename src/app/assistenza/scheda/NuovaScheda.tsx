@@ -3,7 +3,7 @@
 // NUOVA SCHEDA (05/10/2026, specifica §8.6): cliente dalla rubrica (un clic = scheda cliente completa) o nuovo,
 // apparecchio con prodotto a menu e difetto in evidenza. Alla creazione: etichetta Brother SÌ, «Stampa accettazione
 // A4» SEMPRE spenta di default, ricevuta d'ingresso SEMPRE per mail + WhatsApp, PDF della ricevuta da scaricare.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Download, ExternalLink, FileText, Loader2, Mail, MessageCircle, Plus, Printer, Tag, UserRoundPen } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,9 @@ import { Campo, Modale, campo } from "./ui";
 export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, iniziale }: {
   cfg: ConfigAssistenza | null; operatore: string; setOperatore: (o: Operatore) => void; onClose: () => void; onCreata: (s: Scheda) => void;
   /** 24/10/2026: scheda aperta da una richiesta WhatsApp: cliente e difetto già compilati */
-  iniziale?: { azienda?: string; telefono?: string; email?: string; difetto?: string; prodotto?: string; seriale?: string };
+  iniziale?: { azienda?: string; telefono?: string; email?: string; difetto?: string; prodotto?: string; seriale?: string;
+    /** 25/10/2026: scheda aperta dalla chat WhatsApp 334 con il cliente già in rubrica */
+    anagrafica?: Anagrafica | null; note?: string };
 }) {
   const [cli, setCli] = useState<{ azienda: string; telefono: string; email: string; referente: string; indirizzo_spedizione: string; note: string }>(
     { azienda: iniziale?.azienda || "", telefono: iniziale?.telefono || "", email: iniziale?.email || "", referente: "", indirizzo_spedizione: "", note: "" });
@@ -31,6 +33,8 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, i
   const [busy, setBusy] = useState(false);
   const [creata, setCreata] = useState<(Scheda & { esiti: Record<string, unknown> }) | null>(null);
   const setA = (k: keyof ValoriApparecchio, v: unknown) => setApp((x) => ({ ...x, [k]: v }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (iniziale?.anagrafica) daRubrica(iniziale.anagrafica); if (iniziale?.note) setCli((x) => ({ ...x, note: iniziale.note || "" })); }, []);
 
   function daRubrica(a: Anagrafica) {
     setAnag(a);
@@ -42,11 +46,12 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, i
   async function crea() {
     if (!operatore) { toast.error("Scegli l'operatore"); return; }
     if (!cli.azienda.trim()) { toast.error("Scrivi il nome del cliente"); return; }
-    if (!app.famiglia) { toast.error("Scegli il prodotto"); return; }
+    // 26/10/2026: anche un prodotto scritto a mano (non Apple, senza famiglia del menu) va bene: la famiglia la deduce il server
+    if (!app.famiglia && !(app.prodotto || "").trim()) { toast.error("Scegli il prodotto dal menu o scrivilo a mano"); return; }
     setBusy(true);
     try {
       const s = await assCrea({ ...cli, ...app, prodotto: app.prodotto || app.famiglia, operatore, anagrafica_id: anag?.id, in_arrivo: inArrivo,
-        invia_ricevuta: true, invia_wa: true, stampa: inArrivo ? {} : { accettazione: stampaA4, etichetta: stampaEt } });
+        invia_ricevuta: false, invia_wa: true, stampa: inArrivo ? {} : { accettazione: stampaA4, etichetta: stampaEt } });
       toast.success(`Scheda ${s.sigla} creata`);
       setCreata(s);
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
@@ -62,7 +67,10 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, i
             <div className="text-2xl font-bold tabular-nums">N. {creata.sigla}</div>
             <div className="text-muted-foreground">{creata.azienda} · {creata.modello || creata.prodotto}</div>
           </div>
-          {creata.stato === "in_arrivo" ? <p>Dispositivo in arrivo col corriere: la ricevuta parte quando arriva («Dispositivo arrivato»).</p> : (
+          {/* 26/10/2026 (Christian, 63214): la ricevuta non parte più da sola: si manda a scheda compilata (prossimo passo) */}
+          {creata.stato === "in_arrivo" ? <p>Dispositivo in arrivo col corriere: all&apos;arrivo la scheda chiederà di inviare la ricevuta.</p> : !es.mail && !es.whatsapp ? (
+            <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-amber-950">La ricevuta d&apos;ingresso <b>non è ancora partita</b>: apri la scheda, finisci di compilarla e premi «INVIA RICEVUTA» (è il prossimo passo).</p>
+          ) : (
             <div className="space-y-1">
               <div><Mail className="mr-1 inline size-4" />Ricevuta per mail: {es.mail || "—"}</div>
               <div><MessageCircle className="mr-1 inline size-4" />WhatsApp: {es.whatsapp || "—"}</div>
@@ -123,7 +131,7 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, i
             </>}
           </div>
           <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground"><FileText className="size-4" />
-            {inArrivo ? "La ricevuta d'ingresso parte (mail + WhatsApp) quando il dispositivo arriva." : `La ricevuta d'ingresso parte sempre: mail con PDF + WhatsApp${cfg && !cfg.numerazione_live ? ` (PROVA: mail solo a ${cfg.email_test}, WhatsApp da mandare a mano)` : ""}.`}</div>
+            {"La ricevuta d'ingresso (mail con PDF + WhatsApp) NON parte da sola: la mandi dalla scheda quando hai finito di compilarla (è il prossimo passo, prima della verifica)."}</div>
           <SceltaOperatore value={operatore as Operatore} onChange={setOperatore} compatto />
         </div>
       </div>

@@ -162,6 +162,14 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
           </div>
         )}
 
+        {/* 26/10/2026 (Christian): «Trova il mio» attivo → si scrive nel preventivo, così chi accetta sa già che dovrà disattivarlo */}
+        {!ro && (s.trova_il_mio === "attivo" || s.riparazione_stato === "disabilitare_trova") && !/TROVA IL MIO/i.test(bz.note || "") && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+            <span>🔒 «Trova il mio» è attivo: scrivilo nel preventivo, così accettando il cliente sa già che dovrà disattivarlo.</span>
+            <Button size="xs" className="ml-auto" onClick={() => { setBz((b) => ({ ...b, note: (b.note ? b.note.trimEnd() + "\n" : "") + AVVISO_TROVA })); toast.success("Avviso «Trova il mio» inserito nelle note del preventivo: salva la scheda"); }}>
+              Inserisci nel preventivo l&apos;avviso «Trova il mio»</Button>
+          </div>
+        )}
         <Campo label="Note per il cliente (testi standard)">
           <textarea className={area} rows={bz.note ? Math.min(10, bz.note.split("\n").length + 1) : 2} disabled={ro} value={bz.note} onChange={(e) => setBz((b) => ({ ...b, note: e.target.value }))}
             placeholder="Si aggiungono con «Testi standard» (non sostituiscono quello che c'è)" />
@@ -276,3 +284,9 @@ function Riga({ r, i, ro, upd, togli, etichetta }: { r: EstimateLine; i: number;
     </div>
   );
 }
+
+
+// 26/10/2026 (Christian): avviso da mettere nel preventivo quando «Trova il mio» è attivo (va nel PDF del cliente)
+export const AVVISO_TROVA = "IMPORTANTE: SUL DISPOSITIVO È ATTIVO «TROVA IL MIO» (DOV'È). ACCETTANDO IL PREVENTIVO, PER PROCEDERE CON LA RIPARAZIONE DOVRÀ "
+  + "ABILITARE LA RIPARAZIONE DA DOV'È (RIPARAZIONE O PERMUTA) OPPURE RIMUOVERE IL DISPOSITIVO DAL SUO ACCOUNT: LE INVIEREMO LE ISTRUZIONI. "
+  + "FINCHÉ NON È FATTO NON SI PUÒ PROCEDERE.";
