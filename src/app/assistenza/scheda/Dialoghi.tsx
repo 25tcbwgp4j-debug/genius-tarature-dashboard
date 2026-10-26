@@ -7,14 +7,17 @@ import { toast } from "sonner";
 import { CheckCircle2, Copy, Loader2, Mail, MessageCircle, Send, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
-import { assAnteprimaMail, assAzione, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, pagaFineMese, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
+import { assAnteprimaMail, assAzione, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, pagaFineMese, type DocPdf, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
 import { blocchi, ipotesiDelBlocco, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, Pill, Scelta, area, campo } from "./ui";
 
 // ---------------------------------------------------------------------------
+const TITOLI_PDF: Record<string, string> = { ricevuta: "ricevuta d'ingresso", preventivo: "preventivo", pronto: "pronto per il ritiro / la spedizione",
+  consuntivo: "consuntivo con bonifico", rifiutato: "preventivo rifiutato (test, lavorazione, restituzione)", auto: "scheda dello stato attuale" };
+
 function Anteprima({ s, corpo }: { s: Scheda; corpo: Record<string, unknown> }) {
-  const [a, setA] = useState<{ oggetto: string; corpo: string; prova: boolean; destinatario: string | null; whatsapp: string } | null>(null);
+  const [a, setA] = useState<{ oggetto: string; corpo: string; prova: boolean; destinatario: string | null; whatsapp: string; documento?: DocPdf | null } | null>(null);
   const chiave = JSON.stringify(corpo);
   useEffect(() => {
     const t = setTimeout(() => assAnteprimaMail(s.id, JSON.parse(chiave)).then(setA).catch(() => setA(null)), 250);
@@ -24,7 +27,16 @@ function Anteprima({ s, corpo }: { s: Scheda; corpo: Record<string, unknown> }) 
   return (
     <div className="grid gap-2 md:grid-cols-2">
       <div className="rounded-lg border bg-muted/30 p-2.5 text-xs">
-        <div className="mb-1 flex items-center gap-1.5 font-semibold"><Mail className="size-3.5" />Mail con PDF</div>
+        <div className="mb-1 flex items-center gap-1.5 font-semibold"><Mail className="size-3.5" />{a.documento ? "Mail con PDF" : "Mail (senza PDF)"}</div>
+        {/* 26/10/2026 (Christian, 63118): si vede SEMPRE quale scheda PDF parte allegata, calcolata con i valori del pannello */}
+        {a.documento && (
+          <div className="mb-1 flex flex-wrap items-center gap-1.5">📎 Allegato: <b>{TITOLI_PDF[a.documento] || a.documento}</b>
+            <button type="button" className="rounded border bg-white px-1.5 py-0.5 font-medium text-primary hover:bg-muted dark:bg-gray-900"
+              onClick={() => window.open(`${assDocUrl(s.id, a.documento as DocPdf)}&${new URLSearchParams(Object.fromEntries(
+                Object.entries(corpo).filter(([k, v]) => v != null && v !== "" && ["consegna_modo", "consegna_corriere", "pagamento_modo", "totale_lavorazione", "esito", "indirizzo_spedizione"].includes(k)).map(([k, v]) => [k, String(v)])))}`, "_blank")}>
+              Vedi il PDF</button>
+          </div>
+        )}
         <div>A: <b>{a.destinatario || "— (manca l'email)"}</b>{a.prova && <span className="text-amber-800"> · PROVA: non va al cliente ({s.email || "senza email"})</span>}</div>
         <div>Oggetto: <b>{a.oggetto}</b></div>
         <pre className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap font-sans">{a.corpo}</pre>
@@ -180,7 +192,8 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
   // 26/10/2026 (Christian, 63118): a costo zero niente pagamento da chiedere (né bonifico, né consuntivo, né fattura)
   const gratis = (Number(String(tot).replace(",", ".")) || 0) - (Number(s.acconto) || 0) <= 0.009;
   const pagEff = gratis ? "" : (pag || (cons === "spedizione" ? "bonifico" : ""));
-  const corpo = useMemo(() => ({ consegna_modo: cons, pagamento_modo: pagEff, totale_lavorazione: tot, indirizzo_spedizione: ind }), [cons, pagEff, tot, ind]);
+  const corpo = useMemo(() => ({ consegna_modo: cons, pagamento_modo: pagEff, totale_lavorazione: tot, indirizzo_spedizione: ind,
+    consegna_corriere: cons === "spedizione" ? corr : "", esito }), [cons, pagEff, tot, ind, corr, esito]);
   async function invia() {
     setBusy(true);
     try {

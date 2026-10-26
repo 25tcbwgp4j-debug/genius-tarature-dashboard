@@ -121,7 +121,7 @@ export const assScheda = (id: string): Promise<Scheda> => fetchAPI(`/api/assiste
 export const assCrea = (b: Record<string, unknown>): Promise<Scheda & { esiti: Record<string, unknown> }> => fetchAPI("/api/assistenza/schede", j(b));
 export const assModifica = (id: string, b: Record<string, unknown>): Promise<Scheda> => fetchAPI(`/api/assistenza/schede/${id}`, { method: "PATCH", body: JSON.stringify(b) });
 export const assAzione = (id: string, azione: string, b: Record<string, unknown>) => fetchAPI(`/api/assistenza/schede/${id}/${azione}`, j(b));
-export const assAnteprimaMail = (id: string, b: Record<string, unknown>): Promise<{ tipo: string; oggetto: string; corpo: string; prova: boolean; destinatario: string | null; whatsapp: string }> =>
+export const assAnteprimaMail = (id: string, b: Record<string, unknown>): Promise<{ tipo: string; documento?: DocPdf | null; oggetto: string; corpo: string; prova: boolean; destinatario: string | null; whatsapp: string }> =>
   fetchAPI(`/api/assistenza/anteprima-mail/${id}`, j(b));
 export const assListino = (): Promise<{ voci: VoceListino[]; coppie: Coppia[] }> => fetchAPI("/api/assistenza/listino");
 export const assSeriale = (s: string): Promise<Seriale> => fetchAPI(`/api/assistenza/seriale?s=${encodeURIComponent(s)}`);
@@ -131,7 +131,7 @@ export const assStessoModello = (id: string): Promise<{ criterio: string; schede
 export const assPreventivi = (q: string): Promise<{ preventivi: (SchedaBreve & { preventivo_testo: string | null })[]; sintesi: { n: number; min: number; max: number; mediana: number } | null }> =>
   fetchAPI(`/api/assistenza/preventivi?q=${encodeURIComponent(q)}`);
 export const assPdfUrl = (id: string, tipo: "cliente" | "interna" = "cliente") => `/api/backend/api/assistenza/schede/${id}/pdf?tipo=${tipo}`;
-export type DocPdf = "auto" | "ricevuta" | "preventivo" | "pronto" | "consuntivo" | "interna";
+export type DocPdf = "auto" | "ricevuta" | "preventivo" | "pronto" | "consuntivo" | "rifiutato" | "interna";
 export const assDocUrl = (id: string, doc: DocPdf, scarica = false) => `/api/backend/api/assistenza/schede/${id}/pdf?doc=${doc}${scarica ? "&scarica=1" : ""}`;
 export const assSchedaCliente = (id: string): Promise<SchedaCliente> => fetchAPI(`/api/assistenza/clienti/${id}`);
 export const assSalvaCliente = (id: string | null, b: Partial<Anagrafica>): Promise<SchedaCliente> =>
@@ -174,7 +174,7 @@ export const eur = (v: number | string | null | undefined) =>
   v === null || v === undefined || v === "" ? "—" : new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(v) || 0);
 
 export const DOCUMENTI_PDF: [DocPdf, string][] = [["ricevuta", "Ricevuta d'ingresso"], ["preventivo", "Preventivo"], ["pronto", "Pronto per il ritiro"],
-  ["consuntivo", "Consuntivo con bonifico"], ["interna", "Scheda interna (solo per noi)"]];
+  ["consuntivo", "Consuntivo con bonifico"], ["rifiutato", "Preventivo rifiutato (restituzione)"], ["interna", "Scheda interna (solo per noi)"]];
 export const FAMIGLIE_DEFAULT: { codice: string; etichetta: string }[] = [
   { codice: "iphone", etichetta: "iPhone" }, { codice: "ipad", etichetta: "iPad" }, { codice: "airpods", etichetta: "AirPods" },
   { codice: "ipod", etichetta: "iPod" }, { codice: "macbook_air", etichetta: "MacBook Air" }, { codice: "macbook_pro", etichetta: "MacBook Pro" },
