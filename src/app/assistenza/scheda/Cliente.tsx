@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { assClienti, assSalvaCliente, assSchedaCliente, dataOra, TIPI_CLIENTE, type Anagrafica, type SchedaCliente } from "@/lib/assistenza";
 import { Badge, Campo, Modale, Pill, Scelta, campo, area } from "./ui";
+import { PerCliente } from "../PerCliente";
 
 export function iconaTipo(t?: string | null) {
   return t === "rivenditore" ? <Store className="size-3" /> : t === "azienda" ? <Building2 className="size-3" /> : <UserRound className="size-3" />;
@@ -63,6 +64,7 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
   id: string | null; iniziale?: Form; onClose: () => void; onSalvato: (a: SchedaCliente) => void; onApriScheda?: (id: string) => void;
 }) {
   const [c, setC] = useState<SchedaCliente | null>(null);
+  const [riep, setRiep] = useState(false);
   const [f, setF] = useState<Form>(iniziale || {});
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -164,7 +166,10 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
           <Campo label="Note sul cliente (interne)"><textarea className={area} rows={2} value={f.note_cliente || ""} onChange={(e) => set("note_cliente", e.target.value)} /></Campo>
           {c && c.schede.length > 0 && (
             <div>
-              <div className="mb-1 text-xs font-semibold text-muted-foreground">Schede del cliente ({c.schede.length})</div>
+              <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-muted-foreground">Schede del cliente ({c.schede.length})
+                {/* 26/10/2026 (Christian, APR): riepilogo di tutte le schede aperte (da ritirare, da spedire, preventivi…) in un solo messaggio */}
+                <Button size="xs" variant="outline" className="ml-auto" onClick={() => setRiep(true)}>📋 Riepilogo schede aperte al cliente</Button></div>
+              {riep && <PerCliente iniziale={{ id: c.id, denominazione: c.denominazione }} onClose={() => setRiep(false)} onApri={(sid) => { setRiep(false); onApriScheda?.(sid); }} />}
               <div className="max-h-72 divide-y overflow-y-auto rounded-lg border text-sm">
                 {c.schede.map((s) => (
                   <button key={s.id} type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted" onClick={() => onApriScheda?.(s.id)}>

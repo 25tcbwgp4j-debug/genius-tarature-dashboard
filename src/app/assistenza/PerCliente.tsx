@@ -11,6 +11,7 @@ import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 import { assClienti, eur, type Anagrafica, type RicambioAtteso } from "@/lib/assistenza";
 import { Modale, campo } from "./scheda/ui";
+import { useOperatore } from "@/components/Operatore";
 
 interface SchedaAperta {
   id: string; numero: number; sigla: string; stato: string; prodotto: string | null; modello: string | null; seriale: string | null;
@@ -18,10 +19,17 @@ interface SchedaAperta {
   ricambi_attesi: RicambioAtteso[] | null; tecnico_riparazione: string | null; link_pdf: string | null;
 }
 
-export function PerCliente({ operatore, onApri, onClose }: { operatore: string; onApri: (id: string) => void; onClose: () => void }) {
+export function PerCliente({ operatore: opEsterno, onApri, onClose, iniziale }: {
+  operatore?: string; onApri: (id: string) => void; onClose: () => void;
+  /** 26/10/2026: aperto dalla scheda cliente → il cliente è già scelto */
+  iniziale?: { id: string; denominazione: string } | null;
+}) {
+  const [opProprio] = useOperatore();
+  const operatore = opEsterno || opProprio;
   const [q, setQ] = useState("");
   const [trovati, setTrovati] = useState<Anagrafica[]>([]);
-  const [cliente, setCliente] = useState<{ id: string; denominazione: string; email?: string | null; cellulare_whatsapp?: string | null; cellulare?: string | null } | null>(null);
+  const [cliente, setCliente] = useState<{ id: string; denominazione: string; email?: string | null; cellulare_whatsapp?: string | null; cellulare?: string | null; no_whatsapp?: boolean | null; no_whatsapp_nota?: string | null } | null>(null);
+  const [allega, setAllega] = useState(true);
   const [schede, setSchede] = useState<SchedaAperta[] | null>(null);
   const [filtro, setFiltro] = useState<string>("");
   const [scelte, setScelte] = useState<Set<string>>(new Set());
@@ -41,8 +49,10 @@ export function PerCliente({ operatore, onApri, onClose }: { operatore: string; 
     try {
       const r = await fetchAPI(`/api/assistenza/clienti/${a.id}/aperte`);
       setCliente(r.cliente); setSchede(r.schede); setScelte(new Set((r.schede as SchedaAperta[]).map((x) => x.id))); setFiltro("");
+      setWa(!r.cliente?.no_whatsapp);       // cliente «niente WhatsApp»: solo mail
     } catch (e) { toastErrore(e); }
   }
+  useEffect(() => { if (iniziale) scegli(iniziale as Anagrafica); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const fasi = useMemo(() => {
     const m = new Map<string, { etichetta: string; n: number }>();
     for (const x of schede || []) m.set(x.fase, { etichetta: x.fase_etichetta, n: (m.get(x.fase)?.n || 0) + 1 });
@@ -60,7 +70,7 @@ export function PerCliente({ operatore, onApri, onClose }: { operatore: string; 
     setBusy(true);
     try {
       const r = await fetchAPI(`/api/assistenza/clienti/${cliente.id}/riepilogo`, { method: "POST",
-        body: JSON.stringify({ schede: scelteVisibili.map((x) => x.id), nota, invia_mail: mail, invia_wa: wa, operatore }) });
+        body: JSON.stringify({ schede: scelteVisibili.map((x) => x.id), nota, invia_mail: mail, invia_wa: wa && !cliente.no_whatsapp, allega_pdf: mail && allega, operatore }) });
       toast.success(`Riepilogo inviato · mail: ${r.esito.mail || "—"} · WhatsApp: ${r.esito.whatsapp || "—"}`, { duration: 9000 });
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
@@ -110,7 +120,9 @@ export function PerCliente({ operatore, onApri, onClose }: { operatore: string; 
           <textarea className={`${campo} min-h-[56px]`} placeholder="Nota da aggiungere al riepilogo (facoltativa), es. «Possiamo spedire tutto insieme con un unico pacco.»" value={nota} onChange={(e) => setNota(e.target.value)} />
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <label className="flex items-center gap-1.5"><input type="checkbox" checked={mail} onChange={(e) => setMail(e.target.checked)} />mail{cliente?.email ? ` (${cliente.email})` : ""}</label>
-            <label className="flex items-center gap-1.5"><input type="checkbox" checked={wa} onChange={(e) => setWa(e.target.checked)} />WhatsApp{cliente?.cellulare_whatsapp || cliente?.cellulare ? ` (${cliente.cellulare_whatsapp || cliente.cellulare})` : ""}</label>
+            <label className="flex items-center gap-1.5" title="In allegato alla mail il PDF di ogni scheda (preventivo, pronto, consuntivo…)"><input type="checkbox" checked={allega} disabled={!mail} onChange={(e) => setAllega(e.target.checked)} />allega i PDF delle schede</label>
+            {cliente?.no_whatsapp ? <span className="text-xs font-medium text-red-700">🚫 niente WhatsApp per questo cliente{cliente.no_whatsapp_nota ? ` (${cliente.no_whatsapp_nota})` : ""}</span>
+              : <label className="flex items-center gap-1.5"><input type="checkbox" checked={wa} onChange={(e) => setWa(e.target.checked)} />WhatsApp{cliente?.cellulare_whatsapp || cliente?.cellulare ? ` (${cliente.cellulare_whatsapp || cliente.cellulare})` : ""}</label>}
             <Button className="ml-auto" disabled={busy || !scelteVisibili.length || !(mail || wa)} onClick={invia}>{busy ? <Loader2 className="animate-spin" /> : <Send />}Invia riepilogo al cliente ({scelteVisibili.length})</Button>
           </div>
         </>)}

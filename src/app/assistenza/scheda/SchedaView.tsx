@@ -570,7 +570,7 @@ function ComunicazioneCliente({ s, operatore, invia, togli }: { s: Scheda; opera
   const DOC: [string, string][] = [["auto", "la scheda dello stato attuale"],
     ["", "solo il testo, senza scheda"], ["ricevuta", "ricevuta d'ingresso"], ["preventivo", "preventivo"], ["pronto", "pronto per il ritiro"], ["consuntivo", "consuntivo con bonifico"]];
   const [mail, setMail] = useState(!!s.email);
-  const [wa, setWa] = useState(!!s.telefono);
+  const [wa, setWa] = useState(!!s.telefono && !s.cliente_no_whatsapp);
   const [busy, setBusy] = useState(false);
   const [inviata, setInviata] = useState<string | null>(null);
   async function manda() {

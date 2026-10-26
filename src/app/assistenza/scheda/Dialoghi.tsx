@@ -83,7 +83,7 @@ const TITOLI: Record<TipoInvio, string> = { ricevuta: "Ricevuta d'ingresso", pre
 /** Invio al cliente: mail + WhatsApp SEMPRE selezionati (si possono togliere solo apposta). */
 export function DialogoInvio({ s, tipo, onClose, onInvia }: { s: Scheda; tipo: TipoInvio; onClose: () => void; onInvia: (b: Record<string, unknown>) => Promise<Esito | null> }) {
   const [mail, setMail] = useState(true);
-  const [wa, setWa] = useState(true);
+  const [wa, setWa] = useState(!s.cliente_no_whatsapp);   // 26/10/2026: cliente «niente WhatsApp» → spenta
   const [nota, setNota] = useState("");
   const [busy, setBusy] = useState(false);
   const [fatto, setFatto] = useState<Esito | null>(null);
@@ -174,7 +174,7 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
   const [esito, setEsito] = useState(s.esito || (s.preventivo_esito === "rifiutato" ? "NEGATIVO" : "EFFETTUATO"));
   const [ind, setInd] = useState(s.indirizzo_spedizione || "");
   const [mail, setMail] = useState(true);
-  const [wa, setWa] = useState(true);
+  const [wa, setWa] = useState(!s.cliente_no_whatsapp);   // 26/10/2026: cliente «niente WhatsApp» → spenta
   const [busy, setBusy] = useState(false);
   const [fatto, setFatto] = useState<Esito | null>(null);
   // 26/10/2026 (Christian, 63226): come per le Tarature, il pronto / consuntivo si manda subito o si PROGRAMMA
@@ -347,7 +347,7 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
   const [prova, setProva] = useState(true);
   const [stampa, setStampa] = useState(true);
   const [avvisaMail, setAvvisaMail] = useState(true);
-  const [avvisaWa, setAvvisaWa] = useState(true);
+  const [avvisaWa, setAvvisaWa] = useState(!s.cliente_no_whatsapp);
   const [busy, setBusy] = useState(false);
   const dir = modo === "ritiro" ? "ritiro" : "riconsegna";
   const chiave = JSON.stringify({ dir, ind, corriere, giorno, prenotaDaNoi });
