@@ -1322,6 +1322,8 @@ export interface FattRicevuteStato { ultimo: FattSyncLog | null; ultimo_con_novi
 export async function fattRicevuteStato(societa = ''): Promise<FattRicevuteStato> { return fetchAPI(`/api/fatturazione/ricevute/stato?societa=${encodeURIComponent(societa)}`, { cache: 'no-store' }); }
 export async function fattRicevuteViste(societa = '') { return fetchAPI(`/api/fatturazione/ricevute/viste?societa=${encodeURIComponent(societa)}`, { method: 'POST' }); }
 export function fattUrlXml(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/xml`; }
+/** 26/10/2026: ricevuta di consegna (o notifica di mancata consegna / scarto) dello SdI — PDF leggibile o XML ufficiale */
+export function fattUrlRicevutaSdi(id: string, formato: "pdf" | "xml" = "pdf") { return `${API_PROXY}/api/fatturazione/fatture/${id}/ricevuta-sdi?formato=${formato}`; }
 export function fattUrlStampa(id: string) { return `${API_PROXY}/api/fatturazione/fatture/${id}/stampa`; }
 
 // Anagrafiche di fatturazione (clienti/fornitori per società; Genius importata da SimplyFatt) — 30/09/2026
@@ -1330,7 +1332,7 @@ export interface FattAnagrafica {
   denominazione: string | null; piva: string | null; cf: string | null; sdi: string | null; pec: string | null;
   indirizzo: string | null; cap: string | null; comune: string | null; provincia: string | null; paese: string | null;
   email: string | null; telefono: string | null; referente?: string | null; attivo?: boolean;
-  email_contabilita?: string | null; email_altre?: string | null;
+  email_contabilita?: string | null; email_altre?: string | null; email_cc?: string | null;
   resoconto?: FattResocontoCfg | null;
   fatture?: { id: string; direzione: string; tipo_documento: string; numero: string | null; data: string | null;
     totale: number; stato: string; pagamento_stato: string; origine: string }[];
