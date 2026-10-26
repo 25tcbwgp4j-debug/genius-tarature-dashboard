@@ -528,6 +528,8 @@ function BannerScheda({ s, ro, onTrova, onIstruzioni, onPreventivo }: { s: Sched
   const sped = s.consegna_modo === "spedizione" || ["corriere_cliente", "pony", "corriere_nostro", "ritiro_nostro"].includes(arrivo);
   const delCliente = arrivo === "corriere_cliente" || (s.consegna_modo === "spedizione" && s.consegna_corriere === "cliente");
   const pony = arrivo === "pony";
+  // 26/10/2026 (Christian, 63214): il nostro ritiro UPS/DHL collegato alla scheda dice da solo come è arrivato il dispositivo
+  const ritiro = (s.spedizioni || []).find((x) => x.direction === "ritiro" && x.status !== "annullata" && !x.test_mode);
   return (
     <>
       {trovaAttivo && !chiusa && (
@@ -546,7 +548,14 @@ function BannerScheda({ s, ro, onTrova, onIstruzioni, onPreventivo }: { s: Sched
         <div className="-my-1 text-right"><button type="button" className="text-[11px] text-muted-foreground underline" onClick={() => onTrova("attivo")}>
           🔒 Segna «Trova il mio» attivo{s.trova_il_mio === "risolto" ? " (era stato risolto)" : ""}</button></div>
       )}
-      {sped && !chiusa && (
+      {ritiro && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-300 bg-white px-3 py-1.5 text-sm text-sky-950 dark:bg-sky-950/20 dark:text-sky-100">
+          <b>🚚 ARRIVATO CON IL NOSTRO RITIRO {ritiro.carrier || "UPS"}</b>
+          <span className="font-mono">{ritiro.tracking}</span>
+          {ritiro.pickup_date && <span className="text-xs text-muted-foreground">ritiro del {new Date(`${String(ritiro.pickup_date).slice(0, 10)}T12:00:00`).toLocaleDateString("it-IT")}</span>}
+        </div>
+      )}
+      {(sped || ritiro) && !chiusa && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-sky-400 bg-sky-50 px-3 py-2 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
           <b>{pony ? "🛵 ARRIVATO CON PONY / CORRIERE DEL CLIENTE" : delCliente ? "📦 SPEDITO DAL CLIENTE (suo corriere)" : "🚚 SPEDIZIONE ORGANIZZATA DA NOI"}</b>
           <span>— <b>non si ritira a mano in negozio</b>: {pony || delCliente
