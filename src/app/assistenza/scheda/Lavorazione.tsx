@@ -28,6 +28,16 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
     <Sezione titolo="Lavorazione" icona={<Wrench />} sottotitolo={s.preventivo_stato === "accettato" ? <Pill tono="verde">in riparazione</Pill> : null}>
       <datalist id="tecnici-assistenza">{tecnici.map((t) => <option key={t} value={t} />)}</datalist>
       <div className="space-y-3">
+        {/* 27/10/2026 (Christian, 63121): dispositivo SOSTITUITO (iPhone, iPad, Pencil…) → nuovo seriale/IMEI, comunicato al cliente
+            in evidenza in pronto, consuntivo, spedizione (mail, WhatsApp e PDF) */}
+        <div className="rounded-lg border border-sky-300 bg-sky-50/60 p-3 dark:border-sky-900 dark:bg-sky-950/20">
+          <div className="mb-1 text-sm font-semibold">🔁 Dispositivo sostituito: nuovo numero di serie</div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {T("seriale_nuovo", "Nuovo seriale", { placeholder: s.seriale ? `sostituisce ${s.seriale}` : "es. F4GXK2LMN0D2" })}
+            {T("imei_nuovo", "Nuovo IMEI (iPhone / iPad cellular)", { inputMode: "numeric", placeholder: s.imei ? `sostituisce ${s.imei}` : "" })}
+          </div>
+          {(v("seriale_nuovo") || v("imei_nuovo")) && <p className="mt-1 text-xs text-muted-foreground">Il cliente lo riceve in evidenza nel pronto / consuntivo / spedizione (mail, WhatsApp e PDF).</p>}
+        </div>
         {/* 24/10/2026: dispositivo lasciato in CONTO VENDITA (sezione del cruscotto) */}
         <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
           <label className="flex items-center gap-1.5 text-sm font-medium">
