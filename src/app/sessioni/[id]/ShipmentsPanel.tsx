@@ -123,7 +123,7 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
       pickup_date: dir === "ritiro" ? prossimoGiornoLavorativo() : null,
       book_pickup: dir === "ritiro",
       packages: 1,
-      weight_kg: 2,
+      weight_kg: 1,   // 27/10/2026 (Christian): su UPS sempre 1 kg, ritiro e riconsegna
       send_email: true,
       send_whatsapp: true,
       test: false,
@@ -148,8 +148,6 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
         address: cur?.address || p.address,
         email: cur?.email ?? p.email,
         whatsapp_phone: cur?.whatsapp_phone ?? p.whatsapp_phone,
-        // 27/10/2026: riconsegna col peso dichiarato all'andata (prima restava 2 kg: S.T.A.I.T. 6 kg)
-        weight_kg: (cur?.weight_kg ?? 2) === 2 && p.weight_kg_suggested ? p.weight_kg_suggested : (cur?.weight_kg ?? f.weight_kg),
       }));
     } catch (e: unknown) {
       toast.error((e as Error).message || "Errore anteprima");
@@ -322,8 +320,8 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
                 onChange={(e) => setForm({ ...form, packages: Number(e.target.value) || 1 })} />
             </label>
             <label className="flex items-center gap-1">Peso totale kg
-              <Input type="number" min={0.5} step={0.5} className="h-8 w-20" value={form.weight_kg ?? 2}
-                onChange={(e) => setForm({ ...form, weight_kg: Number(e.target.value) || 2 })} />
+              <Input type="number" min={0.5} step={0.5} className="h-8 w-20" value={form.weight_kg ?? 1}
+                onChange={(e) => setForm({ ...form, weight_kg: Number(e.target.value) || 1 })} />
             </label>
           </div>
 
