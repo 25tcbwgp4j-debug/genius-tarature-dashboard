@@ -47,6 +47,11 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const router = useRouter();
   const [s, setS] = useState<Scheda | null>(null);
   const [b, setB] = useState<Bozza>({});
+  // 27/10/2026: messaggio di passaggio chiuso con la X su questo computer (per questa sessione)
+  const [passaggioChiuso, setPassaggioChiuso] = useState(false);
+  const chiaveChiuso = s?.passaggio ? `passaggio-chiuso-${s.id}-${s.passaggio.il}` : "";
+  useEffect(() => { try { setPassaggioChiuso(!!chiaveChiuso && sessionStorage.getItem(chiaveChiuso) === "1"); } catch { setPassaggioChiuso(false); } }, [chiaveChiuso]);
+  function chiudiPassaggio() { try { if (chiaveChiuso) sessionStorage.setItem(chiaveChiuso, "1"); } catch { /* */ } setPassaggioChiuso(true); }
   const [busy, setBusy] = useState("");
   const [dlg, setDlg] = useState<Dialogo>(null);
   const refPrev = useRef<HTMLDivElement>(null);
@@ -228,9 +233,15 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       <Avanzamento av={s.avanzamento} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)}
         onGiaFatto={ro ? undefined : () => setDlg({ k: "chiudi_tutto" })} onRiconsegna={ro ? undefined : riconsegna} />
       {/* 27/10/2026 (Christian, 63228): messaggio di passaggio tra tecnici, in pop-up finché non lo si segna letto */}
-      {s.passaggio && !s.passaggio.letto_il && (
-        <Modale titolo={`📨 Messaggio di ${s.passaggio.da} per ${s.passaggio.a} — scheda ${s.sigla}`} onClose={() => undefined}
-          piedi={<Button onClick={async () => { try { setS(await fetchAPI(`/api/assistenza/schede/${s.id}/passaggio-letto`, { method: "POST", body: JSON.stringify({ operatore }) })); toast.success("Messaggio letto: resta nelle note di riparazione"); } catch (e) { toastErrore(e); } }}>Ho letto</Button>}>
+      {s.passaggio && !s.passaggio.letto_il && !passaggioChiuso && (
+        // 27/10/2026: la X lo chiude solo su questo computer (resta da leggere per il tecnico); «Ho letto» lo chiude per tutti
+        <Modale titolo={`📨 Messaggio di ${s.passaggio.da} per ${s.passaggio.a} — scheda ${s.sigla}`} onClose={() => chiudiPassaggio()}
+          piedi={<>
+            <Button variant="outline" onClick={() => chiudiPassaggio()}>Chiudi (non sono {s.passaggio.a})</Button>
+            <Button onClick={async () => {
+              if (!s.passaggio || !confirm(`Sei ${s.passaggio.a}? Il messaggio sparirà per tutti (resta nelle note di riparazione).`)) return;
+              try { setS(await fetchAPI(`/api/assistenza/schede/${s.id}/passaggio-letto`, { method: "POST", body: JSON.stringify({ operatore }) })); toast.success("Messaggio letto: resta nelle note di riparazione"); } catch (e) { toastErrore(e); }
+            }}>Sono {s.passaggio.a}: ho letto</Button></>}>
           <p className="whitespace-pre-line text-base">{s.passaggio.testo}</p>
           <p className="mt-3 text-xs text-muted-foreground">Scritto il {new Date(s.passaggio.il).toLocaleString("it-IT", { timeZone: "Europe/Rome" })} · resta nella cronologia delle note di riparazione.</p>
         </Modale>
