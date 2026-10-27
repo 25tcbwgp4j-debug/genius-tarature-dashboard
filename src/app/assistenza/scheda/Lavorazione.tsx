@@ -45,16 +45,25 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
             In conto vendita
           </label>
           {!!v("conto_vendita") && (() => {
-            // al cliente: prezzo di vendita − lavorazione fatta (es. batteria) − nostro margine (si decide alla vendita)
+            // 27/10/2026 (Christian, 63247): vendita − CARICO (al proprietario) − lavorazioni = MARGINE Genius.
+            // Alla vendita: regime del margine (N5) → IVA 22% compresa sulla differenza vendita − carico
             const n = (k: keyof Scheda) => Number(String(v(k) ?? "").replace(",", ".")) || 0;
-            const prezzo = n("conto_vendita_prezzo"), lav = n("totale_lavorazione"), marg = n("conto_vendita_margine");
+            const prezzo = n("conto_vendita_prezzo"), carico = n("conto_vendita_carico"), lav = Number(s.totale_dovuto || 0);
+            const marg = Math.round((prezzo - carico - lav) * 100) / 100, diff = Math.round((prezzo - carico) * 100) / 100;
+            const iva = Math.round(Math.max(diff, 0) * 22 / 122 * 100) / 100;
             return (<>
               <div className="w-36">{T("conto_vendita_prezzo", "Prezzo di vendita €", { type: "number", min: 0, step: 1 })}</div>
-              <div className="w-36">{T("conto_vendita_margine", "Nostro margine €", { type: "number", min: 0, step: 1 })}</div>
+              <div className="w-40">{T("conto_vendita_carico", "Prezzo di carico € (al proprietario)", { type: "number", min: 0, step: 1 })}</div>
               {s.conto_vendita_valutazione != null && <div className="text-sm"><div className="text-xs text-muted-foreground">Valutazione concordata</div>{eur(Number(s.conto_vendita_valutazione))}</div>}
-              {prezzo > 0 && <div className="text-sm">
-                <div className="text-xs text-muted-foreground">Al cliente = vendita {eur(prezzo)} − lavorazione {eur(lav)} − margine {eur(marg)}</div>
-                <b className={prezzo - lav - marg < 0 ? "text-red-700" : ""}>{eur(prezzo - lav - marg)}</b></div>}
+              {prezzo > 0 && <div className="basis-full rounded-md bg-muted/50 px-3 py-2 text-sm">
+                <div className="grid max-w-md grid-cols-[1fr_auto] gap-x-4 gap-y-0.5">
+                  <span>Prezzo di vendita</span><span className="text-right tabular-nums">{eur(prezzo)}</span>
+                  <span>− Prezzo di carico (va al proprietario)</span><span className="text-right tabular-nums">{v("conto_vendita_carico") !== null && v("conto_vendita_carico") !== "" ? eur(carico) : <i className="text-amber-700">da scrivere</i>}</span>
+                  <span>− Lavorazioni della scheda</span><span className="text-right tabular-nums">{eur(lav)}</span>
+                  <b>= Margine Genius</b><b className={`text-right tabular-nums ${marg < 0 ? "text-red-700" : "text-emerald-700"}`}>{eur(marg)}</b>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">Alla vendita (scontrino o fattura): regime del margine art. 36 DL 41/1995 — al proprietario {eur(carico)}, sulla differenza {eur(diff)} (lavorazioni + margine) IVA 22% compresa {eur(iva)}, non esposta.</div>
+              </div>}
               {s.conto_vendita_sito && <a className="basis-full text-xs text-blue-700 underline" href={s.conto_vendita_sito.url} target="_blank" rel="noreferrer">
                 Sul sito: {s.conto_vendita_sito.descrizione} · {eur(s.conto_vendita_sito.prezzo)}{s.conto_vendita_sito.codice ? ` · Cod. ${s.conto_vendita_sito.codice}` : ""} (agg. {s.conto_vendita_sito.aggiornato.split("-").reverse().join("/")})</a>}
             </>);

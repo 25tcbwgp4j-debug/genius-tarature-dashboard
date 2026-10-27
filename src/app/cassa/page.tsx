@@ -131,7 +131,9 @@ export default function CassaPage() {
         return;
       }
       if (!r.righe?.length) { toast.error("La scheda non ha importi da incassare"); return; }
-      setCarrello(r.righe.map((x) => ({ descrizione: x.descrizione, quantita: Number(x.quantita) || 1, prezzo: Number((x as unknown as { prezzo_ivato: number }).prezzo_ivato) || 0, aliquota: Number(x.aliquota ?? 22) })));
+      // 27/10/2026 (63247): anche regime del margine / natura / costo d'acquisto (conto vendita), prima si perdevano
+      setCarrello(r.righe.map((x) => ({ descrizione: x.descrizione, quantita: Number(x.quantita) || 1, prezzo: Number((x as unknown as { prezzo_ivato: number }).prezzo_ivato) || 0, aliquota: Number(x.aliquota ?? 22),
+        ...(x.regime ? { regime: x.regime } : {}), ...(x.natura ? { natura: x.natura } : {}), ...(x.costo_acquisto != null ? { costo_acquisto: Number(x.costo_acquisto) } : {}) })));
       setScheda({ id, sigla: r.sigla, cliente: r.cliente });
       setAttScelta("apple");
     }).catch((e: Error) => toast.error("Scheda non caricata: " + e.message));
