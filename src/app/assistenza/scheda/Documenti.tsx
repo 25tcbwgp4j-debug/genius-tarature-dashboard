@@ -36,15 +36,31 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
             <Button variant="outline" disabled={!!s.documento_id || busy} onClick={() => onVendi("proforma")} title="Pro forma per il pagamento con bonifico (poi «Converti in fattura»)"><FileText />Pro forma</Button>
             <Button variant={s.stato === "pronto" && !s.pagata ? "default" : "outline"} disabled={busy || s.pagata} onClick={onPagato} title="Pagamento arrivato (bonifico, PayPal, contanti, POS)"><CheckCircle2 />Pagato</Button>
             <Button variant="outline" onClick={onCorriere}><Truck />Corriere</Button>
-            {/* 27/10/2026 (Christian, Tecnoservice 63163): il cliente paga SUBITO, in qualsiasi stato, per far partire il dispositivo appena pronto */}
-            {onPagamentoAnticipato && !s.pagata && s.saldo > 0 && <>
-              <Button variant="outline" className="border-emerald-400" disabled={busy} onClick={() => onPagamentoAnticipato("proforma")}
-                title="Crea il pro forma (se non c'è) e lo manda al cliente per mail + WhatsApp con IBAN e causale, per pagare subito"><Send />Pagamento anticipato (pro forma)</Button>
-              <Button variant="outline" className="border-emerald-400" disabled={busy} onClick={() => onPagamentoAnticipato("fattura")}
-                title="Crea la fattura, la invia allo SdI DA INCASSARE e la manda al cliente con IBAN e causale"><Send />Pagamento anticipato (fattura)</Button>
-            </>}
           </div>
         )}
+        {/* 27/10/2026 (Christian, Tecnoservice 63163): il cliente paga SUBITO, in qualsiasi stato, per far partire il dispositivo
+            appena pronto. Riquadro a parte (nella griglia i pulsanti si sovrapponevano e non si leggevano) */}
+        {!ro && onPagamentoAnticipato && !s.pagata && s.saldo > 0 && (
+          <div className="rounded-lg border-2 border-emerald-500 bg-emerald-50 p-3 dark:bg-emerald-950/30">
+            <div className="text-sm font-semibold">💶 Il cliente vuole pagare subito? Pagamento anticipato di {eur(s.saldo)}</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">Parte una mail con il documento allegato, IBAN e causale, e un WhatsApp. La scheda non cambia stato.</p>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Button className="w-full bg-emerald-700 text-white hover:bg-emerald-800" disabled={busy} onClick={() => onPagamentoAnticipato("proforma")}
+                title="Crea il pro forma (se non c'è) e lo manda al cliente"><Send />Con PRO FORMA</Button>
+              <Button className="w-full bg-emerald-700 text-white hover:bg-emerald-800" disabled={busy} onClick={() => onPagamentoAnticipato("fattura")}
+                title="Crea la fattura, la invia allo SdI da incassare e la manda al cliente"><Send />Con FATTURA (da incassare)</Button>
+            </div>
+          </div>
+        )}
+        {(() => {
+          const pa = (s.fasi as Record<string, { il?: string; importo?: number; documento?: string } | undefined> | undefined)?.pagamento_anticipato;
+          return pa?.il && !s.pagata ? (
+            <div className="rounded-lg border border-emerald-300 bg-white p-2 text-sm dark:bg-background">
+              <b>Pagamento anticipato richiesto</b> il {new Date(pa.il).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+              {pa.importo ? ` · ${eur(pa.importo)}` : ""} · con {pa.documento === "fattura" ? "fattura (da incassare)" : "pro forma"} · in attesa del bonifico
+            </div>
+          ) : null;
+        })()}
         {/* 24/10/2026: quando e come è stata pagata, da quale documento */}
         {c.pagamento ? (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
