@@ -28,7 +28,7 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
       sottotitolo={s.pagata ? <Pill tono="verde"><CheckCircle2 className="size-3" />pagata</Pill> : s.saldo > 0 ? <Pill tono="ambra">saldo {eur(s.saldo)}</Pill> : null}>
       <div className="space-y-3">
         {!ro && (
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-1.5 [&_button]:h-auto [&_button]:min-h-9 [&_button]:whitespace-normal [&_button]:py-1.5 [&_button]:text-left">
             <Button variant="outline" onClick={onScontrino} title="Apre la cassa con le righe della scheda"><ShoppingCart />Scontrino</Button>
             <Button variant="outline" onClick={onAcconto} title="Scontrino d'acconto: al saldo si scala da solo"><Receipt />Acconto</Button>
             <Button variant="outline" disabled={busy} onClick={onRichiediAcconto} title="Chiede al cliente un acconto (importo a scelta) per mail e WhatsApp, con IBAN, causale e preventivo allegato"><Send />Richiedi acconto</Button>
@@ -44,10 +44,10 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
           <div className="rounded-lg border-2 border-emerald-500 bg-emerald-50 p-3 dark:bg-emerald-950/30">
             <div className="text-sm font-semibold">💶 Il cliente vuole pagare subito? Pagamento anticipato di {eur(s.saldo)}</div>
             <p className="mt-0.5 text-xs text-muted-foreground">Parte una mail con il documento allegato, IBAN e causale, e un WhatsApp. La scheda non cambia stato.</p>
-            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Button className="w-full bg-emerald-700 text-white hover:bg-emerald-800" disabled={busy} onClick={() => onPagamentoAnticipato("proforma")}
+            <div className="mt-2 grid grid-cols-1 gap-2">
+              <Button className="h-auto min-h-10 w-full whitespace-normal bg-emerald-700 py-2 text-white hover:bg-emerald-800" disabled={busy} onClick={() => onPagamentoAnticipato("proforma")}
                 title="Crea il pro forma (se non c'è) e lo manda al cliente"><Send />Con PRO FORMA</Button>
-              <Button className="w-full bg-emerald-700 text-white hover:bg-emerald-800" disabled={busy} onClick={() => onPagamentoAnticipato("fattura")}
+              <Button className="h-auto min-h-10 w-full whitespace-normal bg-emerald-700 py-2 text-white hover:bg-emerald-800" disabled={busy} onClick={() => onPagamentoAnticipato("fattura")}
                 title="Crea la fattura, la invia allo SdI da incassare e la manda al cliente"><Send />Con FATTURA (da incassare)</Button>
             </div>
           </div>
