@@ -11,7 +11,7 @@ import { dataOra, nomeTecnico, STATI_RIPARAZIONE, type Scheda } from "@/lib/assi
 import { cn } from "@/lib/utils";
 import { Campo, Modale, Pill, Sezione, area, campo } from "./ui";
 
-type Tecnico = { codice: string; nome: string; attivo?: boolean };
+type Tecnico = { codice: string; nome: string; attivo?: boolean; esterno?: boolean };
 
 /** Scelta del tecnico a pulsanti grandi (iPad). */
 export function DialogoAssegna({ titolo, testo, tecnici, attuale, onClose, onAssegna }: {
@@ -28,13 +28,19 @@ export function DialogoAssegna({ titolo, testo, tecnici, attuale, onClose, onAss
         <span className="font-medium">Messaggio per il tecnico</span> <span className="text-xs text-muted-foreground">(cosa è stato fatto, cosa resta da fare — gli compare appena apre la scheda e resta nelle note)</span>
         <textarea className="mt-1 min-h-[70px] w-full rounded-md border px-2.5 py-1.5 text-sm" placeholder="Es. Ho sistemato BIOS, firmware e driver: ora rimontalo integralmente e fai il test finale." value={msg} onChange={(e) => setMsg(e.target.value)} />
       </label>
-      <div className="grid grid-cols-2 gap-2">
-        {tecnici.filter((t) => t.attivo !== false).map((t) => (
-          <Button key={t.codice} variant={attuale === t.codice ? "default" : "outline"} className="h-14 text-base" disabled={!!busy}
-            onClick={async () => { setBusy(t.codice); try { if (await onAssegna(t.codice, msg.trim())) onClose(); } finally { setBusy(""); } }}>
-            {busy === t.codice ? <Loader2 className="animate-spin" /> : <UserCog />}{t.nome}</Button>
-        ))}
-      </div>
+      {/* 27/10/2026 (Christian): tecnici del laboratorio + riparazione ESTERNA (Bagnetti, New Tech System per il recupero dati) */}
+      {[["", tecnici.filter((t) => t.attivo !== false && !t.esterno)], ["Riparazione esterna", tecnici.filter((t) => t.attivo !== false && t.esterno)]].map(([etichetta, lista]) =>
+        (lista as Tecnico[]).length > 0 && (
+          <div key={etichetta as string} className="mb-2">
+            {etichetta && <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{etichetta as string}</div>}
+            <div className="grid grid-cols-2 gap-2">
+              {(lista as Tecnico[]).map((t) => (
+                <Button key={t.codice} variant={attuale === t.codice ? "default" : "outline"} className={`h-14 text-base ${t.esterno ? "border-dashed" : ""}`} disabled={!!busy}
+                  onClick={async () => { setBusy(t.codice); try { if (await onAssegna(t.codice, msg.trim())) onClose(); } finally { setBusy(""); } }}>
+                  {busy === t.codice ? <Loader2 className="animate-spin" /> : <UserCog />}{t.nome}</Button>
+              ))}
+            </div>
+          </div>))}
       {!tecnici.length && <p className="text-sm text-red-700">Nessun tecnico in elenco: aggiungili in Impostazioni.</p>}
     </Modale>
   );
