@@ -40,7 +40,8 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
         )}
         {/* 27/10/2026 (Christian, Tecnoservice 63163): il cliente paga SUBITO, in qualsiasi stato, per far partire il dispositivo
             appena pronto. Riquadro a parte (nella griglia i pulsanti si sovrapponevano e non si leggevano) */}
-        {!ro && onPagamentoAnticipato && !s.pagata && s.saldo > 0 && (
+        {/* solo PRIMA della fine lavorazione: dopo il pronto si manda il consuntivo (passo «Da pagare») */}
+        {!ro && onPagamentoAnticipato && !s.pagata && s.saldo > 0 && !["pronto", "consegnato"].includes(s.stato) && s.riparazione_stato !== "finita" && (
           <div className="rounded-lg border-2 border-emerald-500 bg-emerald-50 p-3 dark:bg-emerald-950/30">
             <div className="text-sm font-semibold">💶 Il cliente vuole pagare subito? Pagamento anticipato di {eur(s.saldo)}</div>
             <p className="mt-0.5 text-xs text-muted-foreground">Parte una mail con il documento allegato, IBAN e causale, e un WhatsApp. La scheda non cambia stato.</p>

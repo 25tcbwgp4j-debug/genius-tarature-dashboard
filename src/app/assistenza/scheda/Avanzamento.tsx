@@ -51,6 +51,9 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
           <span className="font-medium">{bloccata ? "🔒 Prossimo passo:" : "Prossimo passo:"}</span>
           <span className={bloccata ? "font-medium" : "text-muted-foreground"}>{av.prossimo.testo}</span>
           {av.prossimo.poi && <span className="text-xs text-muted-foreground">· poi: {av.prossimo.poi}</span>}
+          {av.prossimo.alternativa === "invia_consuntivo" && (
+            <Button size="sm" variant="outline" className="ml-auto border-emerald-400" disabled={disabilitato} onClick={() => onAzione("pronto")}
+              title="Rimanda al cliente il consuntivo di pagamento (mail + WhatsApp, con IBAN e PDF): si apre il pannello PRONTO già compilato">📨 Invia consuntivo di pagamento</Button>)}
           {av.prossimo.alternativa === "rifiutato_diretto" && (
             <Button size="sm" variant="outline" className="ml-auto border-red-300 text-red-700" disabled={disabilitato} onClick={() => onAzione("rifiutato_diretto")}
               title="Preventivo negativo (es. irreparabile): si segna RIFIUTATO senza mandarlo al cliente da accettare, poi si va al PRONTO">Negativo: segna RIFIUTATO</Button>)}
