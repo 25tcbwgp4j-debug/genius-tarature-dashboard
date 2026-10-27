@@ -3,6 +3,7 @@
 // BARRA DI AVANZAMENTO della scheda (05/10/2026, specifica §8.9 — ordine vincolante):
 // Ricevuta → Verifica → Preventivo → Inviato → Accettato/Rifiutato → In riparazione → Pronto → Da pagare → Pagato → Consegna.
 // I passi arrivano calcolati dal backend (assistenza_v2.passi); qui si disegnano e il PROSSIMO PASSO è un pulsante.
+import type React from "react";
 import { ArrowRight, Check, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -17,8 +18,11 @@ const AZIONI: Record<string, string> = {
   ricevuta: "INVIA RICEVUTA",
 };
 
-export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, onRiconsegna }: {
+export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, onRiconsegna, rinvii }: {
   av: Av; onAzione: (azione: string) => void; disabilitato?: boolean;
+  /** 27/10/2026 (Christian, 63224): i RINVII al cliente (ricevuta, preventivo, aggiornamento, pronto da pagare) e CAMBIA STATO,
+   *  qui accanto al prossimo passo, in qualsiasi momento */
+  rinvii?: React.ReactNode;
   /** 26/10/2026: scheda chiusa (niente «già fatto tutto») · chiusura in un passo · cosa si riconsegna davvero */
   chiusa?: boolean; onGiaFatto?: () => void; onRiconsegna?: () => void;
 }) {
@@ -65,6 +69,7 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
             variant={bloccata ? "destructive" : "default"} disabled={disabilitato} onClick={() => onAzione(az)}>{AZIONI[az] || az}<ArrowRight /></Button>}
         </div>
       )}
+      {rinvii && <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed px-3 py-1.5 text-sm">{rinvii}</div>}
       {av.prossimo?.avviso && (
         <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">🔒 {av.prossimo.avviso}</div>
       )}

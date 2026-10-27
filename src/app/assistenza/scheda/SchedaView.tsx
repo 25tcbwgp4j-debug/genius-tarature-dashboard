@@ -186,9 +186,13 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     let nota = "";
     if (stato === "attesa_ricambi" || stato === "piu_tempo" || stato === "finita") {
       // 27/10/2026: a lavoro finito il tecnico scrive cosa ha fatto (resta nelle note di riparazione)
-      const x = prompt(stato === "attesa_ricambi" ? "Quale ricambio, dove è ordinato e quando arriva? (facoltativo)"
+      // 27/10/2026 (63201): senza un ricambio già in elenco, in attesa ricambi si DEVE scrivere quale (diventa «da ordinare»)
+      const serve = stato === "attesa_ricambi" && !(s?.ricambi_attesi || []).some((r) => r.stato !== "arrivato");
+      const x = prompt(stato === "attesa_ricambi" ? (serve ? "QUALE RICAMBIO SERVE? (obbligatorio — es. «batteria Dell PKWVM 95Wh»): va nei ricambi da ordinare"
+        : "Nota sul ricambio (facoltativo: dove è ordinato, quando arriva)")
         : stato === "finita" ? "Riparazione FINITA: cosa hai fatto? (es. sostituita scheda logica, test finale OK) — resta nelle note di riparazione" : "Perché serve più tempo? (facoltativo)", "");
       if (x === null) return;
+      if (serve && !x.trim()) { toast.error("Scrivi quale ricambio serve"); return; }
       nota = x;
     }
     const r = await azione("stato-riparazione", { riparazione_stato: stato, nota }, `Riparazione: ${stato === "finita" ? "FINITA — ora «PRONTO»" : "stato aggiornato"}`);
@@ -231,6 +235,22 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={() => setDlg({ k: "invio", tipo: "trova" })}
         onPreventivo={() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
       <Avanzamento av={s.avanzamento} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)}
+        rinvii={<>
+          {!ro && st !== "in_arrivo" && st !== "annullata" && <>
+            <span className="text-xs font-medium text-muted-foreground">📨 Rinvia al cliente:</span>
+            <Button size="xs" variant="outline" disabled={!!busy} onClick={() => apriInvio("ricevuta")}>Ricevuta d&apos;ingresso</Button>
+            {bz.righe.length > 0 && s.preventivo_stato && s.preventivo_stato !== "da_fare" && <>
+              <Button size="xs" variant="outline" disabled={!!busy} onClick={() => apriInvio("preventivo")}
+                title="Rimanda il preventivo (stesse voci): il cliente torna a dover accettare o rifiutare">Preventivo</Button>
+              <Button size="xs" variant="outline" disabled={!!busy} onClick={() => apriInvio("aggiornamento")}
+                title="Rimanda l'aggiornamento del preventivo (con il preventivo aggiuntivo, se c'è)">Aggiornamento preventivo</Button></>}
+            {(st === "pronto" || (st === "accettato" && s.riparazione_stato === "finita") || st === "rifiutato") && (
+              <Button size="xs" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}
+                title="Rimanda il pronto / consuntivo da pagare (mail + WhatsApp, con IBAN e PDF)">Pronto da pagare</Button>)}</>}
+          {(admin || !["consegnato", "annullata"].includes(st)) && (
+            <Button size="xs" className="ml-auto bg-amber-500 text-white hover:bg-amber-600" onClick={() => setDlg({ k: "cambia_stato" })}
+              title="Riporta la scheda a qualsiasi stato (anche indietro) o la chiude"><RotateCcw />Cambia stato</Button>)}
+        </>}
         onGiaFatto={ro ? undefined : () => setDlg({ k: "chiudi_tutto" })} onRiconsegna={ro ? undefined : riconsegna} />
       {/* 27/10/2026 (Christian, 63228): messaggio di passaggio tra tecnici, in pop-up finché non lo si segna letto */}
       {s.passaggio && !s.passaggio.letto_il && !passaggioChiuso && (
@@ -291,7 +311,6 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {/* 25/10/2026: la chat WhatsApp 334 di questo cliente (dati di fatturazione, foto, risposte) */}
         {s.telefono && <Button size="sm" variant="outline" title="Apri la chat WhatsApp staff 334 di questo numero"
           onClick={() => { window.location.href = `/chat-apple?tab=staff&tel=${encodeURIComponent(s.telefono || "")}`; }}><MessageSquareText />Chat WhatsApp</Button>}
-        {(admin || !["consegnato", "annullata"].includes(st)) && <Button size="sm" variant="ghost" onClick={() => setDlg({ k: "cambia_stato" })} title="Riporta la scheda a qualsiasi stato (anche indietro)"><RotateCcw />Cambia stato</Button>}
         {admin && !ro && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => {
           const m = prompt("Motivo dell'annullamento della scheda?");
           if (m !== null) azione("annulla", { motivo: m }, "Scheda annullata");

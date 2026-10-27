@@ -259,6 +259,9 @@ export function Banco() {
                   <div key={i} className="truncate text-[11px] text-amber-800 dark:text-amber-300">
                     📦 {r.cosa || "ricambio"}{r.stato === "da_ordinare" ? " · DA ORDINARE" : r.stato === "richiesto" ? " · 🛒 ORDINE RICHIESTO" : r.arrivo_previsto ? ` · arrivo ${new Date(`${r.arrivo_previsto}T12:00:00`).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}` : " · ordinato"}
                   </div>))}
+                {/* 27/10/2026 (63201): in attesa ricambi ma senza dire quale → si vede subito che manca */}
+                {s.stato === "accettato" && s.riparazione_stato === "attesa_ricambi" && !(s.ricambi_attesi || []).some((r) => r.stato !== "arrivato") && (
+                  <div className="truncate text-[11px] font-semibold text-red-700 dark:text-red-300">⚠️ Ricambio non indicato: scrivere quale</div>)}
               </button>
             ))}
             {/* 04/10/2026: si aprono le più recenti; «Mostra tutte» porta l'elenco completo (scorrevole) */}
