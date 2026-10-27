@@ -29,7 +29,7 @@ import { Documenti } from "./Documenti";
 import { Lavorazione } from "./Lavorazione";
 import { Preventivo, type BozzaPreventivo } from "./Preventivo";
 import { DialogoAssegna, DialogoChiudiVerifica, PannelloTecnici } from "./Tecnici";
-import { Badge, Campo, Pill, Sezione, area, campo } from "./ui";
+import { Badge, Campo, Modale, Pill, Sezione, area, campo } from "./ui";
 
 type Bozza = Partial<Scheda>;
 type Dialogo = null | { k: "invio"; tipo: TipoInvio } | { k: "chiudi_tutto" } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
@@ -179,8 +179,10 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   }
   async function statoRiparazione(stato: string) {
     let nota = "";
-    if (stato === "attesa_ricambi" || stato === "piu_tempo") {
-      const x = prompt(stato === "attesa_ricambi" ? "Quale ricambio, dove è ordinato e quando arriva? (facoltativo)" : "Perché serve più tempo? (facoltativo)", "");
+    if (stato === "attesa_ricambi" || stato === "piu_tempo" || stato === "finita") {
+      // 27/10/2026: a lavoro finito il tecnico scrive cosa ha fatto (resta nelle note di riparazione)
+      const x = prompt(stato === "attesa_ricambi" ? "Quale ricambio, dove è ordinato e quando arriva? (facoltativo)"
+        : stato === "finita" ? "Riparazione FINITA: cosa hai fatto? (es. sostituita scheda logica, test finale OK) — resta nelle note di riparazione" : "Perché serve più tempo? (facoltativo)", "");
       if (x === null) return;
       nota = x;
     }
@@ -225,6 +227,14 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         onPreventivo={() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
       <Avanzamento av={s.avanzamento} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)}
         onGiaFatto={ro ? undefined : () => setDlg({ k: "chiudi_tutto" })} onRiconsegna={ro ? undefined : riconsegna} />
+      {/* 27/10/2026 (Christian, 63228): messaggio di passaggio tra tecnici, in pop-up finché non lo si segna letto */}
+      {s.passaggio && !s.passaggio.letto_il && (
+        <Modale titolo={`📨 Messaggio di ${s.passaggio.da} per ${s.passaggio.a} — scheda ${s.sigla}`} onClose={() => undefined}
+          piedi={<Button onClick={async () => { try { setS(await fetchAPI(`/api/assistenza/schede/${s.id}/passaggio-letto`, { method: "POST", body: JSON.stringify({ operatore }) })); toast.success("Messaggio letto: resta nelle note di riparazione"); } catch (e) { toastErrore(e); } }}>Ho letto</Button>}>
+          <p className="whitespace-pre-line text-base">{s.passaggio.testo}</p>
+          <p className="mt-3 text-xs text-muted-foreground">Scritto il {new Date(s.passaggio.il).toLocaleString("it-IT", { timeZone: "Europe/Rome" })} · resta nella cronologia delle note di riparazione.</p>
+        </Modale>
+      )}
       <DaRicordare key={s.id} s={s} ro={ro} operatore={operatore} onSalvata={async () => { await ricarica(); onCambiata(); }} />
       {s.pronto_prog_stato === "programmato" && s.pronto_prog_il && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
@@ -377,12 +387,12 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         }} />}
       {dlg?.k === "assegna_verifica" && <DialogoAssegna titolo={`Assegna in verifica — scheda ${s.sigla}`} tecnici={tecnici} attuale={s.tecnico_verifica}
         testo="Chi fa la verifica (test in ingresso / diagnosi)? Il tecnico poi scrive la verifica e la chiude." onClose={() => setDlg(null)}
-        onAssegna={async (t) => !!(await azione("assegna-verifica", { tecnico: t }, `Verifica assegnata a ${t}`))} />}
+        onAssegna={async (t, m) => !!(await azione("assegna-verifica", { tecnico: t, messaggio: m }, `Verifica assegnata a ${t}${m ? " con messaggio" : ""}`))} />}
       {dlg?.k === "chiudi_verifica" && <DialogoChiudiVerifica s={s} tecnici={tecnici} onClose={() => setDlg(null)}
         onChiudi={async (body) => !!(await azione("chiudi-verifica", body, "Verifica chiusa: da preventivare"))} />}
       {dlg?.k === "assegna_riparazione" && <DialogoAssegna titolo={`Assegna in riparazione — scheda ${s.sigla}`} tecnici={tecnici} attuale={s.tecnico_riparazione}
         testo="Chi fa la riparazione? Poi si aggiorna lo stato: attesa ricambi, aggiornamento al cliente, serve più tempo, «Trova il mio dispositivo», finita."
-        onClose={() => setDlg(null)} onAssegna={async (t) => !!(await azione("assegna-riparazione", { tecnico: t }, `Riparazione assegnata a ${t}`))} />}
+        onClose={() => setDlg(null)} onAssegna={async (t, m) => !!(await azione("assegna-riparazione", { tecnico: t, messaggio: m }, `Riparazione assegnata a ${t}${m ? " con messaggio" : ""}`))} />}
       {dlg?.k === "assegna_rimontaggio" && <DialogoAssegna titolo={`Rifiutato da richiudere — scheda ${s.sigla}`} tecnici={tecnici} attuale={s.tecnico_riparazione}
         testo="Il preventivo è rifiutato e il dispositivo è stato smontato per la verifica: chi lo richiude? Quando l'ha richiuso il tecnico segna «Richiuso: pronto da ritirare» e si invia il PRONTO negativo."
         onClose={() => setDlg(null)} onAssegna={async (t) => !!(await azione("rimontaggio", { azione: "serve", tecnico: t }, `Da richiudere: assegnato a ${t}`))} />}

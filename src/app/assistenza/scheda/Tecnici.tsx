@@ -15,16 +15,23 @@ type Tecnico = { codice: string; nome: string; attivo?: boolean };
 
 /** Scelta del tecnico a pulsanti grandi (iPad). */
 export function DialogoAssegna({ titolo, testo, tecnici, attuale, onClose, onAssegna }: {
-  titolo: string; testo: string; tecnici: Tecnico[]; attuale?: string | null; onClose: () => void; onAssegna: (codice: string) => Promise<boolean>;
+  titolo: string; testo: string; tecnici: Tecnico[]; attuale?: string | null; onClose: () => void;
+  onAssegna: (codice: string, messaggio: string) => Promise<boolean>;
 }) {
   const [busy, setBusy] = useState("");
+  // 27/10/2026 (Christian, 63228): messaggio al tecnico che riceve il lavoro (pop-up all'apertura + cronologia nelle note)
+  const [msg, setMsg] = useState("");
   return (
     <Modale titolo={titolo} onClose={onClose}>
       <p className="mb-3 text-sm text-muted-foreground">{testo}</p>
+      <label className="mb-3 block text-sm">
+        <span className="font-medium">Messaggio per il tecnico</span> <span className="text-xs text-muted-foreground">(cosa è stato fatto, cosa resta da fare — gli compare appena apre la scheda e resta nelle note)</span>
+        <textarea className="mt-1 min-h-[70px] w-full rounded-md border px-2.5 py-1.5 text-sm" placeholder="Es. Ho sistemato BIOS, firmware e driver: ora rimontalo integralmente e fai il test finale." value={msg} onChange={(e) => setMsg(e.target.value)} />
+      </label>
       <div className="grid grid-cols-2 gap-2">
         {tecnici.filter((t) => t.attivo !== false).map((t) => (
           <Button key={t.codice} variant={attuale === t.codice ? "default" : "outline"} className="h-14 text-base" disabled={!!busy}
-            onClick={async () => { setBusy(t.codice); try { if (await onAssegna(t.codice)) onClose(); } finally { setBusy(""); } }}>
+            onClick={async () => { setBusy(t.codice); try { if (await onAssegna(t.codice, msg.trim())) onClose(); } finally { setBusy(""); } }}>
             {busy === t.codice ? <Loader2 className="animate-spin" /> : <UserCog />}{t.nome}</Button>
         ))}
       </div>
