@@ -13,8 +13,9 @@ import { fattElimina } from "@/lib/api";
 import { assAzione, eur, type FatturaCollegata, type Scheda } from "@/lib/assistenza";
 import { Pill, Sezione } from "./ui";
 
-export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAcconto, onVendi, onPagato, onCorriere, onFatturaEliminata }: {
+export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAcconto, onPagamentoAnticipato, onVendi, onPagato, onCorriere, onFatturaEliminata }: {
   s: Scheda; ro: boolean; busy: boolean; onScontrino: () => void; onAcconto: () => void; onRichiediAcconto: () => void;
+  onPagamentoAnticipato?: (documento: "proforma" | "fattura") => void;
   onVendi: (t: "fattura" | "proforma") => void; onPagato: () => void; onCorriere: () => void;
   /** 26/10/2026 (63197): la bozza di fattura (mai numerata) si elimina dalla scheda */
   onFatturaEliminata?: () => void;
@@ -35,6 +36,13 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
             <Button variant="outline" disabled={!!s.documento_id || busy} onClick={() => onVendi("proforma")} title="Pro forma per il pagamento con bonifico (poi «Converti in fattura»)"><FileText />Pro forma</Button>
             <Button variant={s.stato === "pronto" && !s.pagata ? "default" : "outline"} disabled={busy || s.pagata} onClick={onPagato} title="Pagamento arrivato (bonifico, PayPal, contanti, POS)"><CheckCircle2 />Pagato</Button>
             <Button variant="outline" onClick={onCorriere}><Truck />Corriere</Button>
+            {/* 27/10/2026 (Christian, Tecnoservice 63163): il cliente paga SUBITO, in qualsiasi stato, per far partire il dispositivo appena pronto */}
+            {onPagamentoAnticipato && !s.pagata && s.saldo > 0 && <>
+              <Button variant="outline" className="border-emerald-400" disabled={busy} onClick={() => onPagamentoAnticipato("proforma")}
+                title="Crea il pro forma (se non c'è) e lo manda al cliente per mail + WhatsApp con IBAN e causale, per pagare subito"><Send />Pagamento anticipato (pro forma)</Button>
+              <Button variant="outline" className="border-emerald-400" disabled={busy} onClick={() => onPagamentoAnticipato("fattura")}
+                title="Crea la fattura, la invia allo SdI DA INCASSARE e la manda al cliente con IBAN e causale"><Send />Pagamento anticipato (fattura)</Button>
+            </>}
           </div>
         )}
         {/* 24/10/2026: quando e come è stata pagata, da quale documento */}

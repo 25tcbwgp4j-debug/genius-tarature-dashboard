@@ -358,6 +358,12 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
               if (!(imp > 0)) return;
               await azione("richiesta-acconto", { importo: imp }, `Richiesta di acconto di ${eur(imp)} inviata`);
             }}
+            onPagamentoAnticipato={async (documento) => {
+              if (sporca && !(await salva(true))) return;
+              const cosa = documento === "proforma" ? "il PRO FORMA" : "la FATTURA (va allo SdI da incassare)";
+              if (!confirm(`Chiedere ORA il pagamento di ${eur(s.saldo)} con ${cosa}? Parte una mail con il documento, IBAN e causale, e un WhatsApp.`)) return;
+              await azione("pagamento-anticipato", { documento }, `Richiesta di pagamento anticipato di ${eur(s.saldo)} inviata`);
+            }}
             onVendi={vendi} onPagato={() => setDlg({ k: "pagato" })} onCorriere={() => setDlg({ k: "corriere" })} />
           <Sezione titolo="Nota interna" sottotitolo="mai al cliente">
             <textarea className={area} rows={3} disabled={ro} value={(v("note_interne") as string) || ""} onChange={(e) => set("note_interne", e.target.value)} />
