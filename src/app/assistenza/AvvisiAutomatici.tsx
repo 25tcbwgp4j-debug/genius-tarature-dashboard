@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Bot, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OPERATORI, type Operatore } from "@/components/Operatore";
-import { assAvvisi, assAvvisoVisto, type AvvisoDashboard } from "@/lib/assistenza";
+import { assAvvisi, assAvvisoVisto, assSpedisciFatturaDaIncassare, type AvvisoDashboard, type EsitoSpedisciFattura } from "@/lib/assistenza";
 import { toastErrore } from "@/lib/errori";
 
 const ora = (s: string) => new Date(s).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -38,7 +38,21 @@ export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto }: {
   const [chi, setChi] = useState<Operatore | "">("");
   const [busy, setBusy] = useState<string | null>(null);
   const [storico, setStorico] = useState<AvvisoDashboard[] | null>(null);
+  const [fatto, setFatto] = useState<Record<string, EsitoSpedisciFattura>>({});
   const op = chi || operatore;
+
+  // 27/10/2026 (Gianni Gallo): spedizione + fattura da incassare in un clic; il risultato (tracking, fattura) resta a video
+  async function spedisciFattura(a: AvvisoDashboard) {
+    if (!op) { toast.error("Scegli chi sei (CHR · VALE · DUMY · ALTRO) prima di spedire"); return; }
+    if (!a.scheda_id || !confirm(`Spedire ora la scheda ${a.sigla} ed emettere la fattura DA INCASSARE?`)) return;
+    setBusy(a.id);
+    try {
+      const r = await assSpedisciFatturaDaIncassare(a.scheda_id, op, a.id);
+      setFatto((x) => ({ ...x, [a.id]: r }));
+      toast.success(`Spedito: ${r.spedizione.tracking} · fattura ${r.fattura.numero ?? ""} da incassare`);
+    } catch (e) { toastErrore(e); }
+    finally { setBusy(null); }
+  }
 
   async function visto(id: string) {
     if (!op) { toast.error("Scegli chi sei (CHR · VALE · DUMY · ALTRO) prima di «Ho visto»"); return; }
@@ -75,6 +89,18 @@ export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto }: {
               <span className="text-sm opacity-80">{ora(a.created_at)}{a.updated_at && a.updated_at !== a.created_at ? ` → ${ora(a.updated_at)}` : ""}</span>
             </div>
             <Voci a={a} onScheda={onScheda} />
+            {a.azione?.tipo === "spedisci_fattura" && (
+              fatto[a.id] ? (
+                <div className="mt-3 rounded-lg border-2 border-green-700 bg-green-50 p-3 text-base font-semibold text-green-950 dark:bg-green-950/40 dark:text-green-50">
+                  📦 Tracking {fatto[a.id].spedizione.tracking}{fatto[a.id].spedizione.gia_fatta ? " (già creato)" : ""} · etichetta in stampa ·
+                  🧾 fattura {fatto[a.id].fattura.numero ?? "—"} DA INCASSARE{fatto[a.id].fattura.scadenza ? ` (scadenza ${fatto[a.id].fattura.scadenza})` : ""}
+                </div>
+              ) : (
+                <Button size="lg" className="mt-3 w-full text-base font-bold" disabled={busy === a.id} onClick={() => spedisciFattura(a)}>
+                  {busy === a.id ? "Spedizione e fattura in corso…" : (a.azione.etichetta || "📦 Spedisci + 🧾 fattura da incassare")}
+                </Button>
+              )
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="text-sm">Chi sei?</span>
               {OPERATORI.map((o) => (

@@ -111,10 +111,18 @@ export const assCruscotto = (): Promise<{ fasi: FaseCruscotto[]; tecnici: { codi
 /** 27/10/2026: quello che è stato fatto in automatico / da Claude, banner sul banco finché non si clicca «Ho visto». */
 export interface AvvisoDashboard { id: string; created_at: string; updated_at?: string; titolo: string; scheda_id: string | null; sigla?: string | null;
   origine: string; livello: "info" | "attenzione" | "errore"; visto_il: string | null; visto_da: string | null;
-  voci: { icona: string; testo: string; link?: string; il?: string }[] }
+  voci: { icona: string; testo: string; link?: string; il?: string }[];
+  /** 27/10/2026: pulsante sul banner (es. Gianni Gallo: spedisci + fattura da incassare) */
+  azione?: { tipo: "spedisci_fattura"; etichetta?: string } | null }
 export const assAvvisi = (visti = false): Promise<{ avvisi: AvvisoDashboard[] }> => fetchAPI(`/api/assistenza/avvisi${visti ? "?visti=true" : ""}`);
 export const assAvvisoVisto = (id: string, operatore: string): Promise<AvvisoDashboard> =>
   fetchAPI(`/api/assistenza/avvisi/${id}/visto`, { method: "POST", body: JSON.stringify({ operatore }) });
+/** 27/10/2026 (Gianni Gallo): un clic = spedizione col nostro corriere + fattura allo SdI DA INCASSARE. */
+export interface EsitoSpedisciFattura {
+  spedizione: { tracking: string; corriere?: string; gia_fatta?: boolean; tracking_url?: string };
+  fattura: { id: string; numero: string | null; stato: string; totale: number | string; scadenza?: string; gia_emessa?: boolean } }
+export const assSpedisciFatturaDaIncassare = (sid: string, operatore: string, avviso_id?: string): Promise<EsitoSpedisciFattura> =>
+  fetchAPI(`/api/assistenza/schede/${sid}/spedisci-fattura-da-incassare`, { method: "POST", body: JSON.stringify({ operatore, avviso_id }) });
 /** 24/10/2026: richieste PROVVISORIE dal chatbot / chat WhatsApp, da trasformare in scheda o scartare. */
 export interface Richiesta { id: string; created_at: string; origine: string; telefono: string | null; nome: string | null; email: string | null;
   dispositivo: string | null; seriale: string | null; problema: string | null; conversazione: string | null; anagrafica_id: string | null;
