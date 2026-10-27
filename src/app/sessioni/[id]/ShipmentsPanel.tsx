@@ -148,6 +148,8 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
         address: cur?.address || p.address,
         email: cur?.email ?? p.email,
         whatsapp_phone: cur?.whatsapp_phone ?? p.whatsapp_phone,
+        // 27/10/2026: riconsegna col peso dichiarato all'andata (prima restava 2 kg: S.T.A.I.T. 6 kg)
+        weight_kg: (cur?.weight_kg ?? 2) === 2 && p.weight_kg_suggested ? p.weight_kg_suggested : (cur?.weight_kg ?? f.weight_kg),
       }));
     } catch (e: unknown) {
       toast.error((e as Error).message || "Errore anteprima");
