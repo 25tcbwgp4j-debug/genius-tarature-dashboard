@@ -353,6 +353,11 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       </div>
 
       <div ref={refPrev} className="scroll-mt-28">
+        {!ro && bz.righe.length > 0 && ["da_preventivare", "preventivo_inviato", "accettato"].includes(st) && (
+          <VerificaPreventivo s={s} admin={admin} busy={!!busy}
+            onAzione={(az, nota) => azione("verifica-preventivo", { azione: az, nota },
+              az === "richiedi" ? "Preventivo mandato in verifica a Christian" : az === "approva" ? "Preventivo approvato" : az === "correggi" ? "Preventivo rimandato al banco" : "Verifica tolta")}
+            onInvia={() => apriInvio(s.preventivo_stato && s.preventivo_stato !== "da_fare" ? "aggiornamento" : "preventivo")} />)}
         <Preventivo s={s} attuale={{ modello: String(v("modello") || ""), prodotto: String(v("prodotto") || ""),
           famiglia: String(v("famiglia") || ""), anno: v("anno") == null ? "" : String(v("anno")) }} bz={bz} setBz={setBz} ro={ro} spedDefault={cfg?.spedizione_default?.ar ?? 28}
           onInvia={() => apriInvio(s.preventivo_stato && s.preventivo_stato !== "da_fare" ? "aggiornamento" : "preventivo")}
@@ -743,4 +748,45 @@ function DaRicordare({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean; 
       {!ro && cambiata && <div className="text-right"><Button size="sm" disabled={busy} onClick={salva}>{busy && <Loader2 className="animate-spin" />}Salva la nota</Button></div>}
     </div>
   );
+}
+
+
+/** 27/10/2026 (Christian): il banco prepara il preventivo e lo manda in VERIFICA al titolare; il titolare lo approva e lo
+ *  invia, lo corregge e lo invia, oppure lo rimanda al banco scrivendo cosa sistemare. */
+function VerificaPreventivo({ s, admin, busy, onAzione, onInvia }: {
+  s: Scheda; admin: boolean; busy: boolean; onAzione: (az: string, nota?: string) => Promise<unknown>; onInvia: () => void;
+}) {
+  const v = s.preventivo_verifica;
+  const quando = (x?: string) => x ? new Date(x).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+  const richiedi = () => { const n = prompt("Nota per Christian (facoltativa): cosa deve guardare?", ""); if (n !== null) onAzione("richiedi", n); };
+  if (!v) return (
+    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-dashed px-3 py-2 text-sm">
+      <span className="text-muted-foreground">Preventivo preparato dal banco? Prima dell&apos;invio fallo verificare.</span>
+      <Button size="sm" variant="outline" className="ml-auto border-violet-400 text-violet-800" disabled={busy} onClick={richiedi}>👑 Richiedi verifica a Christian</Button>
+    </div>);
+  const colori = v.stato === "richiesta" ? "border-violet-400 bg-violet-50 text-violet-950 dark:bg-violet-950/30 dark:text-violet-100"
+    : v.stato === "approvato" ? "border-emerald-400 bg-emerald-50 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100"
+    : "border-red-400 bg-red-50 text-red-950 dark:bg-red-950/30 dark:text-red-100";
+  return (
+    <div className={`mb-2 space-y-1.5 rounded-xl border-2 px-3 py-2 text-sm ${colori}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <b>{v.stato === "richiesta" ? "👑 IN VERIFICA DA CHRISTIAN" : v.stato === "approvato" ? "✅ APPROVATO DA CHRISTIAN: si può inviare" : "✏️ DA SISTEMARE (Christian)"}</b>
+        <span className="text-xs opacity-80">chiesto da {v.richiesta_da} {quando(v.richiesta_il)}{v.risposta_il ? ` · risposta ${quando(v.risposta_il)}` : ""}</span>
+      </div>
+      {v.nota && <div><span className="font-medium">Nota del banco:</span> {v.nota}</div>}
+      {v.risposta && <div className="font-medium">Christian: {v.risposta}</div>}
+      <div className="flex flex-wrap gap-1.5">
+        {admin && v.stato === "richiesta" && <>
+          <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700" disabled={busy}
+            onClick={async () => { if (await onAzione("approva")) onInvia(); }}>✔ Approva e invia</Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => onAzione("approva")}
+            title="Approva senza inviare ora (lo invia il banco)">Approva (invia il banco)</Button>
+          <Button size="sm" variant="outline" className="border-red-300 text-red-700" disabled={busy}
+            onClick={() => { const n = prompt("Cosa devono sistemare nel preventivo?", ""); if (n && n.trim()) onAzione("correggi", n); }}>✏️ Rimanda al banco con una nota</Button>
+          <span className="self-center text-xs opacity-80">Per modificarlo: correggi le voci qui sotto, poi «Approva e invia».</span></>}
+        {v.stato !== "richiesta" && <Button size="sm" variant="outline" disabled={busy} onClick={richiedi}>👑 Richiedi di nuovo la verifica</Button>}
+        {v.stato === "approvato" && <Button size="sm" disabled={busy} onClick={onInvia}>Invia il preventivo</Button>}
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => onAzione("annulla")}>Togli la verifica</Button>
+      </div>
+    </div>);
 }
