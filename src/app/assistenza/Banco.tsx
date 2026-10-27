@@ -13,11 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOperatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
-import { assRichiestaCollega, type Richiesta, STATI_RIPARAZIONE, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, assSetConfig, nomeTecnico, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve } from "@/lib/assistenza";
+import { assRichiestaCollega, type Richiesta, STATI_RIPARAZIONE, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, assSetConfig, nomeTecnico, type AvvisoDashboard, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve } from "@/lib/assistenza";
 import { Cruscotto } from "./Cruscotto";
 import { AvvisoRichieste } from "./Richieste";
 import { PerCliente } from "./PerCliente";
 import { DaGestire, type Novita } from "./DaGestire";
+import { AvvisiAutomatici } from "./AvvisiAutomatici";
 import { MessaggiTecnico } from "./MessaggiTecnico";
 import { NuovaScheda } from "./scheda/NuovaScheda";
 import { SchedaView } from "./scheda/SchedaView";
@@ -71,6 +72,7 @@ export function Banco() {
   const [nuova, setNuova] = useState(false);
   const [perCliente, setPerCliente] = useState(false);
   const [novita, setNovita] = useState<Novita[]>([]);
+  const [avvisi, setAvvisi] = useState<AvvisoDashboard[]>([]);
   // 24/10/2026: richieste provvisorie da WhatsApp (chatbot / chat staff) e quella da cui si sta aprendo la scheda
   const [nRichieste, setNRichieste] = useState(0);
   const [daRichiesta, setDaRichiesta] = useState<Richiesta | null>(null);
@@ -97,12 +99,12 @@ export function Banco() {
       : q.trim().length >= 3 ? tutteLeSchede(q, st) : assElenco(q, st, "", q.trim() ? 500 : 150);
     p.then((r) => { if (mia !== ultimaRicerca.current) return; setElenco(r.schede); setTotale(r.totale); })
       .catch((e) => { if (mia !== ultimaRicerca.current) return; toastErrore(e); setElenco([]); });
-    assCruscotto().then((r) => { setCruscotto(r.fasi); setTecniciCr(r.tecnici); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); }).catch(() => undefined);
+    assCruscotto().then((r) => { setCruscotto(r.fasi); setTecniciCr(r.tecnici); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); }).catch(() => undefined);
   }, [q, filtro, fase]);
   useEffect(() => { const t = setTimeout(carica, 250); return () => clearTimeout(t); }, [carica]);
   // 26/10/2026: il cruscotto (e il banner «Da gestire adesso») si aggiorna da solo ogni minuto
   useEffect(() => {
-    const t = setInterval(() => assCruscotto().then((r) => { setCruscotto(r.fasi); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); }).catch(() => undefined), 60000);
+    const t = setInterval(() => assCruscotto().then((r) => { setCruscotto(r.fasi); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); }).catch(() => undefined), 60000);
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
@@ -181,6 +183,8 @@ export function Banco() {
       </div>
 
       {fase?.tecnico && <MessaggiTecnico tecnico={fase.tecnico} schede={elenco} operatore={operatore} onApri={apri} onLetto={carica} />}
+      <AvvisiAutomatici avvisi={avvisi} operatore={operatore} onScheda={apri}
+        onVisto={() => assCruscotto().then((r) => setAvvisi(r.avvisi || [])).catch(() => undefined)} />
       <DaGestire fasi={cruscotto} novita={novita} onScheda={apri} onApri={(f) => { setFase({ fase: f, tecnico: "" }); setElenco(null); setQ(""); }} />
       <AvvisoRichieste n={nRichieste} operatore={operatore} onCambiate={carica}
         onApriScheda={(r) => { setDaRichiesta(r); setNuova(true); }} />

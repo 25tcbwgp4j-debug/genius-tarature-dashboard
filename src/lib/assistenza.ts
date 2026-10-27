@@ -106,7 +106,15 @@ const j = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
 export const assConfig = (): Promise<ConfigAssistenza> => fetchAPI("/api/assistenza/config");
 export const assSetConfig = (b: { operatori_abilitati: boolean }): Promise<ConfigAssistenza> => fetchAPI("/api/assistenza/config", { method: "PATCH", body: JSON.stringify(b) });
 export const assCruscotto = (): Promise<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[]; richieste_nuove?: number;
-  novita?: { id: string; sigla: string; cliente: string | null; prodotto: string | null; tipo: "accettato" | "rifiutato"; il: string; canale: string | null; richiesta: string | null }[] }> => fetchAPI("/api/assistenza/cruscotto");
+  novita?: { id: string; sigla: string; cliente: string | null; prodotto: string | null; tipo: "accettato" | "rifiutato"; il: string; canale: string | null; richiesta: string | null }[];
+  avvisi?: AvvisoDashboard[] }> => fetchAPI("/api/assistenza/cruscotto");
+/** 27/10/2026: quello che è stato fatto in automatico / da Claude, banner sul banco finché non si clicca «Ho visto». */
+export interface AvvisoDashboard { id: string; created_at: string; updated_at?: string; titolo: string; scheda_id: string | null; sigla?: string | null;
+  origine: string; livello: "info" | "attenzione" | "errore"; visto_il: string | null; visto_da: string | null;
+  voci: { icona: string; testo: string; link?: string; il?: string }[] }
+export const assAvvisi = (visti = false): Promise<{ avvisi: AvvisoDashboard[] }> => fetchAPI(`/api/assistenza/avvisi${visti ? "?visti=true" : ""}`);
+export const assAvvisoVisto = (id: string, operatore: string): Promise<AvvisoDashboard> =>
+  fetchAPI(`/api/assistenza/avvisi/${id}/visto`, { method: "POST", body: JSON.stringify({ operatore }) });
 /** 24/10/2026: richieste PROVVISORIE dal chatbot / chat WhatsApp, da trasformare in scheda o scartare. */
 export interface Richiesta { id: string; created_at: string; origine: string; telefono: string | null; nome: string | null; email: string | null;
   dispositivo: string | null; seriale: string | null; problema: string | null; conversazione: string | null; anagrafica_id: string | null;
