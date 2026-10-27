@@ -170,8 +170,13 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
   const [cons, setCons] = useState<"ritiro" | "spedizione">((s.consegna_modo as "ritiro") || (s.spedizione_tipo === "ar" || s.spedizione_tipo === "solo_ritorno" ? "spedizione" : "ritiro"));
   const [corr, setCorr] = useState<"noi" | "cliente">(s.consegna_corriere || "noi");
   const [pag, setPag] = useState(s.pagamento_modo || "");
-  const [tot, setTot] = useState(String(totale ?? s.totale_lavorazione ?? (s.preventivo_esito === "accettato" ? s.preventivo_totale ?? "" : "")));
-  const [esito, setEsito] = useState(s.esito || (s.preventivo_esito === "rifiutato" ? "NEGATIVO" : "EFFETTUATO"));
+  // 27/10/2026 (Christian, 63182): totale ed esito dallo STESSO calcolo del backend (totale_dovuto / esito_pronto): le schede
+  // FileMaker hanno i totali vuoti e l'esito «DA ULTIMARE» → prima il pronto diceva «nulla da pagare» e il PDF «non conclusa»
+  const vuoto = (x: unknown) => x === null || x === undefined || String(x).trim() === "";
+  const totIniziale = !vuoto(totale) ? totale : !vuoto(s.totale_lavorazione) ? s.totale_lavorazione : (s.totale_dovuto ?? "");
+  const ricavato = vuoto(totale) && vuoto(s.totale_lavorazione) && vuoto(s.preventivo_totale) && Number(s.totale_dovuto || 0) > 0;
+  const [tot, setTot] = useState(String(totIniziale ?? ""));
+  const [esito, setEsito] = useState(s.esito_pronto || (s.esito === "EFFETTUATO" || s.esito === "NEGATIVO" ? s.esito : (s.preventivo_esito === "rifiutato" ? "NEGATIVO" : "EFFETTUATO")));
   const [ind, setInd] = useState(s.indirizzo_spedizione || "");
   const [mail, setMail] = useState(true);
   const [wa, setWa] = useState(!s.cliente_no_whatsapp);   // 26/10/2026: cliente «niente WhatsApp» → spenta
@@ -190,14 +195,16 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
   const passato = !!programma && new Date(programma).getTime() <= Date.now() + 60000;
   const fuoriOrario = !!qs && !inOrarioNegozio(qs.d, qs.o);
   // 26/10/2026 (Christian, 63118): a costo zero niente pagamento da chiedere (né bonifico, né consuntivo, né fattura)
-  const gratis = (Number(String(tot).replace(",", ".")) || 0) - (Number(s.acconto) || 0) <= 0.009;
+  // «1.197,50» e «1197.50» sono lo stesso importo (prima «1.197.50» = 0 = gratis)
+  const totNum = (() => { const t = String(tot).trim(); const n = t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t; return Number(n) || 0; })();
+  const gratis = totNum - (Number(s.acconto) || 0) <= 0.009 || !!s.pagata;
   const pagEff = gratis ? "" : (pag || (cons === "spedizione" ? "bonifico" : ""));
-  const corpo = useMemo(() => ({ consegna_modo: cons, pagamento_modo: pagEff, totale_lavorazione: tot, indirizzo_spedizione: ind,
-    consegna_corriere: cons === "spedizione" ? corr : "", esito }), [cons, pagEff, tot, ind, corr, esito]);
+  const corpo = useMemo(() => ({ consegna_modo: cons, pagamento_modo: pagEff, totale_lavorazione: String(tot).trim() === "" ? null : totNum, indirizzo_spedizione: ind,
+    consegna_corriere: cons === "spedizione" ? corr : "", esito }), [cons, pagEff, tot, totNum, ind, corr, esito]);
   async function invia() {
     setBusy(true);
     try {
-      const r = await onInvia({ ...corpo, consegna_corriere: cons === "spedizione" ? corr : null, esito, pagamento_modo: pagEff || null, invia_mail: mail, invia_wa: wa,
+      const r = await onInvia({ ...corpo, consegna_corriere: cons === "spedizione" ? corr : null, esito, pagamento_modo: pagEff || "", invia_mail: mail, invia_wa: wa,
         ...(programma ? { programma_il: programma } : {}) });
       if (r) setFatto(r);
     } finally { setBusy(false); }
@@ -214,13 +221,14 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <Campo label="Pagamento">
-              {gratis ? <div className={`${campo} bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-200`}>Nessun pagamento (totale € 0)</div> : (
+              {gratis ? <div className={`${campo} bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-200`}>{s.pagata ? "Già pagata: nessun pagamento da chiedere" : "Nessun pagamento (totale € 0)"}</div> : (
               <select className={campo} value={pagEff} onChange={(e) => setPag(e.target.value)}>
                 <option value="">Al banco (contanti / POS)</option><option value="bonifico">Bonifico (IBAN)</option><option value="paypal">PayPal (+3%)</option><option value="fine_mese">Fine mese (rivenditore)</option></select>)}
             </Campo>
-            <Campo label="Totale € (IVA compresa)"><input className={`${campo} text-right font-semibold`} inputMode="decimal" value={tot} onChange={(e) => setTot(e.target.value.replace(",", "."))} /></Campo>
+            <Campo label="Totale € (IVA compresa)"><input className={`${campo} text-right font-semibold`} inputMode="decimal" value={tot} onChange={(e) => setTot(e.target.value)} />
+              {ricavato && <span className="mt-1 block rounded bg-amber-100 px-1 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">Ricavato dalle voci accettate del preventivo + spedizione (i totali della scheda erano vuoti): controllalo</span>}</Campo>
             <Campo label="Esito">
-              <select className={campo} value={esito} onChange={(e) => setEsito(e.target.value)}><option value="EFFETTUATO">Effettuato</option><option value="NEGATIVO">Negativo</option><option value="DA ULTIMARE">Da ultimare</option></select>
+              <select className={campo} value={esito} onChange={(e) => setEsito(e.target.value)}><option value="EFFETTUATO">Effettuato</option><option value="NEGATIVO">Negativo</option></select>
             </Campo>
           </div>
           {cons === "spedizione" && <Campo label={gratis ? "Indirizzo di spedizione" : "Indirizzo di spedizione (va nella causale del bonifico)"}><input className={campo} value={ind} onChange={(e) => setInd(e.target.value)} placeholder="via, CAP, città" /></Campo>}

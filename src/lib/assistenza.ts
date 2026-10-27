@@ -30,6 +30,8 @@ export interface Anagrafica { id: string; denominazione: string; piva?: string |
   telefoni_altri?: string | null; consegna_default?: string | null; ritiro_prenotazione?: boolean | null; ritorno_corriere?: string | null }
 export interface SchedaCliente extends Anagrafica { schede: { id: string; sigla: string; prodotto: string | null; modello: string | null; difetto: string | null; stato: string; created_at: string }[] }
 export interface Scheda extends SchedaBreve {
+  /** 27/10/2026 (63182): calcolati dal backend (stessa regola di pronto, PDF, mail) */
+  totale_dovuto?: number; esito_pronto?: string; consegna_effettiva?: "ritiro" | "spedizione";
   anagrafica_id: string | null; referente: string | null; telefono_referente: string | null; indirizzo_spedizione: string | null; imei: string | null;
   acquistato_il: string | null; anno_garanzia: string | null; password_dispositivo: string | null; apple_id: string | null; password_apple_id: string | null;
   accessori: string | null; note: string | null; note_interne: string | null; trova_il_mio?: "attivo" | "risolto" | null; riconsegna_nota?: string | null; promemoria?: string | null; ricevuta_da_inviare?: boolean; cliente_no_whatsapp?: string | null; passaggio?: { da: string; a: string; testo: string; il: string; letto_il: string | null; letto_da: string | null } | null; comunicazione_cliente?: string | null; recensione_stato?: "inviata" | "non_inviare" | null; recensione_il?: string | null; pronto_prog_il?: string | null; pronto_prog_stato?: string | null; pronto_prog_esito?: string | null; preventivo_righe: EstimateLine[]; preventivo_testo: string | null;

@@ -11,7 +11,9 @@ import { Campo, Pill, Scelta, Sezione, area, campo } from "./ui";
 type V = <K extends keyof Scheda>(k: K) => Scheda[K] | undefined;
 
 export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: (k: keyof Scheda, val: unknown) => void; ro: boolean; tecnici: string[] }) {
-  const tot = v("totale_lavorazione") ?? s.preventivo_totale;
+  const tl = v("totale_lavorazione");
+  // 27/10/2026 (63182): con i totali vuoti vale il totale ricavato dal backend (voci accettate + spedizione)
+  const tot = tl !== null && tl !== undefined && String(tl) !== "" ? tl : (s.preventivo_totale ?? s.totale_dovuto);
   const acc = Number(v("acconto") || 0);
   const saldo = Number(tot || 0) - acc;
   const T = (k: keyof Scheda, l: string, extra: React.ComponentProps<"input"> = {}) => (
