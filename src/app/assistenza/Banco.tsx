@@ -18,6 +18,7 @@ import { Cruscotto } from "./Cruscotto";
 import { AvvisoRichieste } from "./Richieste";
 import { PerCliente } from "./PerCliente";
 import { DaGestire } from "./DaGestire";
+import { MessaggiTecnico } from "./MessaggiTecnico";
 import { NuovaScheda } from "./scheda/NuovaScheda";
 import { SchedaView } from "./scheda/SchedaView";
 import { Badge } from "./scheda/ui";
@@ -178,6 +179,7 @@ export function Banco() {
         {perCliente && <PerCliente operatore={operatore} onClose={() => setPerCliente(false)} onApri={(id) => { setPerCliente(false); apri(id); }} />}
       </div>
 
+      {fase?.tecnico && <MessaggiTecnico tecnico={fase.tecnico} schede={elenco} operatore={operatore} onApri={apri} onLetto={carica} />}
       <DaGestire fasi={cruscotto} onApri={(f) => { setFase({ fase: f, tecnico: "" }); setElenco(null); setQ(""); }} />
       <AvvisoRichieste n={nRichieste} operatore={operatore} onCambiate={carica}
         onApriScheda={(r) => { setDaRichiesta(r); setNuova(true); }} />
@@ -235,6 +237,7 @@ export function Banco() {
                 <div className="flex items-center gap-2">
                   <b className="tabular-nums">{s.sigla}</b>
                   <span className="truncate">{s.azienda || s.nominativo}</span>
+                  {s.passaggio && !s.passaggio.letto_il && <span className="rounded bg-blue-600 px-1.5 text-[10px] font-bold text-white" title={`Messaggio di ${s.passaggio.da} per ${s.passaggio.a}`}>📨 per {s.passaggio.a}</span>}
                   <span className="ml-auto"><Badge stato={s.stato} /></span>
                 </div>
                 <div className="truncate text-xs text-muted-foreground">{s.prodotto}{s.anno ? ` ${s.anno}` : ""}{s.difetto ? ` · ${s.difetto}` : ""}</div>
@@ -249,7 +252,7 @@ export function Banco() {
                 {/* 26/10/2026: che ricambio si aspetta e quando arriva */}
                 {(s.ricambi_attesi || []).filter((r) => r.stato !== "arrivato").map((r, i) => (
                   <div key={i} className="truncate text-[11px] text-amber-800 dark:text-amber-300">
-                    📦 {r.cosa || "ricambio"}{r.stato === "da_ordinare" ? " · DA ORDINARE" : r.arrivo_previsto ? ` · arrivo ${new Date(`${r.arrivo_previsto}T12:00:00`).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}` : " · ordinato"}
+                    📦 {r.cosa || "ricambio"}{r.stato === "da_ordinare" ? " · DA ORDINARE" : r.stato === "richiesto" ? " · 🛒 ORDINE RICHIESTO" : r.arrivo_previsto ? ` · arrivo ${new Date(`${r.arrivo_previsto}T12:00:00`).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}` : " · ordinato"}
                   </div>))}
               </button>
             ))}

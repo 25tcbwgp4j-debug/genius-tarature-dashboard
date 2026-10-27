@@ -660,7 +660,7 @@ function RicambiAttesi({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean
     <div className="space-y-1.5 rounded-xl border-2 border-amber-200 bg-amber-50/50 p-2.5 dark:border-amber-900 dark:bg-amber-950/20">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-semibold text-amber-950 dark:text-amber-100">📦 Ricambi in attesa</span>
-        <span className="text-xs text-muted-foreground">{righe.length ? `${mancano} da arrivare su ${righe.length}` : "nessun ricambio segnato"}</span>
+        <span className="text-xs text-muted-foreground">{righe.length ? `${mancano} da arrivare su ${righe.length}` : "nessun ricambio segnato"} · incolla un link (eBay, AliExpress…) per riga, salva, poi «🛒 Ordina»</span>
         {!ro && <Button size="xs" variant="outline" className="ml-auto" onClick={() => setRighe((x) => [...x, { ...vuoto }])}><Plus />Aggiungi ricambio</Button>}
       </div>
       {righe.map((r, i) => (
@@ -673,8 +673,20 @@ function RicambiAttesi({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean
           <input className={campo} disabled={ro} placeholder="N. ordine / fornitore" value={r.ordine || ""} onChange={(e) => setR(i, "ordine", e.target.value)} />
           <input className={campo} type="date" disabled={ro} title="Arrivo previsto" value={(r.arrivo_previsto || "").slice(0, 10)} onChange={(e) => setR(i, "arrivo_previsto", e.target.value)} />
           <select className={campo} disabled={ro} value={r.stato || "da_ordinare"} onChange={(e) => setR(i, "stato", e.target.value)}>
-            <option value="da_ordinare">Da ordinare</option><option value="ordinato">Ordinato</option><option value="arrivato">✔ Arrivato</option></select>
-          {!ro && <Button size="xs" variant="ghost" className="text-red-700" onClick={() => setRighe((x) => x.filter((_, j) => j !== i))}><Trash2 /></Button>}
+            <option value="da_ordinare">Da ordinare</option><option value="richiesto">🛒 Ordine richiesto</option><option value="ordinato">Ordinato</option><option value="arrivato">✔ Arrivato</option></select>
+          <span className="flex gap-1">
+            {/* 27/10/2026 (Christian): ordine automatico del ricambio (eBay/AliExpress, fattura Genius, PayPal, riferimento alla scheda) */}
+            {!ro && r.stato === "da_ordinare" && !cambiate && (s.ricambi_attesi || [])[i] && (
+              <Button size="xs" title="Mette il ricambio in coda per l'acquisto: si ordina con fattura Genius e PayPal, col riferimento a questa scheda"
+                onClick={async () => {
+                  if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
+                  if (!confirm(`Ordinare questo ricambio per la scheda ${s.sigla}?\n\n${r.cosa || ""}\n${r.link || ""}\n\nVa in coda per l'acquisto (fattura Genius, PayPal): il pagamento chiede l'impronta di Christian.`)) return;
+                  try { await fetchAPI(`/api/assistenza/schede/${s.id}/ricambi/ordina`, { method: "POST", body: JSON.stringify({ indice: i, operatore }) }); toast.success("Ordine richiesto: è in coda per l'acquisto"); await onSalvata(); }
+                  catch (e) { toastErrore(e); }
+                }}>🛒 Ordina</Button>)}
+            {!ro && <Button size="xs" variant="ghost" className="text-red-700" onClick={() => setRighe((x) => x.filter((_, j) => j !== i))}><Trash2 /></Button>}
+          </span>
+          {r.stato === "richiesto" && <div className="text-xs font-medium text-blue-800 sm:col-span-6">🛒 Ordine richiesto{r.richiesto_il ? ` il ${r.richiesto_il.slice(8, 10)}/${r.richiesto_il.slice(5, 7)}` : ""}{r.richiesto_da ? ` da ${r.richiesto_da}` : ""}: in coda per l&apos;acquisto</div>}
           {r.nota && <div className="text-xs text-muted-foreground sm:col-span-6">{r.nota}</div>}
         </div>
       ))}

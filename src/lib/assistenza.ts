@@ -7,7 +7,8 @@ export interface Fase { il: string; operatore?: string | null; sede?: string | n
 /** 26/10/2026: un ricambio della scheda (cosa, link, ordine, arrivo previsto, stato). */
 export interface RicambioAtteso {
   cosa?: string | null; link?: string | null; ordine?: string | null; fornitore?: string | null; nota?: string | null;
-  ordinato_il?: string | null; arrivo_previsto?: string | null; arrivato_il?: string | null; stato?: "da_ordinare" | "ordinato" | "arrivato";
+  ordinato_il?: string | null; arrivo_previsto?: string | null; arrivato_il?: string | null; stato?: "da_ordinare" | "richiesto" | "ordinato" | "arrivato";
+  richiesto_il?: string | null; richiesto_da?: string | null;
 }
 
 export interface SchedaBreve {
@@ -17,7 +18,7 @@ export interface SchedaBreve {
   ritirato: string | null; consegna_modo: string | null; tecnico: string | null; fasi: Record<string, Fase>; created_at: string;
   // 05/10/2026 (§10, migr. 092)
   famiglia?: string | null; anno?: number | null; tecnico_verifica?: string | null; tecnico_riparazione?: string | null;
-  verifica_stato?: "da_assegnare" | "in_corso" | "chiusa" | null; riparazione_stato?: string | null; ricambi_attesi?: RicambioAtteso[] | null;
+  verifica_stato?: "da_assegnare" | "in_corso" | "chiusa" | null; riparazione_stato?: string | null; ricambi_attesi?: RicambioAtteso[] | null; passaggio?: { da: string; a: string; testo: string; il: string; letto_il: string | null } | null;
 }
 export interface Evento { id: string; tipo: string; descrizione: string; operatore: string | null; creato_da: string | null; created_at: string; dati?: Record<string, unknown> }
 export interface Anagrafica { id: string; denominazione: string; piva?: string | null; cf?: string | null; telefono?: string | null; email?: string | null;
