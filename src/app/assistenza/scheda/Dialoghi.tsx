@@ -357,6 +357,9 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
   const [avvisaMail, setAvvisaMail] = useState(true);
   const [avvisaWa, setAvvisaWa] = useState(!s.cliente_no_whatsapp);
   const [busy, setBusy] = useState(false);
+  // 28/10/2026 (Christian): etichetta di riconsegna — il pacco parte OGGI (scheda chiusa) o un ALTRO GIORNO (resta aperta)
+  const [parte, setParte] = useState<"" | "oggi" | "dopo">("");
+  const [partenzaIl, setPartenzaIl] = useState("");
   const dir = modo === "ritiro" ? "ritiro" : "riconsegna";
   const chiave = JSON.stringify({ dir, ind, corriere, giorno, prenotaDaNoi });
   useEffect(() => {
@@ -372,6 +375,7 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
   const dhlBloccato = corriere === "DHL" && !inProva && !ante?.dhl_produzione;
   async function crea() {
     if (!operatore) { toast.error("Scegli l'operatore"); return; }
+    if (dir === "riconsegna" && !inProva && !parte) { toast.error("Scegli quando parte il pacco: oggi o un altro giorno"); return; }
     const conRitiro = dir === "ritiro" ? !!giorno : prenotaDaNoi;
     if (!inProva && !confirm(`Creare l'etichetta ${corriere} VERA (costo sul conto ${corriere})${conRitiro ? " e prenotare il corriere" : ""}?`)) return;
     // 14/10/2026: riconsegna di una scheda non ancora pagata → il backend la ferma; qui si chiede conferma esplicita
@@ -381,7 +385,8 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
     try {
       const r = await assAzione(s.id, "spedizione", { operatore, corriere, direzione: dir, indirizzo: ind, giorno_ritiro: giorno || undefined, test: inProva,
         prenota: dir === "riconsegna" ? prenotaDaNoi : undefined, stampa: inProva ? false : stampa, forza: nonPagata || undefined,
-        invia_mail: avvisaMail, invia_wa: avvisaWa });
+        invia_mail: avvisaMail, invia_wa: avvisaWa,
+        ...(dir === "riconsegna" && !inProva ? { chiudi: parte === "oggi", partenza_il: parte === "dopo" && partenzaIl ? partenzaIl : undefined } : {}) });
       toast.success(`${r.corriere} ${r.test ? "(PROVA) " : ""}${r.tracking}${r.prn ? ` · ritiro ${r.prn}` : ""}${r.pickup_error ? ` · ERRORE ritiro: ${r.pickup_error}` : ""}` + (r.esito?.mail ? ` · mail ${r.esito.mail}` : "") + (r.esito?.whatsapp ? ` · WhatsApp ${r.esito.whatsapp}` : ""), { duration: 10000 });
       if (!r.stampa || !r.stampa.agente_attivo) window.open(`/api/backend${r.label_url}`, "_blank");
       onFatta();
@@ -426,6 +431,17 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
                 {prenotaDaNoi && <Campo label="Giorno (vuoto = oggi/prossimo feriale)" className="w-48"><input type="date" className={campo} value={giorno} onChange={(e) => setGiorno(e.target.value)} /></Campo>}
               </div>
             )}
+            {dir === "riconsegna" && !inProva && (
+              <div className="rounded-lg border-2 border-sky-300 bg-sky-50 p-2.5 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
+                <b>Quando parte il pacco?</b>
+                <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-1.5"><input type="radio" name="parte" checked={parte === "oggi"} onChange={() => setParte("oggi")} />
+                    Parte <b>oggi</b>{corriere === "UPS" ? " (ritiro UPS delle 16:30)" : ""} → la scheda si chiude come SPEDITO</label>
+                  <label className="flex items-center gap-1.5"><input type="radio" name="parte" checked={parte === "dopo"} onChange={() => setParte("dopo")} />
+                    Parte <b>un altro giorno</b> → la scheda resta aperta (etichetta pronta)</label>
+                  {parte === "dopo" && <input type="date" className={`${campo} w-44`} value={partenzaIl} onChange={(e) => setPartenzaIl(e.target.value)} aria-label="Giorno di partenza" />}
+                </div>
+              </div>)}
             {ante?.mancanti.length ? <div className="text-sm text-red-700">Mancano: {ante.mancanti.join(", ")}</div> : null}
             {corriere === "DHL" && ante && !ante.dhl_configurato && <div className="text-sm text-red-700">DHL non configurato sul server.</div>}
             {dhlBloccato && <div className="text-sm text-amber-800">DHL produzione non ancora attiva sul server: per ora solo in prova (sandpit).</div>}
