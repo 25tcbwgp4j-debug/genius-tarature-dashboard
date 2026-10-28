@@ -365,7 +365,9 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
   const [giorno, setGiorno] = useState("");
   const [daNoi, setDaNoi] = useState<boolean | null>(null);
   const prenotaDaNoi = daNoi ?? corriere === "DHL";
-  const [prova, setProva] = useState(true);
+  // 28/10/2026 (Christian, 63224): il gestionale è in produzione → si parte con l'etichetta VERA (prima «Prova» era spuntata
+  // e la riconsegna usciva finta, 1ZXXXX…). Le schede di prova restano sempre in prova (provaForzata).
+  const [prova, setProva] = useState(false);
   const [stampa, setStampa] = useState(true);
   const [avvisaMail, setAvvisaMail] = useState(true);
   const [avvisaWa, setAvvisaWa] = useState(!s.cliente_no_whatsapp);
