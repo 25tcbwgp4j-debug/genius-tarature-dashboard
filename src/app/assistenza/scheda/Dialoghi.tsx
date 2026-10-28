@@ -433,7 +433,10 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
               <Scelta valore={corriere} opzioni={[["UPS", "UPS"], ["DHL", "DHL"]]} onChange={(c) => { setCorriere(c); setDaNoi(null); }} /></div>
             {ante?.indirizzo_libero && <div className="text-xs text-muted-foreground">Indicazioni sulla scheda: {ante.indirizzo_libero}</div>}
             <div className="grid gap-2 md:grid-cols-3">{C("name", "Ragione sociale / nome")}{C("attention", "Alla c.a.")}{C("phone", "Telefono")}
-              {C("street", "Indirizzo")}{C("city", "Città")}<div className="grid grid-cols-2 gap-2">{C("zip", "CAP")}{C("province", "Prov.")}</div></div>
+              {C("street", "Indirizzo")}{C("city", "Città")}<div className="grid grid-cols-2 gap-2">{C("zip", "CAP")}{C("province", "Prov.")}</div>
+              {/* 28/10/2026 (Christian): la mail a cui va il tracking, modificabile come l'indirizzo */}
+              <Campo label="Email per il tracking"><input className={campo} type="email" value={ind.email ?? ante?.email ?? ""} onChange={(e) => setInd({ ...ind, email: e.target.value })} /></Campo></div>
+            <p className="text-xs text-muted-foreground">Dati presi dalla scheda, dalla rubrica e dalle spedizioni già fatte per questo cliente: se il {dir === "ritiro" ? "ritiro" : "pacco"} va a un indirizzo diverso, correggili qui (valgono solo per questa spedizione).</p>
             {dir === "ritiro" ? (
               <Campo label={`Giorno del ritiro dal cliente (vuoto = senza prenotazione: porta il pacco a un punto ${corriere})`} className="max-w-sm">
                 <input type="date" className={campo} value={giorno} onChange={(e) => setGiorno(e.target.value)} /></Campo>
