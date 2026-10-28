@@ -22,9 +22,11 @@ import { VociPreventivo } from "./VociPreventivo";
 
 export type BozzaPreventivo = { righe: EstimateLine[]; diagnosi: string; note: string; spedizione_tipo: string; spedizione_importo: number | string };
 
-export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, onStessoModello, spedDefault }: {
+export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, onStessoModello, spedDefault, onConcordato }: {
   s: Scheda; attuale: ApparecchioAttuale; bz: BozzaPreventivo; setBz: (f: (b: BozzaPreventivo) => BozzaPreventivo) => void; ro: boolean;
   onInvia: () => void; onNotaInterna: (t: string) => void; onStessoModello: () => void; spedDefault: number;
+  /** 28/10/2026 (Christian, 63246): voci cambiate dopo l'accettazione e concordate col cliente (anche a voce) → resta accettato */
+  onConcordato?: () => void;
 }) {
   const righe = bz.righe;
   const setRighe = (f: (r: EstimateLine[]) => EstimateLine[]) => setBz((b) => ({ ...b, righe: f(b.righe) }));
@@ -119,6 +121,8 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
             <Button size="sm" variant="outline" onClick={() => setRighe((r) => [...r, { t: "", p: "", opt: nuovoOpt(r, bloccoAttivo), agg: true, on: false, b: bloccoAttivo }])}><Plus />Ipotesi aggiungibile</Button>
             <Button size="sm" variant="outline" onClick={() => setRighe((r) => [...r, { t: "", p: "", opt: null, on: false, b: bloccoAttivo }])}><Plus />Voce fissa</Button>
             {accettato && <Button size="sm" variant="outline" onClick={nuovoBlocco} title="Dopo l'accettazione: es. riparata la logica, trovata la batteria da sostituire"><Plus />Preventivo aggiuntivo</Button>}
+            {!ro && onConcordato && <Button size="sm" variant="outline" className="border-emerald-400 text-emerald-800" onClick={onConcordato}
+              title="Hai cambiato le voci (alternativa, upgrade, prezzo diverso) e il cliente le ha già approvate, anche a voce o su WhatsApp: si salva e il preventivo resta/diventa ACCETTATO">✏️ Alternativa / upgrade concordato col cliente</Button>}
           </div>
         )}
 

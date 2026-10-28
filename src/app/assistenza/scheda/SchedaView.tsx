@@ -299,7 +299,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             } catch (e) { toastErrore(e); }
           }}>Aggiungi le spese</Button>
         </div>)}
-      {(s.stato === "accettato" || (s.ricambi_attesi || []).length > 0) && <RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
+      {/* 28/10/2026 (Christian): la sezione RICAMBI c'è in qualunque stato (anche prima dell'accettazione o dopo il pronto) */}
+      {(!["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0) && <RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
         onSalvata={async () => { await ricarica(); onCambiata(); }} />}
       <BannerRecensione s={s} ro={ro} onScelta={(az) => azione("recensione", { azione: az }, az === "invia" ? "Richiesta di recensione inviata" : "Recensione: non si chiede")} />
 
@@ -382,7 +383,20 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           famiglia: String(v("famiglia") || ""), anno: v("anno") == null ? "" : String(v("anno")) }} bz={bz} setBz={setBz} ro={ro} spedDefault={cfg?.spedizione_default?.ar ?? 28}
           onInvia={() => apriInvio(s.preventivo_stato && s.preventivo_stato !== "da_fare" ? "aggiornamento" : "preventivo")}
           onNotaInterna={(t) => set("note_interne", ((v("note_interne") as string) ? `${v("note_interne")}\n` : "") + t)}
-          onStessoModello={() => setDlg({ k: "stesso" })} />
+          onStessoModello={() => setDlg({ k: "stesso" })}
+          onConcordato={async () => {
+            if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
+            if (!("preventivo_righe" in b)) { toast.error("Prima modifica le voci del preventivo (alternativa / upgrade), poi premi di nuovo"); return; }
+            const nota = prompt("Come e quando l'ha concordato il cliente? (es. «WhatsApp 28/10: disco da 128 GB a € 179»)", "");
+            if (nota === null) return;
+            const t = nota.toLowerCase();
+            const canale = /whats|wa\b/.test(t) ? "whatsapp" : /mail/.test(t) ? "mail" : /telef|chiam/.test(t) ? "telefono" : /negozio|banco|a voce/.test(t) ? "negozio" : undefined;
+            try {
+              const n = await assModifica(s.id, { ...b, concordato: { canale, nota: nota.trim() || null }, operatore });
+              setS(n); setB({}); onCambiata();
+              toast.success("Preventivo modificato e ACCETTATO (concordato col cliente): lavorazione e totale aggiornati");
+            } catch (e) { toastErrore(e); }
+          }} />
       </div>
 
       <div className="grid gap-3 xl:grid-cols-[3fr_2fr]">
@@ -571,17 +585,20 @@ function RiferimentiScheda({ s, v, set, ro, operatore, onApri, onCambiata, salva
 /** 26/10/2026 (Christian): dopo la consegna (ritirato o spedito) si sceglie se chiedere la recensione su Google
  *  (mail + WhatsApp, come per le Tarature). Solo per le consegne degli ultimi 30 giorni, una volta per scheda. */
 function BannerRecensione({ s, ro, onScelta }: { s: Scheda; ro: boolean; onScelta: (a: "invia" | "no") => void }) {
-  const consegna = (s.fasi as Record<string, { il?: string } | undefined> | undefined)?.consegna?.il;
-  const recente = !!consegna && Date.now() - new Date(consegna).getTime() < 30 * 86400000;
-  if (s.stato !== "consegnato" || !["RITIRATO", "SPEDITO"].includes(String(s.ritirato || "").toUpperCase())) return null;
+  // 28/10/2026 (Christian, 63250): il pulsante compare su OGNI scheda chiusa (anche in sola lettura, anche vecchia):
+  // se il cliente è soddisfatto si chiede la recensione. Prima spariva sulle schede chiuse (sola lettura) e dopo 30 giorni
+  void ro;
+  if (s.stato !== "consegnato") return null;
   if (s.recensione_stato === "inviata") return <div className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground">⭐ Recensione su Google chiesta{s.recensione_il ? ` il ${dataOra(s.recensione_il)}` : ""}</div>;
-  if (s.recensione_stato || !recente || ro) return null;
+  if (s.recensione_stato === "non_inviare") return (
+    <div className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs text-muted-foreground">⭐ Recensione: si era scelto di non chiederla
+      <Button size="xs" variant="outline" className="ml-auto" onClick={() => onScelta("invia")}>⭐ Chiedila adesso</Button></div>);
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-      <span className="font-semibold">⭐ {s.ritirato === "SPEDITO" ? "Spedito" : "Ritirato"}: chiediamo al cliente una recensione su Google?</span>
+      <span className="font-semibold">⭐ {s.ritirato === "SPEDITO" ? "Spedito" : s.ritirato === "RITIRATO" ? "Ritirato" : "Consegnato"}: il cliente è soddisfatto? Chiediamo una recensione su Google</span>
       <span className="text-xs">mail{s.email ? ` a ${s.email}` : " (manca)"} + WhatsApp{s.telefono ? ` a ${s.telefono}` : " (manca)"}</span>
       <span className="ml-auto flex gap-1">
-        <Button size="sm" onClick={() => onScelta("invia")}>⭐ Sì, chiedi la recensione</Button>
+        <Button size="sm" onClick={() => onScelta("invia")}>⭐ Richiedi la recensione</Button>
         <Button size="sm" variant="outline" onClick={() => onScelta("no")}>No</Button>
       </span>
     </div>
@@ -693,6 +710,8 @@ function ComunicazioneCliente({ s, operatore, invia, togli }: { s: Scheda; opera
  *  Salvando, con il preventivo accettato la riparazione va da sola in «attesa ricambi» (o «ricambio arrivato» quando sono tutti arrivati). */
 function RicambiAttesi({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean; operatore: string; onSalvata: () => Promise<void> }) {
   const vuoto: RicambioAtteso = { cosa: "", link: "", ordine: "", fornitore: "", arrivo_previsto: "", stato: "da_ordinare" };
+  // 28/10/2026 (Christian): da chi si ordina — Bagnetti (ordine di Christian), Amazon / eBay / AliExpress (col link)
+  const FORNITORI = ["Bagnetti", "Amazon", "eBay", "AliExpress", "Altro"];
   const [righe, setRighe] = useState<RicambioAtteso[]>(() => (s.ricambi_attesi || []).map((r) => ({ ...r })));
   const [busy, setBusy] = useState(false);
   const cambiate = JSON.stringify(righe) !== JSON.stringify(s.ricambi_attesi || []);
@@ -709,15 +728,18 @@ function RicambiAttesi({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean
   return (
     <div className="space-y-1.5 rounded-xl border-2 border-amber-200 bg-amber-50/50 p-2.5 dark:border-amber-900 dark:bg-amber-950/20">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-semibold text-amber-950 dark:text-amber-100">📦 Ricambi in attesa</span>
-        <span className="text-xs text-muted-foreground">{righe.length ? `${mancano} da arrivare su ${righe.length}` : "nessun ricambio segnato"} · incolla un link (eBay, AliExpress…) per riga, salva, poi «🛒 Ordina»</span>
+        <span className="font-semibold text-amber-950 dark:text-amber-100">📦 Ricambi</span>
+        <span className="text-xs text-muted-foreground">{righe.length ? `${mancano} da arrivare su ${righe.length}` : "nessun ricambio segnato"} · una riga per ricambio: cosa, da chi (Bagnetti / Amazon / eBay…) e il link, salva, poi «🛒 Ordina»</span>
         {!ro && <Button size="xs" variant="outline" className="ml-auto" onClick={() => setRighe((x) => [...x, { ...vuoto }])}><Plus />Aggiungi ricambio</Button>}
       </div>
       {righe.map((r, i) => (
-        <div key={i} className={`grid gap-1.5 rounded-lg border bg-background p-2 sm:grid-cols-[1.4fr_1fr_0.8fr_0.7fr_0.7fr_auto] ${r.stato === "arrivato" ? "opacity-60" : ""}`}>
+        <div key={i} className={`grid gap-1.5 rounded-lg border bg-background p-2 sm:grid-cols-[1.3fr_0.6fr_1fr_0.8fr_0.7fr_0.7fr_auto] ${r.stato === "arrivato" ? "opacity-60" : ""}`}>
           <input className={campo} disabled={ro} placeholder="Cosa (es. Tastiera Lenovo V15 G2)" value={r.cosa || ""} onChange={(e) => setR(i, "cosa", e.target.value)} />
+          <select className={campo} disabled={ro} value={FORNITORI.find((f) => (r.fornitore || "").toLowerCase().startsWith(f.toLowerCase())) || (r.fornitore ? "Altro" : "")}
+            onChange={(e) => setR(i, "fornitore", e.target.value)} aria-label="Da chi si ordina">
+            <option value="">Da chi…</option>{FORNITORI.map((f) => <option key={f} value={f}>{f}</option>)}</select>
           <div className="flex gap-1">
-            <input className={campo} disabled={ro} placeholder="Link del prodotto ordinato" value={r.link || ""} onChange={(e) => setR(i, "link", e.target.value)} />
+            <input className={campo} disabled={ro} placeholder={/^bagnetti/i.test(r.fornitore || "") ? "(Bagnetti: non serve il link)" : "Link del prodotto da ordinare"} value={r.link || ""} onChange={(e) => setR(i, "link", e.target.value)} />
             {r.link && /^https?:\/\//.test(r.link) && <a className="inline-flex items-center px-1 text-blue-700 underline" href={r.link} target="_blank" rel="noreferrer">apri</a>}
           </div>
           <input className={campo} disabled={ro} placeholder="N. ordine / fornitore" value={r.ordine || ""} onChange={(e) => setR(i, "ordine", e.target.value)} />
@@ -736,8 +758,8 @@ function RicambiAttesi({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean
                 }}>🛒 Ordina</Button>)}
             {!ro && <Button size="xs" variant="ghost" className="text-red-700" onClick={() => setRighe((x) => x.filter((_, j) => j !== i))}><Trash2 /></Button>}
           </span>
-          {r.stato === "richiesto" && <div className="text-xs font-medium text-blue-800 sm:col-span-6">🛒 Ordine richiesto{r.richiesto_il ? ` il ${r.richiesto_il.slice(8, 10)}/${r.richiesto_il.slice(5, 7)}` : ""}{r.richiesto_da ? ` da ${r.richiesto_da}` : ""}: in coda per l&apos;acquisto</div>}
-          {r.nota && <div className="text-xs text-muted-foreground sm:col-span-6">{r.nota}</div>}
+          {r.stato === "richiesto" && <div className="text-xs font-medium text-blue-800 sm:col-span-7">🛒 Ordine richiesto{r.richiesto_il ? ` il ${r.richiesto_il.slice(8, 10)}/${r.richiesto_il.slice(5, 7)}` : ""}{r.richiesto_da ? ` da ${r.richiesto_da}` : ""}: in coda per l&apos;acquisto</div>}
+          {r.nota && <div className="text-xs text-muted-foreground sm:col-span-7">{r.nota}</div>}
         </div>
       ))}
       {!ro && cambiate && <div className="flex justify-end"><Button size="sm" disabled={busy} onClick={salva}>{busy ? <Loader2 className="animate-spin" /> : <Save />}Salva ricambi</Button></div>}
