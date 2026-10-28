@@ -144,6 +144,8 @@ function RigaSpedizione({ s, x, ro }: { s: Scheda; x: Spedizione; ro: boolean })
       {x.tracking_url ? <a className="underline" href={x.tracking_url} target="_blank" rel="noreferrer">{x.tracking}</a> : x.tracking}
       {x.pickup_prn ? ` · ritiro ${x.pickup_prn}${x.pickup_date ? ` il ${x.pickup_date.split("-").reverse().join("/")}` : ""}${x.pickup_location === "lab" ? " da noi" : ""}` : ""}
       {x.pickup_error ? <span className="text-red-700"> · ERRORE ritiro: {x.pickup_error}</span> : null}
+      {/* 28/10/2026 (Christian, 63019): una spedizione annullata non deve sembrare vera (prima era solo barrata) */}
+      {annullata && <span className="ml-1 rounded bg-red-100 px-1 text-xs font-semibold text-red-800 no-underline dark:bg-red-950/40 dark:text-red-200" style={{ textDecoration: "none", display: "inline-block" }}>ANNULLATA · non è partita (etichetta mai usata)</span>}
       {" · "}<a className="underline" href={`/api/backend/api/shipments/${x.id}/label-pdf`} target="_blank" rel="noreferrer">etichetta</a>
       {!annullata && !ro && <>{" · "}<button className="text-red-700 underline disabled:opacity-50" disabled={busy} onClick={annulla}>annulla</button></>}
     </div>
