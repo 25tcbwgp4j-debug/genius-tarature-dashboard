@@ -57,7 +57,7 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
           {av.prossimo.poi && <span className="text-xs text-muted-foreground">· poi: {av.prossimo.poi}</span>}
           {av.prossimo.alternativa === "invia_consuntivo" && (
             <Button size="sm" variant="outline" className="ml-auto border-emerald-400" disabled={disabilitato} onClick={() => onAzione("pronto")}
-              title="Rimanda al cliente il consuntivo di pagamento (mail + WhatsApp, con IBAN e PDF): si apre il pannello PRONTO già compilato">📨 Invia consuntivo di pagamento</Button>)}
+              title="Rimanda al cliente il consuntivo di pagamento (mail + WhatsApp + PDF, con bonifico o PayPal +3%): si apre il pannello PRONTO già compilato">📨 Invia consuntivo di pagamento</Button>)}
           {/* 28/10/2026 (63130): corriere del cliente — chiedere (o richiedere di nuovo) l'etichetta, oppure consegnare */}
           {(av.prossimo.alternativa === "richiedi_etichetta" || av.prossimo.alternativa === "consegna") && (
             <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione(av.prossimo!.alternativa!)}>

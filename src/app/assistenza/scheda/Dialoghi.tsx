@@ -179,7 +179,8 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
 }) {
   const [cons, setCons] = useState<"ritiro" | "spedizione">((s.consegna_modo as "ritiro") || (s.spedizione_tipo === "ar" || s.spedizione_tipo === "solo_ritorno" ? "spedizione" : "ritiro"));
   const [corr, setCorr] = useState<"noi" | "cliente">(s.consegna_corriere || "noi");
-  const [pag, setPag] = useState(s.pagamento_modo || "");
+  // 28/10/2026 (Christian, 63188 Medianet): chi paga sempre con PayPal (rubrica) ha già PayPal scelto
+  const [pag, setPag] = useState(s.pagamento_modo || s.pagamento_abituale || "");
   // 27/10/2026 (Christian, 63182): totale ed esito dallo STESSO calcolo del backend (totale_dovuto / esito_pronto): le schede
   // FileMaker hanno i totali vuoti e l'esito «DA ULTIMARE» → prima il pronto diceva «nulla da pagare» e il PDF «non conclusa»
   const vuoto = (x: unknown) => x === null || x === undefined || String(x).trim() === "";
@@ -234,6 +235,8 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
               {gratis ? <div className={`${campo} bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-200`}>{s.pagata ? "Già pagata: nessun pagamento da chiedere" : "Nessun pagamento (totale € 0)"}</div> : (
               <select className={campo} value={pagEff} onChange={(e) => setPag(e.target.value)}>
                 <option value="">Al banco (contanti / POS)</option><option value="bonifico">Bonifico (IBAN)</option><option value="paypal">PayPal (+3%)</option><option value="fine_mese">Fine mese (rivenditore)</option></select>)}
+              {!gratis && pagEff === "paypal" && <span className="mt-1 block rounded bg-sky-50 px-1 text-xs text-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+                PayPal: si chiede {eur(Math.round((totNum - (Number(s.acconto) || 0)) * 103) / 100)} (saldo + 3% commissioni); mail, WhatsApp e PDF del consuntivo si rifanno con PayPal{s.pagamento_abituale === "paypal" ? " · cliente che paga di solito con PayPal" : ""}</span>}
             </Campo>
             <Campo label="Totale € (IVA compresa)"><input className={`${campo} text-right font-semibold`} inputMode="decimal" value={tot} onChange={(e) => setTot(e.target.value)} />
               {ricavato && <span className="mt-1 block rounded bg-amber-100 px-1 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">Ricavato dalle voci accettate del preventivo + spedizione (i totali della scheda erano vuoti): controllalo</span>}</Campo>
