@@ -283,6 +283,13 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       {!ro && s.stato !== "annullata" && <ComunicazioneCliente key={`com-${s.id}`} s={s} operatore={operatore} invia={(b) => azione("comunicazione", b, "Comunicazione inviata al cliente")}
         togli={async () => { if (!confirm("Togliere la comunicazione dalla scheda? Non comparirà più nelle prossime mail, WhatsApp e PDF.")) return;
           try { await assModifica(s.id, { comunicazione_cliente: null, operatore }); await ricarica(); onCambiata(); toast.success("Comunicazione tolta"); } catch (e) { toastErrore(e); } }} />}
+      {/* 28/10/2026 (Christian, 63251): WhatsApp NON consegnati — di solito il cellulare in scheda è sbagliato */}
+      {!!s.wa_falliti?.length && (
+        <div className="rounded-xl border-2 border-red-500 bg-red-50 px-3 py-2 text-sm text-red-950 dark:bg-red-950/30 dark:text-red-100">
+          <b>⚠️ {s.wa_falliti.length} WhatsApp NON consegnat{s.wa_falliti.length === 1 ? "o" : "i"}</b> al +{s.wa_falliti[0].numero}: {s.wa_falliti[0].errore || "errore"}.
+          {" "}Il cellulare in scheda è <b>{s.telefono || "—"}</b>: correggilo (anche nella scheda cliente) e rimanda il messaggio.
+          <ul className="mt-1 list-disc pl-5 text-xs">{s.wa_falliti.map((x, i) => <li key={i}>{dataOra(x.il)} · {x.testo}…</li>)}</ul>
+        </div>)}
       {/* 28/10/2026 (Christian, 63130/63131): cliente con spedizioni a carico nostro ma la scheda non ha le spese */}
       {!ro && !["consegnato", "annullata"].includes(st) && !s.conto_vendita && s.anagrafica?.spedizione_tipo_default && (!s.spedizione_tipo || s.spedizione_tipo === "nessuna") && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-red-400 bg-red-50 px-3 py-2 text-sm text-red-950 dark:bg-red-950/30 dark:text-red-100">

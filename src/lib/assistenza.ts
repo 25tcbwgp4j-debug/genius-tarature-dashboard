@@ -19,6 +19,8 @@ export interface SchedaBreve {
   // 05/10/2026 (§10, migr. 092)
   famiglia?: string | null; anno?: number | null; tecnico_verifica?: string | null; tecnico_riparazione?: string | null;
   verifica_stato?: "da_assegnare" | "in_corso" | "chiusa" | null; riparazione_stato?: string | null; ricambi_attesi?: RicambioAtteso[] | null;
+  /** 28/10/2026: WhatsApp della scheda NON consegnati negli ultimi 14 giorni */
+  wa_falliti?: { il: string; numero: string | null; errore: string | null; testo: string }[];
   /** 27/10/2026: verifica del titolare sui preventivi del banco */
   preventivo_verifica?: { stato: "richiesta" | "approvato" | "da_correggere"; richiesta_da?: string; richiesta_il?: string; nota?: string | null;
     risposta?: string | null; risposta_da?: string; risposta_il?: string } | null; passaggio?: { da: string; a: string; testo: string; il: string; letto_il: string | null } | null;
