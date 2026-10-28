@@ -149,6 +149,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "preventivo") refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (a === "invia_preventivo") apriInvio(s?.preventivo_stato && s.preventivo_stato !== "da_fare" ? "aggiornamento" : "preventivo");
     else if (a === "esito") setDlg({ k: "esito" });
+    // 28/10/2026 (63247): conto vendita → in vendita in negozio, senza pronto al cliente
+    else if (a === "in_vendita") { if (confirm("Mettere il dispositivo IN VENDITA in negozio (conto vendita)?\nNon parte nessun pronto al cliente.")) azione("in-vendita", {}, "Messo IN VENDITA (conto vendita)"); }
     else if (a === "pronto") setDlg({ k: "pronto" });
     else if (a === "incassa") { refDoc.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }
     else if (a === "consegna") setDlg({ k: "consegna" });

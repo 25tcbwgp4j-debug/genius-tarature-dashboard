@@ -15,7 +15,7 @@ const AZIONI: Record<string, string> = {
   assegna_verifica: "Assegna in verifica", chiudi_verifica: "Scrivi e chiudi la verifica", assegna_riparazione: "Assegna in riparazione",
   stato_riparazione: "Stato riparazione", aggiornamento: "Aggiornamento al cliente", trova: "Invia le istruzioni «Trova il mio»",
   rimontaggio: "Da richiudere: assegna a un tecnico", rimontato: "✔ Richiuso: pronto da ritirare",
-  ricevuta: "INVIA RICEVUTA",
+  ricevuta: "INVIA RICEVUTA", in_vendita: "🏷️ Metti IN VENDITA",
 };
 
 export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, onRiconsegna, rinvii }: {
