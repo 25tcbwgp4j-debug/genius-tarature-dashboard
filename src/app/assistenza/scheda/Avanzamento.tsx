@@ -11,7 +11,7 @@ import type { Avanzamento as Av } from "@/lib/assistenza";
 
 const AZIONI: Record<string, string> = {
   arrivato: "Dispositivo arrivato", preventivo: "Vai al preventivo", invia_preventivo: "INVIA PREVENTIVO", esito: "Accettato / Rifiutato",
-  pronto: "PRONTO", incassa: "Incassa / Pagato", consegna: "CONSEGNA",
+  pronto: "PRONTO", incassa: "Incassa / Pagato", consegna: "CONSEGNA", spedisci: "🚚 Crea l'etichetta di riconsegna",
   assegna_verifica: "Assegna in verifica", chiudi_verifica: "Scrivi e chiudi la verifica", assegna_riparazione: "Assegna in riparazione",
   stato_riparazione: "Stato riparazione", aggiornamento: "Aggiornamento al cliente", trova: "Invia le istruzioni «Trova il mio»",
   rimontaggio: "Da richiudere: assegna a un tecnico", rimontato: "✔ Richiuso: pronto da ritirare",
@@ -55,11 +55,14 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
           <span className="font-medium">{bloccata ? "🔒 Prossimo passo:" : "Prossimo passo:"}</span>
           <span className={bloccata ? "font-medium" : "text-muted-foreground"}>{av.prossimo.testo}</span>
           {av.prossimo.poi && <span className="text-xs text-muted-foreground">· poi: {av.prossimo.poi}</span>}
+          {az === "spedisci" && (
+            <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("consegna")}
+              title="Il pacco è già partito (etichetta fatta altrove) o il cliente l'ha ritirato: registra solo la consegna">Già spedito: CONSEGNA</Button>)}
           {av.prossimo.alternativa === "invia_consuntivo" && (
             <Button size="sm" variant="outline" className="ml-auto border-emerald-400" disabled={disabilitato} onClick={() => onAzione("pronto")}
               title="Rimanda al cliente il consuntivo di pagamento (mail + WhatsApp + PDF, con bonifico o PayPal +3%): si apre il pannello PRONTO già compilato">📨 Invia consuntivo di pagamento</Button>)}
           {/* 28/10/2026 (63130): corriere del cliente — chiedere (o richiedere di nuovo) l'etichetta, oppure consegnare */}
-          {(av.prossimo.alternativa === "richiedi_etichetta" || av.prossimo.alternativa === "consegna") && (
+          {(av.prossimo.alternativa === "richiedi_etichetta" || (av.prossimo.alternativa === "consegna" && az !== "spedisci")) && (
             <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione(av.prossimo!.alternativa!)}>
               {av.prossimo.alternativa === "consegna" ? "Ho già l'etichetta: CONSEGNA" : "📨 Richiedi di nuovo l'etichetta"}</Button>)}
           {av.prossimo.alternativa === "rifiutato_diretto" && (

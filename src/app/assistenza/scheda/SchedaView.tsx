@@ -156,6 +156,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "pronto") setDlg({ k: "pronto" });
     else if (a === "incassa") { refDoc.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }
     else if (a === "consegna") setDlg({ k: "consegna" });
+    else if (a === "spedisci") setDlg({ k: "corriere" });   // 28/10/2026 (63224): etichetta di riconsegna dal passo
     // 05/10/2026 (§10.5): verifica e riparazione assegnate ai tecnici
     else if (a === "assegna_verifica") setDlg({ k: "assegna_verifica" });
     else if (a === "chiudi_verifica") setDlg({ k: "chiudi_verifica" });
