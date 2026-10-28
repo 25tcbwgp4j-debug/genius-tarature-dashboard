@@ -38,6 +38,7 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
             <Button variant="outline" onClick={onCorriere}><Truck />Corriere</Button>
           </div>
         )}
+        {!ro && !s.pagata && s.saldo > 0 && <VerificaPagamento s={s} />}
         {/* 27/10/2026 (Christian, Tecnoservice 63163): il cliente paga SUBITO, in qualsiasi stato, per far partire il dispositivo
             appena pronto. Riquadro a parte (nella griglia i pulsanti si sovrapponevano e non si leggevano) */}
         {/* solo PRIMA della fine lavorazione: dopo il pronto si manda il consuntivo (passo «Da pagare») */}
@@ -145,6 +146,55 @@ function RigaSpedizione({ s, x, ro }: { s: Scheda; x: Spedizione; ro: boolean })
       {x.pickup_error ? <span className="text-red-700"> · ERRORE ritiro: {x.pickup_error}</span> : null}
       {" · "}<a className="underline" href={`/api/backend/api/shipments/${x.id}/label-pdf`} target="_blank" rel="noreferrer">etichetta</a>
       {!annullata && !ro && <>{" · "}<button className="text-red-700 underline disabled:opacity-50" disabled={busy} onClick={annulla}>annulla</button></>}
+    </div>
+  );
+}
+
+
+type Trovato = { id: string; fonte: string; codice: string; data: string; importo: number; ordinante: string | null; causale: string | null;
+  stato: string; perche: string[]; commissione: number | null };
+type EsitoVerifica = { saldo: number; paypal_con_3: number; trovati: Trovato[];
+  paypal?: { codice: string; data: string; importo: number; commissione: number; netto: number; amici_familiari: boolean; stato_paypal: string } };
+
+/** 28/10/2026 (Christian, 63188 Medianet): «il cliente dice che ha pagato» → si verifica dalla scheda. Col codice transazione
+ *  PayPal (mail «Hai ricevuto denaro» o ricevuta del cliente) il controllo è IN DIRETTA; senza, si rileggono subito PayPal,
+ *  POS e conto (l'elenco PayPal arriva con ~3 ore di ritardo). */
+function VerificaPagamento({ s }: { s: Scheda }) {
+  const [codice, setCodice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [e, setE] = useState<EsitoVerifica | null>(null);
+  async function vai() {
+    setBusy(true);
+    try { setE(await assAzione(s.id, "verifica-pagamento", codice.trim() ? { codice: codice.trim() } : {}) as EsitoVerifica); }
+    catch (err) { toastErrore(err); } finally { setBusy(false); }
+  }
+  const pp = e?.paypal;
+  return (
+    <div className="rounded-lg border p-2.5 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold">🔎 Il cliente dice che ha pagato?</span>
+        <input className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm" placeholder="codice transazione PayPal (facoltativo)"
+          value={codice} onChange={(x) => setCodice(x.target.value)} />
+        <Button size="sm" variant="outline" disabled={busy} onClick={vai}>{busy ? "Verifico…" : "Verifica pagamento"}</Button>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">Con il codice transazione PayPal la verifica è immediata. Senza codice si rileggono adesso PayPal, POS e conto: i pagamenti PayPal compaiono con circa 3 ore di ritardo.</p>
+      {pp && (
+        <div className={`mt-2 rounded-md p-2 ${pp.stato_paypal === "COMPLETED" ? "bg-emerald-50 dark:bg-emerald-950/30" : "bg-amber-50 dark:bg-amber-950/30"}`}>
+          <b>PayPal {pp.stato_paypal === "COMPLETED" ? "✓ ARRIVATO" : pp.stato_paypal}</b> · {eur(pp.importo)} il {new Date(pp.data).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+          <br />Commissione {eur(pp.commissione)} · netto {eur(pp.netto)} · {pp.amici_familiari ? "inviato come «Amici e familiari» (nessuna commissione)" : "pagamento per beni e servizi"}
+          <br /><span className="text-xs">Dovuto {eur(e!.saldo)} (con PayPal +3%: {eur(e!.paypal_con_3)}){Math.abs(pp.importo - e!.saldo) > 0.01 && Math.abs(pp.importo - e!.paypal_con_3) > 0.01 ? ` · differenza ${eur(pp.importo - e!.saldo)} sul dovuto` : ""}</span>
+        </div>
+      )}
+      {e && (e.trovati.length ? (
+        <ul className="mt-2 space-y-1">
+          {e.trovati.map((x) => (
+            <li key={x.id} className="rounded-md border px-2 py-1 text-xs">
+              <b>{x.fonte.toUpperCase()} {eur(x.importo)}</b> · {new Date(x.data).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+              {x.ordinante ? ` · ${x.ordinante}` : ""}{x.causale ? ` · «${x.causale}»` : ""} <span className="text-muted-foreground">({x.perche.join(", ")})</span>
+            </li>))}
+          <li className="text-xs text-muted-foreground">Se è quello giusto: «Pagato» qui sopra (PayPal, con il codice transazione come riferimento).</li>
+        </ul>
+      ) : <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">Nessun pagamento trovato negli ultimi 30 giorni. Se è PayPal fatto da poco, chiedi il codice transazione o riprova più tardi.</p>)}
     </div>
   );
 }
