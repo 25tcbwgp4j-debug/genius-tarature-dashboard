@@ -12,7 +12,7 @@ export const PAGINE_DEL_TITOLARE = [
   "/audit",            // registro delle modifiche
   "/impostazioni",
   "/utenti",
-  "/chat",             // chat WhatsApp e chatbot
+  // "/chat": 28/10/2026 (Christian) le chat WhatsApp (Tarature e Apple) le vedono tutti, non solo il titolare
   "/rubrica",          // contatti della chat
   "/nuovi-clienti",    // prospect e campagne
   "/partner",          // partner B2B e outreach
