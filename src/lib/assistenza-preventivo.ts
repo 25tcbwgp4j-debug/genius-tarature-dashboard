@@ -23,6 +23,7 @@ export type EstimateLine = {
   b?: number                // blocco: 0 = preventivo, 1… = preventivo aggiuntivo (05/10/2026)
   agg?: boolean             // ipotesi AGGIUNGIBILE: si somma all'ipotesi scelta (es. solo recupero backup)
   voce_id?: string          // voce di preventivo da cui viene
+  acc?: boolean             // 28/10/2026: voce di un preventivo già accettato (le voci nuove vanno nell'aggiuntivo)
 }
 
 export const num = (v: unknown): number => {

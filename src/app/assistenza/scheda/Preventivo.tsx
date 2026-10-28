@@ -238,6 +238,8 @@ function Blocco({ b, righe, ro, attivo, onAttiva, upd, togli, setRighe, accettat
   return (
     <div className={`space-y-2 ${b > 0 ? "rounded-lg border-2 border-dashed border-amber-300 p-2" : ""}`} onClick={onAttiva}>
       {b > 0 && <div className="flex items-center gap-2 text-sm font-semibold">Preventivo aggiuntivo {b > 1 ? b : ""}{attivo && !ro && <Pill tono="ambra">le voci nuove vanno qui</Pill>}</div>}
+      {/* 28/10/2026 (63224): voce nuova su un preventivo accettato → il backend la mette da sola nel preventivo aggiuntivo */}
+      {accettato && !ro && b === Math.max(...blocchi(righe)) && <div className="rounded-md bg-emerald-50 px-2 py-1 text-xs text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">✓ Già accettato dal cliente: una voce NUOVA scritta qui va da sola nel <b>preventivo aggiuntivo</b> (il cliente accetta o rifiuta solo quella). Per un&apos;alternativa già approvata usa «Alternativa / upgrade concordato».</div>}
       {fisse.length > 0 && (
         <div className="space-y-1.5 rounded-xl border-2 border-amber-300 bg-amber-50/60 p-2.5 dark:border-amber-800 dark:bg-amber-950/20">
           <div className="text-xs font-semibold">Voci fisse <span className="font-normal text-muted-foreground">— si sommano sempre</span></div>

@@ -8,7 +8,7 @@ import { CheckCircle2, Copy, Loader2, Mail, MessageCircle, Send, Truck } from "l
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { assAnteprimaMail, assAzione, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, pagaFineMese, type DocPdf, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
-import { blocchi, ipotesiDelBlocco, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
+import { blocchi, ipotesiDelBlocco, isActive, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, Pill, Scelta, area, campo } from "./ui";
 
@@ -131,15 +131,25 @@ export function DialogoEsito({ s, righe, onClose, onEsito }: { s: Scheda; righe:
   const [canale, setCanale] = useState("telefono");
   const fisse = righe.filter((r) => (r.b ?? 0) === b && r.opt == null).reduce((t, r) => t + rowTotal(r), 0);
   const tot = fisse + (alt.find((x) => x.opt === opt)?.totale || 0) + agg.filter((x) => prese.includes(x.opt)).reduce((t, x) => t + x.totale, 0);
-  async function vai(esito: "accettato" | "rifiutato") {
+  async function vai(esito: "accettato" | "rifiutato", tutto = false) {
     setBusy(true);
-    try { if (await onEsito(esito === "accettato" ? { esito, blocco: b, ipotesi: opt, aggiunte: prese, canale } : { esito, blocco: b, canale })) onClose(); } finally { setBusy(false); }
+    try { if (await onEsito(esito === "accettato" ? { esito, blocco: b, ipotesi: opt, aggiunte: prese, canale } : { esito, blocco: b, canale, tutto })) onClose(); } finally { setBusy(false); }
   }
+  // 28/10/2026 (Christian, 63224): con un preventivo AGGIUNTIVO il rifiuto va detto esattamente: solo l'aggiuntivo (resta
+  // valido quello già accettato) oppure tutto (il cliente non vuole più nessuna lavorazione)
+  const totAcc = righe.filter((r) => (r.b ?? 0) < b && isActive(r)).reduce((t, r) => t + rowTotal(r), 0);
   return (
     <Modale titolo={`Risposta del cliente${b > 0 ? " al preventivo aggiuntivo" : ""} — scheda ${s.sigla}`} onClose={onClose}
-      piedi={<><Button variant="outline" className="mr-auto text-red-700" disabled={busy} onClick={() => vai("rifiutato")}>RIFIUTATO</Button>
+      piedi={b > 0 ? <>
+        <Button variant="outline" className="mr-auto text-red-700" disabled={busy} onClick={() => { if (confirm("Il cliente RIFIUTA TUTTO, anche il preventivo già accettato? La scheda diventa «rifiutato · da restituire».")) vai("rifiutato", true); }}>Rifiuta TUTTO</Button>
+        <Button variant="outline" className="border-red-300 text-red-700" disabled={busy} onClick={() => vai("rifiutato")}>Rifiuta solo l&apos;aggiuntivo</Button>
+        <Button disabled={busy || (alt.length > 0 && opt == null)} onClick={() => vai("accettato")}>{busy && <Loader2 className="animate-spin" />}Accetta l&apos;aggiuntivo · + {eur(tot)}</Button></> : <>
+        <Button variant="outline" className="mr-auto text-red-700" disabled={busy} onClick={() => vai("rifiutato")}>RIFIUTATO</Button>
         <Button disabled={busy || (alt.length > 0 && opt == null)} onClick={() => vai("accettato")}>{busy && <Loader2 className="animate-spin" />}ACCETTATO · {eur(tot)}</Button></>}>
       <div className="space-y-2">
+        {b > 0 && <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-2.5 text-sm dark:border-emerald-800 dark:bg-emerald-950/30">
+          ✓ <b>Preventivo già accettato · {eur(totAcc)}</b>: resta valido in ogni caso, salvo «Rifiuta TUTTO».<br />
+          Qui sotto solo il <b>preventivo aggiuntivo</b>: «Rifiuta solo l&apos;aggiuntivo» toglie le sue voci e la scheda prosegue con la lavorazione già accettata.</div>}
         {alt.map((x) => (
           <label key={x.opt} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 text-sm ${opt === x.opt ? "border-primary bg-primary/5" : ""}`}>
             <input type="radio" className="mt-1" checked={opt === x.opt} onChange={() => setOpt(x.opt)} />
