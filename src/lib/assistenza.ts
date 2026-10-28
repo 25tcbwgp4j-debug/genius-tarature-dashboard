@@ -76,11 +76,11 @@ export interface VoceProposta { id: string; intervento: string; ipotesi: string 
   nota: string | null; da_verificare: boolean; fonte: string | null; modello: string | null; modello_chiave?: string | null; aggiornato_il: string | null; tipo_ricambio: string | null }
 export interface ModelloVoci { chiave: string; nome: string; anno: number | null; pollici: number | null; voci: number }
 /** COMBO «1ª + 2ª ipotesi abbinate» dello stesso intervento e modello (+ 3ª aggiungibile) — 05/10/2026 §10.2 */
-export interface Combo { modello_chiave: string | null; modello: string | null; intervento: string; etichetta: string;
+export interface Combo { fonte?: string;  modello_chiave: string | null; modello: string | null; intervento: string; etichetta: string;
   uno: VoceProposta | null; due: VoceProposta | null; tre: VoceProposta | null;
   /** 26/10/2026: Touch ID da sostituire insieme alla scheda logica ufficiale (MacBook con Touch ID) */
   due_touch_id?: VoceProposta | null; totale_2?: number | null }
-export interface Proposte { modello_chiave: string | null; famiglia: string | null;
+export interface Proposte { modello_nome?: string | null; modello_come?: string;  modello_chiave: string | null; famiglia: string | null;
   fonte: "modello" | "famiglia" | "tutte" | "vicino" | "ricerca" | "modello_scelto" | "filtro" | ""; nota?: string; vicini?: ModelloVoci[];
   voci: VoceProposta[]; combo: Combo[]; pollici_scheda?: number | null; anno_scheda?: number | null;
   filtri?: { pollici: number[]; anni: number[]; modelli: ModelloVoci[] };

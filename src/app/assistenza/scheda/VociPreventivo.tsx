@@ -55,7 +55,7 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
     <div className="rounded-lg border bg-muted/30 p-3" data-testid="voci-preventivo">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
         <b>Voci di preventivo</b>
-        {prop && <span className="text-xs text-muted-foreground">{FONTE[prop.fonte] || "nessuna voce"}{prop.fonte === "modello" && modelloScheda ? <> · <b>{modelloScheda}</b></> : null}</span>}
+        {prop && <span className="text-xs text-muted-foreground">{FONTE[prop.fonte] || "nessuna voce"}{prop.fonte === "modello" && (prop.modello_nome || modelloScheda) ? <> · <b>{prop.modello_nome || modelloScheda}</b>{prop.modello_come === "prodotto_anno" ? " (riconosciuto da prodotto e anno)" : ""}</> : null}</span>}
         {accettato && <Pill tono="ambra">vanno nel {bloccoAggiuntivo ? "preventivo aggiuntivo" : "preventivo"}</Pill>}
         {carico && <Loader2 className="size-4 animate-spin" />}
       </div>
@@ -70,7 +70,7 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
         {!!prop?.filtri?.modelli?.length && (
           <select className={cn(campo, "w-auto max-w-[260px]")} value={f.modello} aria-label="Modello"
             onChange={(e) => setF((x) => ({ ...x, modello: e.target.value, q: "", pollici: "", anno: "" }))}>
-            <option value="">Modello: quello della scheda</option>
+            <option value="">{prop.modello_nome ? `Modello della scheda: ${prop.modello_nome}` : "Modello: quello della scheda"}</option>
             {prop.filtri.modelli.map((m) => <option key={m.chiave} value={m.chiave}>{m.nome} ({m.voci})</option>)}
           </select>
         )}
@@ -127,6 +127,7 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs">
                 <b className="text-sm">{c.etichetta}</b>
                 {mostraModello && c.modello && <span className="text-muted-foreground">· {c.modello}</span>}
+                {c.fonte === "prezzi_ufficiali" && <Pill tono="blu" title="Prezzi dalla pagina Prezzi ufficiali (GSX + regole del titolare)">prezzi ufficiali</Pill>}
                 {[c.uno, c.due, c.tre].some((v) => v?.da_verificare) && <Pill tono="ambra" title="Prezzi dello storico che non collimano: verificare su GSX">da verificare</Pill>}
               </div>
               <div className="space-y-1 text-[13px]">
