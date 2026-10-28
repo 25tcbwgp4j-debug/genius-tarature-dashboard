@@ -58,7 +58,7 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
               {prezzo > 0 && <div className="basis-full rounded-md bg-muted/50 px-3 py-2 text-sm">
                 <div className="grid max-w-md grid-cols-[1fr_auto] gap-x-4 gap-y-0.5">
                   <span>Prezzo di vendita</span><span className="text-right tabular-nums">{eur(prezzo)}</span>
-                  <span>− Prezzo di carico (va al proprietario)</span><span className="text-right tabular-nums">{v("conto_vendita_carico") !== null && v("conto_vendita_carico") !== "" ? eur(carico) : <i className="text-amber-700">da scrivere</i>}</span>
+                  <span>− Prezzo di carico (va al proprietario)</span><span className="text-right tabular-nums">{carico > 0 ? eur(carico) : <i className="font-semibold text-red-700">da scrivere</i>}</span>
                   <span>− Lavorazioni della scheda</span><span className="text-right tabular-nums">{eur(lav)}</span>
                   <b>= Margine Genius</b><b className={`text-right tabular-nums ${marg < 0 ? "text-red-700" : "text-emerald-700"}`}>{eur(marg)}</b>
                 </div>
