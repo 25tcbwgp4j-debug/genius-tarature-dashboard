@@ -15,7 +15,7 @@ const AZIONI: Record<string, string> = {
   assegna_verifica: "Assegna in verifica", chiudi_verifica: "Scrivi e chiudi la verifica", assegna_riparazione: "Assegna in riparazione",
   stato_riparazione: "Stato riparazione", aggiornamento: "Aggiornamento al cliente", trova: "Invia le istruzioni «Trova il mio»",
   rimontaggio: "Da richiudere: assegna a un tecnico", rimontato: "✔ Richiuso: pronto da ritirare",
-  ricevuta: "INVIA RICEVUTA", in_vendita: "🏷️ Metti IN VENDITA",
+  ricevuta: "INVIA RICEVUTA", in_vendita: "🏷️ Metti IN VENDITA", richiedi_etichetta: "📨 Pagamento arrivato: chiedi l'etichetta di ritorno",
 };
 
 export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, onRiconsegna, rinvii }: {
@@ -58,6 +58,10 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
           {av.prossimo.alternativa === "invia_consuntivo" && (
             <Button size="sm" variant="outline" className="ml-auto border-emerald-400" disabled={disabilitato} onClick={() => onAzione("pronto")}
               title="Rimanda al cliente il consuntivo di pagamento (mail + WhatsApp, con IBAN e PDF): si apre il pannello PRONTO già compilato">📨 Invia consuntivo di pagamento</Button>)}
+          {/* 28/10/2026 (63130): corriere del cliente — chiedere (o richiedere di nuovo) l'etichetta, oppure consegnare */}
+          {(av.prossimo.alternativa === "richiedi_etichetta" || av.prossimo.alternativa === "consegna") && (
+            <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione(av.prossimo!.alternativa!)}>
+              {av.prossimo.alternativa === "consegna" ? "Ho già l'etichetta: CONSEGNA" : "📨 Richiedi di nuovo l'etichetta"}</Button>)}
           {av.prossimo.alternativa === "rifiutato_diretto" && (
             <Button size="sm" variant="outline" className="ml-auto border-red-300 text-red-700" disabled={disabilitato} onClick={() => onAzione("rifiutato_diretto")}
               title="Preventivo negativo (es. irreparabile): si segna RIFIUTATO senza mandarlo al cliente da accettare, poi si va al PRONTO">Negativo: segna RIFIUTATO</Button>)}
