@@ -144,6 +144,24 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
               <Campo label="Corriere predefinito"><Scelta valore={(f.corriere_default as "UPS") || null} opzioni={[["UPS", "UPS"], ["DHL", "DHL"]]} onChange={(v) => set("corriere_default", v)} /></Campo>
               <Campo label="Ritorno"><Scelta valore={(f.ritorno_corriere as "noi") || null} opzioni={[["noi", "Col nostro corriere"], ["cliente", "Corriere / pony del cliente"]]} onChange={(v) => set("ritorno_corriere", v)} /></Campo>
               <label className="flex items-center gap-2"><input type="checkbox" className="size-4" checked={!!f.ritiro_prenotazione} onChange={(e) => set("ritiro_prenotazione", e.target.checked)} />Ritiro dal cliente con prenotazione</label>
+            </div>
+            {/* 28/10/2026 (Christian, 63130): chi paga le spedizioni — la scheda nuova mette da sola le spese */}
+            <div className="rounded-md border-2 border-sky-300 bg-sky-50/60 p-2 text-sm dark:bg-sky-950/20">
+              <div className="mb-1 font-semibold">🚚 Spese di spedizione</div>
+              <Scelta valore={f.spedizioni_carico === "cliente" ? "cliente" : (f.spedizione_tipo_default as string) || null}
+                opzioni={[["ar", "A carico nostro: A/R addebitato"], ["solo_ritorno", "Arriva col suo corriere, ritorno nostro"], ["solo_ritiro", "Solo ritiro nostro"], ["cliente", "Corriere del cliente (a carico suo)"]]}
+                onChange={(v) => setF((x) => v === "cliente"
+                  ? { ...x, spedizioni_carico: "cliente", spedizione_tipo_default: null, spedizione_importo_default: null, ritorno_corriere: "cliente", consegna_default: "spedizione" }
+                  : { ...x, spedizioni_carico: v === "ar" ? "noi" : "misto", spedizione_tipo_default: v as "ar" | "solo_ritiro" | "solo_ritorno", consegna_default: "spedizione",
+                      ritorno_corriere: v === "solo_ritiro" ? x.ritorno_corriere : "noi",
+                      spedizione_importo_default: x.spedizione_importo_default || (v === "ar" ? 28 : 14) })} />
+              {f.spedizione_tipo_default && <div className="mt-1.5 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Importo addebitato in ogni scheda €</span>
+                <input type="number" min={0} step={1} className={`${campo} h-8 w-24`} value={String(f.spedizione_importo_default ?? "")}
+                  onChange={(e) => set("spedizione_importo_default", e.target.value)} />
+                <span className="text-xs text-muted-foreground">entra da solo in preventivo, consuntivo e fattura</span></div>}
+            </div>
+            <div className="flex flex-wrap items-end gap-4 text-sm">
               {T("pagamento_default", "Pagamento abituale", { placeholder: "es. Bonifico riepilogo mensile, 1 gg FM" }, "min-w-64")}
             </div>
           </fieldset>
@@ -205,6 +223,13 @@ export function RiepilogoCliente({ a, nome, telefono, email }: { a: Anagrafica |
         {a?.piva && <span>P.IVA {a.piva}</span>}
         {a?.referente && <span>Ref. {a.referente}</span>}
       </div>
+      {/* 28/10/2026 (Christian, 63130): chi paga le spedizioni, in evidenza */}
+      {a && (a.spedizioni_carico || a.spedizione_tipo_default) && (
+        <div className={`rounded-md border-2 px-2.5 py-1 text-sm font-semibold ${a.spedizioni_carico === "cliente"
+          ? "border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" : "border-sky-400 bg-sky-50 text-sky-950 dark:bg-sky-950/30 dark:text-sky-100"}`}>
+          {a.spedizioni_carico === "cliente" ? "📦 SPEDIZIONI A CARICO DEL CLIENTE: arriva e riparte col suo corriere / pony (nessuna spesa nostra)"
+            : `🚚 SPEDIZIONI CON IL NOSTRO CORRIERE: ${a.spedizione_tipo_default === "ar" ? "ritiro e riconsegna" : a.spedizione_tipo_default === "solo_ritorno" ? "solo il ritorno" : "solo il ritiro"} — spese € ${Number(a.spedizione_importo_default || 0) || (a.spedizione_tipo_default === "ar" ? 28 : 14)} addebitate in scheda`}
+        </div>)}
       {/* 24/10/2026 (Christian): sulla scheda gli stessi dati della scheda cliente, senza doverla aprire */}
       {a && (
         <div className="grid gap-x-4 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-2">

@@ -112,6 +112,13 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, i
                 <button className="text-xs underline" onClick={() => setAnag(null)}>scollega</button>
               </div>
             )}
+            {/* 28/10/2026 (Christian, 63130): chi paga le spedizioni, chiaro già alla creazione */}
+            {anag && (anag.spedizioni_carico || anag.spedizione_tipo_default) ? (
+              <div className={`rounded-lg border-2 px-3 py-2 text-sm font-semibold ${anag.spedizioni_carico === "cliente" ? "border-amber-300 bg-amber-50 text-amber-950" : "border-sky-400 bg-sky-50 text-sky-950"}`}>
+                {anag.spedizioni_carico === "cliente" ? "📦 Spedizioni A CARICO DEL CLIENTE (suo corriere / pony): nessuna spesa in scheda"
+                  : `🚚 Spedizioni con il NOSTRO corriere (${anag.spedizione_tipo_default === "ar" ? "ritiro e riconsegna" : anag.spedizione_tipo_default === "solo_ritorno" ? "solo ritorno" : "solo ritiro"}): in scheda entrano da sole le spese € ${Number(anag.spedizione_importo_default || 0) || (anag.spedizione_tipo_default === "ar" ? 28 : 14)}`}
+              </div>) : anag ? (
+              <div className="rounded-lg border border-dashed border-red-300 px-3 py-1.5 text-xs text-red-800">Spedizioni: non indicato nella scheda cliente chi le paga — se si spedisce, impostalo nella scheda cliente.</div>) : null}
             {C("azienda", "Nome e cognome / azienda *")}
             <div className="grid grid-cols-2 gap-2">{C("telefono", "Cellulare (WhatsApp)", { inputMode: "tel" })}{C("email", "Email", { type: "email" })}</div>
             {!anag && <Button size="sm" variant="outline" onClick={() => setSchedaCli(true)}><UserRoundPen />Scheda cliente completa (P.IVA, fattura, spedizione…)</Button>}

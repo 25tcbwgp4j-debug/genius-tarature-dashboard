@@ -30,7 +30,9 @@ export interface Anagrafica { id: string; denominazione: string; piva?: string |
   cellulare?: string | null; cellulare_whatsapp?: string | null; email_contabilita?: string | null; email_altre?: string | null; email_cc?: string | null; no_whatsapp?: boolean | null; no_whatsapp_nota?: string | null;
   sped_presso?: string | null; sped_indirizzo?: string | null; sped_cap?: string | null; sped_comune?: string | null; sped_provincia?: string | null;
   note_cliente?: string | null; origine?: string | null; corriere_default?: string | null; pagamento_default?: string | null;
-  telefoni_altri?: string | null; consegna_default?: string | null; ritiro_prenotazione?: boolean | null; ritorno_corriere?: string | null }
+  telefoni_altri?: string | null; consegna_default?: string | null; ritiro_prenotazione?: boolean | null; ritorno_corriere?: string | null;
+  /** 28/10/2026: chi paga le spedizioni e le spese che la scheda nuova mette da sola */
+  spedizioni_carico?: "noi" | "cliente" | "misto" | null; spedizione_tipo_default?: "ar" | "solo_ritiro" | "solo_ritorno" | null; spedizione_importo_default?: number | string | null }
 export interface SchedaCliente extends Anagrafica { schede: { id: string; sigla: string; prodotto: string | null; modello: string | null; difetto: string | null; stato: string; created_at: string }[] }
 export interface Scheda extends SchedaBreve {
   /** 27/10/2026 (63182): calcolati dal backend (stessa regola di pronto, PDF, mail) */

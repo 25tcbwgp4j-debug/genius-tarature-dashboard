@@ -283,6 +283,22 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       {!ro && s.stato !== "annullata" && <ComunicazioneCliente key={`com-${s.id}`} s={s} operatore={operatore} invia={(b) => azione("comunicazione", b, "Comunicazione inviata al cliente")}
         togli={async () => { if (!confirm("Togliere la comunicazione dalla scheda? Non comparirà più nelle prossime mail, WhatsApp e PDF.")) return;
           try { await assModifica(s.id, { comunicazione_cliente: null, operatore }); await ricarica(); onCambiata(); toast.success("Comunicazione tolta"); } catch (e) { toastErrore(e); } }} />}
+      {/* 28/10/2026 (Christian, 63130/63131): cliente con spedizioni a carico nostro ma la scheda non ha le spese */}
+      {!ro && !["consegnato", "annullata"].includes(st) && !s.conto_vendita && s.anagrafica?.spedizione_tipo_default && (!s.spedizione_tipo || s.spedizione_tipo === "nessuna") && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-red-400 bg-red-50 px-3 py-2 text-sm text-red-950 dark:bg-red-950/30 dark:text-red-100">
+          <b>⚠️ Mancano le spese di spedizione:</b> questo cliente ha le spedizioni con il NOSTRO corriere
+          ({s.anagrafica.spedizione_tipo_default === "ar" ? "A/R" : s.anagrafica.spedizione_tipo_default === "solo_ritorno" ? "solo ritorno" : "solo ritiro"} € {Number(s.anagrafica.spedizione_importo_default || 0) || (s.anagrafica.spedizione_tipo_default === "ar" ? 28 : 14)}).
+          <span className="text-xs">Se è una spedizione combinata già addebitata su un'altra scheda, ignora.</span>
+          <Button size="sm" className="ml-auto" disabled={!!busy} onClick={async () => {
+            if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
+            try {
+              const a = s.anagrafica!;
+              await assModifica(s.id, { spedizione_tipo: a.spedizione_tipo_default, spedizione_importo: Number(a.spedizione_importo_default || 0) || (a.spedizione_tipo_default === "ar" ? 28 : 14),
+                consegna_modo: "spedizione", ...(a.spedizione_tipo_default !== "solo_ritiro" ? { consegna_corriere: "noi" } : {}), operatore });
+              toast.success("Spese di spedizione aggiunte (preventivo e totale aggiornati)"); await ricarica(); onCambiata();
+            } catch (e) { toastErrore(e); }
+          }}>Aggiungi le spese</Button>
+        </div>)}
       {(s.stato === "accettato" || (s.ricambi_attesi || []).length > 0) && <RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
         onSalvata={async () => { await ricarica(); onCambiata(); }} />}
       <BannerRecensione s={s} ro={ro} onScelta={(az) => azione("recensione", { azione: az }, az === "invia" ? "Richiesta di recensione inviata" : "Recensione: non si chiede")} />
