@@ -21,6 +21,7 @@ import {
 } from "@/lib/assistenza";
 import type { EstimateLine } from "@/lib/assistenza-preventivo";
 import { Apparecchio, type ValoriApparecchio } from "./Apparecchio";
+import { Assistente } from "./Assistente";
 import { Avanzamento } from "./Avanzamento";
 import { CercaCliente, RiepilogoCliente, SchedaClienteModal } from "./Cliente";
 import { Comunicazioni, Registro } from "./Comunicazioni";
@@ -252,6 +253,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             {(st === "pronto" || (st === "accettato" && s.riparazione_stato === "finita") || st === "rifiutato") && (
               <Button size="xs" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}
                 title="Rimanda il pronto / consuntivo da pagare (mail + WhatsApp, con IBAN e PDF)">Pronto da pagare</Button>)}</>}
+          {/* 28/10/2026 (Christian): preventivi e modifiche dettate anche da iPhone */}
+          {!ro && <Assistente s={s} operatore={operatore} sporca={sporca} onEseguito={(n) => { setS(n); setB({}); onCambiata(); }} />}
           {(admin || !["consegnato", "annullata"].includes(st)) && (
             <Button size="xs" className="ml-auto bg-amber-500 text-white hover:bg-amber-600" onClick={() => setDlg({ k: "cambia_stato" })}
               title="Riporta la scheda a qualsiasi stato (anche indietro) o la chiude"><RotateCcw />Cambia stato</Button>)}
