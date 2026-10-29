@@ -60,22 +60,26 @@ export function AzioniProforma({ d, onCambiato }: { d: DocumentoCliente; onCambi
   }
 
   const invii = (d.avvisi || []).filter((a) => a.tipo === "invio_proforma");
+  // 29/10/2026: pro forma di Gingy/Avantifiori → solo PDF, stampa del browser ed email dalla casella della società.
+  // Stampa al banco, WhatsApp, divisioni Tarature/Apple e spedizioni sono del negozio Genius Lab.
+  const genius = (d.societa || "genius") === "genius";
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Button size="sm" variant="outline" onClick={() => window.open(getDocumentoPdfUrl(d.id), "_blank")}><FileText className="mr-1 size-4" />PDF</Button>
-        <Button size="sm" variant="outline" disabled={!!busy} onClick={stampaBanco} title="Stampante normale del banco (iMac SX)">
-          {busy === "stampa" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Printer className="mr-1 size-4" />}Stampa al banco</Button>
+        {genius && <Button size="sm" variant="outline" disabled={!!busy} onClick={stampaBanco} title="Stampante normale del banco (iMac SX)">
+          {busy === "stampa" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Printer className="mr-1 size-4" />}Stampa al banco</Button>}
         <Button size="sm" variant="ghost" onClick={stampaQui}><Printer className="mr-1 size-4" />Stampa qui</Button>
         <Button size="sm" variant="outline" disabled={!!busy} onClick={() => apriInvio("email")}>
           {busy === "email" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Mail className="mr-1 size-4" />}Invia per email</Button>
-        <Button size="sm" variant="outline" className="border-green-500 text-green-800 dark:text-green-300" disabled={!!busy} onClick={() => apriInvio("whatsapp")}>
-          {busy === "whatsapp" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <MessageCircle className="mr-1 size-4" />}Invia per WhatsApp</Button>
-        {d.stato !== "annullato" && <Button size="sm" variant="ghost" disabled={!!busy} onClick={sposta}
+        {genius && <Button size="sm" variant="outline" className="border-green-500 text-green-800 dark:text-green-300" disabled={!!busy} onClick={() => apriInvio("whatsapp")}>
+          {busy === "whatsapp" ? <Loader2 className="mr-1 size-4 animate-spin" /> : <MessageCircle className="mr-1 size-4" />}Invia per WhatsApp</Button>}
+        {genius && d.stato !== "annullato" && <Button size="sm" variant="ghost" disabled={!!busy} onClick={sposta}
           title={!aperto && !admin ? "Pro forma convertito: serve l'autorizzazione del titolare" : undefined}>
           <ArrowRightLeft className="mr-1 size-4" />Sposta in {altra === "apple" ? "Apple" : "Tarature"}</Button>}
       </div>
-      <SpedisciDocumento link={{ documento_id: d.id }} />
+      {genius ? <SpedisciDocumento link={{ documento_id: d.id }} />
+        : <div className="text-xs text-muted-foreground">L&apos;email parte dalla casella della società (non da Genius Lab); WhatsApp, stampa al banco e spedizioni sono solo per Genius Lab.</div>}
       {!!invii.length && (
         <div className="text-xs text-muted-foreground" data-testid="invii-proforma">
           {invii.map((a, i) => <div key={i}>{a.canale === "email" ? "✉️ Email" : "💬 WhatsApp"} {a.modo === "wa.me" ? "preparato (aperto sul telefono)" : a.modo === "in_coda" ? "in coda" : "inviata"} il {oraIt(a.il)} a {a.destinatario}

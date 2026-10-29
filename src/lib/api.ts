@@ -1766,6 +1766,8 @@ export interface DocumentoCliente {
   id: string; tipo: TipoDocumento; anno: number; numero: number; sigla: string; data: string;
   stato: 'aperto' | 'convertito' | 'saldato' | 'annullato'; anagrafica_id: string | null; controparte: FattControparte;
   cliente_nome: string | null; cliente?: string; telefono: string | null; email: string | null; righe: RigaDoc[]; totale: number;
+  /** società del documento (29/10/2026): genius · gingy · avantifiori */
+  societa?: FattSocieta;
   rif: string | null; note: string | null; convertito_in: { tipo: string; id?: string; sigla?: string; numero?: string } | null;
   pagamenti?: PagamentoDoc[]; pagato: number; residuo: number; created_at: string; session_id?: string | null;
   /** CHR · VALE · DUMY · ALTRO */
@@ -1791,8 +1793,9 @@ export interface PagamentoGiaArrivato {
 }
 export type TipoDocumento = 'preventivo' | 'ordine' | 'proforma' | 'ddt';
 export type VistaOrdini = 'aperti' | 'arrivati' | 'completati' | 'annullati' | 'tutti';
-export async function docElenco(tipo: TipoDocumento, stato = '', q = '', vista = '', attivita = ''): Promise<DocumentoCliente[]> {
-  return fetchAPI(`/api/documenti?tipo=${tipo}&stato=${stato}&q=${encodeURIComponent(q)}&vista=${vista}&attivita=${attivita}`);
+// 29/10/2026: multi-società (genius · gingy · avantifiori, le ultime due solo per l'amministratore) come la Fatturazione
+export async function docElenco(tipo: TipoDocumento, stato = '', q = '', vista = '', attivita = '', societa: FattSocieta = 'genius'): Promise<DocumentoCliente[]> {
+  return fetchAPI(`/api/documenti?tipo=${tipo}&stato=${stato}&q=${encodeURIComponent(q)}&vista=${vista}&attivita=${attivita}&societa=${societa}`);
 }
 export type EsitoIncassoOrdine = DocumentoCliente & { fattura?: { id: string; tipo_documento: string }; scontrino?: { id: string; stato: string } };
 /** Acconto (importo) o intero/saldo dell'ordine con FATTURA: bozza TD02/TD01 da pagare in Fatturazione.

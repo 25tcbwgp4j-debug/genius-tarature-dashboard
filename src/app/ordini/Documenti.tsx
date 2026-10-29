@@ -5,13 +5,16 @@
 // pronto) o FATTURA (bozza da pagare in Fatturazione). Fasi: da ordinare → ordinato (da quale FORNITORE) → arrivato
 // (subito l'avviso al cliente via email/WhatsApp) → ritirato. Resta aperto finché non è tutto pagato E ritirato.
 // Preventivo: si converte in ordine, in fattura o in scontrino.
+// 29/10/2026 (caso PF 1/2026 Gingy): MULTI-SOCIETÀ come la Fatturazione — selettore Genius / Gingy / Avantifiori Immobiliare
+// (le ultime due solo per l'amministratore, useSocietaFatturazione). Per Gingy e Avantifiori niente funzioni del negozio:
+// scontrino/cassa, POS, divisioni Tarature/Apple, fasi fornitore, avviso di arrivo, ritiro, WhatsApp, spedizioni.
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowRightLeft, Ban, CheckCircle2, FileText, Loader2, Mail, MessageCircle, PackageCheck, Pencil, Plus, Receipt, Save, Search, Trash2, Truck, Undo2, Wallet, X } from "lucide-react";
+import { ArrowRightLeft, Ban, Building2, CheckCircle2, FileText, Loader2, Mail, MessageCircle, PackageCheck, Pencil, Plus, Receipt, Save, Search, Trash2, Truck, Undo2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { CercaArticolo } from "@/components/CercaArticolo";
 import { EstraiDati, esistenteInCampi } from "@/components/EstraiDati";
@@ -26,11 +29,13 @@ import type { Bonifico } from "@/lib/bonifici";
 import {
   cassaGiornata, getDocumentoPdfUrl, docAcconto, docAnnulla, docAvvisa, docConverti, docCrea, docDettaglio, docElenco, docFase, docModifica, docRitira,
   fattAnagrafiche, fattCatalogo, fattEstraiSalva,
-  type CampiEstratti, type DocumentoCliente, type EsitoIncassoOrdine, type FaseOrdine, type FattAnagrafica, type FattVoceCatalogo, type RigaDoc,
+  type CampiEstratti, type DocumentoCliente, type FattSocieta, type EsitoIncassoOrdine, type FaseOrdine, type FattAnagrafica, type FattVoceCatalogo, type RigaDoc,
   type TipoDocumento, type VistaOrdini,
 } from "@/lib/api";
 import { IncassoOrdine } from "./IncassoOrdine";
 import { AzioniProforma } from "./AzioniProforma";
+import { useSocietaFatturazione } from "../fatturazione/societa";
+import { SOCIETA_LABEL } from "../fatturazione/util";
 
 const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
 const MOD: [string, string][] = [["contanti", "Contanti"], ["pos_sumup", "POS SumUp"], ["bonifico", "Bonifico"], ["paypal", "PayPal"], ["carta_stripe", "Carta online (Stripe)"]];
@@ -75,9 +80,11 @@ const TITOLO: Record<TipoDocumento, string> = { ordine: "Ordine cliente", preven
 type Bozza = { id?: string; tipo: TipoDocumento; cliente_nome: string; telefono: string; email: string; anagrafica_id: string | null;
   controparte: DocumentoCliente["controparte"]; rif: string; note: string; righe: (RigaDoc & { _k?: string })[];
   attivita?: Attivita | null; scadenza?: string;
+  /** società del documento (29/10/2026) */
+  societa: FattSocieta;
   /** pro forma convertito o pagato (05/10/2026): si cambiano solo email e telefono, per gli invii */
   soloContatti?: boolean; sigla?: string };
-const bozzaVuota = (tipo: TipoDocumento): Bozza => ({ tipo, cliente_nome: "", telefono: "", email: "", anagrafica_id: null, controparte: {}, rif: "", note: "", righe: [] });
+const bozzaVuota = (tipo: TipoDocumento, societa: FattSocieta = "genius"): Bozza => ({ tipo, societa, cliente_nome: "", telefono: "", email: "", anagrafica_id: null, controparte: {}, rif: "", note: "", righe: [] });
 
 function Editor({ iniziale, listino, onChiudi, onSalvato }: {
   iniziale: Bozza; listino: FattVoceCatalogo[]; onChiudi: () => void; onSalvato: (d: DocumentoCliente) => void;
@@ -93,11 +100,13 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
   // 14/10/2026: senza scelta a mano decide il contenuto (taratura → Tarature, il resto → Apple)
   const [attScelta, setAtt] = useState<Attivita | null>(iniziale.attivita || null);
   const att: Attivita = attScelta || attivitaDaTesto(b.righe.map((r) => r.descrizione));
+  const societa = b.societa || "genius";
+  const genius = societa === "genius";
   useEffect(() => {
     if (q.trim().length < 2) return;
-    const t = setTimeout(() => fattAnagrafiche("genius", "cliente", q.trim(), 8).then((r) => setTrovati(r.anagrafiche || [])).catch(() => setTrovati([])), 250);
+    const t = setTimeout(() => fattAnagrafiche(societa, "cliente", q.trim(), 8).then((r) => setTrovati(r.anagrafiche || [])).catch(() => setTrovati([])), 250);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, societa]);
   const tot = b.righe.reduce((s, r) => s + r.quantita * r.prezzo_ivato * (1 - (r.sconto || 0) / 100), 0);
   /** «Estrai dati» → «Compila» (05/10/2026): nome, recapiti e controparte completa per la fattura */
   function daEstratti(c: Partial<CampiEstratti>, anagraficaId: string | null) {
@@ -126,8 +135,8 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
     if (righe.some((r) => !(r.quantita > 0))) { toast.error("Ogni riga deve avere una quantità maggiore di zero"); return; }
     setBusy(true);
     try {
-      const corpo = { tipo: b.tipo, cliente_nome: b.cliente_nome.trim(), telefono: b.telefono, email: b.email, anagrafica_id: b.anagrafica_id,
-        controparte: { ...b.controparte, email: b.email, telefono: b.telefono }, rif: b.rif, note: b.note, righe, operatore, ...(attScelta ? { attivita: attScelta } : {}),
+      const corpo = { tipo: b.tipo, societa, cliente_nome: b.cliente_nome.trim(), telefono: b.telefono, email: b.email, anagrafica_id: b.anagrafica_id,
+        controparte: { ...b.controparte, email: b.email, telefono: b.telefono }, rif: b.rif, note: b.note, righe, operatore, ...(attScelta && genius ? { attivita: attScelta } : {}),
         ...(b.tipo === "proforma" ? { scadenza: b.scadenza || null } : {}) };
       onSalvato(b.id ? await docModifica(b.id, corpo) : await docCrea(corpo));
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
@@ -137,7 +146,8 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={chiudi}>
       <div className="h-full w-full max-w-3xl space-y-3 overflow-y-auto bg-background p-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{b.id ? "Modifica" : "Nuovo"} {NOME[b.tipo]}{b.sigla ? ` ${b.sigla}` : ""}</h2>
+          <h2 className="text-lg font-semibold">{b.id ? "Modifica" : "Nuovo"} {NOME[b.tipo]}{b.sigla ? ` ${b.sigla}` : ""}
+            {!genius && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 align-middle text-xs font-semibold text-amber-900">{societa === "avantifiori" ? "Avantifiori Immobiliare" : SOCIETA_LABEL[societa]}</span>}</h2>
           <Button size="icon" variant="ghost" onClick={chiudi}><X className="size-4" /></Button>
         </div>
         {b.soloContatti && (
@@ -157,13 +167,13 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">Cliente</span>
             {/* «Estrai dati»: incolli firma/visura/WhatsApp o una foto/PDF e i campi si compilano da soli */}
-            <EstraiDati societa="genius" className="ml-auto"
+            <EstraiDati societa={societa} className="ml-auto"
               onCompila={(c, a) => daEstratti(c, a?.id || null)}
               onUsaEsistente={async (e) => {
                 if (e.fonte === "fatturazione") { daEstratti(esistenteInCampi(e), e.id); return; }
                 // cliente Tarature: si porta anche nella rubrica di fatturazione (senza doppioni) per collegarlo
                 const c = esistenteInCampi(e);
-                try { const a = await fattEstraiSalva("genius", c); daEstratti(c, a.id); } catch { daEstratti(c, null); }
+                try { const a = await fattEstraiSalva(societa, c); daEstratti(c, a.id); } catch { daEstratti(c, null); }
               }} />
           </div>
           <div className="relative">
@@ -232,8 +242,8 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
           {b.tipo === "proforma" && <label className="flex items-center gap-2 text-sm text-muted-foreground">Scadenza del pagamento
             <input type="date" className={campo} value={b.scadenza || ""} onChange={(e) => setB({ ...b, scadenza: e.target.value })} /></label>}
         </Card>
-        <div className="flex items-center gap-2 text-sm"><span className="text-muted-foreground">Attività</span>
-          <SceltaAttivita value={att} onChange={(a) => { setAtt(a); setSporco(true); }} /></div>
+        {genius && <div className="flex items-center gap-2 text-sm"><span className="text-muted-foreground">Attività</span>
+          <SceltaAttivita value={att} onChange={(a) => { setAtt(a); setSporco(true); }} /></div>}
         </>}
         <SceltaOperatore value={operatore} onChange={setOperatore} />
         <div className="flex justify-end gap-2">
@@ -475,6 +485,8 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
     </div>
   );
   const aperto = d.stato === "aperto";
+  // Gingy / Avantifiori (29/10/2026): niente cassa, POS, fasi fornitore, avvisi, ritiro
+  const genius = (d.societa || "genius") === "genius";
   const gia = d.pagamento_sessione?.pagata ? d.pagamento_sessione : null;
   const cardAzione = azione ? (
           <Card className="space-y-2 border-2 border-primary/40 p-3">
@@ -513,7 +525,7 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
               <Button disabled={busy || !operatore} onClick={() => conferma()}>{busy ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}{azione === "fattura" && gia ? "Crea la fattura già pagata" : "Conferma"}</Button>
               <Button variant="ghost" onClick={() => setAzione("")}>Chiudi</Button>
             </div>
-            {!(azione === "fattura" && gia) && (() => {
+            {genius && !(azione === "fattura" && gia) && (() => {
               // incasso col POS SumUp: l'importo va sul terminale scelto, a pagamento riuscito si registra con «POS SumUp»
               const imp = azione === "acconto" ? (parseDec(f.importo) ?? 0) : d.residuo;
               const serveNumero = (azione === "acconto" && f.certificato === "scontrino") || azione === "scontrino";
@@ -538,7 +550,8 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
       <div className="h-full w-full max-w-2xl space-y-3 overflow-y-auto bg-background p-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h2 className="text-lg font-semibold">{TITOLO[d.tipo]} {d.sigla} <BadgeAttivita a={d.attivita} className="align-middle" /></h2>
+            <h2 className="text-lg font-semibold">{TITOLO[d.tipo]} {d.sigla} <BadgeAttivita a={d.attivita} className="align-middle" />
+              {!genius && <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 align-middle text-xs font-semibold text-amber-900">{d.societa === "avantifiori" ? "Avantifiori Immobiliare" : SOCIETA_LABEL[d.societa || ""]}</span>}</h2>
             <div className="text-sm text-muted-foreground">{dataIt(d.data)}{d.operatore ? <> · fatto da <BadgeOperatore op={d.operatore} /></> : ""} · {d.cliente_nome || d.controparte?.denominazione}{d.telefono ? ` · ${d.telefono}` : ""}{d.rif ? ` · ${d.rif}` : ""}</div>
           </div>
           <div className="flex items-center gap-2">
@@ -556,7 +569,7 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
             <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
             <div className="flex flex-wrap gap-2">
               <Button size="lg" className="bg-emerald-600 font-semibold text-white hover:bg-emerald-700" onClick={() => apri("fattura")}><FileText className="mr-1 size-5" />Converti in fattura</Button>
-              <Button variant="outline" onClick={() => apri("scontrino")}><Receipt className="mr-1 size-4" />Converti in scontrino</Button>
+              {genius && <Button variant="outline" onClick={() => apri("scontrino")}><Receipt className="mr-1 size-4" />Converti in scontrino</Button>}
               {(d.tipo === "preventivo" || d.tipo === "proforma") && <Button variant="outline" disabled={busy || !operatore} onClick={() => esegui(async () => {
                 const r = await docConverti(d.id, { a: "ordine", operatore }); if (r.ordine) toast.success(`Creato ${r.ordine.sigla}`); return r;
               }, "Preventivo convertito in ordine cliente")}><ArrowRightLeft className="mr-1 size-4" />Converti in ordine</Button>}
@@ -664,7 +677,7 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
 
         {aperto && d.tipo === "ordine" && <SceltaOperatore value={operatore} onChange={setOperatore} compatto />}
 
-        {aperto && d.tipo === "ordine" && proposta && !incasso && daCert(d) > 0.005 && (
+        {aperto && genius && d.tipo === "ordine" && proposta && !incasso && daCert(d) > 0.005 && (
           <Card className="space-y-2 border-2 border-emerald-400 bg-emerald-50/60 p-3 dark:bg-emerald-950/20">
             <div className="font-semibold">✅ {d.sigla} salvato. Il cliente paga adesso?</div>
             <div className="flex flex-wrap gap-2">
@@ -688,7 +701,15 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
                 cosa === "ordinato" ? `Ordinato a ${fo.fornitore_nome}` : `Fornitore: ${fo.fornitore_nome}`); }} />
         )}
 
-        {aperto && d.tipo === "ordine" && !incasso && (
+        {aperto && !genius && d.tipo === "ordine" && (
+          <div className="flex flex-wrap gap-2">
+            <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => apri("fattura")}><FileText className="mr-1 size-4" />Converti in fattura</Button>
+            <Button variant="ghost" onClick={() => onModifica(d)}><Pencil className="mr-1 size-4" />Modifica</Button>
+            {!d.pagato && <Button variant="ghost" className="text-red-600" disabled={busy} onClick={() => confirm(`Annullare ${d.sigla}?`) && esegui(() => docAnnulla(d.id), "Annullato")}><Ban className="mr-1 size-4" />Annulla ordine</Button>}
+          </div>
+        )}
+
+        {aperto && genius && d.tipo === "ordine" && !incasso && (
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
               {daCert(d) > 0.005 && <Button variant="outline" onClick={() => { setProposta(false); apriIncasso({ modo: d.pagato ? "intero" : "acconto" }); }}>
@@ -757,6 +778,9 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
   const [listino, setListino] = useState<FattVoceCatalogo[]>([]);
   const [editor, setEditor] = useState<Bozza | null>(null);
   const [operatore] = useOperatore();
+  // società (29/10/2026): stessa scelta e stesse regole della Fatturazione (Gingy/Avantifiori solo per l'amministratore)
+  const { societa, setSocieta, cfg, permesse } = useSocietaFatturazione();
+  const genius = societa === "genius";
   const [avvisando, setAvvisando] = useState("");
   async function avvisaDaElenco(d: DocumentoCliente, canale: "email" | "whatsapp") {
     if (avvisando) return;
@@ -781,19 +805,35 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
 
   const carica = useCallback(() => {
     const ordini = tipo === "ordine";
-    docElenco(tipo, ordini ? "" : stato, q, ordini && vista !== "tutti" ? vista : "", attivitaF).then((r) => { setLista(r); setErrore(""); })
+    docElenco(tipo, ordini ? "" : stato, q, ordini && vista !== "tutti" ? vista : "", genius ? attivitaF : "", societa).then((r) => { setLista(r); setErrore(""); })
       .catch((e: Error) => { setErrore(e.message); setLista([]); });
-    if (ordini) docElenco("ordine", "", "", "arrivati").then((r) => setNArrivati(r.length)).catch(() => undefined);
-  }, [tipo, stato, q, vista, attivitaF]);
+    if (ordini) docElenco("ordine", "", "", "arrivati", "", societa).then((r) => setNArrivati(r.length)).catch(() => undefined);
+  }, [tipo, stato, q, vista, attivitaF, societa, genius]);
   useEffect(() => { const t = setTimeout(carica, 200); return () => clearTimeout(t); }, [carica]);
-  useEffect(() => { fattCatalogo("genius").then((r) => setListino(r.voci || [])).catch(() => undefined); }, []);
+  useEffect(() => { fattCatalogo(societa).then((r) => setListino(r.voci || [])).catch(() => setListino([])); }, [societa]);
 
   return (
     <div className="space-y-4 p-1 md:p-2">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-2 text-2xl font-semibold">{soloTipo === "proforma" ? "Pro forma" : "Ordini e preventivi"}</h1>
-        <Button className="ml-auto" onClick={() => setEditor(bozzaVuota(tipo))}><Plus className="mr-1 size-4" />Nuovo {NOME[tipo]}</Button>
+        <Button className="ml-auto" onClick={() => setEditor(bozzaVuota(tipo, societa))}><Plus className="mr-1 size-4" />Nuovo {NOME[tipo]}</Button>
       </div>
+      {/* Selettore della società (29/10/2026), come in Fatturazione: compare solo a chi può vedere più società */}
+      {permesse.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
+          <Building2 className="size-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Società</span>
+          <div className="flex flex-wrap gap-1" role="tablist" aria-label="Società">
+            {(cfg?.societa || []).map((s) => (
+              <button key={s.codice} role="tab" aria-selected={societa === s.codice}
+                onClick={() => { setSocieta(s.codice); setLista(null); setAperto(null); }}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${societa === s.codice ? "bg-primary text-primary-foreground shadow" : "bg-background hover:bg-muted"}`}>
+                {s.codice === "avantifiori" ? "Avantifiori Immobiliare" : SOCIETA_LABEL[s.codice]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 border-b">
         {(soloTipo ? [] : [["ordine", "Ordini cliente"], ["preventivo", "Preventivi"], ["proforma", "Pro forma"], ["ddt", "DDT"]] as const).map(([k, l]) => (
           <button key={k} onClick={() => { setTipo(k); setLista(null); }}
@@ -803,7 +843,7 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
           <option value="aperto">Aperti</option><option value="saldato">Saldati</option><option value="convertito">Convertiti</option><option value="annullato">Annullati</option><option value="">Tutti</option>
         </select>}
         {tipo === "ordine" && <span className="ml-auto" />}
-        <FiltroAttivita className="h-8" value={attivitaF} onChange={(v) => { setAttivitaF(v); setLista(null); }} />
+        {genius && <FiltroAttivita className="h-8" value={attivitaF} onChange={(v) => { setAttivitaF(v); setLista(null); }} />}
         <Input className="h-8 w-56" placeholder="Cerca cliente, scheda, telefono…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       {tipo === "ordine" && (
@@ -860,7 +900,7 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
           if (d.anagrafica_id && !editor.anagrafica_id) toast.info("Cliente collegato alla rubrica");
         }} />}
       {aperto && <Dettaglio key={aperto} id={aperto} proponiIncasso={aperto === nuovoId} onChiudi={() => { setNuovoId(null); chiudiDettaglio(); }} onCambiato={carica}
-        onModifica={(d) => { chiudiDettaglio(); setEditor({ id: d.id, tipo: d.tipo, cliente_nome: d.cliente_nome || "", telefono: d.telefono || "", email: d.email || "",
+        onModifica={(d) => { chiudiDettaglio(); setEditor({ id: d.id, tipo: d.tipo, societa: d.societa || "genius", cliente_nome: d.cliente_nome || "", telefono: d.telefono || "", email: d.email || "",
           anagrafica_id: d.anagrafica_id, controparte: d.controparte || {}, rif: d.rif || "", note: d.note || "", righe: d.righe,
           attivita: d.attivita, scadenza: d.scadenza || "", sigla: d.sigla,
           soloContatti: d.tipo === "proforma" && (d.stato === "convertito" || d.stato === "saldato") }); }} />}
