@@ -5,7 +5,7 @@
 // a ritirare» · corriere del cliente → «pagamento ricevuto, mandateci l'etichetta» · nostro corriere → crea la spedizione.
 // Compare anche per i bonifici dei giorni scorsi rimasti senza seguito, finché non si gestiscono o si segnano «già fatto».
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Banknote, Loader2, X } from "lucide-react";
@@ -47,8 +47,12 @@ export function DopoBonifico() {
   const [busy, setBusy] = useState("");
   const [operatore, setOperatore] = useOperatore();
 
+  const ultimo = useRef(0);
   const carica = useCallback((forza: boolean) => {
     if (SENZA.includes(path)) return;
+    // 29/10/2026: al cambio pagina al massimo una richiesta al minuto (prima ogni navigazione chiamava il backend)
+    if (!forza && Date.now() - ultimo.current < 60 * 1000) return;
+    ultimo.current = Date.now();
     // 29/10/2026: anche le schede con fattura o scontrino EMESSI e non ancora consegnate («chiudo la scheda come…»)
     Promise.all([
       fetchAPI("/api/assistenza/dopo-bonifici?giorni=3", undefined, false).catch(() => ({ bonifici: [] })),
