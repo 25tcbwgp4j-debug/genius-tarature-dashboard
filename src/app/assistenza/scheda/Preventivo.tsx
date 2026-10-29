@@ -120,6 +120,16 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
             <Button size="sm" variant="outline" onClick={() => setRighe((r) => [...r, { t: "", p: "", opt: nuovoOpt(r, bloccoAttivo), on: ipotesiDelBlocco(r, bloccoAttivo).filter((x) => !x.agg).length === 0, b: bloccoAttivo }])}><Plus />Ipotesi</Button>
             <Button size="sm" variant="outline" onClick={() => setRighe((r) => [...r, { t: "", p: "", opt: nuovoOpt(r, bloccoAttivo), agg: true, on: false, b: bloccoAttivo }])}><Plus />Ipotesi aggiungibile</Button>
             <Button size="sm" variant="outline" onClick={() => setRighe((r) => [...r, { t: "", p: "", opt: null, on: false, b: bloccoAttivo }])}><Plus />Voce fissa</Button>
+            {/* 29/10/2026 (Christian): SCONTO / ASSISTENZA DI CORTESIA = riga con importo negativo (anche tutto il totale → € 0) */}
+            <Button size="sm" variant="outline" className="border-rose-300 text-rose-800" title="Riga con importo NEGATIVO: sconto oppure assistenza di cortesia (per azzerare il totale metti tutto l'importo)"
+              onClick={() => {
+                const tipo = window.prompt("Descrizione della riga (es. SCONTO, ASSISTENZA DI CORTESIA):", "ASSISTENZA DI CORTESIA");
+                if (tipo === null) return;
+                const imp = window.prompt("Importo dello sconto in euro (positivo: verrà messo in negativo). Per azzerare scrivi il totale:", "");
+                const n = Number(String(imp || "").replace(",", "."));
+                if (!n || n <= 0) return;
+                setRighe((r) => [...r, { t: (tipo.trim() || "SCONTO").toUpperCase(), p: -Math.abs(n), opt: null, on: false, b: bloccoAttivo }]);
+              }}><Plus />Sconto / cortesia</Button>
             {accettato && <Button size="sm" variant="outline" onClick={nuovoBlocco} title="Dopo l'accettazione: es. riparata la logica, trovata la batteria da sostituire"><Plus />Preventivo aggiuntivo</Button>}
             {!ro && onConcordato && <Button size="sm" variant="outline" className="border-emerald-400 text-emerald-800" onClick={onConcordato}
               title="Hai cambiato le voci (alternativa, upgrade, prezzo diverso) e il cliente le ha già approvate, anche a voce o su WhatsApp: si salva e il preventivo resta/diventa ACCETTATO">✏️ Alternativa / upgrade concordato col cliente</Button>}
