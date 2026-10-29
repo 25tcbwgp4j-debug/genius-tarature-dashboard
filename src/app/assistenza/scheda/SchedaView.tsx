@@ -191,6 +191,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     // 26/10/2026 (63214): la ricevuta d'ingresso si manda a scheda compilata (oppure «Non serve»)
     else if (a === "ricevuta") apriInvio("ricevuta");
     else if (a === "ricevuta_no") { if (s && confirm("Non mandare la ricevuta d'ingresso per questa scheda?")) assModifica(s.id, { ricevuta_da_inviare: false, operatore }).then(async () => { await ricarica(); onCambiata(); }).catch(toastErrore); }
+    // 29/10/2026 (Christian): verifica e preventivo si saltano quando non servono
+    else if (a === "salta_verifica") { if (confirm("Saltare la verifica? Si passa direttamente al preventivo.")) azione("salta-passo", { passo: "verifica" }, "Verifica saltata"); }
+    else if (a === "salta_preventivo") { if (confirm("Saltare il preventivo? Si considera accettato senza inviarlo al cliente e si passa alla riparazione.")) azione("salta-passo", { passo: "preventivo" }, "Preventivo saltato: si passa alla riparazione"); }
     else if (a === "rimontaggio") setDlg({ k: "assegna_rimontaggio" });
     else if (a === "rimontaggio_chiuso") azione("rimontaggio", { azione: "non_serve" }, "Dispositivo chiuso: ora invia il PRONTO (negativo)");
     else if (a === "rimontato") azione("rimontaggio", { azione: "fatto" }, "Richiuso: ora invia il PRONTO (negativo)");

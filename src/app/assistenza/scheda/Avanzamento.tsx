@@ -68,11 +68,14 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
           {av.prossimo.alternativa === "rifiutato_diretto" && (
             <Button size="sm" variant="outline" className="ml-auto border-red-300 text-red-700" disabled={disabilitato} onClick={() => onAzione("rifiutato_diretto")}
               title="Preventivo negativo (es. irreparabile): si segna RIFIUTATO senza mandarlo al cliente da accettare, poi si va al PRONTO">Negativo: segna RIFIUTATO</Button>)}
+          {/* 29/10/2026 (Christian): verifica e preventivo si saltano quando non servono */}
+          {(az === "assegna_verifica" || az === "chiudi_verifica") && <Button size="sm" variant="ghost" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("salta_verifica")} title="La verifica non serve: si passa al preventivo">Non serve: salta la verifica</Button>}
+          {(az === "preventivo" || az === "invia_preventivo") && <Button size="sm" variant="ghost" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("salta_preventivo")} title="Prezzo già concordato: si considera accettato senza inviarlo e si va alla riparazione">Non serve: salta il preventivo</Button>}
           {az === "ricevuta" && <Button size="sm" variant="ghost" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("ricevuta_no")} title="Il cliente non vuole la ricevuta / l'ha già avuta">Non serve</Button>}
           {/* 26/10/2026 (63202): rifiutato → chiuso (si restituisce subito) oppure smontato (un tecnico lo rimonta) */}
           {az === "rimontaggio" && !(av.passi.find((p) => p.codice === "riparazione")?.stato === "attuale") && (
             <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("rimontaggio_chiuso")}>È chiuso: invia il pronto</Button>)}
-          {az && <Button size="sm" className={(az === "rimontaggio" && av.passi.find((p) => p.codice === "riparazione")?.stato !== "attuale") || az === "ricevuta" || av.prossimo.alternativa ? "" : "ml-auto"}
+          {az && <Button size="sm" className={(az === "rimontaggio" && av.passi.find((p) => p.codice === "riparazione")?.stato !== "attuale") || ["ricevuta", "assegna_verifica", "chiudi_verifica", "preventivo", "invia_preventivo"].includes(az) || av.prossimo.alternativa ? "" : "ml-auto"}
             variant={bloccata ? "destructive" : "default"} disabled={disabilitato} onClick={() => onAzione(az)}>{AZIONI[az] || az}<ArrowRight /></Button>}
         </div>
       )}
