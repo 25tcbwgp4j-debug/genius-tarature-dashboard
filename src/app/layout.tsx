@@ -10,6 +10,7 @@ import { PermessiProvider } from "@/components/permessi";
 import { AutorizzazioneDialog } from "@/components/AutorizzazioneDialog";
 import { GuardiaTitolare } from "@/components/RiservatoTitolare";
 import { BonificiAvviso } from "@/components/BonificiAvviso";
+import { DopoBonifico } from "@/components/DopoBonifico";
 import { StripeAvviso } from "@/components/StripeAvviso";
 import { AttivitaProvider } from "@/components/attivita";
 
@@ -81,6 +82,8 @@ export default function RootLayout({
             <BonificiAvviso />
             {/* pagamenti Stripe ricevuti (riconciliati da soli o NON abbinati): stesso stile, sopra i bonifici (07/10/2026) */}
             <StripeAvviso />
+            {/* dopo l'abbinamento di un bonifico: avviso ritiro / etichetta / spedizione della scheda (29/10/2026) */}
+            <DopoBonifico />
            </AttivitaProvider>
           </PermessiProvider>
           <Toaster richColors position="top-right" />

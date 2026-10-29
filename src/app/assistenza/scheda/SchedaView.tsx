@@ -63,6 +63,18 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
 
   const ricarica = useCallback(() => assScheda(id).then((x) => { setS(x); setB({}); }).catch(toastErrore), [id]);
   useEffect(() => { ricarica(); }, [ricarica]);
+  // 29/10/2026 (pop-up «dopo il bonifico»): /assistenza?id=…&az=spedisci apre subito l'etichetta di riconsegna
+  const azLink = useRef(false);
+  useEffect(() => {
+    if (!s || azLink.current) return;
+    azLink.current = true;
+    const u = new URL(window.location.href);
+    if (u.searchParams.get("az") === "spedisci" && u.searchParams.get("id") === s.id) {
+      setDlg({ k: "corriere" });
+      u.searchParams.delete("az");
+      window.history.replaceState(null, "", u.toString());
+    }
+  }, [s]);
   const sporca = Object.keys(b).length > 0;
   const v = <K extends keyof Scheda>(k: K): Scheda[K] | undefined => (k in b ? (b as Scheda)[k] : s?.[k]);
   const set = useCallback((k: keyof Scheda, val: unknown) => setB((x) => ({ ...x, [k]: val })), []);

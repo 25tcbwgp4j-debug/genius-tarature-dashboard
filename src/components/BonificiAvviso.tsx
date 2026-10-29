@@ -14,6 +14,7 @@ import { AlertTriangle, Banknote, Check, ExternalLink, Loader2, Search, X } from
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ControllaSumUp } from "@/components/ControllaSumUp";
+import { dopoBonifico } from "@/components/DopoBonifico";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { usePermessi } from "@/components/permessi";
 import { fetchAPI } from "@/lib/api";
@@ -270,6 +271,7 @@ function Pannello({ onClose }: { onClose: () => void }) {
       }
       const r = await fetchAPI("/api/bonifici/crea", { method: "POST", body: JSON.stringify({ ids, tipo, operatore, totale, descrizione }) });
       toast.success(r.esito);
+      dopoBonifico();
       setSel([]); aggiorna(); onClose();
       router.push(r.url);
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
@@ -503,6 +505,7 @@ function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
       else toast.success(r.bonifico.esito || "Bonifico registrato");
       if (r.invio && !r.invio.ok) toast.warning(`Invio allo SdI non riuscito: ${r.invio.errore || ""}`, { duration: 15000 });
       onFine();
+      dopoBonifico();   // 29/10/2026: subito dopo, «cosa fare adesso» sulla scheda (avviso ritiro, etichetta, spedizione)
       aggiorna();
       if (r.fattura_id) router.push(`/fatturazione?id=${r.fattura_id}`);
       else {
