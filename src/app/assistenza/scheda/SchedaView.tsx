@@ -41,6 +41,14 @@ function bozzaPreventivo(m: Partial<Scheda>): BozzaPreventivo {
     spedizione_tipo: m.spedizione_tipo || "nessuna", spedizione_importo: m.spedizione_importo ?? "" };
 }
 
+/** 29/10/2026 (Medianet): «Vs. rif.» = riferimento del cliente; il numero_interno delle schede FileMaker è il loro progressivo, non si mostra. */
+function rifCliente(s: Scheda): string {
+  const r = (s.rif_cliente || "").trim();
+  if (r) return r;
+  const ni = (s.numero_interno || "").trim();
+  return !ni || (s.origine === "filemaker" && /^\d+$/.test(ni)) ? "" : ni;
+}
+
 export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiata, onChiudi }: {
   id: string; cfg: ConfigAssistenza | null; operatore: string; setOperatore: (o: Operatore) => void;
   onApri: (id: string) => void; onCambiata: () => void; onChiudi?: () => void;
@@ -235,7 +243,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           {onChiudi && <Button size="icon-sm" variant="ghost" className="lg:hidden" onClick={onChiudi} title="Torna all'elenco"><ArrowLeft /></Button>}
           <Button size="icon-xs" variant="outline" disabled={!s.precedente} onClick={() => s.precedente && onApri(s.precedente.id)} title="Precedente (Alt+←)"><ArrowLeft /></Button>
           <span className="text-2xl font-bold tabular-nums tracking-tight">{s.sigla}</span>
-          {s.numero_interno && <span className="rounded-md border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:bg-blue-950/30 dark:text-blue-100" title="Riferimento del rivenditore / cliente">Vs. rif. {s.numero_interno}</span>}
+          {rifCliente(s) && <span className="rounded-md border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:bg-blue-950/30 dark:text-blue-100" title="Riferimento del rivenditore / cliente">Vs. rif. {rifCliente(s)}</span>}
           <Button size="icon-xs" variant="outline" disabled={!s.successiva} onClick={() => s.successiva && onApri(s.successiva.id)} title="Successiva (Alt+→)"><ArrowRight /></Button>
           <Badge stato={st} />
           {s.prova && s.origine === "prova" && <Pill tono="ambra">PROVA</Pill>}
