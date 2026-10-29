@@ -19,7 +19,8 @@ export const EVENTO_DOPO_BONIFICO = "bonifici:dopo";
 export function dopoBonifico() { window.setTimeout(() => window.dispatchEvent(new Event(EVENTO_DOPO_BONIFICO)), 1200); }
 
 type Passo = { scheda_id: string; sigla: string; cliente: string; stato: string; consegna: string; pagata: boolean; saldo: number;
-  importo: number; azione: "avvisa_ritiro" | "richiedi_etichetta" | "spedisci" | "niente"; testo: string; fatto?: boolean };
+  importo: number; azione: Azione; alternativa?: Azione; testo: string; fatto?: boolean };
+type Azione = "avvisa_ritiro" | "richiedi_etichetta" | "spedisci" | "niente";
 type Voce = { incasso: { id: string; data: string; importo: number | string; ordinante: string | null; causale: string | null;
   documento_numero: string | null }; schede: Passo[]; da_fare: number };
 
@@ -67,19 +68,19 @@ export function DopoBonifico() {
     setAperto(false);
   }
 
-  async function esegui(v: Voce, p: Passo) {
+  async function esegui(v: Voce, p: Passo, az: Azione = p.azione) {
     if (!operatore) { toast.error("Scegli l'operatore"); return; }
-    if (p.azione === "spedisci") {
+    if (az === "spedisci") {
       setAperto(false);
       router.push(`/assistenza?id=${p.scheda_id}&az=spedisci`);
       return;
     }
-    const cosa = p.azione === "avvisa_ritiro" ? "«pagamento ricevuto: può passare a ritirare»"
+    const cosa = az === "avvisa_ritiro" ? "«pagamento ricevuto: può passare a ritirare»"
       : "«pagamento ricevuto: inviateci l'etichetta di spedizione di ritorno»";
     if (!confirm(`Scheda ${p.sigla} · ${p.cliente}\n\nMandare al cliente (mail + WhatsApp) ${cosa}?`)) return;
     setBusy(p.scheda_id);
     try {
-      await fetchAPI(`/api/assistenza/schede/${p.scheda_id}/${p.azione === "avvisa_ritiro" ? "avvisa-pagato" : "richiedi-etichetta"}`,
+      await fetchAPI(`/api/assistenza/schede/${p.scheda_id}/${az === "avvisa_ritiro" ? "avvisa-pagato" : "richiedi-etichetta"}`,
         { method: "POST", body: JSON.stringify({ operatore, incassato: Number(v.incasso.importo) }) });
       toast.success(`Scheda ${p.sigla}: cliente avvisato`);
       carica(true);
@@ -129,6 +130,7 @@ export function DopoBonifico() {
                   <Button size="sm" disabled={!!busy} onClick={() => esegui(v, p)}>
                     {busy === p.scheda_id && <Loader2 className="animate-spin" />}{PULSANTE[p.azione]}
                   </Button>
+                  {p.alternativa && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => esegui(v, p, p.alternativa)}>{PULSANTE[p.alternativa]}</Button>}
                   <Button size="sm" variant="outline" disabled={!!busy} onClick={() => giaFatto(p)}>Già fatto</Button>
                 </div>
               ))}
