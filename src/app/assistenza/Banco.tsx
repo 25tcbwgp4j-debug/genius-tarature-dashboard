@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOperatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
-import { assRichiestaCollega, type Richiesta, STATI_RIPARAZIONE, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, assSetConfig, nomeTecnico, type AvvisoDashboard, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve } from "@/lib/assistenza";
+import { assRichiestaCollega, type Richiesta, STATI_RIPARAZIONE, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, assSetConfig, nomeTecnico, type AvvisoDashboard, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve, type CaricoTecnico } from "@/lib/assistenza";
 import { Cruscotto } from "./Cruscotto";
 import { AvvisoRichieste } from "./Richieste";
 import { PerCliente } from "./PerCliente";
@@ -66,6 +66,7 @@ export function Banco() {
   const [cruscotto, setCruscotto] = useState<FaseCruscotto[] | null>(null);
   const [mostraCr, setMostraCr] = useState(false);
   const [tecniciCr, setTecniciCr] = useState<{ codice: string; nome: string }[]>([]);
+  const [carichi, setCarichi] = useState<CaricoTecnico[]>([]);
   const faseLink = sp.get("fase");
   const [fase, setFase] = useState<{ fase: string; tecnico: string } | null>(faseLink ? { fase: faseLink, tecnico: sp.get("tecnico") || "" } : null);
   const [salto, setSalto] = useState("");
@@ -99,12 +100,12 @@ export function Banco() {
       : q.trim().length >= 3 ? tutteLeSchede(q, st) : assElenco(q, st, "", q.trim() ? 500 : 150);
     p.then((r) => { if (mia !== ultimaRicerca.current) return; setElenco(r.schede); setTotale(r.totale); })
       .catch((e) => { if (mia !== ultimaRicerca.current) return; toastErrore(e); setElenco([]); });
-    assCruscotto().then((r) => { setCruscotto(r.fasi); setTecniciCr(r.tecnici); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); }).catch(() => undefined);
+    assCruscotto().then((r) => { setCruscotto(r.fasi); setTecniciCr(r.tecnici); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); }).catch(() => undefined);
   }, [q, filtro, fase]);
   useEffect(() => { const t = setTimeout(carica, 250); return () => clearTimeout(t); }, [carica]);
   // 26/10/2026: il cruscotto (e il banner «Da gestire adesso») si aggiorna da solo ogni minuto
   useEffect(() => {
-    const t = setInterval(() => assCruscotto().then((r) => { setCruscotto(r.fasi); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); }).catch(() => undefined), 60000);
+    const t = setInterval(() => assCruscotto().then((r) => { setCruscotto(r.fasi); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); }).catch(() => undefined), 60000);
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
@@ -198,7 +199,7 @@ export function Banco() {
       ) : (
       <>
       {aperta && <div className="flex justify-end"><button type="button" className="text-xs text-muted-foreground underline" onClick={() => setMostraCr(false)}>riduci il cruscotto</button></div>}
-      <Cruscotto fasi={cruscotto} tecnici={tecniciCr} scelta={fase}
+      <Cruscotto fasi={cruscotto} tecnici={tecniciCr} scelta={fase} carichi={carichi}
         onScegli={(x) => {
           setFase(x); setElenco(null); setQ("");
           if (x) setElencoChiuso(false);
@@ -222,7 +223,7 @@ export function Banco() {
           <div className="flex flex-wrap items-center gap-1 text-xs">
             {fase && (
               <span className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary/10 px-2 py-0.5 font-medium">
-                {(() => { const p = cruscotto?.find((f) => f.codice === fase.fase || f.sotto?.some((x) => x.codice === fase.fase));
+                {fase.fase.startsWith("tec_") ? `I miei lavori${fase.fase === "tec_tutto" ? "" : " · " + (carichi[0]?.sotto.find((x) => x.codice === fase.fase)?.etichetta || fase.fase)}` : (() => { const p = cruscotto?.find((f) => f.codice === fase.fase || f.sotto?.some((x) => x.codice === fase.fase));
                   const x = p?.sotto?.find((y) => y.codice === fase.fase); return x ? `${p?.etichetta} · ${x.etichetta}` : p?.etichetta || fase.fase; })()}{fase.tecnico ? ` · ${nomeTecnico(fase.tecnico, tecniciCr)}` : ""}
                 <button onClick={() => { setFase(null); setElenco(null); }} aria-label="Togli il filtro della fase" className="ml-0.5">✕</button>
               </span>

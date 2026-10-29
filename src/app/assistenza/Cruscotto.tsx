@@ -5,20 +5,51 @@
 // con il dettaglio per tecnico dove serve (in verifica, in riparazione). Cliccando, l'elenco mostra solo quelle schede.
 // Compatto e leggibile su iPad. Le stesse fasi le usa la Panoramica Apple.
 import { cn } from "@/lib/utils";
-import { nomeTecnico, type FaseCruscotto } from "@/lib/assistenza";
+import { nomeTecnico, type CaricoTecnico, type FaseCruscotto } from "@/lib/assistenza";
 
 // fasi che chiedono un'azione: in evidenza quando non sono a zero
 const DA_FARE = new Set(["da_assegnare_verifica", "da_preventivare", "preventivi_da_inviare", "da_assegnare_riparazione", "aggiornamenti", "da_pagare", "da_spedire"]);
 
-export function Cruscotto({ fasi, tecnici, scelta, onScegli }: {
-  fasi: FaseCruscotto[] | null; tecnici: { codice: string; nome: string }[];
+export function Cruscotto({ fasi, tecnici, scelta, onScegli, carichi = [] }: {
+  fasi: FaseCruscotto[] | null; tecnici: { codice: string; nome: string }[]; carichi?: CaricoTecnico[];
   scelta: { fase: string; tecnico: string } | null; onScegli: (s: { fase: string; tecnico: string } | null) => void;
 }) {
   if (!fasi) return <div className="h-[74px] animate-pulse rounded-xl border bg-muted/40" />;
+  // 29/10/2026 (Christian): «I miei lavori» — il tecnico clicca il suo nome e vede tutto quello che ha in carico
+  const tecSel = scelta?.fase.startsWith("tec_") ? scelta.tecnico : "";
+  const carico = carichi.find((c) => c.tecnico === tecSel);
   return (
+    <div className="space-y-1.5">
+    {carichi.length > 0 && (
+      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border bg-card px-2 py-1.5" data-testid="miei-lavori">
+        <span className="text-xs font-semibold">👷 I miei lavori:</span>
+        {carichi.map((c) => {
+          const sel = tecSel === c.tecnico;
+          return (
+            <button key={c.tecnico} type="button" data-tecnico={c.tecnico}
+              onClick={() => onScegli(sel ? null : { fase: "tec_tutto", tecnico: c.tecnico })}
+              className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold", sel ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+              {nomeTecnico(c.tecnico, tecnici) || c.tecnico} <span className="tabular-nums">{c.n}</span></button>
+          );
+        })}
+        {carico && (
+          <div className="flex w-full flex-wrap gap-1 pt-1">
+            {carico.sotto.map((x) => {
+              const sel = scelta?.fase === x.codice;
+              return (
+                <button key={x.codice} type="button" data-fase={x.codice}
+                  onClick={() => onScegli({ fase: sel ? "tec_tutto" : x.codice, tecnico: carico.tecnico })}
+                  className={cn("rounded border px-2 py-0.5 text-[11px] font-medium", sel ? "border-primary bg-primary text-primary-foreground" : "bg-background", !x.n && !sel && "opacity-50")}>
+                  {x.etichetta} <span className="tabular-nums">{x.n}</span></button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    )}
     <div className="flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible" data-testid="cruscotto">
       {fasi.map((f) => {
-        const attiva = scelta?.fase === f.codice || !!f.sotto?.some((x) => x.codice === scelta?.fase);
+        const attiva = !tecSel && (scelta?.fase === f.codice || !!f.sotto?.some((x) => x.codice === scelta?.fase));
         const urgente = DA_FARE.has(f.codice) && f.n > 0;
         return (
           <div key={f.codice} role="button" tabIndex={0} data-fase={f.codice}
@@ -63,6 +94,7 @@ export function Cruscotto({ fasi, tecnici, scelta, onScegli }: {
           </div>
         );
       })}
+    </div>
     </div>
   );
 }

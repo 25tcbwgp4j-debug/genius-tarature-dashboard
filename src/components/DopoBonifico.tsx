@@ -24,6 +24,9 @@ type Azione = "avvisa_ritiro" | "richiedi_etichetta" | "spedisci" | "niente";
 type Voce = { incasso: { id: string; data: string; importo: number | string; ordinante: string | null; causale: string | null;
   documento_numero: string | null }; schede: Passo[]; da_fare: number };
 
+type Documento = { scheda_id: string; sigla: string; cliente: string; stato: string; consegna: string;
+  documento: { tipo: "fattura" | "scontrino"; numero: string | null; data: string | null; totale: number | string | null }; recensione: string | null };
+
 const RIMANDA = "dopo_bonifico_rimandato";
 const SENZA = ["/login", "/forgot-password", "/reset-password"];
 const eur = (v: number | string | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(v || 0));
@@ -39,23 +42,30 @@ export function DopoBonifico() {
   const path = usePathname() || "";
   const router = useRouter();
   const [voci, setVoci] = useState<Voce[]>([]);
+  const [docs, setDocs] = useState<Documento[]>([]);
   const [aperto, setAperto] = useState(false);
   const [busy, setBusy] = useState("");
   const [operatore, setOperatore] = useOperatore();
 
   const carica = useCallback((forza: boolean) => {
     if (SENZA.includes(path)) return;
-    fetchAPI("/api/assistenza/dopo-bonifici?giorni=3", undefined, false).then((r: { bonifici: Voce[] }) => {
-      setVoci(r.bonifici);
+    // 29/10/2026: anche le schede con fattura o scontrino EMESSI e non ancora consegnate («chiudo la scheda come…»)
+    Promise.all([
+      fetchAPI("/api/assistenza/dopo-bonifici?giorni=3", undefined, false).catch(() => ({ bonifici: [] })),
+      fetchAPI("/api/assistenza/dopo-documenti?giorni=3", undefined, false).catch(() => ({ schede: [] })),
+    ]).then(([b, d]: [{ bonifici: Voce[] }, { schede: Documento[] }]) => {
+      setVoci(b.bonifici); setDocs(d.schede);
+      const n = b.bonifici.length + d.schede.length;
       let rimandato = 0;
       try { rimandato = Number(sessionStorage.getItem(RIMANDA) || 0); } catch { /* storage non disponibile */ }
-      if (r.bonifici.length && (forza || Date.now() - rimandato > 30 * 60 * 1000)) setAperto(true);
-      if (!r.bonifici.length) setAperto(false);
-    }).catch(() => undefined);   // operatori senza accesso all'assistenza: nessuna finestra
+      if (n && (forza || Date.now() - rimandato > 30 * 60 * 1000)) setAperto(true);
+      if (!n) setAperto(false);
+    });
   }, [path]);
 
+  // a ogni cambio pagina si ricontrolla (es. fattura emessa in /fatturazione, scontrino dalla cassa)
+  useEffect(() => { carica(false); }, [carica]);
   useEffect(() => {
-    carica(false);
     const ev = () => carica(true);
     window.addEventListener(EVENTO_DOPO_BONIFICO, ev);
     return () => window.removeEventListener(EVENTO_DOPO_BONIFICO, ev);
@@ -98,21 +108,55 @@ export function DopoBonifico() {
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
 
-  if (!aperto || !voci.length) return null;
-  const n = voci.reduce((t, v) => t + v.da_fare, 0);
+  async function chiudiCome(d: Documento, come: "ritiro" | "spedizione" | "non_ancora") {
+    if (!operatore) { toast.error("Scegli l'operatore"); return; }
+    setBusy(d.scheda_id);
+    try {
+      if (come === "non_ancora") {
+        await fetchAPI(`/api/assistenza/schede/${d.scheda_id}/dopo-documento`, { method: "POST", body: JSON.stringify({ operatore }) });
+      } else {
+        await fetchAPI(`/api/assistenza/schede/${d.scheda_id}/consegna`, { method: "POST", body: JSON.stringify({ operatore, modo: come }) });
+        toast.success(`Scheda ${d.sigla}: ${come === "ritiro" ? "riconsegnata" : "spedita"} e chiusa`);
+        if (d.recensione !== "inviata" && confirm(`Scheda ${d.sigla} · ${d.cliente}\n\nChiedere la recensione su Google al cliente (mail + WhatsApp)?`)) {
+          await fetchAPI(`/api/assistenza/schede/${d.scheda_id}/recensione`, { method: "POST", body: JSON.stringify({ operatore }) });
+          toast.success("Recensione chiesta");
+        }
+      }
+      carica(true);
+    } catch (e) { toastErrore(e); } finally { setBusy(""); }
+  }
+
+  if (!aperto || (!voci.length && !docs.length)) return null;
+  const n = voci.reduce((t, v) => t + v.da_fare, 0) + docs.length;
   return (
     <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-auto bg-black/40 p-3 sm:p-8" onClick={rimanda}>
       <div className="w-full max-w-2xl rounded-xl bg-background shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b px-4 py-3">
           <Banknote className="size-5 text-emerald-600" />
           <div className="flex-1">
-            <div className="font-semibold">Bonifico arrivato: cosa fare adesso</div>
-            <div className="text-xs text-muted-foreground">{n} {n === 1 ? "scheda aspetta" : "schede aspettano"} l&apos;avviso al cliente o la spedizione</div>
+            <div className="font-semibold">{voci.length ? "Bonifico arrivato: cosa fare adesso" : "Fattura o scontrino emesso: chiudo la scheda?"}</div>
+            <div className="text-xs text-muted-foreground">{n} {n === 1 ? "scheda aspetta" : "schede aspettano"} il passo successivo (avviso, spedizione o consegna)</div>
           </div>
           <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
           <button type="button" onClick={rimanda} aria-label="Più tardi" className="rounded p-1 hover:bg-muted"><X className="size-4" /></button>
         </div>
         <div className="max-h-[70vh] space-y-3 overflow-auto p-4">
+          {docs.map((d) => (
+            <div key={d.scheda_id} className="rounded-lg border">
+              <div className="flex flex-wrap items-baseline gap-x-3 border-b bg-muted/40 px-3 py-2 text-sm">
+                <span className="font-semibold">{d.documento.tipo === "fattura" ? `Fattura ${d.documento.numero}` : `Scontrino ${d.documento.numero || ""}`}</span>
+                <span>{eur(d.documento.totale)}</span>
+                <a className="underline" href={`/assistenza?id=${d.scheda_id}`}>Scheda {d.sigla}</a> · {d.cliente}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+                <span className="mr-1 text-xs text-muted-foreground">Chiudo la scheda come:</span>
+                <Button size="sm" disabled={!!busy} onClick={() => chiudiCome(d, "ritiro")}>{busy === d.scheda_id && <Loader2 className="animate-spin" />}✅ Riconsegnato</Button>
+                <Button size="sm" variant="outline" disabled={!!busy} onClick={() => chiudiCome(d, "spedizione")}>🚚 Spedito</Button>
+                <Button size="sm" variant="outline" disabled={!!busy} onClick={() => { setAperto(false); router.push(`/assistenza?id=${d.scheda_id}`); }}>Altro…</Button>
+                <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => chiudiCome(d, "non_ancora")}>Non ancora (resta aperta)</Button>
+              </div>
+            </div>
+          ))}
           {voci.map((v) => (
             <div key={v.incasso.id} className="rounded-lg border">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b bg-muted/40 px-3 py-2 text-sm">
