@@ -10,13 +10,16 @@
 // c'è, si apre «nuovo articolo» già compilato con descrizione e modelli dai ricambi GSX), TOGLI.
 // Posizione (Christian 22/10/2026): REPARTO/ripiano (A1, H3, F…) · SCAFFALE (1°/2°/3°, lo scaffale grande a tre
 // cassettoni) · CONFEZIONE (busta, busta sciolta…). Accanto alla descrizione l'esito dell'ultima verifica sul GSX.
+// 29/10/2026: ETICHETTE (StampaEtichetteRicambi.tsx) — «Etichetta» su ogni riga, oppure si spuntano le righe (o «tutta la
+// sezione» = le righe visibili col filtro) e si stampano in blocco, copie = giacenza; il codice a barre RA<id> si spara qui.
 
 import { corrisponde } from "@/lib/ricercaRicambi";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Boxes, Check, History, Loader2, Minus, Pencil, Plus, RotateCcw, ScanLine, Search, Trash2, X } from "lucide-react";
+import { Boxes, Check, History, Loader2, Minus, Pencil, Plus, Printer, RotateCcw, ScanLine, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { fetchAPI } from "@/lib/api";
+import { StampaEtichetteRicambi } from "./StampaEtichetteRicambi";
 
 type Tipo = "ricambio" | "display" | "scheda_logica" | "top_case" | "garanzia";
 interface Riga {
@@ -291,6 +294,9 @@ export default function MagazzinoRicambi() {
   const [mov, setMov] = useState<{ r: Riga; t: "carico" | "scarico" } | null>(null);
   const [mod, setMod] = useState<{ r: Partial<Riga> | null } | null>(null);
   const [sto, setSto] = useState<Riga | null>(null);
+  // 29/10/2026: righe spuntate per le etichette in blocco + finestra di stampa
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [eti, setEti] = useState<{ righe: Riga[]; titolo?: string } | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
 
   const carica = useCallback(async () => {
@@ -300,6 +306,7 @@ export default function MagazzinoRicambi() {
     } catch (e) { toast.error(String((e as Error)?.message || e)); } finally { setCarico(false); }
   }, [tipo, eliminati]);
   useEffect(() => { carica(); }, [carica]);
+  useEffect(() => { setSel(new Set()); }, [tipo, eliminati]);
 
   const visibili = useMemo(() => {
     const t = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -357,7 +364,7 @@ export default function MagazzinoRicambi() {
       }
     } catch (e) { toast.error(String((e as Error)?.message || e)); }
   };
-  useEffect(() => { if (!conta && !mov && !mod && !sto) scanRef.current?.focus(); }, [conta, mov, mod, sto]);
+  useEffect(() => { if (!conta && !mov && !mod && !sto && !eti) scanRef.current?.focus(); }, [conta, mov, mod, sto, eti]);
 
   const fatto = () => { setConta(null); setMov(null); setMod(null); carica(); };
   const elimina = async (r: Riga) => {
@@ -372,6 +379,11 @@ export default function MagazzinoRicambi() {
   };
   const pezzi = tipo !== "ricambio" && tipo !== "garanzia";
   const gar = tipo === "garanzia";
+  const nomeTipo = TIPI.find((x) => x.k === tipo)?.t || "";
+  const stampabili = visibili.filter((r) => r.attivo);
+  const tutteSpuntate = stampabili.length > 0 && stampabili.every((r) => sel.has(r.id));
+  const spunta = (id: number) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const spuntaTutte = () => setSel(tutteSpuntate ? new Set() : new Set(stampabili.map((r) => r.id)));
   const totNuovi = visibili.reduce((n, r) => n + r.qta_nuovo, 0), totUsati = visibili.reduce((n, r) => n + r.qta_usato, 0);
 
   return (
@@ -438,6 +450,21 @@ export default function MagazzinoRicambi() {
         </button>
       </div>
 
+      {!eliminati && stampabili.length > 0 && (
+        <div className="flex flex-wrap gap-2 items-center text-sm">
+          <Printer className="h-4 w-4 text-gray-500" /> Etichette:
+          <button type="button" disabled={!sel.size} onClick={() => setEti({ righe: stampabili.filter((r) => sel.has(r.id)) })}
+            className="px-3 py-1.5 rounded border inline-flex items-center gap-1 disabled:opacity-40">
+            Stampa le spuntate ({sel.size})
+          </button>
+          <button type="button" onClick={() => setEti({ righe: stampabili, titolo: `Etichette: ${nomeTipo}${q || modello ? " (filtro)" : ""} · ${stampabili.length} righe` })}
+            className="px-3 py-1.5 rounded border inline-flex items-center gap-1" title="Tutte le righe visibili di questa sezione (col filtro, se c'è)">
+            Tutta la sezione{q || modello ? " filtrata" : ""} ({stampabili.length})
+          </button>
+          {sel.size > 0 && <button type="button" onClick={() => setSel(new Set())} className="text-xs underline text-gray-500">togli le spunte</button>}
+        </div>
+      )}
+
       <Card className="overflow-x-auto">
         {carico ? <div className="p-4"><Loader2 className="h-5 w-5 animate-spin" /></div> : visibili.length === 0 ? (
           <p className="p-4 text-sm text-gray-500">
@@ -447,6 +474,8 @@ export default function MagazzinoRicambi() {
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-gray-500">
               <tr>
+                <th className="p-2 w-6">{!eliminati && <input type="checkbox" aria-label="Spunta tutte le righe visibili" title="Spunta tutte le righe visibili"
+                  checked={tutteSpuntate} onChange={spuntaTutte} />}</th>
                 <th className="p-2">Codice</th><th className="p-2">Descrizione / modelli</th>
                 {pezzi && <th className="p-2">Stato</th>}
                 {gar ? <><th className="p-2">Riparato il</th><th className="p-2">Scadenza</th></>
@@ -458,6 +487,7 @@ export default function MagazzinoRicambi() {
             <tbody>
               {visibili.map((r) => (
                 <tr key={r.id} id={`riga-${r.id}`} className={`border-t align-top ${evid === r.id ? "bg-yellow-100 dark:bg-yellow-900/40" : ""}`}>
+                  <td className="p-2">{r.attivo && <input type="checkbox" aria-label="Spunta per le etichette" checked={sel.has(r.id)} onChange={() => spunta(r.id)} />}</td>
                   <td className="p-2 font-mono whitespace-nowrap">{r.etichetta ? <div className="font-bold">{r.etichetta}</div> : null}{r.codice}{r.codici_alt ? <div className="text-xs text-gray-500">= {r.codici_alt}</div> : null}
                     {r.mpn ? <div className="text-xs text-gray-500">{r.mpn}</div> : null}
                     {r.gsx_stato && <div className={`text-[10px] mt-0.5 ${r.gsx_stato === "in_vendita" ? "text-green-700" : "text-gray-400"}`}
@@ -492,6 +522,7 @@ export default function MagazzinoRicambi() {
                         <button type="button" title="Carica: arrivano pezzi" onClick={() => setMov({ r, t: "carico" })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5 text-green-700"><Plus className="h-3 w-3" />Carica</button>
                         <button type="button" title="Togli: pezzi usati o venduti" onClick={() => setMov({ r, t: "scarico" })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5 text-amber-700"><Minus className="h-3 w-3" />Togli</button>
                         </>)}
+                        <button type="button" title="Stampa l'etichetta (copie = giacenza)" onClick={() => setEti({ righe: [r] })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5 text-blue-700"><Printer className="h-3 w-3" />Etichetta</button>
                         <button type="button" title="Modifica i dati" onClick={() => setMod({ r })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5"><Pencil className="h-3 w-3" />Modifica</button>
                         <button type="button" title="Storico: chi ha cambiato cosa e quando" onClick={() => setSto(r)} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5"><History className="h-3 w-3" />Storico</button>
                         <button type="button" title="Elimina (si può ripristinare)" onClick={() => elimina(r)} className="px-2 py-1 rounded border text-xs text-red-600 inline-flex items-center gap-0.5"><Trash2 className="h-3 w-3" />Elimina</button>
@@ -505,7 +536,7 @@ export default function MagazzinoRicambi() {
             </tbody>
             <tfoot>
               <tr className="border-t text-xs text-gray-500">
-                <td className="p-2" colSpan={pezzi ? 3 : 2}>{visibili.length} righe</td>
+                <td className="p-2" colSpan={pezzi ? 4 : 3}>{visibili.length} righe{sel.size ? ` · ${sel.size} spuntate` : ""}</td>
                 <td className="p-2 text-right font-medium">{totNuovi}</td><td className="p-2 text-right">{totUsati}</td><td colSpan={4} />
               </tr>
             </tfoot>
@@ -517,6 +548,7 @@ export default function MagazzinoRicambi() {
       {mov && <Movimenta r={mov.r} tipo={mov.t} onFatto={fatto} onChiudi={() => setMov(null)} />}
       {mod && <Scheda r={mod.r} tipo={tipo} titolare={titolare} stati={stati} onFatto={fatto} onChiudi={() => setMod(null)} />}
       {sto && <Storico r={sto} onChiudi={() => setSto(null)} />}
+      {eti && <StampaEtichetteRicambi righe={eti.righe} titolo={eti.titolo} onClose={() => setEti(null)} />}
     </div>
   );
 }
