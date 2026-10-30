@@ -30,6 +30,7 @@ import { Documenti } from "./Documenti";
 import { Lavorazione } from "./Lavorazione";
 import { Preventivo, type BozzaPreventivo } from "./Preventivo";
 import { DialogoAssegna, DialogoChiudiVerifica, PannelloTecnici } from "./Tecnici";
+import { NotificheScheda } from "../NotificheGestire";
 import { Badge, Campo, Modale, Pill, Sezione, area, campo } from "./ui";
 
 type Bozza = Partial<Scheda>;
@@ -261,6 +262,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <div className="mt-2"><SceltaOperatore value={operatore as Operatore} onChange={setOperatore} compatto /></div>
       </div>
 
+      {/* 30/10/2026 (Christian): notifiche da gestire della scheda, in alto finché non sono chiuse con l'esito */}
+      <NotificheScheda key={`ng-${s.id}`} schedaId={s.id} aperte={s.notifiche_gestire || []} operatore={operatore}
+        onCambiata={async () => { window.dispatchEvent(new Event("gl-notifiche")); await ricarica(); onCambiata(); }} />
       <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={() => setDlg({ k: "invio", tipo: "trova" })}
         onPreventivo={() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
       <Avanzamento av={s.avanzamento} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)}
@@ -322,7 +326,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-red-400 bg-red-50 px-3 py-2 text-sm text-red-950 dark:bg-red-950/30 dark:text-red-100">
           <b>⚠️ Mancano le spese di spedizione:</b> questo cliente ha le spedizioni con il NOSTRO corriere
           ({s.anagrafica.spedizione_tipo_default === "ar" ? "A/R" : s.anagrafica.spedizione_tipo_default === "solo_ritorno" ? "solo ritorno" : "solo ritiro"} € {Number(s.anagrafica.spedizione_importo_default || 0) || (s.anagrafica.spedizione_tipo_default === "ar" ? 28 : 14)}).
-          <span className="text-xs">Se è una spedizione combinata già addebitata su un'altra scheda, ignora.</span>
+          <span className="text-xs">Se è una spedizione combinata già addebitata su un&apos;altra scheda, ignora.</span>
           <Button size="sm" className="ml-auto" disabled={!!busy} onClick={async () => {
             if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
             try {

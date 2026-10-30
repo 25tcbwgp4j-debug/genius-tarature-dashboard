@@ -165,6 +165,20 @@ export function Sidebar() {
     return () => { annullato = true; };
   }, [pathname]);
 
+  // 30/10/2026: numero delle NOTIFICHE DA GESTIRE aperte accanto a «Schede assistenza» (si aggiorna ogni minuto e quando cambiano)
+  const [nNotifiche, setNNotifiche] = useState(0);
+  const vedeSchede = admin || assistenzaOperatori;
+  useEffect(() => {
+    if (!vedeSchede || pathname === "/login" || pathname.startsWith("/login/")) return;
+    let annullato = false;
+    const conta = () => fetchAPI("/api/assistenza/notifiche-gestire/conteggio")
+      .then((r: { aperte?: number }) => { if (!annullato) setNNotifiche(r.aperte || 0); }).catch(() => undefined);
+    conta();
+    const t = setInterval(conta, 60_000);
+    window.addEventListener("gl-notifiche", conta);
+    return () => { annullato = true; clearInterval(t); window.removeEventListener("gl-notifiche", conta); };
+  }, [vedeSchede, pathname]);
+
   useEffect(() => {
     // messaggi non letti della chat: la chat è del titolare (l'operatore riceverebbe 403)
     if (!admin || pathname === "/login" || pathname.startsWith("/login/")) return;
@@ -248,6 +262,7 @@ export function Sidebar() {
             const Icon = item.icon;
             const showBadge = item.href === "/chat" && unread > 0;
             const badgeAut = item.href === "/autorizzazioni" && nInAttesa > 0;
+            const badgeNot = item.href === "/assistenza" && nNotifiche > 0;
             return (
               <Link
                 key={item.href}
@@ -264,6 +279,11 @@ export function Sidebar() {
                 {showBadge && (
                   <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[10px] font-semibold">
                     {unread > 99 ? "99+" : unread}
+                  </span>
+                )}
+                {badgeNot && (
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-semibold" title="Notifiche da gestire aperte">
+                    {nNotifiche > 99 ? "99+" : nNotifiche}
                   </span>
                 )}
                 {badgeAut && (

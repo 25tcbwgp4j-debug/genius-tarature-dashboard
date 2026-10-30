@@ -41,6 +41,8 @@ export interface Scheda extends SchedaBreve {
   totale_dovuto?: number; esito_pronto?: string; seriale_nuovo?: string | null; imei_nuovo?: string | null; consegna_effettiva?: "ritiro" | "spedizione";
   anagrafica_id: string | null; referente: string | null; telefono_referente: string | null; indirizzo_spedizione: string | null; imei: string | null;
   acquistato_il: string | null; anno_garanzia: string | null; password_dispositivo: string | null; apple_id: string | null; password_apple_id: string | null;
+  /** 30/10/2026: notifiche da gestire APERTE della scheda */
+  notifiche_gestire?: NotificaGestire[];
   accessori: string | null; note: string | null; note_interne: string | null; trova_il_mio?: "attivo" | "risolto" | null; riconsegna_nota?: string | null; promemoria?: string | null; ricevuta_da_inviare?: boolean; cliente_no_whatsapp?: string | null; passaggio?: { da: string; a: string; testo: string; il: string; letto_il: string | null; letto_da: string | null } | null; comunicazione_cliente?: string | null; recensione_stato?: "inviata" | "non_inviare" | null; recensione_il?: string | null; pronto_prog_il?: string | null; pronto_prog_stato?: string | null; pronto_prog_esito?: string | null; preventivo_righe: EstimateLine[]; preventivo_testo: string | null;
   lavorazione: string | null; esito: string | null; ricambi: string | null; pagamento_modo: string | null; pagamento_abituale?: string | null; operatore_accettazione: string | null;
   scontrino_id: string | null; fattura_id: string | null; documento_id: string | null; numero_interno: string | null; token_pubblico: string;
@@ -116,7 +118,7 @@ export const assConfig = (): Promise<ConfigAssistenza> => fetchAPI("/api/assiste
 export const assSetConfig = (b: { operatori_abilitati: boolean }): Promise<ConfigAssistenza> => fetchAPI("/api/assistenza/config", { method: "PATCH", body: JSON.stringify(b) });
 export const assCruscotto = (): Promise<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[]; richieste_nuove?: number;
   novita?: { id: string; sigla: string; cliente: string | null; prodotto: string | null; tipo: "accettato" | "rifiutato"; il: string; canale: string | null; richiesta: string | null }[];
-  avvisi?: AvvisoDashboard[]; per_tecnico?: CaricoTecnico[] }> => fetchAPI("/api/assistenza/cruscotto");
+  avvisi?: AvvisoDashboard[]; notifiche?: NotificaGestire[]; per_tecnico?: CaricoTecnico[] }> => fetchAPI("/api/assistenza/cruscotto");
 /** 29/10/2026: «I miei lavori» — carico di ogni tecnico (fasi tec_*) */
 export interface CaricoTecnico { tecnico: string; n: number; sotto: { codice: string; etichetta: string; n: number }[] }
 /** 27/10/2026: quello che è stato fatto in automatico / da Claude, banner sul banco finché non si clicca «Ho visto». */
@@ -125,6 +127,20 @@ export interface AvvisoDashboard { id: string; created_at: string; updated_at?: 
   voci: { icona: string; testo: string; link?: string; il?: string }[];
   /** 27/10/2026: pulsante sul banner (es. Gianni Gallo: spedisci + fattura da incassare) */
   azione?: { tipo: "spedisci_fattura"; etichetta?: string } | null }
+/** 30/10/2026 (Christian): NOTIFICA DA GESTIRE — LETTA e CHIUSA sono stati separati; resta visibile finché non è chiusa con l'esito. */
+export interface NotificaGestire { id: string; created_at: string; updated_at?: string; scheda_id: string | null; sigla?: string | null;
+  cliente?: string | null; prodotto?: string | null; titolo: string; storia: string | null; da_fare: string | null;
+  livello: "info" | "attenzione" | "urgente"; creata_da: string | null; letta_il: string | null; letta_da: string | null;
+  chiusa_il: string | null; chiusa_da: string | null; esito: string | null; telegram_inviato?: boolean }
+export const assNotifiche = (stato: "aperte" | "chiuse" | "tutte" = "aperte", schedaId?: string): Promise<{ notifiche: NotificaGestire[] }> =>
+  fetchAPI(`/api/assistenza/notifiche-gestire?stato=${stato}${schedaId ? `&scheda_id=${encodeURIComponent(schedaId)}` : ""}`);
+export const assNotificheConteggio = (): Promise<{ aperte: number }> => fetchAPI("/api/assistenza/notifiche-gestire/conteggio");
+export const assNotificaCrea = (b: { titolo: string; storia?: string; da_fare?: string; livello: NotificaGestire["livello"]; scheda_id?: string; telegram?: boolean; operatore: string }): Promise<NotificaGestire> =>
+  fetchAPI("/api/assistenza/notifiche-gestire", j(b));
+export const assNotificaLetta = (id: string, operatore: string): Promise<NotificaGestire> => fetchAPI(`/api/assistenza/notifiche-gestire/${id}/letta`, j({ operatore }));
+export const assNotificaChiudi = (id: string, esito: string, operatore: string): Promise<NotificaGestire> =>
+  fetchAPI(`/api/assistenza/notifiche-gestire/${id}/chiudi`, j({ esito, operatore }));
+export const assNotificaRiapri = (id: string, operatore: string): Promise<NotificaGestire> => fetchAPI(`/api/assistenza/notifiche-gestire/${id}/riapri`, j({ operatore }));
 export const assAvvisi = (visti = false): Promise<{ avvisi: AvvisoDashboard[] }> => fetchAPI(`/api/assistenza/avvisi${visti ? "?visti=true" : ""}`);
 export const assAvvisoVisto = (id: string, operatore: string): Promise<AvvisoDashboard> =>
   fetchAPI(`/api/assistenza/avvisi/${id}/visto`, { method: "POST", body: JSON.stringify({ operatore }) });
