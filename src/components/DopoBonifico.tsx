@@ -120,11 +120,9 @@ export function DopoBonifico() {
         await fetchAPI(`/api/assistenza/schede/${d.scheda_id}/dopo-documento`, { method: "POST", body: JSON.stringify({ operatore }) });
       } else {
         await fetchAPI(`/api/assistenza/schede/${d.scheda_id}/consegna`, { method: "POST", body: JSON.stringify({ operatore, modo: come }) });
-        toast.success(`Scheda ${d.sigla}: ${come === "ritiro" ? "riconsegnata" : "spedita"} e chiusa`);
-        if (d.recensione !== "inviata" && confirm(`Scheda ${d.sigla} · ${d.cliente}\n\nChiedere la recensione su Google al cliente (mail + WhatsApp)?`)) {
-          await fetchAPI(`/api/assistenza/schede/${d.scheda_id}/recensione`, { method: "POST", body: JSON.stringify({ operatore }) });
-          toast.success("Recensione chiesta");
-        }
+        // 30/10/2026 (Christian, 63227): niente più domanda automatica sulla recensione dopo la chiusura: con Invio partiva
+        // senza volerlo (7 volte in 2 giorni). Si chiede solo dal riquadro ⭐ della scheda.
+        toast.success(`Scheda ${d.sigla}: ${come === "ritiro" ? "riconsegnata" : "spedita"} e chiusa · la recensione si chiede dalla scheda`);
       }
       carica(true);
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
