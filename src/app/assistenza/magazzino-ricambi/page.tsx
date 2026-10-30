@@ -296,7 +296,7 @@ export default function MagazzinoRicambi() {
   const [sto, setSto] = useState<Riga | null>(null);
   // 29/10/2026: righe spuntate per le etichette in blocco + finestra di stampa
   const [sel, setSel] = useState<Set<number>>(new Set());
-  const [eti, setEti] = useState<{ righe: Riga[]; titolo?: string } | null>(null);
+  const [eti, setEti] = useState<{ righe: Riga[]; titolo?: string; massa?: boolean } | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
 
   const carica = useCallback(async () => {
@@ -457,7 +457,11 @@ export default function MagazzinoRicambi() {
             className="px-3 py-1.5 rounded border inline-flex items-center gap-1 disabled:opacity-40">
             Stampa le spuntate ({sel.size})
           </button>
-          <button type="button" onClick={() => setEti({ righe: stampabili, titolo: `Etichette: ${nomeTipo}${q || modello ? " (filtro)" : ""} · ${stampabili.length} righe` })}
+          <button type="button" onClick={() => {
+              // 30/10/2026 (Christian): prima conferma; la seconda (numero scritto a mano) è nella finestra di stampa
+              if (!confirm(`Preparare le etichette di TUTTA la sezione ${nomeTipo}${q || modello ? " filtrata" : ""} (${stampabili.length} righe)?\nNella finestra successiva dovrai scrivere il numero di etichette per stampare.`)) return;
+              setEti({ righe: stampabili, titolo: `Etichette: ${nomeTipo}${q || modello ? " (filtro)" : ""} · ${stampabili.length} righe`, massa: true });
+            }}
             className="px-3 py-1.5 rounded border inline-flex items-center gap-1" title="Tutte le righe visibili di questa sezione (col filtro, se c'è)">
             Tutta la sezione{q || modello ? " filtrata" : ""} ({stampabili.length})
           </button>
@@ -548,7 +552,7 @@ export default function MagazzinoRicambi() {
       {mov && <Movimenta r={mov.r} tipo={mov.t} onFatto={fatto} onChiudi={() => setMov(null)} />}
       {mod && <Scheda r={mod.r} tipo={tipo} titolare={titolare} stati={stati} onFatto={fatto} onChiudi={() => setMod(null)} />}
       {sto && <Storico r={sto} onChiudi={() => setSto(null)} />}
-      {eti && <StampaEtichetteRicambi righe={eti.righe} titolo={eti.titolo} onClose={() => setEti(null)} />}
+      {eti && <StampaEtichetteRicambi righe={eti.righe} titolo={eti.titolo} massa={eti.massa} onClose={() => setEti(null)} />}
     </div>
   );
 }

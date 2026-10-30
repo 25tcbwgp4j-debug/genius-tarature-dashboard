@@ -24,22 +24,33 @@ const FORMATI: { k: Formato; t: string }[] = [
   { k: "62x29", t: "Rotolo 62x29 mm (solo PDF)" },
 ];
 const MAX = 1500;
+/** 30/10/2026 (Christian): oltre questa soglia (o per una sezione intera) la stampa vuole il numero di etichette scritto a mano */
+const SOGLIA_CONFERMA = 20;
 const giacenza = (r: RigaEtichetta) => Math.max(1, (r.qta_nuovo || 0) + (r.qta_usato || 0));
 const riassunto = (r: RigaEtichetta) => [r.descrizione, r.colore?.toLowerCase(), r.grado && `grado ${r.grado}`, r.condizioni]
   .filter(Boolean).join(" · ");
 
-export function StampaEtichetteRicambi({ righe, titolo, onClose }: { righe: RigaEtichetta[]; titolo?: string; onClose: () => void }) {
+export function StampaEtichetteRicambi({ righe, titolo, onClose, massa }: {
+  righe: RigaEtichetta[]; titolo?: string; onClose: () => void;
+  /** 30/10/2026: aperta da «Tutta la sezione» → seconda conferma obbligatoria prima di stampare */
+  massa?: boolean;
+}) {
   const [copie, setCopie] = useState<Record<number, string>>(() => Object.fromEntries(righe.map((r) => [r.id, String(giacenza(r))])));
   const [formato, setFormato] = useState<Formato>("50x22");
   const [busy, setBusy] = useState<"" | "stampa" | "anteprima">("");
   const n = (id: number) => Math.max(0, Math.round(Number((copie[id] || "0").replace(",", "."))) || 0);
   const totale = righe.reduce((s, r) => s + n(r.id), 0);
   const soloPdf = formato === "62x29";
+  // 30/10/2026 (Christian: «se per sbaglio uno preme il pulsante succede il disastro»): seconda conferma scrivendo il numero
+  const [conferma, setConferma] = useState("");
+  const serveConferma = !!massa || totale > SOGLIA_CONFERMA;
+  const confermato = !serveConferma || Number(conferma.trim()) === totale;
 
   async function esegui(anteprima: boolean) {
     if (busy) return;
     if (!totale) { toast.error("Scrivi quante etichette stampare"); return; }
     if (totale > MAX) { toast.error(`Massimo ${MAX} etichette per volta`); return; }
+    if (!anteprima && !confermato) { toast.error(`Per stampare scrivi ${totale} nella casella di conferma`); return; }
     setBusy(anteprima ? "anteprima" : "stampa");
     try {
       const r: Esito = await fetchAPI("/api/ricambi-apple/etichette/stampa", {
@@ -108,8 +119,15 @@ export function StampaEtichetteRicambi({ righe, titolo, onClose }: { righe: Riga
           <button type="button" disabled={!!busy} onClick={() => esegui(true)} title="Apre il PDF delle etichette senza stamparle"
             className="inline-flex items-center gap-1 rounded border px-3 py-2 text-sm">
             {busy === "anteprima" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />} Anteprima</button>
+          {!soloPdf && serveConferma && (
+            <label className="flex items-center gap-1 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-900 dark:bg-red-950/30 dark:text-red-100">
+              Per stampare scrivi <b>{totale}</b>:
+              <input value={conferma} onChange={(e) => setConferma(e.target.value)} inputMode="numeric" disabled={!!busy}
+                className="w-16 rounded border px-1 py-0.5 text-sm text-black" aria-label="Conferma del numero di etichette" />
+            </label>
+          )}
           {!soloPdf && (
-            <button type="button" disabled={!!busy || !totale} onClick={() => esegui(false)}
+            <button type="button" disabled={!!busy || !totale || !confermato} onClick={() => esegui(false)}
               className="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-2 text-sm text-white disabled:opacity-50">
               {busy === "stampa" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} Stampa {totale > 0 ? totale : ""}</button>
           )}
