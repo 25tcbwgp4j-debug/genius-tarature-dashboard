@@ -21,7 +21,9 @@ const CHIAVE = "assistenza-da-gestire-visti";
 
 /** 27/10/2026 (Christian, 63214): novità scheda per scheda (preventivo appena accettato/rifiutato + cosa chiede il cliente) */
 export interface Novita { id: string; sigla: string; cliente: string | null; prodotto: string | null; tipo: "accettato" | "rifiutato";
-  il: string; canale: string | null; richiesta: string | null }
+  il: string; canale: string | null; richiesta: string | null;
+  /** 30/10/2026 (63249): risposta a un preventivo AGGIUNTIVO su una scheda già in riparazione → avvisato il tecnico */
+  aggiuntivo?: boolean; tecnico?: string | null }
 
 export function DaGestire({ fasi, onApri, novita = [], onScheda }: {
   fasi: FaseCruscotto[] | null; onApri: (fase: string) => void; novita?: Novita[]; onScheda?: (id: string) => void;
@@ -46,7 +48,7 @@ export function DaGestire({ fasi, onApri, novita = [], onScheda }: {
       {novita.map((x) => (
         <button key={`${x.id}-${x.il}`} type="button" onClick={() => onScheda?.(x.id)}
           className={`flex w-full flex-wrap items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left ${x.tipo === "accettato" ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30" : "border-red-300 bg-red-50 dark:bg-red-950/30"}`}>
-          <span className={`rounded px-1.5 text-[11px] font-bold text-white ${x.tipo === "accettato" ? "bg-emerald-600" : "bg-red-600"}`}>🆕 {x.tipo === "accettato" ? "ACCETTATO" : "RIFIUTATO"}</span>
+          <span className={`rounded px-1.5 text-[11px] font-bold text-white ${x.tipo === "accettato" ? "bg-emerald-600" : "bg-red-600"}`}>🆕 {x.aggiuntivo ? "AGGIUNTIVO " : ""}{x.tipo === "accettato" ? "ACCETTATO" : "RIFIUTATO"}</span>
           <b>Scheda {x.sigla}</b><span>{x.cliente}</span><span className="text-xs text-muted-foreground">{x.prodotto}</span>
           <span className="text-xs text-muted-foreground">{x.canale ? `${x.canale} · ` : ""}{new Date(x.il).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
           <span className="text-xs font-medium">{x.tipo === "accettato" ? "→ assegna la riparazione" : "→ invia il pronto (restituzione)"}</span>
