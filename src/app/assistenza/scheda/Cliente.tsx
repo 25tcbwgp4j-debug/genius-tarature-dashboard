@@ -134,6 +134,13 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
                 {f.no_whatsapp && <input className={`${campo} mt-1.5`} value={f.no_whatsapp_nota || ""} placeholder="perché (es. usa il gruppo con noi)"
                   onChange={(e) => set("no_whatsapp_nota", e.target.value)} />}
               </div>
+              {/* 30/10/2026 (Christian, Archimedia/Zanella): niente etichette adesive sui dispositivi, solo nastro carta col numero */}
+              <div className="sm:col-span-3 rounded-md border border-red-200 bg-red-50/60 p-2 dark:border-red-900 dark:bg-red-950/20">
+                <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" className="size-4" checked={!!f.no_etichette}
+                  onChange={(e) => set("no_etichette", e.target.checked)} />🏷️🚫 Niente etichette adesive sui dispositivi: si mette il nastro carta con il numero di scheda</label>
+                {f.no_etichette && <input className={`${campo} mt-1.5`} value={f.no_etichette_nota || ""} placeholder="nota (es. lo ha chiesto il titolare)"
+                  onChange={(e) => set("no_etichette_nota", e.target.value)} />}
+              </div>
             </div>
           </fieldset>
           {/* 24/10/2026: abitudini di consegna: la scheda nuova e il dialogo corriere le usano come valori iniziali */}
@@ -214,6 +221,7 @@ export function RiepilogoCliente({ a, nome, telefono, email }: { a: Anagrafica |
         {a && <PillTipo a={a} />}
         {a?.vuole_fattura && <Pill tono="blu">vuole fattura</Pill>}
         {a?.no_whatsapp && <Pill tono="rosso">🚫 niente WhatsApp</Pill>}
+        {a?.no_etichette && <Pill tono="rosso">🏷️🚫 niente etichette: nastro carta</Pill>}
         {!a && <Pill tono="ambra">non collegato alla rubrica</Pill>}
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">

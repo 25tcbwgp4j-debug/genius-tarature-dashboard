@@ -59,6 +59,7 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, i
 
   if (creata) {
     const es = (creata.esiti?.ricevuta || {}) as Esito;
+    const etSaltata = creata.esiti?.stampa_etichetta as { saltata?: boolean; avviso?: string } | undefined;
     return (
       <Modale titolo={`Scheda ${creata.sigla} creata`} onClose={() => onCreata(creata)}
         piedi={<Button onClick={() => onCreata(creata)}>Apri la scheda</Button>}>
@@ -67,6 +68,8 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, i
             <div className="text-2xl font-bold tabular-nums">N. {creata.sigla}</div>
             <div className="text-muted-foreground">{creata.azienda} · {creata.modello || creata.prodotto}</div>
           </div>
+          {/* 30/10/2026: cliente che non vuole etichette adesive → l'etichetta non è partita, si mette il nastro carta */}
+          {etSaltata?.saltata && <p className="rounded-md border-2 border-red-400 bg-red-50 px-2 py-1.5 font-semibold text-red-900">🏷️🚫 Etichetta NON stampata. {etSaltata.avviso}</p>}
           {/* 26/10/2026 (Christian, 63214): la ricevuta non parte più da sola: si manda a scheda compilata (prossimo passo) */}
           {creata.stato === "in_arrivo" ? <p>Dispositivo in arrivo col corriere: all&apos;arrivo la scheda chiederà di inviare la ricevuta.</p> : !es.mail && !es.whatsapp ? (
             <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-amber-950">La ricevuta d&apos;ingresso <b>non è ancora partita</b>: apri la scheda, finisci di compilarla e premi «INVIA RICEVUTA» (è il prossimo passo).</p>

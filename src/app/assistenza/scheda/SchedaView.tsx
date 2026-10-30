@@ -155,8 +155,11 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     if (!s) return;
     // 26/10/2026 (63228): prima si salva, altrimenti l'etichetta esce coi dati vecchi (es. «DA COMPILARE»)
     if (sporca && !ro && !(await salva(true))) return;
+    // 30/10/2026 (Christian, Archimedia/Zanella): cliente che non vuole etichette adesive → conferma esplicita
+    const etich = tipo === "etichetta" || tipo === "etichetta_accessori";
+    if (etich && s.cliente_no_etichette && !confirm(`⚠️ ${s.cliente_no_etichette}\n\nProcedi comunque con la stampa dell'etichetta?`)) return;
     try {
-      const r = await assAzione(s.id, "stampa", { tipo, copie: 1 });
+      const r = await assAzione(s.id, "stampa", { tipo, copie: 1, conferma_no_etichette: etich && !!s.cliente_no_etichette });
       toast.success(r.simulata ? "Scheda di PROVA: stampa simulata (niente stampanti del negozio), apro il PDF"
         : r.agente_attivo ? `In stampa al banco (${tipo === "etichetta" ? "etichetta Brother" : tipo === "etichetta_accessori" ? "etichette degli accessori" : "A4"})` : "Messa in coda, ma l'agente di stampa non risponde: apro il PDF");
       if (!r.agente_attivo) window.open(tipo === "etichetta" ? assEtichettaUrl(s.id) : tipo === "etichetta_accessori" ? assEtichettaUrl(s.id).replace("/etichetta.pdf", "/etichetta-accessori.pdf") : assDocUrl(s.id, "auto"), "_blank");
@@ -265,6 +268,11 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       {/* 30/10/2026 (Christian): notifiche da gestire della scheda, in alto finché non sono chiuse con l'esito */}
       <NotificheScheda key={`ng-${s.id}`} schedaId={s.id} aperte={s.notifiche_gestire || []} operatore={operatore}
         onCambiata={async () => { window.dispatchEvent(new Event("gl-notifiche")); await ricarica(); onCambiata(); }} />
+      {/* 30/10/2026 (Christian, Archimedia/Zanella): niente etichette adesive sul dispositivo, nastro carta col numero */}
+      {s.cliente_no_etichette && (
+        <div className="rounded-lg border-2 border-red-400 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900 dark:bg-red-950/30 dark:text-red-100">
+          🏷️🚫 {s.cliente_no_etichette}
+        </div>)}
       <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={() => setDlg({ k: "invio", tipo: "trova" })}
         onPreventivo={() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
       <Avanzamento av={s.avanzamento} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)}
