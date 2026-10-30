@@ -27,6 +27,7 @@ import { CercaCliente, RiepilogoCliente, SchedaClienteModal } from "./Cliente";
 import { Comunicazioni, Registro } from "./Comunicazioni";
 import { DialogoCambiaStato, DialogoChiudiTutto, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoStessoModello, type TipoInvio } from "./Dialoghi";
 import { Documenti } from "./Documenti";
+import { InviiProgrammati } from "./InviiProgrammati";
 import { Lavorazione } from "./Lavorazione";
 import { Preventivo, type BozzaPreventivo } from "./Preventivo";
 import { DialogoAssegna, DialogoChiudiVerifica, PannelloTecnici } from "./Tecnici";
@@ -310,15 +311,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         </Modale>
       )}
       <DaRicordare key={s.id} s={s} ro={ro} operatore={operatore} onSalvata={async () => { await ricarica(); onCambiata(); }} />
-      {s.pronto_prog_stato === "programmato" && s.pronto_prog_il && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
-          ⏰ PRONTO programmato per {new Date(s.pronto_prog_il).toLocaleString("it-IT", { timeZone: "Europe/Rome", weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-          {!ro && <Button size="xs" variant="outline" className="ml-auto" onClick={async () => {
-            if (!confirm("Annullare il pronto programmato?")) return;
-            try { setS(await fetchAPI(`/api/assistenza/schede/${s.id}/pronto-programmato?operatore=${encodeURIComponent(operatore || "")}`, { method: "DELETE" })); toast.success("Pronto programmato annullato"); onCambiata(); } catch (e) { toastErrore(e); }
-          }}>Annulla</Button>}
-        </div>)}
-      {s.pronto_prog_stato === "errore" && <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-900">⚠️ Il pronto programmato NON è partito: {s.pronto_prog_esito}. Mandalo con PRONTO.</div>}
+      {/* 30/10/2026: preventivo e pronto programmati (come le Tarature): Invia subito · Modifica orario · Annulla, poi l'esito */}
+      <InviiProgrammati key={`prog-${s.id}-${s.preventivo_prog_il}-${s.pronto_prog_il}`} s={s} ro={ro} operatore={operatore || ""} onScheda={(x) => { setS(x); onCambiata(); }} />
       {!ro && s.stato !== "annullata" && <ComunicazioneCliente key={`com-${s.id}`} s={s} operatore={operatore} invia={(b) => azione("comunicazione", b, "Comunicazione inviata al cliente")}
         togli={async () => { if (!confirm("Togliere la comunicazione dalla scheda? Non comparirà più nelle prossime mail, WhatsApp e PDF.")) return;
           try { await assModifica(s.id, { comunicazione_cliente: null, operatore }); await ricarica(); onCambiata(); toast.success("Comunicazione tolta"); } catch (e) { toastErrore(e); } }} />}
@@ -485,7 +479,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       {dlg?.k === "invio" && <DialogoInvio s={s} tipo={dlg.tipo} onClose={() => setDlg(null)} onInvia={async (body) => {
         const nome = dlg.tipo === "ricevuta" ? "ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "aggiornamento-riparazione" : dlg.tipo === "trova" ? "trova" : "preventivo";
         const corpo = dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento" ? { ...body, tipo: dlg.tipo } : dlg.tipo === "trova" ? { ...body, azione: "invia" } : body;
-        const r = await azione(nome, corpo, dlg.tipo === "ricevuta" ? "Ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "Aggiornamento riparazione" : dlg.tipo === "trova" ? "Istruzioni «Trova il mio» inviate" : "Preventivo inviato");
+        const r = await azione(nome, corpo, dlg.tipo === "ricevuta" ? "Ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "Aggiornamento riparazione" : dlg.tipo === "trova" ? "Istruzioni «Trova il mio» inviate" : body.programma_il ? "Preventivo PROGRAMMATO" : "Preventivo inviato");
         return r ? (r.esito as Esito) : null;
       }} />}
       {dlg?.k === "esito" && <DialogoEsito s={s} righe={bz.righe} onClose={() => setDlg(null)}

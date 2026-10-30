@@ -53,7 +53,7 @@ function Anteprima({ s, corpo }: { s: Scheda; corpo: Record<string, unknown> }) 
 function EsitoInvio({ e }: { e: Esito }) {
   return (
     <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm dark:bg-emerald-950/20">
-      <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="size-4 text-emerald-600" />Fatto</div>
+      <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="size-4 text-emerald-600" />{e.programmato ? `Programmato: parte da solo il ${e.programmato}` : "Fatto"}</div>
       {e.mail && <div><Mail className="mr-1 inline size-3.5" />Mail: {e.mail}</div>}
       {e.whatsapp && <div><MessageCircle className="mr-1 inline size-3.5" />WhatsApp: {e.whatsapp}</div>}
       {e.whatsapp_testo && e.whatsapp && !e.whatsapp.startsWith("in coda") && (
@@ -88,16 +88,20 @@ export function DialogoInvio({ s, tipo, onClose, onInvia }: { s: Scheda; tipo: T
   const [busy, setBusy] = useState(false);
   const [fatto, setFatto] = useState<Esito | null>(null);
   const conNota = tipo === "aggiornamento" || tipo === "aggiornamento_riparazione";
+  // 30/10/2026 (Christian): il PREVENTIVO (e l'aggiornamento) si manda subito o si PROGRAMMA, come il pronto e le Tarature
+  const programmabile = tipo === "preventivo" || tipo === "aggiornamento";
+  const q = useQuando();
+  const programma = programmabile ? q.programma : null;
   async function invia() {
     if (tipo === "aggiornamento_riparazione" && !nota.trim()) { toast.error("Scrivi cosa comunicare al cliente"); return; }
     setBusy(true);
-    try { const r = await onInvia({ invia_mail: mail, invia_wa: wa, nota }); if (r) setFatto(r); } finally { setBusy(false); }
+    try { const r = await onInvia({ invia_mail: mail, invia_wa: wa, nota, ...(programma ? { programma_il: programma } : {}) }); if (r) setFatto(r); } finally { setBusy(false); }
   }
   return (
     <Modale titolo={`${TITOLI[tipo]} — scheda ${s.sigla}`} onClose={onClose} largo
       piedi={fatto ? <Button onClick={onClose}>Chiudi</Button> : <><Button variant="outline" onClick={onClose}>Annulla</Button>
-        <Button disabled={busy || (!mail && !wa && tipo !== "preventivo" && tipo !== "aggiornamento")} onClick={invia}>{busy ? <Loader2 className="animate-spin" /> : <Send />}
-          {mail && wa ? "Invia mail + WhatsApp" : mail ? "Invia solo mail" : wa ? "Solo WhatsApp" : "Registra senza inviare"}</Button></>}>
+        <Button disabled={busy || (!mail && !wa && (!programmabile || q.quando !== "adesso")) || (programmabile && q.quando !== "adesso" && (!programma || q.passato))} onClick={invia}>{busy ? <Loader2 className="animate-spin" /> : <Send />}
+          {programma ? `PROGRAMMA l'invio (${quandoBreve(programma)})` : mail && wa ? "Invia mail + WhatsApp" : mail ? "Invia solo mail" : wa ? "Solo WhatsApp" : "Registra senza inviare"}</Button></>}>
       {fatto ? <EsitoInvio e={fatto} /> : (
         <div className="space-y-3">
           {(tipo === "preventivo" || tipo === "aggiornamento") && <>
@@ -111,6 +115,9 @@ export function DialogoInvio({ s, tipo, onClose, onInvia }: { s: Scheda; tipo: T
               placeholder={tipo === "aggiornamento" ? "es. TROVA IL MIO IPHONE ATTIVO DA DISABILITARE" : "es. il ricambio arriva giovedì, la riparazione sarà pronta venerdì"} /></Campo>}
           <Anteprima s={s} corpo={{ tipo, nota }} />
           <Canali mail={mail} wa={wa} setMail={setMail} setWa={setWa} />
+          {programmabile && <QuandoInvio q={q} titolo="Quando inviarlo al cliente:">
+            {programma && <span className="w-full text-xs text-muted-foreground">Il preventivo resta salvato così com&apos;è adesso (voci, test in ingresso, spedizione{conNota ? ", nota" : ""}) e parte da solo all&apos;ora scelta ({[mail && "mail", wa && "WhatsApp"].filter(Boolean).join(" + ") || "scegli almeno un canale"}). Sulla scheda: Invia subito · Modifica orario · Annulla. Se nel frattempo lo mandi a mano o cambi le voci, non parte.</span>}
+          </QuandoInvio>}
         </div>
       )}
     </Modale>
@@ -195,16 +202,8 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
   const [fatto, setFatto] = useState<Esito | null>(null);
   // 26/10/2026 (Christian, 63226): come per le Tarature, il pronto / consuntivo si manda subito o si PROGRAMMA
   // 26/10/2026: stesse scelte delle Tarature — Adesso · Oggi alle… · Domani alle… · Data e ora a scelta
-  const [quando, setQuando] = useState<"adesso" | "oggi" | "domani" | "libero">("adesso");
-  const [oraOggi, setOraOggi] = useState(prossimaMezzora);
-  const [oraDomani, setOraDomani] = useState("09:30");
-  const [dataLibera, setDataLibera] = useState(() => giornoIso(prossimoLavorativo930()));
-  const [oraLibera, setOraLibera] = useState("09:30");
-  const qs = quando === "oggi" ? { d: giornoIso(new Date()), o: oraOggi } : quando === "domani" ? { d: giornoIso(prossimoLavorativo930()), o: oraDomani }
-    : quando === "libero" ? { d: dataLibera, o: oraLibera } : null;
-  const programma = qs && qs.d && /^\d{2}:\d{2}$/.test(qs.o) ? new Date(`${qs.d}T${qs.o}:00`).toISOString() : null;
-  const passato = !!programma && new Date(programma).getTime() <= Date.now() + 60000;
-  const fuoriOrario = !!qs && !inOrarioNegozio(qs.d, qs.o);
+  const q = useQuando();
+  const { quando, programma, passato } = q;
   // 26/10/2026 (Christian, 63118): a costo zero niente pagamento da chiedere (né bonifico, né consuntivo, né fattura)
   // «1.197,50» e «1197.50» sono lo stesso importo (prima «1.197.50» = 0 = gratis)
   const totNum = (() => { const t = String(tot).trim(); const n = t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t; return Number(n) || 0; })();
@@ -249,17 +248,9 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
           {!lavorazione && !s.lavorazione && <p className="text-xs text-amber-700">La lavorazione è vuota: si riempie con le righe accettate del preventivo.</p>}
           <Anteprima s={s} corpo={pagEff === "fine_mese" ? { ...corpo, tipo: "pronto" } : corpo} />
           <Canali mail={mail} wa={wa} setMail={setMail} setWa={setWa} />
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
-            <span className="text-sm font-medium">Quando avvisare il cliente:</span>
-            <Scelta valore={quando} opzioni={[["adesso", "Adesso"], ["oggi", "Oggi alle…"], ["domani", `${etichettaGiorno(prossimoLavorativo930())} alle…`], ["libero", "Data e ora a scelta"]]} onChange={setQuando} />
-            {quando === "oggi" && <input type="time" className={`${campo} w-28`} value={oraOggi} onChange={(e) => setOraOggi(e.target.value)} />}
-            {quando === "domani" && <input type="time" className={`${campo} w-28`} value={oraDomani} onChange={(e) => setOraDomani(e.target.value)} />}
-            {quando === "libero" && <><input type="date" className={`${campo} w-40`} value={dataLibera} onChange={(e) => setDataLibera(e.target.value)} />
-              <input type="time" className={`${campo} w-28`} value={oraLibera} onChange={(e) => setOraLibera(e.target.value)} /></>}
-            {passato && <span className="w-full text-xs font-medium text-red-700">L&apos;orario è già passato: scegline uno nel futuro (oppure «Adesso»).</span>}
-            {!passato && fuoriOrario && <span className="w-full text-xs text-amber-700">Fuori dall&apos;orario del negozio (lun-ven 9:30-13:30 e 15:00-19:00): il cliente riceverà il messaggio a negozio chiuso.</span>}
+          <QuandoInvio q={q} titolo="Quando avvisare il cliente:">
             {programma && <span className="w-full text-xs text-muted-foreground">La scheda resta in «Riparazione finita · Pronto programmato»: all&apos;ora scelta parte il {gratis ? (cons === "spedizione" ? "«pronto per la spedizione» (nulla da pagare)" : "pronto") : pagEff === "bonifico" || pagEff === "paypal" ? "consuntivo" : "pronto"} ({[mail && "mail", wa && "WhatsApp"].filter(Boolean).join(" + ") || "nessun canale"}) e la scheda diventa PRONTA.</span>}
-          </div>
+          </QuandoInvio>
         </div>
       )}
     </Modale>
@@ -570,3 +561,39 @@ const etichettaGiorno = (d: Date) => {
   const domani = new Date(); domani.setDate(domani.getDate() + 1);
   return d.toDateString() === domani.toDateString() ? "Domani" : d.toLocaleDateString("it-IT", { weekday: "long" }).replace(/^./, (c) => c.toUpperCase());
 };
+
+const adessoMs = () => Date.now();
+/** 30/10/2026: «quando» dell'invio (pronto e preventivo), stesse scelte delle Tarature: Adesso · Oggi alle… · Domani alle… · Data e ora. */
+export function useQuando(iniziale?: string | null) {
+  const ini = iniziale ? new Date(iniziale) : null;
+  const [quando, setQuando] = useState<"adesso" | "oggi" | "domani" | "libero">(ini ? "libero" : "adesso");
+  const [oraOggi, setOraOggi] = useState(prossimaMezzora);
+  const [oraDomani, setOraDomani] = useState("09:30");
+  const [dataLibera, setDataLibera] = useState(() => giornoIso(ini || prossimoLavorativo930()));
+  const [oraLibera, setOraLibera] = useState(() => ini ? ini.toLocaleTimeString("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit", hour12: false }) : "09:30");
+  const qs = quando === "oggi" ? { d: giornoIso(new Date()), o: oraOggi } : quando === "domani" ? { d: giornoIso(prossimoLavorativo930()), o: oraDomani }
+    : quando === "libero" ? { d: dataLibera, o: oraLibera } : null;
+  const programma = qs && qs.d && /^\d{2}:\d{2}$/.test(qs.o) ? new Date(`${qs.d}T${qs.o}:00`).toISOString() : null;
+  const passato = !!programma && new Date(programma).getTime() <= adessoMs() + 60000;
+  const fuoriOrario = !!qs && !inOrarioNegozio(qs.d, qs.o);
+  return { quando, setQuando, oraOggi, setOraOggi, oraDomani, setOraDomani, dataLibera, setDataLibera, oraLibera, setOraLibera, programma, passato, fuoriOrario };
+}
+export type Quando = ReturnType<typeof useQuando>;
+export const quandoBreve = (iso: string) => new Date(iso).toLocaleString("it-IT", { timeZone: "Europe/Rome", weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+export function QuandoInvio({ q, titolo, senzaAdesso, children }: { q: Quando; titolo: string; senzaAdesso?: boolean; children?: React.ReactNode }) {
+  const opz: [Quando["quando"], string][] = [["adesso", "Adesso"], ["oggi", "Oggi alle…"], ["domani", `${etichettaGiorno(prossimoLavorativo930())} alle…`], ["libero", "Data e ora a scelta"]];
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+      <span className="text-sm font-medium">{titolo}</span>
+      <Scelta valore={q.quando} opzioni={senzaAdesso ? opz.filter(([k]) => k !== "adesso") : opz} onChange={q.setQuando} />
+      {q.quando === "oggi" && <input type="time" className={`${campo} w-28`} value={q.oraOggi} onChange={(e) => q.setOraOggi(e.target.value)} />}
+      {q.quando === "domani" && <input type="time" className={`${campo} w-28`} value={q.oraDomani} onChange={(e) => q.setOraDomani(e.target.value)} />}
+      {q.quando === "libero" && <><input type="date" className={`${campo} w-40`} value={q.dataLibera} onChange={(e) => q.setDataLibera(e.target.value)} />
+        <input type="time" className={`${campo} w-28`} value={q.oraLibera} onChange={(e) => q.setOraLibera(e.target.value)} /></>}
+      {q.passato && <span className="w-full text-xs font-medium text-red-700">L&apos;orario è già passato: scegline uno nel futuro{senzaAdesso ? "" : " (oppure «Adesso»)"}.</span>}
+      {!q.passato && q.fuoriOrario && <span className="w-full text-xs text-amber-700">Fuori dall&apos;orario del negozio (lun-ven 9:30-13:30 e 15:00-19:00): il cliente riceverà il messaggio a negozio chiuso.</span>}
+      {children}
+    </div>
+  );
+}
