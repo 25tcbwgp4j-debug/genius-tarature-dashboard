@@ -21,7 +21,7 @@ import { Card } from "@/components/ui/card";
 import { fetchAPI } from "@/lib/api";
 import { StampaEtichetteRicambi } from "./StampaEtichetteRicambi";
 
-type Tipo = "ricambio" | "display" | "scheda_logica" | "top_case" | "garanzia";
+type Tipo = "ricambio" | "display" | "scheda_logica" | "top_case" | "garanzia" | "rotto";
 interface Riga {
   id: number; tipo: Tipo; codice: string | null; mpn: string | null; descrizione: string; modelli: string | null;
   qta_nuovo: number; qta_usato: number; posizione: string | null; scaffale: string | null; confezione: string | null;
@@ -40,6 +40,7 @@ interface Movimento {
 const TIPI: { k: Tipo; t: string }[] = [
   { k: "ricambio", t: "Ricambi Apple" }, { k: "display", t: "Display" }, { k: "scheda_logica", t: "Schede logiche" },
   { k: "top_case", t: "Top case" }, { k: "garanzia", t: "Dispositivi in garanzia" },
+  { k: "rotto", t: "Ricambi rotti (per sostituzione)" },   // 01/11/2026: difettosi tenuti per la sostituzione, a quantità
 ];
 const STATI_TESTO: Record<string, string> = {
   funzionante: "Funzionante", rotto: "Rotto", usato: "Usato", da_verificare: "Da verificare", nuovo: "Nuovo", riservato: "Riservato",
@@ -195,7 +196,7 @@ function Scheda({ r, tipo, titolare, stati, onFatto, onChiudi }: {
     <label className={`text-sm ${cls}`}>{t}<br /><input className={`${inp} w-full`} value={v[k]} onChange={set(k)} /></label>
   );
   const t = r?.tipo || tipo;
-  const pezzo = t !== "ricambio" && t !== "garanzia";
+  const pezzo = t !== "ricambio" && t !== "garanzia" && t !== "rotto";
   const gar = t === "garanzia";
   return (
     <Finestra titolo={nuovo ? `Nuovo: ${TIPI.find((x) => x.k === tipo)?.t}` : `Modifica ${r?.codice || ""}`} onChiudi={onChiudi}>
@@ -377,7 +378,7 @@ export default function MagazzinoRicambi() {
     try { await fetchAPI(`/api/ricambi-apple/${r.id}/ripristina`, { method: "POST" }); toast.success("Ripristinato"); carica(); }
     catch (e) { toast.error(String((e as Error)?.message || e)); }
   };
-  const pezzi = tipo !== "ricambio" && tipo !== "garanzia";
+  const pezzi = tipo !== "ricambio" && tipo !== "garanzia" && tipo !== "rotto";
   const gar = tipo === "garanzia";
   const nomeTipo = TIPI.find((x) => x.k === tipo)?.t || "";
   const stampabili = visibili.filter((r) => r.attivo);
