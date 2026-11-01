@@ -104,7 +104,11 @@ export interface TestoStandard { id: string; titolo: string; categoria: string; 
 export interface ConfigAssistenza { operatori_abilitati: boolean; numerazione_live: boolean; ultimo_numero_filemaker: number | null; admin: boolean;
   visibile: boolean; email_test: string | null; stati: { codice: StatoScheda; etichetta: string }[];
   famiglie: { codice: string; etichetta: string }[]; tecnici: { codice: string; nome: string; attivo: boolean }[]; spedizione_default: { ar?: number };
-  prodotti?: GruppoProdotti[]; riparazione_stati?: { codice: string; etichetta: string }[]; canali_risposta?: { codice: string; etichetta: string }[] }
+  prodotti?: GruppoProdotti[]; riparazione_stati?: { codice: string; etichetta: string }[]; canali_risposta?: { codice: string; etichetta: string }[];
+  /** 01/11/2026: commissione PayPal a carico del cliente (dal backend, paypal_commissione: 3,40% + 0,35 €) */
+  paypal_fee?: PaypalFee }
+export { lordoPaypal, type PaypalFee } from "./paypal-commissione";
+import type { PaypalFee } from "./paypal-commissione";
 export interface VoceListino { id: string; label: string; intervention: string; price: number | null; is_shipping: boolean }
 export interface Coppia { id: string; label: string; first_line: { t: string; nota?: string }; second_line: { t: string; nota?: string } }
 export interface Seriale { seriale: string; codice: string | null; modello: string | null; famiglia: string | null; visti: number; nota: string | null;

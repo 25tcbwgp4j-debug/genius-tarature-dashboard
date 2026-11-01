@@ -155,7 +155,7 @@ function RigaSpedizione({ s, x, ro }: { s: Scheda; x: Spedizione; ro: boolean })
 
 type Trovato = { id: string; fonte: string; codice: string; data: string; importo: number; ordinante: string | null; causale: string | null;
   stato: string; perche: string[]; commissione: number | null };
-type EsitoVerifica = { saldo: number; paypal_con_3: number; trovati: Trovato[];
+type EsitoVerifica = { saldo: number; paypal_con_3: number; paypal_vecchio_3?: number; trovati: Trovato[];
   paypal?: { codice: string; data: string; importo: number; commissione: number; netto: number; amici_familiari: boolean; stato_paypal: string } };
 
 /** 28/10/2026 (Christian, 63188 Medianet): «il cliente dice che ha pagato» → si verifica dalla scheda. Col codice transazione
@@ -184,7 +184,7 @@ function VerificaPagamento({ s }: { s: Scheda }) {
         <div className={`mt-2 rounded-md p-2 ${pp.stato_paypal === "COMPLETED" ? "bg-emerald-50 dark:bg-emerald-950/30" : "bg-amber-50 dark:bg-amber-950/30"}`}>
           <b>PayPal {pp.stato_paypal === "COMPLETED" ? "✓ ARRIVATO" : pp.stato_paypal}</b> · {eur(pp.importo)} il {new Date(pp.data).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
           <br />Commissione {eur(pp.commissione)} · netto {eur(pp.netto)} · {pp.amici_familiari ? "inviato come «Amici e familiari» (nessuna commissione)" : "pagamento per beni e servizi"}
-          <br /><span className="text-xs">Dovuto {eur(e!.saldo)} (con PayPal +3%: {eur(e!.paypal_con_3)}){Math.abs(pp.importo - e!.saldo) > 0.01 && Math.abs(pp.importo - e!.paypal_con_3) > 0.01 ? ` · differenza ${eur(pp.importo - e!.saldo)} sul dovuto` : ""}</span>
+          <br /><span className="text-xs">Dovuto {eur(e!.saldo)} (con la commissione PayPal: {eur(e!.paypal_con_3)}{e!.paypal_vecchio_3 ? `, link vecchi +3%: ${eur(e!.paypal_vecchio_3)}` : ""}){Math.abs(pp.importo - e!.saldo) > 0.01 && Math.abs(pp.importo - e!.paypal_con_3) > 0.01 && Math.abs(pp.importo - (e!.paypal_vecchio_3 || 0)) > 0.01 ? ` · differenza ${eur(pp.importo - e!.saldo)} sul dovuto` : ""}</span>
         </div>
       )}
       {e && (e.trovati.length ? (

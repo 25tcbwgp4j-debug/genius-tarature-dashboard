@@ -3,7 +3,7 @@
 // NUOVA SCHEDA (05/10/2026, specifica §8.6): cliente dalla rubrica (un clic = scheda cliente completa) o nuovo,
 // apparecchio con prodotto a menu e difetto in evidenza. Alla creazione: etichetta Brother SÌ, «Stampa accettazione
 // A4» SEMPRE spenta di default, ricevuta d'ingresso SEMPRE per mail + WhatsApp, PDF della ricevuta da scaricare.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Download, ExternalLink, FileText, Loader2, Mail, MessageCircle, Plus, Printer, Tag, UserRoundPen } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,12 @@ import { Apparecchio, type ValoriApparecchio } from "./Apparecchio";
 import { CercaCliente, PillTipo, SchedaClienteModal } from "./Cliente";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, campo } from "./ui";
+import { DialogoSchedaDoppia, nuovaChiave, schedaDoppia, type SchedaEsistente } from "./SchedaDoppia";
 
-export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, iniziale }: {
+export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, onApriEsistente, iniziale }: {
   cfg: ConfigAssistenza | null; operatore: string; setOperatore: (o: Operatore) => void; onClose: () => void; onCreata: (s: Scheda) => void;
+  /** 01/11/2026: dal dialog «esiste già una scheda aperta» → apre quella invece di crearne una doppia */
+  onApriEsistente?: (id: string) => void;
   /** 24/10/2026: scheda aperta da una richiesta WhatsApp: cliente e difetto già compilati */
   iniziale?: { azienda?: string; telefono?: string; email?: string; difetto?: string; prodotto?: string; seriale?: string;
     /** 25/10/2026: scheda aperta dalla chat WhatsApp 334 con il cliente già in rubrica */
@@ -31,6 +34,11 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, i
   const [stampaEt, setStampaEt] = useState(true);
   const [inArrivo, setInArrivo] = useState(false);
   const [busy, setBusy] = useState(false);
+  // 01/11/2026 (63268/63269 create a 3 secondi): blocco SINCRONO dell'invio (lo stato React arriva dopo, e Ctrl/Cmd+Invio
+  // non passava dal pulsante disabilitato) + chiave di idempotenza del modulo: il server restituisce la scheda già creata
+  const inviando = useRef(false);
+  const chiave = useRef(nuovaChiave());
+  const [doppia, setDoppia] = useState<SchedaEsistente | null>(null);
   const [creata, setCreata] = useState<(Scheda & { esiti: Record<string, unknown> }) | null>(null);
   const setA = (k: keyof ValoriApparecchio, v: unknown) => setApp((x) => ({ ...x, [k]: v }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -43,18 +51,25 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, i
       referente: a.referente || x.referente, indirizzo_spedizione: sped || [a.indirizzo, a.cap, a.comune, a.provincia].filter(Boolean).join(" ") || x.indirizzo_spedizione }));
   }
 
-  async function crea() {
+  async function crea(forza = false) {
+    if (inviando.current || creata) return;
     if (!operatore) { toast.error("Scegli l'operatore"); return; }
     if (!cli.azienda.trim()) { toast.error("Scrivi il nome del cliente"); return; }
     // 26/10/2026: anche un prodotto scritto a mano (non Apple, senza famiglia del menu) va bene: la famiglia la deduce il server
     if (!app.famiglia && !(app.prodotto || "").trim()) { toast.error("Scegli il prodotto dal menu o scrivilo a mano"); return; }
+    inviando.current = true;
     setBusy(true);
     try {
       const s = await assCrea({ ...cli, ...app, prodotto: app.prodotto || app.famiglia, operatore, anagrafica_id: anag?.id, in_arrivo: inArrivo,
-        invia_ricevuta: false, invia_wa: true, stampa: inArrivo ? {} : { accettazione: stampaA4, etichetta: stampaEt } });
+        invia_ricevuta: false, invia_wa: true, stampa: inArrivo ? {} : { accettazione: stampaA4, etichetta: stampaEt },
+        chiave_idempotenza: chiave.current, ...(forza ? { forza_duplicato: true } : {}) });
       toast.success(`Scheda ${s.sigla} creata`);
+      setDoppia(null);
       setCreata(s);
-    } catch (e) { toastErrore(e); } finally { setBusy(false); }
+    } catch (e) {
+      const es = schedaDoppia(e);
+      if (es) setDoppia(es); else toastErrore(e);
+    } finally { inviando.current = false; setBusy(false); }
   }
 
   if (creata) {
@@ -102,8 +117,8 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, i
       piedi={<>
         <span className="mr-auto hidden text-xs text-muted-foreground sm:block">Ctrl/Cmd+Invio per creare</span>
         <Button variant="outline" onClick={onClose}>Annulla</Button>
-        <Button disabled={busy || !operatore} onClick={crea}>{busy ? <Loader2 className="animate-spin" /> : <Plus />}Crea scheda</Button></>}>
-      <div className="space-y-4" onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") crea(); }}>
+        <Button disabled={busy || !operatore} onClick={() => crea()}>{busy ? <Loader2 className="animate-spin" /> : <Plus />}Crea scheda</Button></>}>
+      <div className="space-y-4" onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !e.repeat) crea(); }}>
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold">Cliente</div>
@@ -145,6 +160,8 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, i
           <SceltaOperatore value={operatore as Operatore} onChange={setOperatore} compatto />
         </div>
       </div>
+      {doppia && <DialogoSchedaDoppia esistente={doppia} busy={busy} onClose={() => setDoppia(null)} onCreaComunque={() => crea(true)}
+        onApri={(id) => { setDoppia(null); if (onApriEsistente) onApriEsistente(id); else window.location.href = `/assistenza?id=${id}`; }} />}
       {schedaCli && (
         <SchedaClienteModal id={anag?.id || null} iniziale={anag ? undefined : { denominazione: cli.azienda, cellulare: cli.telefono, email: cli.email, referente: cli.referente }}
           onClose={() => setSchedaCli(false)} onSalvato={(a) => { daRubrica(a); setSchedaCli(false); }} />

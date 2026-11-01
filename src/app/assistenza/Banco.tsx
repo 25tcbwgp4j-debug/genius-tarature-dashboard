@@ -290,6 +290,7 @@ export function Banco() {
       {nuova && <NuovaScheda cfg={cfg} operatore={operatore} setOperatore={setOperatore} onClose={() => { setNuova(false); setDaRichiesta(null); }}
         iniziale={daRichiesta ? { azienda: daRichiesta.cliente?.denominazione || daRichiesta.nome || "", telefono: daRichiesta.telefono || "",
           email: daRichiesta.email || "", difetto: daRichiesta.problema || "", prodotto: daRichiesta.dispositivo || "", seriale: daRichiesta.seriale || "" } : undefined}
+        onApriEsistente={(id) => { setDaRichiesta(null); setNuova(false); apri(id); }}
         onCreata={async (s) => {
           if (daRichiesta) {
             try { await assRichiestaCollega(daRichiesta.id, { scheda_id: s.id, operatore }); toast.success(`Richiesta R-${daRichiesta.id.slice(0, 6).toUpperCase()} → scheda ${s.sigla}`); }

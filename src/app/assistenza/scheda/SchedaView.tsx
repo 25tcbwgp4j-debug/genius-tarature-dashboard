@@ -33,6 +33,7 @@ import { Preventivo, type BozzaPreventivo } from "./Preventivo";
 import { DialogoAssegna, DialogoChiudiVerifica, PannelloTecnici } from "./Tecnici";
 import { NotificheScheda } from "../NotificheGestire";
 import { Badge, Campo, Modale, Pill, Sezione, area, campo } from "./ui";
+import { DialogoDuplica, nuovaChiave } from "./SchedaDoppia";
 
 type Bozza = Partial<Scheda>;
 type Dialogo = null | { k: "invio"; tipo: TipoInvio } | { k: "chiudi_tutto" } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
@@ -65,6 +66,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   function chiudiPassaggio() { try { if (chiaveChiuso) sessionStorage.setItem(chiaveChiuso, "1"); } catch { /* */ } setPassaggioChiuso(true); }
   const [busy, setBusy] = useState("");
   const [dlg, setDlg] = useState<Dialogo>(null);
+  const [duplica, setDuplica] = useState(false);
   const refPrev = useRef<HTMLDivElement>(null);
   const refDoc = useRef<HTMLDivElement>(null);
   const refTec = useRef<HTMLDivElement>(null);
@@ -363,12 +365,13 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <span className="ml-auto" />
         <a className="text-xs text-muted-foreground underline" href={assTrackUrl(s.token_pubblico)} target="_blank" rel="noreferrer" title="Pagina pubblica per il cliente (senza dati personali)">pagina cliente</a>
         {/* 26/10/2026 (62245): DUPLICA anche dalle schede chiuse e storiche (la scheda originale non cambia) */}
-        <Button size="sm" variant="outline" title="Nuova scheda identica (stesso cliente e dispositivo, difetto e accessori): poi correggi quello che serve" onClick={async () => {
+        {/* 01/11/2026 (63257, 63267-63269): niente più confirm() con «Annulla» che creava comunque la scheda */}
+        <Button size="sm" variant="outline" title="Nuova scheda dello stesso cliente: identica oppure per un altro dispositivo" onClick={() => {
           if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
-          const stesso = confirm("Duplica la scheda.\n\nOK = scheda IDENTICA (stesso cliente, stesso dispositivo, difetto e accessori)\nAnnulla = solo stesso cliente, dispositivo nuovo");
-          try { const n = await assAzione(s.id, "duplica", { operatore, stesso_dispositivo: stesso, identica: stesso }); toast.success(`Nuova scheda ${n.sigla}: correggi quello che serve`); onCambiata(); onApri(n.id); }
-          catch (e) { toastErrore(e); }
+          setDuplica(true);
         }}><Copy />Duplica</Button>
+        {duplica && <DialogoDuplica id={s.id} sigla={s.sigla} prodotto={s.prodotto} operatore={operatore} onClose={() => setDuplica(false)}
+          onApri={(id) => { setDuplica(false); onApri(id); }} onFatta={(n) => { setDuplica(false); onCambiata(); onApri(n.id); }} />}
         {/* 25/10/2026: la chat WhatsApp 334 di questo cliente (dati di fatturazione, foto, risposte) */}
         {s.telefono && <Button size="sm" variant="outline" title="Apri la chat WhatsApp staff 334 di questo numero"
           onClick={() => { window.location.href = `/chat-apple?tab=staff&tel=${encodeURIComponent(s.telefono || "")}`; }}><MessageSquareText />Chat WhatsApp</Button>}
@@ -484,7 +487,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       }} />}
       {dlg?.k === "esito" && <DialogoEsito s={s} righe={bz.righe} onClose={() => setDlg(null)}
         onEsito={async (body) => !!(await azione("esito-preventivo", body, body.esito === "accettato" ? "ACCETTATO: in riparazione, lavorazione precompilata" : "Preventivo RIFIUTATO"))} />}
-      {dlg?.k === "pronto" && <DialogoPronto s={s} lavorazione={String(v("lavorazione") || "")} totale={(v("totale_lavorazione") as number | null) ?? null} onClose={() => setDlg(null)}
+      {dlg?.k === "pronto" && <DialogoPronto paypalFee={cfg?.paypal_fee} s={s} lavorazione={String(v("lavorazione") || "")} totale={(v("totale_lavorazione") as number | null) ?? null} onClose={() => setDlg(null)}
         onInvia={async (body) => { const r = await azione("pronto", body, body.programma_il ? "PRONTO programmato" : "PRONTO"); return r ? (r.esito as Esito) : null; }} />}
       {dlg?.k === "cambia_stato" && <DialogoCambiaStato s={s} onClose={() => setDlg(null)} onConferma={async (b) => !!(await azione("riapri", b, "Stato della scheda cambiato"))} />}
       {dlg?.k === "pagato" && <DialogoPagato s={s} onClose={() => setDlg(null)} onPagato={async (body) => !!(await azione("pagamento", body, "Pagamento registrato"))} />}
@@ -565,6 +568,8 @@ function RiferimentiScheda({ s, v, set, ro, operatore, onApri, onCambiata, salva
   onApri: (id: string) => void; onCambiata: () => void; salva: (silenziosa?: boolean) => Promise<boolean>;
 }) {
   const [modifica, setModifica] = useState(false);
+  // 01/11/2026: «altra nel pacco» una volta sola anche col doppio clic (blocco sincrono + chiave di idempotenza del pacco)
+  const pacInvio = useRef(false);
   const comb = (v("spedizione_combinata") as string) || "";
   const voci = [["Rif. cliente", v("rif_cliente")], ["DDT", v("ddt_cliente")], ["Schede precedenti", v("schede_precedenti")]].filter(([, x]) => x) as [string, string][];
   async function creaCodice() {
@@ -583,13 +588,15 @@ function RiferimentiScheda({ s, v, set, ro, operatore, onApri, onCambiata, salva
     if (x === null) return;
     const quante = Number(x.trim());
     if (!Number.isInteger(quante) || quante < 1 || quante > 20) { toast.error("Scrivi un numero da 1 a 20"); return; }
-    if (!(await salva(true))) return;
+    if (pacInvio.current) return;
+    pacInvio.current = true;
     try {
-      const r = await assAzione(s.id, "duplica", { operatore, combinata: true, quante });
+      if (!(await salva(true))) return;
+      const r = await assAzione(s.id, "duplica", { operatore, combinata: true, quante, chiave_idempotenza: nuovaChiave() });
       const sigle = ((r.schede as { sigla: string }[]) || []).map((y) => y.sigla).join(", ");
       toast.success(`${quante === 1 ? "Creata la scheda" : `Create ${quante} schede`} ${sigle} nel pacco ${comb}: compila prodotto, seriale e difetto, poi manda la ricevuta`, { duration: 9000 });
       onCambiata(); onApri(r.id);
-    } catch (e) { toastErrore(e); }
+    } catch (e) { toastErrore(e); } finally { pacInvio.current = false; }
   }
   const pacco = s.collegamenti?.combinata || [];
   return (

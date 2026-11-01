@@ -60,7 +60,7 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
               title="Il pacco è già partito (etichetta fatta altrove) o il cliente l'ha ritirato: registra solo la consegna">Già spedito: CONSEGNA</Button>)}
           {av.prossimo.alternativa === "invia_consuntivo" && (
             <Button size="sm" variant="outline" className="ml-auto border-emerald-400" disabled={disabilitato} onClick={() => onAzione("pronto")}
-              title="Rimanda al cliente il consuntivo di pagamento (mail + WhatsApp + PDF, con bonifico o PayPal +3%): si apre il pannello PRONTO già compilato">📨 Invia consuntivo di pagamento</Button>)}
+              title="Rimanda al cliente il consuntivo di pagamento (mail + WhatsApp + PDF, con bonifico o PayPal + commissione): si apre il pannello PRONTO già compilato">📨 Invia consuntivo di pagamento</Button>)}
           {/* 28/10/2026 (63130): corriere del cliente — chiedere (o richiedere di nuovo) l'etichetta, oppure consegnare */}
           {(av.prossimo.alternativa === "richiedi_etichetta" || (av.prossimo.alternativa === "consegna" && az !== "spedisci")) && (
             <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione(av.prossimo!.alternativa!)}>

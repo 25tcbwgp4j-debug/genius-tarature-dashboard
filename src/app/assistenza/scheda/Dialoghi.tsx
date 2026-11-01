@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { CheckCircle2, Copy, Loader2, Mail, MessageCircle, Send, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
-import { assAnteprimaMail, assAzione, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, pagaFineMese, type DocPdf, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
+import { assAnteprimaMail, assAzione, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, lordoPaypal, pagaFineMese, type DocPdf, type PaypalFee, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
 import { blocchi, ipotesiDelBlocco, isActive, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, Pill, Scelta, area, campo } from "./ui";
@@ -181,8 +181,10 @@ export function DialogoEsito({ s, righe, onClose, onEsito }: { s: Scheda; righe:
 
 // ---------------------------------------------------------------------------
 /** PRONTO: ritiro in negozio o per corriere (nostro o del cliente), pagamento, totale, esito; poi mail + WhatsApp. */
-export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
+export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypalFee }: {
   s: Scheda; lavorazione: string; totale: number | string | null; onClose: () => void; onInvia: (b: Record<string, unknown>) => Promise<Esito | null>;
+  /** 01/11/2026: commissione PayPal vera (da /config) al posto del +3% */
+  paypalFee?: PaypalFee;
 }) {
   const [cons, setCons] = useState<"ritiro" | "spedizione">((s.consegna_modo as "ritiro") || (s.spedizione_tipo === "ar" || s.spedizione_tipo === "solo_ritorno" ? "spedizione" : "ritiro"));
   const [corr, setCorr] = useState<"noi" | "cliente">(s.consegna_corriere || "noi");
@@ -233,9 +235,9 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia }: {
             <Campo label="Pagamento">
               {gratis ? <div className={`${campo} bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-200`}>{s.pagata ? "Già pagata: nessun pagamento da chiedere" : "Nessun pagamento (totale € 0)"}</div> : (
               <select className={campo} value={pagEff} onChange={(e) => setPag(e.target.value)}>
-                <option value="">Al banco (contanti / POS)</option><option value="bonifico">Bonifico (IBAN)</option><option value="paypal">PayPal (+3%)</option><option value="fine_mese">Fine mese (rivenditore)</option></select>)}
+                <option value="">Al banco (contanti / POS)</option><option value="bonifico">Bonifico (IBAN)</option><option value="paypal">PayPal (+ commissione)</option><option value="fine_mese">Fine mese (rivenditore)</option></select>)}
               {!gratis && pagEff === "paypal" && <span className="mt-1 block rounded bg-sky-50 px-1 text-xs text-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
-                PayPal: si chiede {eur(Math.round((totNum - (Number(s.acconto) || 0)) * 103) / 100)} (saldo + 3% commissioni); mail, WhatsApp e PDF del consuntivo si rifanno con PayPal{s.pagamento_abituale === "paypal" ? " · cliente che paga di solito con PayPal" : ""}</span>}
+                PayPal: si chiede {paypalFee ? eur(lordoPaypal(totNum - (Number(s.acconto) || 0), paypalFee)) : "il saldo + la commissione"} (saldo + commissione PayPal{paypalFee ? ` ${String(paypalFee.pct).replace(".", ",")}% + ${eur(paypalFee.fisso)}` : ""}: a noi arriva netto il saldo); mail, WhatsApp e PDF del consuntivo si rifanno con PayPal{s.pagamento_abituale === "paypal" ? " · cliente che paga di solito con PayPal" : ""}</span>}
             </Campo>
             <Campo label="Totale € (IVA compresa)"><input className={`${campo} text-right font-semibold`} inputMode="decimal" value={tot} onChange={(e) => setTot(e.target.value)} />
               {ricavato && <span className="mt-1 block rounded bg-amber-100 px-1 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">Ricavato dalle voci accettate del preventivo + spedizione (i totali della scheda erano vuoti): controllalo</span>}</Campo>
