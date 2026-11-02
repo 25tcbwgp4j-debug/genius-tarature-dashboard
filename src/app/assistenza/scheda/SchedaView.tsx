@@ -192,9 +192,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "stato_riparazione") refTec.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (a === "aggiornamento") setDlg({ k: "invio", tipo: "aggiornamento_riparazione" });
     else if (a === "trova") setDlg({ k: "invio", tipo: "trova" });
-    // 26/10/2026 (63202): rifiutato → chiuso / da rimontare (tecnico) / rimontato → pronto negativo
+    // 02/11/2026 (Christian, 63270): rifiutato → da richiudere (tecnico) → richiuso → solo allora pronto negativo
     // 26/10/2026 (63118): preventivo negativo → RIFIUTATO subito, senza mandarlo da accettare
-    else if (a === "rifiutato_diretto") { if (confirm("Preventivo NEGATIVO: segnare la scheda come RIFIUTATA senza inviare il preventivo al cliente?\nPoi si va al PRONTO (restituzione).")) azione("esito-preventivo", { esito: "rifiutato", canale: "negozio" }, "Preventivo RIFIUTATO (negativo, non inviato)"); }
+    else if (a === "rifiutato_diretto") { if (confirm("Preventivo NEGATIVO: segnare la scheda come RIFIUTATA senza inviare il preventivo al cliente?\nPoi un tecnico lo richiude e si manda il PRONTO (restituzione).")) azione("esito-preventivo", { esito: "rifiutato", canale: "negozio" }, "Preventivo RIFIUTATO (negativo, non inviato)"); }
     // 26/10/2026 (63214): la ricevuta d'ingresso si manda a scheda compilata (oppure «Non serve»)
     else if (a === "ricevuta") apriInvio("ricevuta");
     else if (a === "ricevuta_no") { if (s && confirm("Non mandare la ricevuta d'ingresso per questa scheda?")) assModifica(s.id, { ricevuta_da_inviare: false, operatore }).then(async () => { await ricarica(); onCambiata(); }).catch(toastErrore); }
@@ -202,7 +202,6 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "salta_verifica") { if (confirm("Saltare la verifica? Si passa direttamente al preventivo.")) azione("salta-passo", { passo: "verifica" }, "Verifica saltata"); }
     else if (a === "salta_preventivo") { if (confirm("Saltare il preventivo? Si considera accettato senza inviarlo al cliente e si passa alla riparazione.")) azione("salta-passo", { passo: "preventivo" }, "Preventivo saltato: si passa alla riparazione"); }
     else if (a === "rimontaggio") setDlg({ k: "assegna_rimontaggio" });
-    else if (a === "rimontaggio_chiuso") azione("rimontaggio", { azione: "non_serve" }, "Dispositivo chiuso: ora invia il PRONTO (negativo)");
     else if (a === "rimontato") azione("rimontaggio", { azione: "fatto" }, "Richiuso: ora invia il PRONTO (negativo)");
   }
   // 26/10/2026: «Trova il mio» attivo / risolto (la riparazione resta bloccata finché il cliente non abilita la riparazione)
@@ -288,7 +287,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
                 title="Rimanda il preventivo (stesse voci): il cliente torna a dover accettare o rifiutare">Preventivo</Button>
               <Button size="xs" variant="outline" disabled={!!busy} onClick={() => apriInvio("aggiornamento")}
                 title="Rimanda l'aggiornamento del preventivo (con il preventivo aggiuntivo, se c'è)">Aggiornamento preventivo</Button></>}
-            {(st === "pronto" || (st === "accettato" && s.riparazione_stato === "finita") || st === "rifiutato") && (
+            {(st === "pronto" || (st === "accettato" && s.riparazione_stato === "finita") || (st === "rifiutato" && s.rimontaggio === "fatto")) && (
               <Button size="xs" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}
                 title="Rimanda il pronto / consuntivo da pagare (mail + WhatsApp, con IBAN e PDF)">Pronto da pagare</Button>)}</>}
           {/* 28/10/2026 (Christian): preventivi e modifiche dettate anche da iPhone */}
@@ -353,7 +352,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {!ro && (st === "preventivo_inviato" || (st === "da_preventivare" && bz.righe.length > 0)) && (
           <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "esito" })}>Accettato / Rifiutato</Button>)}
         {!ro && st === "accettato" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "invio", tipo: "aggiornamento_riparazione" })}><MessageSquareText />Aggiornamento riparazione</Button>}
-        {!ro && st !== "in_arrivo" && st !== "consegnato" && <Button size="sm" variant={(st === "accettato" && s.riparazione_stato === "finita") || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
+        {!ro && st !== "in_arrivo" && st !== "consegnato" && !(st === "rifiutato" && s.rimontaggio !== "fatto") && <Button size="sm" variant={(st === "accettato" && s.riparazione_stato === "finita") || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
         {!ro && st === "pronto" && <Button size="sm" variant={s.pagata || s.saldo <= 0 ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "consegna" })}>CONSEGNA</Button>}
         <span className="mx-0.5 hidden h-6 w-px bg-border sm:block" />
         <MenuPdf id={s.id} prima={() => salva(true)} />
@@ -512,7 +511,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         testo="Chi fa la riparazione? Poi si aggiorna lo stato: attesa ricambi, aggiornamento al cliente, serve più tempo, «Trova il mio dispositivo», finita."
         onClose={() => setDlg(null)} onAssegna={async (t, m) => !!(await azione("assegna-riparazione", { tecnico: t, messaggio: m }, `Riparazione assegnata a ${t}${m ? " con messaggio" : ""}`))} />}
       {dlg?.k === "assegna_rimontaggio" && <DialogoAssegna titolo={`Rifiutato da richiudere — scheda ${s.sigla}`} tecnici={tecnici} attuale={s.tecnico_riparazione}
-        testo="Il preventivo è rifiutato e il dispositivo è stato smontato per la verifica: chi lo richiude? Quando l'ha richiuso il tecnico segna «Richiuso: pronto da ritirare» e si invia il PRONTO negativo."
+        testo="Il preventivo è rifiutato: chi richiude il dispositivo? Quando l'ha richiuso il tecnico segna «Richiuso» e solo allora si invia il PRONTO negativo."
         onClose={() => setDlg(null)} onAssegna={async (t) => !!(await azione("rimontaggio", { azione: "serve", tecnico: t }, `Da richiudere: assegnato a ${t}`))} />}
       {dlg?.k === "stesso" && <DialogoStessoModello s={s} ro={ro} onClose={() => setDlg(null)} onApri={onApri}
         onCopia={(r) => { setBz((x) => ({ ...x, righe: r })); setDlg(null); toast.success("Preventivo copiato: controlla i prezzi e salva"); }} />}

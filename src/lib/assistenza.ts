@@ -37,6 +37,7 @@ export interface Anagrafica { id: string; denominazione: string; piva?: string |
   spedizioni_carico?: "noi" | "cliente" | "misto" | null; spedizione_tipo_default?: "ar" | "solo_ritiro" | "solo_ritorno" | null; spedizione_importo_default?: number | string | null }
 export interface SchedaCliente extends Anagrafica { schede: { id: string; sigla: string; prodotto: string | null; modello: string | null; difetto: string | null; stato: string; created_at: string }[] }
 export interface Scheda extends SchedaBreve {
+  rimontaggio?: string | null;
   /** 27/10/2026 (63182): calcolati dal backend (stessa regola di pronto, PDF, mail) */
   totale_dovuto?: number; esito_pronto?: string; seriale_nuovo?: string | null; imei_nuovo?: string | null; consegna_effettiva?: "ritiro" | "spedizione";
   anagrafica_id: string | null; referente: string | null; telefono_referente: string | null; indirizzo_spedizione: string | null; imei: string | null;
