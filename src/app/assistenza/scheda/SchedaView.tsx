@@ -202,6 +202,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "salta_verifica") { if (confirm("Saltare la verifica? Si passa direttamente al preventivo.")) azione("salta-passo", { passo: "verifica" }, "Verifica saltata"); }
     else if (a === "salta_preventivo") { if (confirm("Saltare il preventivo? Si considera accettato senza inviarlo al cliente e si passa alla riparazione.")) azione("salta-passo", { passo: "preventivo" }, "Preventivo saltato: si passa alla riparazione"); }
     else if (a === "rimontaggio") setDlg({ k: "assegna_rimontaggio" });
+    // 02/11/2026 (Christian, 63278): scheda ferma perché abbiamo chiesto qualcosa al cliente
+    else if (a === "risposta_cliente") azione("attesa-cliente", { azione: "togli" }, "Il cliente ha risposto: la scheda riprende il suo giro");
     else if (a === "rimontato") azione("rimontaggio", { azione: "fatto" }, "Richiuso: ora invia il PRONTO (negativo)");
   }
   // 26/10/2026: «Trova il mio» attivo / risolto (la riparazione resta bloccata finché il cliente non abilita la riparazione)
@@ -351,6 +353,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {!ro && <Button size="sm" variant="outline" disabled={!!busy || st === "in_arrivo"} onClick={() => setDlg({ k: "invio", tipo: "ricevuta" })}><Mail />Ricevuta</Button>}
         {!ro && (st === "preventivo_inviato" || (st === "da_preventivare" && bz.righe.length > 0)) && (
           <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "esito" })}>Accettato / Rifiutato</Button>)}
+        {!ro && ["da_preventivare", "preventivo_inviato", "accettato"].includes(st) && !s.attesa_cliente_il && (
+          <Button size="sm" variant="outline" disabled={!!busy} title="Abbiamo chiesto qualcosa al cliente: la scheda resta ferma nella sua sezione finché non risponde. Non manda nulla al cliente."
+            onClick={() => azione("attesa-cliente", { azione: "metti" }, "Scheda in attesa di risposta dal cliente")}>💬 In attesa di risposta dal cliente</Button>)}
         {!ro && st === "accettato" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "invio", tipo: "aggiornamento_riparazione" })}><MessageSquareText />Aggiornamento riparazione</Button>}
         {!ro && st !== "in_arrivo" && st !== "consegnato" && !(st === "rifiutato" && s.rimontaggio !== "fatto") && <Button size="sm" variant={(st === "accettato" && s.riparazione_stato === "finita") || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
         {!ro && st === "pronto" && <Button size="sm" variant={s.pagata || s.saldo <= 0 ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "consegna" })}>CONSEGNA</Button>}

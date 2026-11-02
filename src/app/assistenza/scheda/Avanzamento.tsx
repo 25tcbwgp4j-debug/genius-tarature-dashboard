@@ -14,7 +14,7 @@ const AZIONI: Record<string, string> = {
   pronto: "PRONTO", incassa: "Incassa / Pagato", consegna: "CONSEGNA", spedisci: "🚚 Crea l'etichetta di riconsegna",
   assegna_verifica: "Assegna in verifica", chiudi_verifica: "Scrivi e chiudi la verifica", assegna_riparazione: "Assegna in riparazione",
   stato_riparazione: "Stato riparazione", aggiornamento: "Aggiornamento al cliente", trova: "Invia le istruzioni «Trova il mio»",
-  rimontaggio: "Da richiudere: assegna a un tecnico", rimontato: "✔ Richiuso",
+  rimontaggio: "Da richiudere: assegna a un tecnico", rimontato: "✔ Richiuso", risposta_cliente: "✔ Il cliente ha risposto",
   ricevuta: "INVIA RICEVUTA", in_vendita: "🏷️ Metti IN VENDITA", richiedi_etichetta: "📨 Pagamento arrivato: chiedi l'etichetta di ritorno",
 };
 
