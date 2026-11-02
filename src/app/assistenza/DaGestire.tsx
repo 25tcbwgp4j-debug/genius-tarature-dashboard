@@ -12,7 +12,7 @@ const VOCI: [string, (n: number) => string][] = [
   ["ricambi_arrivati", (n) => `🔧 ${n} ${n === 1 ? "ricambio arrivato" : "ricambi arrivati"}: il tecnico può riparare`],
   ["da_assegnare_riparazione", (n) => `👍 ${n} ${n === 1 ? "preventivo accettato" : "preventivi accettati"}: assegna la riparazione`],
   ["preventivi_da_inviare", (n) => `📨 ${n} ${n === 1 ? "preventivo pronto" : "preventivi pronti"} da inviare`],
-  ["rifiutati", (n) => `↩️ ${n} ${n === 1 ? "rifiutato" : "rifiutati"}: invia il pronto (restituzione)`],
+  ["rifiutati", (n) => `↩️ ${n} ${n === 1 ? "rifiutato" : "rifiutati"}: da richiudere, poi il pronto (restituzione)`],
   ["da_spedire_noi", (n) => `📦 ${n} ${n === 1 ? "pagato" : "pagati"} da spedire`],
   ["trova_attivo", (n) => `🔒 ${n} con «Trova il mio» da disattivare`],
   ["da_assegnare_verifica", (n) => `🔍 ${n} da assegnare in verifica`],
