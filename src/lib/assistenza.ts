@@ -149,7 +149,14 @@ export const assNotificaLetta = (id: string, operatore: string): Promise<Notific
 export const assNotificaChiudi = (id: string, esito: string, operatore: string): Promise<NotificaGestire> =>
   fetchAPI(`/api/assistenza/notifiche-gestire/${id}/chiudi`, j({ esito, operatore }));
 export const assNotificaRiapri = (id: string, operatore: string): Promise<NotificaGestire> => fetchAPI(`/api/assistenza/notifiche-gestire/${id}/riapri`, j({ operatore }));
-export const assAvvisi = (visti = false): Promise<{ avvisi: AvvisoDashboard[] }> => fetchAPI(`/api/assistenza/avvisi${visti ? "?visti=true" : ""}`);
+export const assAvvisi = (visti = false, attivita: "apple" | "tarature" = "apple"): Promise<{ avvisi: AvvisoDashboard[] }> =>
+  fetchAPI(`/api/assistenza/avvisi?attivita=${attivita}${visti ? "&visti=true" : ""}`);
+export const assAvvisiVistiTutti = (attivita: "apple" | "tarature", operatore: string): Promise<{ visti: number }> =>
+  fetchAPI("/api/assistenza/avvisi/visti-tutti", j({ attivita, operatore }));
+/** 02/11/2026: le cose da gestire delle Tarature, per il pulsante presente su ogni pagina. */
+export interface TaratureDaFare { session_id: string; numero: string; cliente: string; tipo: "da_tarare" | "da_pronto" | "da_consegnare"; testo: string }
+export interface TaratureDaGestire { da_fare: TaratureDaFare[]; notifiche: NotificaGestire[]; avvisi: AvvisoDashboard[]; totale: number }
+export const assTaratureDaGestire = (): Promise<TaratureDaGestire> => fetchAPI("/api/assistenza/tarature/da-gestire");
 export const assAvvisoVisto = (id: string, operatore: string): Promise<AvvisoDashboard> =>
   fetchAPI(`/api/assistenza/avvisi/${id}/visto`, { method: "POST", body: JSON.stringify({ operatore }) });
 /** 27/10/2026 (Gianni Gallo): un clic = spedizione col nostro corriere + fattura allo SdI DA INCASSARE. */

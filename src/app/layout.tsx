@@ -12,6 +12,7 @@ import { GuardiaTitolare } from "@/components/RiservatoTitolare";
 import { BonificiAvviso } from "@/components/BonificiAvviso";
 import { DopoBonifico } from "@/components/DopoBonifico";
 import { StripeAvviso } from "@/components/StripeAvviso";
+import { DaGestireTarature } from "@/components/DaGestireTarature";
 import { AttivitaProvider } from "@/components/attivita";
 
 const geist = Geist({
@@ -82,6 +83,8 @@ export default function RootLayout({
             <BonificiAvviso />
             {/* pagamenti Stripe ricevuti (riconciliati da soli o NON abbinati): stesso stile, sopra i bonifici (07/10/2026) */}
             <StripeAvviso />
+            {/* 02/11/2026: le cose da gestire delle Tarature, su ogni pagina come bonifici e Stripe */}
+            <DaGestireTarature />
             {/* dopo l'abbinamento di un bonifico: avviso ritiro / etichetta / spedizione della scheda (29/10/2026) */}
             <DopoBonifico />
            </AttivitaProvider>

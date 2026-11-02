@@ -32,8 +32,8 @@ function Voci({ a, onScheda }: { a: AvvisoDashboard; onScheda?: (id: string) => 
   );
 }
 
-export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto }: {
-  avvisi: AvvisoDashboard[]; operatore: Operatore | ""; onScheda?: (id: string) => void; onVisto: () => void;
+export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto, attivita = "apple" }: {
+  avvisi: AvvisoDashboard[]; operatore: Operatore | ""; onScheda?: (id: string) => void; onVisto: () => void; attivita?: "apple" | "tarature";
 }) {
   const [chi, setChi] = useState<Operatore | "">("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -63,7 +63,7 @@ export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto }: {
   }
   async function apriStorico() {
     if (storico) { setStorico(null); return; }
-    try { setStorico((await assAvvisi(true)).avvisi); } catch (e) { toastErrore(e); }
+    try { setStorico((await assAvvisi(true, attivita)).avvisi); } catch (e) { toastErrore(e); }
   }
 
   if (!avvisi.length && !storico) {
