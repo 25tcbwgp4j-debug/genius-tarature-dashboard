@@ -101,6 +101,7 @@ export const MENU_TARATURE: Voce[] = [
 
 export const MENU_APPLE: Voce[] = [
   { href: "/assistenza", label: "Schede assistenza", icon: Smartphone },
+  { href: "/assistenza/ricambi-da-ordinare", label: "Ricambi da ordinare", icon: ShoppingCart },
   { href: "/assistenza/voci", label: "Voci di preventivo", icon: ListChecks },
   { href: "/assistenza/ricambi-gsx", label: "Ricambi GSX (costi)", icon: Wrench },
   { href: "/assistenza/prezzi-ufficiali", label: "Prezzi assistenza ufficiale", icon: Tags },

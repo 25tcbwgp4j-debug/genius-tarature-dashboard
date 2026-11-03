@@ -808,7 +808,7 @@ function RicambiAttesi({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean
             <option value="">Da chi…</option>{FORNITORI.map((f) => <option key={f} value={f}>{f}</option>)}</select>
           <div className="flex gap-1">
             <input className={campo} disabled={ro} placeholder={/^bagnetti/i.test(r.fornitore || "") ? "(Bagnetti: non serve il link)" : "Link del prodotto da ordinare"} value={r.link || ""} onChange={(e) => setR(i, "link", e.target.value)} />
-            {r.link && /^https?:\/\//.test(r.link) && <a className="inline-flex items-center px-1 text-blue-700 underline" href={r.link} target="_blank" rel="noreferrer">apri</a>}
+            {r.link && /^https?:\/\//.test(r.link) && <a className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md bg-blue-700 px-2.5 text-xs font-medium text-white" href={r.link} target="_blank" rel="noreferrer">Apri il link</a>}
           </div>
           <input className={campo} disabled={ro} placeholder="N. ordine / fornitore" value={r.ordine || ""} onChange={(e) => setR(i, "ordine", e.target.value)} />
           <input className={campo} type="date" disabled={ro} title="Arrivo previsto" value={(r.arrivo_previsto || "").slice(0, 10)} onChange={(e) => setR(i, "arrivo_previsto", e.target.value)} />

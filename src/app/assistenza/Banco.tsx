@@ -191,6 +191,8 @@ export function Banco() {
         onCambiata={() => { window.dispatchEvent(new Event("gl-notifiche")); assCruscotto().then((r) => setNotifiche(r.notifiche || [])).catch(() => undefined); }} />
       <AvvisiAutomatici avvisi={avvisi} operatore={operatore} onScheda={apri}
         onVisto={() => assCruscotto().then((r) => setAvvisi(r.avvisi || [])).catch(() => undefined)} />
+      {/* 03/11/2026 (Christian, 63281): i ricambi delle schede in un solo elenco */}
+      <div className="text-right"><a className="text-sm font-medium text-blue-700 underline" href="/assistenza/ricambi-da-ordinare">🛒 Ricambi da ordinare</a></div>
       <DaGestire fasi={cruscotto} novita={novita} onScheda={apri} onApri={(f) => { setFase({ fase: f, tecnico: "" }); setElenco(null); setQ(""); }} />
       <AvvisoRichieste n={nRichieste} operatore={operatore} onCambiate={carica}
         onApriScheda={(r) => { setDaRichiesta(r); setNuova(true); }} />
