@@ -405,8 +405,8 @@ export function getReceiptPdfUrl(sessionId: string): string {
   return `${API_PROXY}/api/sessions/${sessionId}/receipt-pdf`;
 }
 
-export function getSessionReportsZipUrl(sessionId: string): string {
-  return `${API_PROXY}/api/sessions/${sessionId}/reports-zip`;
+export function getSessionReportsZipUrl(sessionId: string, rdt?: string[]): string {
+  return `${API_PROXY}/api/sessions/${sessionId}/reports-zip${rdt?.length ? `?rdt=${rdt.join(",")}` : ""}`;
 }
 
 export function getLabelsPdfUrl(sessionId: string, fmt: "default" | "brother_ql710" = "default"): string {
@@ -458,8 +458,8 @@ export async function proformaSessioneCrea(sessionId: string, operatore: string)
 }
 
 // === STAMPA DIRETTA (coda + agente sul Mac del banco) ===
-export async function stampaSessione(sessionId: string, tipo: 'etichette' | 'ricevuta' | 'rapporti'): Promise<{ ok: boolean; id: string; agente_attivo: boolean; copie: number }> {
-  return fetchAPI(`/api/stampa/sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ tipo }) });
+export async function stampaSessione(sessionId: string, tipo: 'etichette' | 'ricevuta' | 'rapporti', rdt?: string[]): Promise<{ ok: boolean; id: string; agente_attivo: boolean; copie: number }> {
+  return fetchAPI(`/api/stampa/sessione/${sessionId}`, { method: 'POST', body: JSON.stringify({ tipo, rdt }) });
 }
 export async function stampaStato(): Promise<{ agente_attivo: boolean }> {
   return fetchAPI(`/api/stampa/stato`, {}, false);

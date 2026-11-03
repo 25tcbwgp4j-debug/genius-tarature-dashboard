@@ -75,6 +75,7 @@ import { ProntoProgrammato } from "./ProntoProgrammato";
 import { DelegaRitiro } from "./DelegaRitiro";
 import { AssistenzaSessione } from "./AssistenzaSessione";
 import { AvvisoScansioneModal, PromemoriaScansione } from "./ScansioneRapporti";
+import { StampaRapportiDialog, type RapportoDaStampare } from "./StampaRapporti";
 import type { StatoScansioneRapporti } from "@/lib/api";
 import { NOMI_OPERATORI, OPERATORI_TARATURE, useOperatore, type Operatore } from "@/components/Operatore";
 import { eProvvisoria } from "@/lib/numeroSessione";
@@ -240,6 +241,7 @@ export default function SessionDetail() {
     }
   }, []);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [sceltaRapporti, setSceltaRapporti] = useState(false);
   // Pro forma (documento PF n/AAAA): dialog di preparazione; se aperto da PROFORMA EMAIL/WHATSAPP
   // dopo la creazione si riapre l'anteprima di invio su quel canale
   const [dialogPf, setDialogPf] = useState(false);
@@ -399,9 +401,9 @@ export default function SessionDetail() {
   // Agente spento → si apre il PDF come prima (finestra di stampa del browser).
   // ETICHETTE solo dopo i rapporti (Christian 02/10/2026): tutti gli strumenti da tarare (esclusi «NON lo tariamo noi»)
   // devono avere il numero di rapporto, che è scritto sull'etichetta.
-  const daTarare = ((session?.instruments || []) as { rdt_number?: string | null; external_processing?: boolean | null }[])
+  const daTarare = ((session?.instruments || []) as { rdt_number?: string | null; rdt_generated?: boolean | null; external_processing?: boolean | null }[])
     .filter((i) => !i.external_processing);
-  const rapportiPronti = daTarare.length > 0 && daTarare.every((i) => !!i.rdt_number);
+  const rapportiPronti = daTarare.length > 0 && daTarare.every((i) => !!i.rdt_number && i.rdt_generated !== false);
   const MSG_ETICHETTE = "Prima genera i rapporti di taratura: senza il numero di rapporto (RDT) le etichette escono incomplete.";
   // Il pulsante resta cliccabile anche senza rapporti: un pulsante spento non spiega niente, il messaggio sì.
   const etichetteBloccate = () => {
@@ -410,19 +412,19 @@ export default function SessionDetail() {
     return true;
   };
 
-  const stampaDiretta = async (tipo: "etichette" | "ricevuta" | "rapporti") => {
+  const stampaDiretta = async (tipo: "etichette" | "ricevuta" | "rapporti", rdt?: string[]) => {
     if (tipo === "etichette" && etichetteBloccate()) return;
     setActionLoading("stampa_" + tipo);
     try {
-      const r = await stampaSessione(sessionId, tipo);
+      const r = await stampaSessione(sessionId, tipo, rdt);
       setAgenteStampa(r.agente_attivo);
       if (r.agente_attivo) {
         toast.success(tipo === "etichette" ? "Etichette mandate alla stampante Brother"
-          : tipo === "rapporti" ? "Rapporti mandati in stampa sulla stampante A4 del banco (uno per strumento)"
+          : tipo === "rapporti" ? (rdt?.length === 1 ? `Rapporto ${rdt[0]} mandato in stampa sulla stampante A4 del banco` : "Rapporti mandati in stampa sulla stampante A4 del banco (uno per strumento)")
           : `Ricevuta mandata in stampa (${r.copie} copie)`);
       } else if (tipo === "rapporti") {
         toast.warning("Agente di stampa del banco spento: scarico i rapporti da stampare a mano. Il lavoro resta in coda 15 minuti.", { duration: 8000 });
-        window.location.href = getSessionReportsZipUrl(sessionId);
+        window.location.href = getSessionReportsZipUrl(sessionId, rdt);
       } else {
         toast.warning("Agente di stampa del banco spento: apro il PDF da stampare a mano. Il lavoro resta in coda 15 minuti.", { duration: 8000 });
         if (tipo === "etichette") openLabelsPdf(); else openReceiptPdf();
@@ -550,6 +552,14 @@ export default function SessionDetail() {
           await loadSession();
           return;
         }
+      }
+      // 03/11/2026 (sess. 256): se un rapporto non si genera si dice quale, non «generati» e basta
+      if (action === "rdts" && res?.errors > 0) {
+        const motivi = (res.results || []).filter((r: { error?: string }) => r.error)
+          .map((r: { rdt_number?: string; error?: string }) => `${r.rdt_number || "strumento"}: ${r.error}`).join(" · ");
+        toast.error(`Generati ${res.generated}, NON generati ${res.errors}. ${motivi}`.slice(0, 400), { duration: 15000 });
+        await loadSession();
+        return;
       }
       toast.success(detail);
       await loadSession();
@@ -703,6 +713,12 @@ export default function SessionDetail() {
 
   const customer = session.customers || {};
   const instruments = session.instruments || [];
+  const rapportiStampabili: RapportoDaStampare[] = instruments
+    .filter((i: { rdt_number?: string | null; rdt_generated?: boolean | null }) => !!i.rdt_number && i.rdt_generated !== false)
+    .map((i: { rdt_number: string; instrument_name?: string; manufacturer?: string; model?: string; serial_number?: string }) => ({
+      rdt: i.rdt_number,
+      descrizione: [i.instrument_name, i.manufacturer, i.model, i.serial_number && `matr. ${i.serial_number}`].filter(Boolean).join(" "),
+    }));
   const currentStep = STATUS_CONFIG[session.status]?.step || 0;
 
   return (
@@ -902,9 +918,11 @@ export default function SessionDetail() {
             variant="outline"
             size="sm"
             disabled={actionLoading === "stampa_rapporti" || !(session.instruments || []).some((i: { rdt_number?: string | null }) => !!i.rdt_number)}
-            onClick={() => controllaScansione("stampare i rapporti", () => stampaDiretta("rapporti"))}
+            onClick={() => controllaScansione("stampare i rapporti", () => {
+              if (rapportiStampabili.length > 1) setSceltaRapporti(true); else stampaDiretta("rapporti");
+            })}
             className="w-full bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
-            title="Stampa subito tutti i rapporti di taratura della sessione sulla stampante A4 del banco"
+            title="Scegli quali rapporti di taratura stampare sulla stampante A4 del banco"
           >
             {actionLoading === "stampa_rapporti" ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Printer className="w-4 h-4 mr-1" />}
             Stampa rapporti
@@ -1323,6 +1341,14 @@ export default function SessionDetail() {
                         </Badge>
                       )}
                     </div>
+                    {/* 03/11/2026: ristampa di questo solo rapporto */}
+                    {inst.rdt_number && inst.rdt_generated !== false && (
+                      <Button variant="ghost" size="sm" disabled={actionLoading === "stampa_rapporti"}
+                        title={`Stampa solo il rapporto ${inst.rdt_number}`} aria-label={`Stampa solo il rapporto ${inst.rdt_number}`}
+                        onClick={() => controllaScansione("stampare il rapporto", () => stampaDiretta("rapporti", [inst.rdt_number]))}>
+                        <Printer className="w-4 h-4" />
+                      </Button>
+                    )}
                     {/* «Aggiungi foto» (15/10/2026): altra foto dello stesso strumento → dati riletti e corretti */}
                     {!inst.rdt_number && !inst.rdt_generated && session.status !== "completata" && (
                       <AggiungiFotoStrumento instrumentId={inst.id} nFoto={(inst.photo_urls || []).length} onAggiornato={loadSession} />
@@ -1421,6 +1447,10 @@ export default function SessionDetail() {
         </div>
       )}
 
+      {sceltaRapporti && (
+        <StampaRapportiDialog rapporti={rapportiStampabili} onChiudi={() => setSceltaRapporti(false)}
+          onStampa={(rdt) => { setSceltaRapporti(false); stampaDiretta("rapporti", rdt.length ? rdt : undefined); }} />
+      )}
       {dialogPf && (
         <ProformaDialog
           sessionId={sessionId}

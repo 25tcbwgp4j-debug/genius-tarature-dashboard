@@ -21,7 +21,7 @@ type Sess = Record<string, any>;  // eslint-disable-line @typescript-eslint/no-e
 interface Props {
   sessionId: string;
   session: Sess;
-  instruments: { rdt_generated_at?: string | null; rdt_number?: string | null; external_processing?: boolean | null }[];
+  instruments: { rdt_generated_at?: string | null; rdt_generated?: boolean | null; rdt_number?: string | null; external_processing?: boolean | null }[];
   actionLoading: string | null;
   setActionLoading: (v: string | null) => void;
   handleAction: (action: string, fn: () => Promise<unknown>, successMsg: string) => Promise<void>;
@@ -104,7 +104,7 @@ export function AzioniSessione({ sessionId, session, instruments, actionLoading,
   const differito = statoPag?.pagamento?.termine === "differito";
   // stato rapporti: quanti strumenti da tarare (esclusi «NON lo tariamo noi») hanno già il numero RDT
   const daTarare = instruments.filter((i) => !i.external_processing);
-  const conRdt = daTarare.filter((i) => !!i.rdt_number).length;
+  const conRdt = daTarare.filter((i) => !!i.rdt_number && i.rdt_generated !== false).length;   // numero senza file = rapporto mancante (03/11/2026)
   // scansione dei rapporti firmati richiesta ma non segnata come fatta → avviso al pronto e alla riconsegna (08/10/2026)
   const mancaScansione = !!session.scansione_rapporti?.manca;
   const okScansione = () => !mancaScansione
