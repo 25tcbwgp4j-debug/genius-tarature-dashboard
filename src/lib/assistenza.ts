@@ -179,7 +179,7 @@ export const assElencoFase = (fase: string, tecnico = ""): Promise<{ schede: Sch
 export const assElenco = (q: string, stato: string, origine = "", limit = 150, offset = 0): Promise<{ schede: SchedaBreve[]; totale: number }> =>
   fetchAPI(`/api/assistenza/schede?q=${encodeURIComponent(q)}&stato=${stato}&origine=${origine}&limit=${limit}&offset=${offset}`);
 export const assContatori = (): Promise<{ contatori: Record<string, number> }> => fetchAPI("/api/assistenza/contatori");
-export const assPerNumero = (n: string): Promise<{ id: string; sigla: string; esatta: boolean }> => fetchAPI(`/api/assistenza/schede/numero/${encodeURIComponent(n)}`);
+export const assPerNumero = (n: string): Promise<{ id: string; sigla: string; esatta: boolean }> => fetchAPI(`/api/assistenza/schede/numero/${encodeURIComponent(n.trim().replace(/^(\d{5,})\/\d+$/, "$1"))}`); // 03/11/2026: 63300/2 (dispositivo aggiuntivo) → scheda 63300
 export const assScheda = (id: string): Promise<Scheda> => fetchAPI(`/api/assistenza/schede/${id}`);
 export const assCrea = (b: Record<string, unknown>): Promise<Scheda & { esiti: Record<string, unknown> }> => fetchAPI("/api/assistenza/schede", j(b));
 export const assModifica = (id: string, b: Record<string, unknown>): Promise<Scheda> => fetchAPI(`/api/assistenza/schede/${id}`, { method: "PATCH", body: JSON.stringify(b) });
