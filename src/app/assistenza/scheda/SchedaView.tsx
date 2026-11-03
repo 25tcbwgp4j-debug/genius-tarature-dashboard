@@ -379,7 +379,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {/* 25/10/2026: la chat WhatsApp 334 di questo cliente (dati di fatturazione, foto, risposte) */}
         {s.telefono && <Button size="sm" variant="outline" title="Apri la chat WhatsApp staff 334 di questo numero"
           onClick={() => { window.location.href = `/chat-apple?tab=staff&tel=${encodeURIComponent(s.telefono || "")}`; }}><MessageSquareText />Chat WhatsApp</Button>}
-        {admin && !ro && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => {
+        {/* 03/11/2026 (Christian, 63289): anche il banco, con operatore e motivo; il server blocca le schede con movimenti */}
+        {!ro && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => {
+          if (!admin && !operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
           const m = prompt("Motivo dell'annullamento della scheda?");
           if (m !== null) azione("annulla", { motivo: m }, "Scheda annullata");
         }}><Trash2 />Annulla</Button>}
