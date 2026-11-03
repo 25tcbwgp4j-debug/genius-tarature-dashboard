@@ -42,6 +42,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Megaphone,
+  Landmark,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -61,6 +62,7 @@ type Voce = { href: string; label: string; icon: typeof ClipboardList };
 // sezioni comuni alle due divisioni (stesso ordine nei due menu)
 const COMUNI: Voce[] = [
   { href: "/fatturazione", label: "Fatturazione", icon: Receipt },
+  { href: "/bonifici-arrivati", label: "Bonifici arrivati", icon: Landmark },
   // buste paga (16/10/2026): tolte dal menu, ora sono nella barra in alto della Fatturazione accanto alle società
   { href: "/cassa", label: "Scontrino (registratore)", icon: ShoppingCart },
   { href: "/cassa/giornata", label: "Cassa del giorno", icon: Calculator },
