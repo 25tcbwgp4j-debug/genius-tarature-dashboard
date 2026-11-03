@@ -45,6 +45,7 @@ export interface Scheda extends SchedaBreve {
   acquistato_il: string | null; anno_garanzia: string | null; password_dispositivo: string | null; apple_id: string | null; password_apple_id: string | null;
   /** 30/10/2026: notifiche da gestire APERTE della scheda */
   notifiche_gestire?: NotificaGestire[];
+  dispositivi_aggiuntivi?: { n: number; descrizione: string; da?: string; il?: string; tolto_il?: string | null }[];
   accessori: string | null; note: string | null; note_interne: string | null; trova_il_mio?: "attivo" | "risolto" | null; riconsegna_nota?: string | null; promemoria?: string | null; ricevuta_da_inviare?: boolean; cliente_no_whatsapp?: string | null; cliente_no_etichette?: string | null; passaggio?: { da: string; a: string; testo: string; il: string; letto_il: string | null; letto_da: string | null } | null; comunicazione_cliente?: string | null; recensione_stato?: "inviata" | "non_inviare" | null; recensione_il?: string | null; pronto_prog_il?: string | null; pronto_prog_stato?: string | null; pronto_prog_esito?: string | null; pronto_prog_eseguito_il?: string | null; pronto_prog_da?: string | null;
   preventivo_prog_il?: string | null; preventivo_prog_stato?: string | null; preventivo_prog_esito?: string | null; preventivo_prog_eseguito_il?: string | null; preventivo_prog_da?: string | null; preventivo_prog_cambiato?: boolean;
   preventivo_prog_body?: { tipo?: string | null; nota?: string | null; invia_mail?: boolean; invia_wa?: boolean } | null; preventivo_righe: EstimateLine[]; preventivo_testo: string | null;

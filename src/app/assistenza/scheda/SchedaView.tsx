@@ -26,6 +26,7 @@ import { Avanzamento } from "./Avanzamento";
 import { CercaCliente, RiepilogoCliente, SchedaClienteModal } from "./Cliente";
 import { Comunicazioni, Registro } from "./Comunicazioni";
 import { DialogoCambiaStato, DialogoChiudiTutto, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoStessoModello, type TipoInvio } from "./Dialoghi";
+import { Aggiuntivi } from "./Aggiuntivi";
 import { Documenti } from "./Documenti";
 import { InviiProgrammati } from "./InviiProgrammati";
 import { Lavorazione } from "./Lavorazione";
@@ -153,6 +154,18 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       await ricarica(); onCambiata();
       return r;
     } catch (e) { toastErrore(e); return null; } finally { setBusy(""); }
+  }
+  // 03/11/2026: etichette dei dispositivi aggiuntivi (63300/1): una sola o, senza numero, tutte
+  async function stampaAggiuntivo(n?: number) {
+    if (!s) return;
+    if (sporca && !ro && !(await salva(true))) return;
+    if (s.cliente_no_etichette && !confirm(`⚠️ ${s.cliente_no_etichette}\n\nProcedi comunque con la stampa dell'etichetta?`)) return;
+    try {
+      const r = await assAzione(s.id, "stampa", { tipo: "etichetta_aggiuntivo", n, copie: 1, conferma_no_etichette: !!s.cliente_no_etichette });
+      toast.success(r.simulata ? "Scheda di PROVA: stampa simulata (niente stampanti del negozio), apro il PDF"
+        : r.agente_attivo ? `In stampa al banco (etichetta ${n ? `${s.sigla}/${n}` : "dei dispositivi aggiuntivi"})` : "Messa in coda, ma l'agente di stampa non risponde: apro il PDF");
+      if (!r.agente_attivo) window.open(assEtichettaUrl(s.id).replace("/etichetta.pdf", `/etichetta-aggiuntivo.pdf${n ? `?n=${n}` : ""}`), "_blank");
+    } catch (e) { toastErrore(e); }
   }
   async function stampa(tipo: "accettazione" | "etichetta" | "etichetta_accessori") {
     if (!s) return;
@@ -414,6 +427,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           <Apparecchio v={appV} set={(k, val) => set(k as keyof Scheda, val)} ro={ro} famiglie={cfg?.famiglie} prodotti={cfg?.prodotti} idScheda={s.id} onApri={onApri} />
         </Sezione>
       </div>
+
+      <Aggiuntivi s={s} ro={ro} busy={!!busy} azione={azione} stampa={stampaAggiuntivo} />
 
       <div ref={refTec} className="scroll-mt-28">
         <PannelloTecnici s={s} tecnici={tecnici} ro={ro} busy={!!busy}
