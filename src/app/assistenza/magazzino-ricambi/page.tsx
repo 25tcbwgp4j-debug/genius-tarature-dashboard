@@ -23,7 +23,7 @@ import { StampaEtichetteRicambi } from "./StampaEtichetteRicambi";
 
 type Tipo = "ricambio" | "display" | "scheda_logica" | "top_case" | "garanzia" | "rotto";
 interface Riga {
-  id: number; tipo: Tipo; codice: string | null; mpn: string | null; descrizione: string; modelli: string | null;
+  id: number; tipo: Tipo; codice: string | null; codice_ricambio: string | null; mpn: string | null; descrizione: string; modelli: string | null;
   qta_nuovo: number; qta_usato: number; posizione: string | null; scaffale: string | null; confezione: string | null;
   codici_alt: string | null; gsx_descrizione: string | null; gsx_stato: string | null; gsx_costo?: number | null;
   gsx_sostituito_da: string | null; gsx_verificato_il: string | null; stato: string | null;
@@ -169,7 +169,7 @@ function Scheda({ r, tipo, titolare, stati, onFatto, onChiudi }: {
   const nuovo = !r?.id;
   const [v, setV] = useState<Record<string, string>>(() => {
     const o: Record<string, string> = {};
-    for (const k of ["codice", "codici_alt", "mpn", "descrizione", "modelli", "posizione", "scaffale", "confezione", "stato", "condizioni", "seriale", "note", "costo", "qta_nuovo", "qta_usato", "gsx_descrizione", "gsx_sostituito_da", "gsx_costo", "gsx_sostituzione", "etichetta", "grado", "colore", "anno", "data_riparazione", "scadenza"]) {
+    for (const k of ["codice", "codice_ricambio", "codici_alt", "mpn", "descrizione", "modelli", "posizione", "scaffale", "confezione", "stato", "condizioni", "seriale", "note", "costo", "qta_nuovo", "qta_usato", "gsx_descrizione", "gsx_sostituito_da", "gsx_costo", "gsx_sostituzione", "etichetta", "grado", "colore", "anno", "data_riparazione", "scadenza"]) {
       const x = (r as Record<string, unknown> | null)?.[k];
       o[k] = x == null ? "" : String(x);
     }
@@ -202,7 +202,8 @@ function Scheda({ r, tipo, titolare, stati, onFatto, onChiudi }: {
     <Finestra titolo={nuovo ? `Nuovo: ${TIPI.find((x) => x.k === tipo)?.t}` : `Modifica ${r?.codice || ""}`} onChiudi={onChiudi}>
       <div className="grid grid-cols-2 gap-3">
         {(pezzo || gar || v.etichetta) && campo("etichetta", gar ? "Riferimento (n. scheda)" : "Sigla sul pezzo (AIR1, DLR5, TP2…)")}
-        {campo("codice", t === "scheda_logica" ? "Codice scheda (820-…)" : "Codice (APN)")}
+        {campo("codice", t === "scheda_logica" ? "Codice scheda (820-…)" : t === "ricambio" ? "Codice pacco (APN)" : "Codice (APN)")}
+        {t === "ricambio" && campo("codice_ricambio", "Codice ricambio (dentro il pacco)")}
         {campo("mpn", "MPN / codice produttore")}
         {campo("codici_alt", "Altri codici dello stesso pezzo", "col-span-2")}
         {campo("descrizione", "Descrizione", "col-span-2")}
@@ -319,7 +320,7 @@ export default function MagazzinoRicambi() {
     if (!t.length) return perModello;
     // 24/10/2026: italiano e inglese («dissipatore» = «Heat Sink»), senza badare a spazi e trattini
     return perModello.filter((r) => corrisponde(
-      [r.codice, r.mpn, r.descrizione, r.modelli, r.posizione, r.scaffale, r.seriale, r.note, r.stato, r.etichetta, r.colore, r.grado, r.condizioni, r.codici_alt].join(" "), q));
+      [r.codice, r.codice_ricambio, r.mpn, r.descrizione, r.modelli, r.posizione, r.scaffale, r.seriale, r.note, r.stato, r.etichetta, r.colore, r.grado, r.condizioni, r.codici_alt].join(" "), q));
   }, [righe, q, modello]);
   const modelliTipo = useMemo(() => [...new Set(righe.map((r) => (r.modelli || "").trim()).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "it", { numeric: true })), [righe]);
@@ -354,7 +355,7 @@ export default function MagazzinoRicambi() {
         // 24/10/2026: non è un codice ma una parola («dissipatore», «heatsink», «MacBook Pro 15 2011»): si cerca in
         // tutto il magazzino, in italiano e in inglese
         const tutte: Riga[] = (await fetchAPI(`/api/ricambi-apple?${new URLSearchParams({ eliminati: "false" })}`)).righe || [];
-        const trovate = tutte.filter((x) => corrisponde([x.codice, x.mpn, x.descrizione, x.modelli, x.etichetta, x.codici_alt, x.note, x.posizione].join(" "), c));
+        const trovate = tutte.filter((x) => corrisponde([x.codice, x.codice_ricambio, x.mpn, x.descrizione, x.modelli, x.etichetta, x.codici_alt, x.note, x.posizione].join(" "), c));
         if (trovate.length === 1) vaiA(trovate[0]);
         else if (trovate.length > 1) setScelte(trovate);
         else toast.error(`Nessun ricambio per «${c}»`);
@@ -481,7 +482,7 @@ export default function MagazzinoRicambi() {
               <tr>
                 <th className="p-2 w-6">{!eliminati && <input type="checkbox" aria-label="Spunta tutte le righe visibili" title="Spunta tutte le righe visibili"
                   checked={tutteSpuntate} onChange={spuntaTutte} />}</th>
-                <th className="p-2">Codice</th><th className="p-2">Descrizione / modelli</th>
+                <th className="p-2">{tipo === "ricambio" ? "Codice pacco / ricambio" : "Codice"}</th><th className="p-2">Descrizione / modelli</th>
                 {pezzi && <th className="p-2">Stato</th>}
                 {gar ? <><th className="p-2">Riparato il</th><th className="p-2">Scadenza</th></>
                   : <><th className="p-2 text-right">Nuovi</th><th className="p-2 text-right">Usati</th></>}
@@ -493,7 +494,7 @@ export default function MagazzinoRicambi() {
               {visibili.map((r) => (
                 <tr key={r.id} id={`riga-${r.id}`} className={`border-t align-top ${evid === r.id ? "bg-yellow-100 dark:bg-yellow-900/40" : ""}`}>
                   <td className="p-2">{r.attivo && <input type="checkbox" aria-label="Spunta per le etichette" checked={sel.has(r.id)} onChange={() => spunta(r.id)} />}</td>
-                  <td className="p-2 font-mono whitespace-nowrap">{r.etichetta ? <div className="font-bold">{r.etichetta}</div> : null}{r.codice}{r.codici_alt ? <div className="text-xs text-gray-500">= {r.codici_alt}</div> : null}
+                  <td className="p-2 font-mono whitespace-nowrap">{r.etichetta ? <div className="font-bold">{r.etichetta}</div> : null}{r.codice}{r.codice_ricambio ? <div className="text-xs">ricambio {r.codice_ricambio}</div> : null}{r.codici_alt ? <div className="text-xs text-gray-500">= {r.codici_alt}</div> : null}
                     {r.mpn ? <div className="text-xs text-gray-500">{r.mpn}</div> : null}
                     {r.gsx_stato && <div className={`text-[10px] mt-0.5 ${r.gsx_stato === "in_vendita" ? "text-green-700" : "text-gray-400"}`}
                       title={r.gsx_verificato_il ? `verificato sul GSX il ${data(r.gsx_verificato_il)}` : ""}>{r.gsx_stato === "in_vendita" ? "GSX: in vendita" : "GSX: fuori vendita"}</div>}
