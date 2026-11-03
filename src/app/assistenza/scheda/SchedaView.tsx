@@ -38,7 +38,7 @@ import { DialogoDuplica, nuovaChiave } from "./SchedaDoppia";
 
 type Bozza = Partial<Scheda>;
 type Dialogo = null | { k: "invio"; tipo: TipoInvio } | { k: "chiudi_tutto" } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
-  | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" } | { k: "stato_riparazione"; stato: string };
+  | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" } | { k: "stato_riparazione"; stato: string } | { k: "trova_dopo_preventivo" };
 
 function bozzaPreventivo(m: Partial<Scheda>): BozzaPreventivo {
   return { righe: (m.preventivo_righe as EstimateLine[]) || [], diagnosi: m.preventivo?.diagnosi || "", note: m.preventivo?.note || "",
@@ -70,6 +70,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const [duplica, setDuplica] = useState(false);
   const refPrev = useRef<HTMLDivElement>(null);
   const refLav = useRef<HTMLDivElement>(null);
+  const trovaDopoInvio = useRef(false);
   const refRic = useRef<HTMLDivElement>(null);
   const refDoc = useRef<HTMLDivElement>(null);
   const refTec = useRef<HTMLDivElement>(null);
@@ -499,12 +500,27 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       </div>
 
       {dlg?.k === "chiudi_tutto" && <DialogoChiudiTutto s={s} onClose={() => setDlg(null)} onChiudi={async (b) => !!(await azione("chiudi-tutto", b, "Scheda chiusa: già fatto tutto"))} />}
-      {dlg?.k === "invio" && <DialogoInvio s={s} tipo={dlg.tipo} onClose={() => setDlg(null)} onInvia={async (body) => {
+      {dlg?.k === "invio" && <DialogoInvio s={s} tipo={dlg.tipo} onClose={() => {
+        // 03/11/2026 (Christian, 63299): preventivo partito con «Trova il mio» attivo → si offre l'invio separato delle istruzioni
+        setDlg(trovaDopoInvio.current ? { k: "trova_dopo_preventivo" } : null);
+        trovaDopoInvio.current = false;
+      }} onInvia={async (body) => {
         const nome = dlg.tipo === "ricevuta" ? "ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "aggiornamento-riparazione" : dlg.tipo === "trova" ? "trova" : "preventivo";
         const corpo = dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento" ? { ...body, tipo: dlg.tipo } : dlg.tipo === "trova" ? { ...body, azione: "invia" } : body;
         const r = await azione(nome, corpo, dlg.tipo === "ricevuta" ? "Ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "Aggiornamento riparazione" : dlg.tipo === "trova" ? "Istruzioni «Trova il mio» inviate" : body.programma_il ? "Preventivo PROGRAMMATO" : "Preventivo inviato");
+        if (r && (dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento") && !body.programma_il && s.trova_il_mio === "attivo") trovaDopoInvio.current = true;
         return r ? (r.esito as Esito) : null;
       }} />}
+      {dlg?.k === "trova_dopo_preventivo" && (
+        <Modale titolo="«Trova il mio» è attivo" onClose={() => setDlg(null)} piedi={<>
+          <Button variant="outline" onClick={() => setDlg(null)}>Non ora</Button>
+          <Button disabled={!!busy} onClick={async () => {
+            if (await azione("trova", { azione: "invia" }, "Istruzioni «Trova il mio» inviate")) setDlg(null);
+          }}>{busy && <Loader2 className="animate-spin" />}Invia le istruzioni al cliente</Button>
+        </>}>
+          <p className="text-sm">Il preventivo è partito. Su questa scheda hai segnato «Trova il mio» attivo: inviare anche al cliente, con un messaggio a parte (mail e WhatsApp), le istruzioni per disabilitarlo?</p>
+        </Modale>
+      )}
       {dlg?.k === "esito" && <DialogoEsito s={s} righe={bz.righe} onClose={() => setDlg(null)}
         onEsito={async (body) => !!(await azione("esito-preventivo", body, body.esito === "accettato" ? "ACCETTATO: in riparazione, lavorazione precompilata" : "Preventivo RIFIUTATO"))} />}
       {dlg?.k === "stato_riparazione" && <DialogoStatoRiparazione stato={dlg.stato} totale={s.totale_lavorazione as number | null | undefined}
