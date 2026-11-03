@@ -31,14 +31,14 @@ import { Documenti } from "./Documenti";
 import { InviiProgrammati } from "./InviiProgrammati";
 import { Lavorazione } from "./Lavorazione";
 import { Preventivo, type BozzaPreventivo } from "./Preventivo";
-import { DialogoAssegna, DialogoChiudiVerifica, PannelloTecnici } from "./Tecnici";
+import { DialogoAssegna, DialogoChiudiVerifica, DialogoStatoRiparazione, PannelloTecnici } from "./Tecnici";
 import { NotificheScheda } from "../NotificheGestire";
 import { Badge, Campo, Modale, Pill, Sezione, area, campo } from "./ui";
 import { DialogoDuplica, nuovaChiave } from "./SchedaDoppia";
 
 type Bozza = Partial<Scheda>;
 type Dialogo = null | { k: "invio"; tipo: TipoInvio } | { k: "chiudi_tutto" } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
-  | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" };
+  | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" } | { k: "stato_riparazione"; stato: string };
 
 function bozzaPreventivo(m: Partial<Scheda>): BozzaPreventivo {
   return { righe: (m.preventivo_righe as EstimateLine[]) || [], diagnosi: m.preventivo?.diagnosi || "", note: m.preventivo?.note || "",
@@ -69,6 +69,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const [dlg, setDlg] = useState<Dialogo>(null);
   const [duplica, setDuplica] = useState(false);
   const refPrev = useRef<HTMLDivElement>(null);
+  const refLav = useRef<HTMLDivElement>(null);
   const refDoc = useRef<HTMLDivElement>(null);
   const refTec = useRef<HTMLDivElement>(null);
   const tecnici = (cfg?.tecnici || []).filter((t) => t.attivo !== false);
@@ -232,21 +233,16 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     try { await assModifica(s.id, { riconsegna_nota: x.trim() || null, operatore }); toast.success(x.trim() ? "Scritto nel prossimo passo" : "Si riconsegna tutto"); await ricarica(); onCambiata(); }
     catch (e) { toastErrore(e); }
   }
-  async function statoRiparazione(stato: string) {
-    let nota = "";
-    if (stato === "attesa_ricambi" || stato === "piu_tempo" || stato === "finita") {
-      // 27/10/2026: a lavoro finito il tecnico scrive cosa ha fatto (resta nelle note di riparazione)
-      // 27/10/2026 (63201): senza un ricambio già in elenco, in attesa ricambi si DEVE scrivere quale (diventa «da ordinare»)
-      const serve = stato === "attesa_ricambi" && !(s?.ricambi_attesi || []).some((r) => r.stato !== "arrivato");
-      const x = prompt(stato === "attesa_ricambi" ? (serve ? "QUALE RICAMBIO SERVE? (obbligatorio — es. «batteria Dell PKWVM 95Wh»): va nei ricambi da ordinare"
-        : "Nota sul ricambio (facoltativo: dove è ordinato, quando arriva)")
-        : stato === "finita" ? "Riparazione FINITA: cosa hai fatto? (es. sostituita scheda logica, test finale OK) — resta nelle note di riparazione" : "Perché serve più tempo? (facoltativo)", "");
-      if (x === null) return;
-      if (serve && !x.trim()) { toast.error("Scrivi quale ricambio serve"); return; }
-      nota = x;
-    }
-    const r = await azione("stato-riparazione", { riparazione_stato: stato, nota }, `Riparazione: ${stato === "finita" ? "FINITA — ora «PRONTO»" : "stato aggiornato"}`);
+  // 03/11/2026 (Christian, 63185): la nota si scrive in una finestra vera; «non riparabile» chiede il motivo e l'importo
+  async function salvaStatoRiparazione(stato: string, nota = "", importo?: number) {
+    const finale = stato === "finita" ? "FINITA — ora «PRONTO»" : stato === "non_riparabile" ? "NON RIPARABILE — ora «PRONTO»" : "stato aggiornato";
+    const r = await azione("stato-riparazione", { riparazione_stato: stato, nota, ...(importo !== undefined ? { importo } : {}) }, `Riparazione: ${finale}`);
     if (r && (stato === "aggiornamento_cliente" || stato === "disabilitare_trova")) setDlg({ k: "invio", tipo: "aggiornamento_riparazione" });
+    return !!r;
+  }
+  function statoRiparazione(stato: string) {
+    if (["attesa_ricambi", "piu_tempo", "finita", "non_riparabile"].includes(stato)) setDlg({ k: "stato_riparazione", stato });
+    else salvaStatoRiparazione(stato);
   }
 
   if (!s) return <div className="rounded-xl border bg-card p-10 text-center"><Loader2 className="inline size-5 animate-spin" /></div>;
@@ -302,7 +298,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
                 title="Rimanda il preventivo (stesse voci): il cliente torna a dover accettare o rifiutare">Preventivo</Button>
               <Button size="xs" variant="outline" disabled={!!busy} onClick={() => apriInvio("aggiornamento")}
                 title="Rimanda l'aggiornamento del preventivo (con il preventivo aggiuntivo, se c'è)">Aggiornamento preventivo</Button></>}
-            {(st === "pronto" || (st === "accettato" && s.riparazione_stato === "finita") || (st === "rifiutato" && s.rimontaggio === "fatto")) && (
+            {(st === "pronto" || (st === "accettato" && ["finita", "non_riparabile"].includes(s.riparazione_stato || "")) || (st === "rifiutato" && s.rimontaggio === "fatto")) && (
               <Button size="xs" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}
                 title="Rimanda il pronto / consuntivo da pagare (mail + WhatsApp, con IBAN e PDF)">Pronto da pagare</Button>)}</>}
           {/* 28/10/2026 (Christian): preventivi e modifiche dettate anche da iPhone */}
@@ -370,7 +366,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           <Button size="sm" variant="outline" disabled={!!busy} title="Abbiamo chiesto qualcosa al cliente: la scheda resta ferma nella sua sezione finché non risponde. Non manda nulla al cliente."
             onClick={() => azione("attesa-cliente", { azione: "metti" }, "Scheda in attesa di risposta dal cliente")}>💬 In attesa di risposta dal cliente</Button>)}
         {!ro && st === "accettato" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "invio", tipo: "aggiornamento_riparazione" })}><MessageSquareText />Aggiornamento riparazione</Button>}
-        {!ro && st !== "in_arrivo" && st !== "consegnato" && !(st === "rifiutato" && s.rimontaggio !== "fatto") && <Button size="sm" variant={(st === "accettato" && s.riparazione_stato === "finita") || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
+        {!ro && st !== "in_arrivo" && st !== "consegnato" && !(st === "rifiutato" && s.rimontaggio !== "fatto") && <Button size="sm" variant={(st === "accettato" && ["finita", "non_riparabile"].includes(s.riparazione_stato || "")) || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
         {!ro && st === "pronto" && <Button size="sm" variant={s.pagata || s.saldo <= 0 ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "consegna" })}>CONSEGNA</Button>}
         <span className="mx-0.5 hidden h-6 w-px bg-border sm:block" />
         <MenuPdf id={s.id} prima={() => salva(true)} />
@@ -434,7 +430,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <PannelloTecnici s={s} tecnici={tecnici} ro={ro} busy={!!busy}
           onAssegnaVerifica={() => setDlg({ k: "assegna_verifica" })} onChiudiVerifica={() => setDlg({ k: "chiudi_verifica" })}
           onRiapriVerifica={() => azione("riapri-verifica", {}, "Verifica riaperta")}
-          onAssegnaRiparazione={() => setDlg({ k: "assegna_riparazione" })} onStato={statoRiparazione} />
+          onAssegnaRiparazione={() => setDlg({ k: "assegna_riparazione" })} onStato={statoRiparazione}
+          onVai={(dove) => (dove === "preventivo" ? refPrev : refLav).current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
       </div>
 
       <div ref={refPrev} className="scroll-mt-28">
@@ -464,7 +461,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       </div>
 
       <div className="grid gap-3 xl:grid-cols-[3fr_2fr]">
-        <Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} />
+        <div ref={refLav} className="scroll-mt-28"><Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} /></div>
         <div ref={refDoc} className="scroll-mt-28 space-y-3">
           <Documenti s={s} ro={ro} busy={!!busy} onFatturaEliminata={async () => { await ricarica(); onCambiata(); }}
             onScontrino={async () => { if (sporca && !(await salva(true))) return; router.push(`/cassa?scheda=${s.id}`); }}
@@ -508,6 +505,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       }} />}
       {dlg?.k === "esito" && <DialogoEsito s={s} righe={bz.righe} onClose={() => setDlg(null)}
         onEsito={async (body) => !!(await azione("esito-preventivo", body, body.esito === "accettato" ? "ACCETTATO: in riparazione, lavorazione precompilata" : "Preventivo RIFIUTATO"))} />}
+      {dlg?.k === "stato_riparazione" && <DialogoStatoRiparazione stato={dlg.stato} totale={s.totale_lavorazione as number | null | undefined}
+        serveRicambio={!(s.ricambi_attesi || []).some((r) => r.stato !== "arrivato")} onClose={() => setDlg(null)}
+        onConferma={(nota, importo) => salvaStatoRiparazione(dlg.stato, nota, importo)} />}
       {dlg?.k === "pronto" && <DialogoPronto paypalFee={cfg?.paypal_fee} s={s} lavorazione={String(v("lavorazione") || "")} totale={(v("totale_lavorazione") as number | null) ?? null} onClose={() => setDlg(null)}
         onInvia={async (body) => { const r = await azione("pronto", body, body.programma_il ? "PRONTO programmato" : "PRONTO"); return r ? (r.esito as Esito) : null; }} />}
       {dlg?.k === "cambia_stato" && <DialogoCambiaStato s={s} onClose={() => setDlg(null)} onConferma={async (b) => !!(await azione("riapri", b, "Stato della scheda cambiato"))} />}

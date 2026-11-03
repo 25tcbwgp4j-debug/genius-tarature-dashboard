@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { CheckCircle2, ClipboardCheck, Loader2, UserCog, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { dataOra, nomeTecnico, STATI_RIPARAZIONE, type Scheda } from "@/lib/assistenza";
+import { dataOra, eur, nomeTecnico, STATI_RIPARAZIONE, type Scheda } from "@/lib/assistenza";
 import { cn } from "@/lib/utils";
 import { Campo, Modale, Pill, Sezione, area, campo } from "./ui";
 
@@ -72,10 +72,54 @@ export function DialogoChiudiVerifica({ s, tecnici, onClose, onChiudi }: {
 }
 
 /** Pannello in testa alla lavorazione: chi verifica / chi ripara e lo STATO DELLA RIPARAZIONE a un clic. */
-export function PannelloTecnici({ s, tecnici, ro, busy, onAssegnaVerifica, onChiudiVerifica, onRiapriVerifica, onAssegnaRiparazione, onStato }: {
+// 03/11/2026 (Christian, 63185): gli stati della riparazione a gruppi, con preventivo e lavorazione effettuata sott'occhio
+const GRUPPI_RIPARAZIONE: { titolo: string; stati: string[] }[] = [
+  { titolo: "A che punto è", stati: ["in_corso", "attesa_ricambi", "ricambio_arrivato", "piu_tempo"] },
+  { titolo: "Serve il cliente", stati: ["aggiornamento_cliente", "disabilitare_trova"] },
+  { titolo: "Com'è finita", stati: ["finita", "non_riparabile"] },
+];
+
+/** La nota che accompagna lo stato della riparazione (prima era un prompt del browser). */
+export function DialogoStatoRiparazione({ stato, serveRicambio, totale, onClose, onConferma }: {
+  stato: string; serveRicambio: boolean; totale: number | null | undefined; onClose: () => void; onConferma: (nota: string, importo?: number) => Promise<boolean>;
+}) {
+  const [nota, setNota] = useState("");
+  const [importo, setImporto] = useState("0");
+  const [busy, setBusy] = useState(false);
+  const nonRip = stato === "non_riparabile";
+  const obbligatoria = nonRip || (stato === "attesa_ricambi" && serveRicambio);
+  const testi: Record<string, [string, string, string]> = {
+    attesa_ricambi: ["In attesa ricambi", serveRicambio ? "Quale ricambio serve? Va tra i ricambi da ordinare." : "Nota sul ricambio (facoltativa): dove è ordinato, quando arriva.", "es. batteria Dell PKWVM 95Wh"],
+    piu_tempo: ["Serve più tempo", "Perché serve più tempo? (facoltativo)", ""],
+    finita: ["Riparazione finita", "Cosa hai fatto? Resta nelle note di riparazione.", "es. sostituita scheda logica, test finale OK"],
+    non_riparabile: ["Non riparabile", "Perché non è riparabile? Va nella lavorazione effettuata e nel PRONTO al cliente.", "es. processore morto"],
+  };
+  const [titolo, testo, esempio] = testi[stato];
+  return (
+    <Modale titolo={titolo} onClose={onClose} piedi={<>
+      <Button variant="outline" onClick={onClose}>Annulla</Button>
+      <Button disabled={busy || (obbligatoria && !nota.trim())} onClick={async () => {
+        setBusy(true);
+        try { if (await onConferma(nota.trim(), nonRip ? Number(importo.replace(",", ".")) || 0 : undefined)) onClose(); } finally { setBusy(false); }
+      }}>{busy && <Loader2 className="animate-spin" />}Conferma</Button>
+    </>}>
+      <div className="space-y-3">
+        <Campo label={testo}><textarea className={`${area} min-h-[84px]`} autoFocus value={nota} placeholder={esempio} onChange={(e) => setNota(e.target.value)} /></Campo>
+        {nonRip && (
+          <Campo label="Importo da far pagare €" aiuto={`Sostituisce il totale del preventivo${totale != null ? ` (${eur(Number(totale))})` : ""}. Comprendi le spese di spedizione, se ci sono. Il cliente lo riceve solo quando mandi il PRONTO.`}>
+            <input className={campo} type="number" min={0} step={1} value={importo} onChange={(e) => setImporto(e.target.value)} />
+          </Campo>
+        )}
+      </div>
+    </Modale>
+  );
+}
+
+export function PannelloTecnici({ s, tecnici, ro, busy, onAssegnaVerifica, onChiudiVerifica, onRiapriVerifica, onAssegnaRiparazione, onStato, onVai }: {
   s: Scheda; tecnici: Tecnico[]; ro: boolean; busy: boolean;
   onAssegnaVerifica: () => void; onChiudiVerifica: () => void; onRiapriVerifica: () => void; onAssegnaRiparazione: () => void;
   onStato: (stato: string) => void;
+  onVai: (dove: "preventivo" | "lavorazione") => void;
 }) {
   const st = s.stato;
   const vs = s.verifica_stato;
@@ -112,21 +156,33 @@ export function PannelloTecnici({ s, tecnici, ro, busy, onAssegnaVerifica, onChi
               : inRiparazione ? <Pill tono="ambra">da assegnare</Pill> : <Pill>—</Pill>}
           </div>
           {s.riparazione_assegnata_il && <div className="text-xs text-muted-foreground">assegnata {dataOra(s.riparazione_assegnata_il)}</div>}
+          {["accettato", "pronto", "consegnato"].includes(st) && (
+            <div className="mt-2 grid gap-1 rounded-md bg-muted/40 p-2 text-sm">
+              <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => onVai("preventivo")}>
+                <b>Preventivo:</b> {s.preventivo_totale != null ? eur(Number(s.preventivo_totale)) : "—"}{s.preventivo_esito === "accettato" ? " · accettato" : ""}</button>
+              <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => onVai("lavorazione")}>
+                <b>Lavorazione effettuata:</b> {s.lavorazione ? s.lavorazione.slice(0, 160) + (s.lavorazione.length > 160 ? "…" : "") : "da scrivere"}{s.totale_lavorazione != null ? ` · ${eur(Number(s.totale_lavorazione))}` : ""}</button>
+            </div>
+          )}
+          {s.note_riparazione && <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-line rounded-md border p-2 text-xs">{s.note_riparazione.trim()}</p>}
           {!ro && inRiparazione && (
             <div className="mt-2 space-y-2">
               <Button size="sm" variant={s.tecnico_riparazione ? "outline" : "default"} disabled={busy} onClick={onAssegnaRiparazione}>
                 <Wrench />{s.tecnico_riparazione ? "Riassegna" : "Assegna in riparazione"}</Button>
-              {s.tecnico_riparazione && (
-                <div className="flex flex-wrap gap-1">
-                  {STATI_RIPARAZIONE.map(([k, l]) => (
-                    <button key={k} type="button" disabled={busy} onClick={() => onStato(k)} aria-pressed={s.riparazione_stato === k}
-                      className={cn("rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-60",
-                        s.riparazione_stato === k ? (k === "finita" ? "border-emerald-600 bg-emerald-600 text-white" : "border-primary bg-primary text-primary-foreground")
-                          : k === "disabilitare_trova" ? "border-rose-300 bg-rose-50 text-rose-900 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-100" : "bg-background hover:bg-muted")}>
-                      {l}</button>
-                  ))}
+              {s.tecnico_riparazione && GRUPPI_RIPARAZIONE.map((g) => (
+                <div key={g.titolo}>
+                  <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{g.titolo}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {STATI_RIPARAZIONE.filter(([k]) => g.stati.includes(k)).map(([k, l]) => (
+                      <button key={k} type="button" disabled={busy} onClick={() => onStato(k)} aria-pressed={s.riparazione_stato === k}
+                        className={cn("rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-60",
+                          s.riparazione_stato === k ? (k === "finita" ? "border-emerald-600 bg-emerald-600 text-white" : k === "non_riparabile" ? "border-rose-700 bg-rose-700 text-white" : "border-primary bg-primary text-primary-foreground")
+                            : k === "disabilitare_trova" || k === "non_riparabile" ? "border-rose-300 bg-rose-50 text-rose-900 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-100" : "bg-background hover:bg-muted")}>
+                        {l}</button>
+                    ))}
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           )}
         </div>
