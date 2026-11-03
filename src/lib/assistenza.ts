@@ -75,7 +75,7 @@ export interface Scheda extends SchedaBreve {
   verifica_assegnata_il: string | null; verifica_assegnata_da: string | null; verifica_chiusa_il: string | null; verifica_chiusa_da: string | null;
   riparazione_assegnata_il: string | null; preventivo_risposta_canale: string | null; preventivo_risposta_il: string | null;
   avanzamento: Avanzamento; saldo: number; pagata: boolean; comunicazioni: Comunicazione[]; wa_linea_attiva: boolean;
-  preventivo_totale: number | null;
+  preventivo_totale: number | null; opencore_avviso?: string | null;
 }
 export interface Passo { codice: string; etichetta: string; stato: "fatto" | "attuale" | "da_fare" | "saltato"; dettaglio: string }
 export interface Avanzamento { passi: Passo[]; attuale: string | null;

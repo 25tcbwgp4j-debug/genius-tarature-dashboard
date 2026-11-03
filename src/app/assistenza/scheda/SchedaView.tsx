@@ -289,6 +289,11 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <div className="rounded-lg border-2 border-red-400 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900 dark:bg-red-950/30 dark:text-red-100">
           🏷️🚫 {s.cliente_no_etichette}
         </div>)}
+      {/* 03/11/2026 (Christian, 63285): Mac con OpenCore, il banco lo vede e lo dice al cliente alla consegna */}
+      {s.opencore_avviso && (
+        <div className="rounded-lg border-2 border-red-500 bg-red-50 px-3 py-3 text-center text-xl font-extrabold text-red-700 dark:bg-red-950/30 dark:text-red-200">
+          ⚠️ {s.opencore_avviso}
+        </div>)}
       <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={() => setDlg({ k: "invio", tipo: "trova" })}
         onPreventivo={() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
       <Avanzamento av={s.avanzamento} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)}
