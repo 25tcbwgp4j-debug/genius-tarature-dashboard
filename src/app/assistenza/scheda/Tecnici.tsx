@@ -164,6 +164,14 @@ export function PannelloTecnici({ s, tecnici, ro, busy, onAssegnaVerifica, onChi
                 <b>Lavorazione effettuata:</b> {s.lavorazione ? s.lavorazione.slice(0, 160) + (s.lavorazione.length > 160 ? "…" : "") : "da scrivere"}{s.totale_lavorazione != null ? ` · ${eur(Number(s.totale_lavorazione))}` : ""}</button>
             </div>
           )}
+          {(s.ricambi_attesi || []).filter((r) => r.stato !== "arrivato").map((r, i) => (
+            <div key={i} className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50/60 p-2 text-sm dark:bg-amber-950/20">
+              <b>{r.cosa || "Ricambio"}</b>{r.fornitore ? <span className="text-xs text-muted-foreground">{r.fornitore}</span> : null}
+              <Pill tono={r.stato === "ordinato" ? "blu" : r.stato === "richiesto" ? "ambra" : "rosso"}>{r.stato === "ordinato" ? "ordinato" : r.stato === "richiesto" ? "in coda per l'acquisto" : "da ordinare"}</Pill>
+              {r.ordine ? <span className="text-xs">ordine {r.ordine}</span> : null}
+              {r.link && /^https?:\/\//i.test(r.link) && <a className="text-xs font-medium text-blue-700 underline" href={r.link} target="_blank" rel="noopener noreferrer">Apri il link</a>}
+            </div>
+          ))}
           {s.note_riparazione && <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-line rounded-md border p-2 text-xs">{s.note_riparazione.trim()}</p>}
           {!ro && inRiparazione && (
             <div className="mt-2 space-y-2">

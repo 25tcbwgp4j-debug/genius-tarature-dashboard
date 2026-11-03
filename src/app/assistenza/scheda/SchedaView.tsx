@@ -70,6 +70,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const [duplica, setDuplica] = useState(false);
   const refPrev = useRef<HTMLDivElement>(null);
   const refLav = useRef<HTMLDivElement>(null);
+  const refRic = useRef<HTMLDivElement>(null);
   const refDoc = useRef<HTMLDivElement>(null);
   const refTec = useRef<HTMLDivElement>(null);
   const tecnici = (cfg?.tecnici || []).filter((t) => t.attivo !== false);
@@ -204,6 +205,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "chiudi_verifica") setDlg({ k: "chiudi_verifica" });
     else if (a === "assegna_riparazione") setDlg({ k: "assegna_riparazione" });
     else if (a === "stato_riparazione") refTec.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (a === "ricambi") refRic.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (a === "aggiornamento") setDlg({ k: "invio", tipo: "aggiornamento_riparazione" });
     else if (a === "trova") setDlg({ k: "invio", tipo: "trova" });
     // 02/11/2026 (Christian, 63270): rifiutato → da richiudere (tecnico) → richiuso → solo allora pronto negativo
@@ -325,6 +327,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       <DaRicordare key={s.id} s={s} ro={ro} operatore={operatore} onSalvata={async () => { await ricarica(); onCambiata(); }} />
       {/* 30/10/2026: preventivo e pronto programmati (come le Tarature): Invia subito · Modifica orario · Annulla, poi l'esito */}
       <InviiProgrammati key={`prog-${s.id}-${s.preventivo_prog_il}-${s.pronto_prog_il}`} s={s} ro={ro} operatore={operatore || ""} onScheda={(x) => { setS(x); onCambiata(); }} />
+      {/* 28/10/2026 (Christian): la sezione RICAMBI c'è in qualunque stato (anche prima dell'accettazione o dopo il pronto) */}
+      {(!["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0) && <div ref={refRic} className="scroll-mt-28"><RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
+        onSalvata={async () => { await ricarica(); onCambiata(); }} /></div>}
       {!ro && s.stato !== "annullata" && <ComunicazioneCliente key={`com-${s.id}`} s={s} operatore={operatore} invia={(b) => azione("comunicazione", b, "Comunicazione inviata al cliente")}
         togli={async () => { if (!confirm("Togliere la comunicazione dalla scheda? Non comparirà più nelle prossime mail, WhatsApp e PDF.")) return;
           try { await assModifica(s.id, { comunicazione_cliente: null, operatore }); await ricarica(); onCambiata(); toast.success("Comunicazione tolta"); } catch (e) { toastErrore(e); } }} />}
@@ -351,9 +356,6 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             } catch (e) { toastErrore(e); }
           }}>Aggiungi le spese</Button>
         </div>)}
-      {/* 28/10/2026 (Christian): la sezione RICAMBI c'è in qualunque stato (anche prima dell'accettazione o dopo il pronto) */}
-      {(!["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0) && <RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
-        onSalvata={async () => { await ricarica(); onCambiata(); }} />}
       <BannerRecensione s={s} ro={ro} onScelta={(az) => azione("recensione", { azione: az }, az === "invia" ? "Richiesta di recensione inviata" : "Recensione: non si chiede")} />
 
       {/* azioni e PDF */}
@@ -801,20 +803,20 @@ function RicambiAttesi({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean
         {!ro && <Button size="xs" variant="outline" className="ml-auto" onClick={() => setRighe((x) => [...x, { ...vuoto }])}><Plus />Aggiungi ricambio</Button>}
       </div>
       {righe.map((r, i) => (
-        <div key={i} className={`grid gap-1.5 rounded-lg border bg-background p-2 sm:grid-cols-[1.3fr_0.6fr_1fr_0.8fr_0.7fr_0.7fr_auto] ${r.stato === "arrivato" ? "opacity-60" : ""}`}>
-          <input className={campo} disabled={ro} placeholder="Cosa (es. Tastiera Lenovo V15 G2)" value={r.cosa || ""} onChange={(e) => setR(i, "cosa", e.target.value)} />
+        <div key={i} className={`grid gap-1.5 rounded-lg border bg-background p-2 sm:grid-cols-6 ${r.stato === "arrivato" ? "opacity-60" : ""}`}>
+          <input className={`${campo} font-semibold sm:col-span-2`} disabled={ro} placeholder="Cosa (es. Tastiera Lenovo V15 G2)" value={r.cosa || ""} onChange={(e) => setR(i, "cosa", e.target.value)} />
           <select className={campo} disabled={ro} value={FORNITORI.find((f) => (r.fornitore || "").toLowerCase().startsWith(f.toLowerCase())) || (r.fornitore ? "Altro" : "")}
             onChange={(e) => setR(i, "fornitore", e.target.value)} aria-label="Da chi si ordina">
             <option value="">Da chi…</option>{FORNITORI.map((f) => <option key={f} value={f}>{f}</option>)}</select>
-          <div className="flex gap-1">
+          <div className="flex gap-1 sm:col-span-3 sm:row-start-2">
             <input className={campo} disabled={ro} placeholder={/^bagnetti/i.test(r.fornitore || "") ? "(Bagnetti: non serve il link)" : "Link del prodotto da ordinare"} value={r.link || ""} onChange={(e) => setR(i, "link", e.target.value)} />
             {r.link && /^https?:\/\//.test(r.link) && <a className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md bg-blue-700 px-2.5 text-xs font-medium text-white" href={r.link} target="_blank" rel="noreferrer">Apri il link</a>}
           </div>
-          <input className={campo} disabled={ro} placeholder="N. ordine / fornitore" value={r.ordine || ""} onChange={(e) => setR(i, "ordine", e.target.value)} />
-          <input className={campo} type="date" disabled={ro} title="Arrivo previsto" value={(r.arrivo_previsto || "").slice(0, 10)} onChange={(e) => setR(i, "arrivo_previsto", e.target.value)} />
-          <select className={campo} disabled={ro} value={r.stato || "da_ordinare"} onChange={(e) => setR(i, "stato", e.target.value)}>
+          <input className={`${campo} sm:row-start-2`} disabled={ro} placeholder="N. ordine / fornitore" value={r.ordine || ""} onChange={(e) => setR(i, "ordine", e.target.value)} />
+          <input className={`${campo} sm:row-start-2`} type="date" disabled={ro} title="Arrivo previsto" value={(r.arrivo_previsto || "").slice(0, 10)} onChange={(e) => setR(i, "arrivo_previsto", e.target.value)} />
+          <select className={`${campo} font-semibold ${(r.stato || "da_ordinare") === "da_ordinare" ? "border-rose-400 text-rose-800" : r.stato === "arrivato" ? "text-emerald-700" : "text-blue-800"}`} disabled={ro} value={r.stato || "da_ordinare"} onChange={(e) => setR(i, "stato", e.target.value)}>
             <option value="da_ordinare">Da ordinare</option><option value="richiesto">🛒 Ordine richiesto</option><option value="ordinato">Ordinato</option><option value="arrivato">✔ Arrivato</option></select>
-          <span className="flex gap-1">
+          <span className="flex gap-1 sm:col-span-2 sm:justify-end">
             {/* 27/10/2026 (Christian): ordine automatico del ricambio (eBay/AliExpress, fattura Genius, PayPal, riferimento alla scheda) */}
             {!ro && r.stato === "da_ordinare" && !cambiate && (s.ricambi_attesi || [])[i] && (
               <Button size="xs" title="Mette il ricambio in coda per l'acquisto: si ordina con fattura Genius e PayPal, col riferimento a questa scheda"
@@ -826,8 +828,8 @@ function RicambiAttesi({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean
                 }}>🛒 Ordina</Button>)}
             {!ro && <Button size="xs" variant="ghost" className="text-red-700" onClick={() => setRighe((x) => x.filter((_, j) => j !== i))}><Trash2 /></Button>}
           </span>
-          {r.stato === "richiesto" && <div className="text-xs font-medium text-blue-800 sm:col-span-7">🛒 Ordine richiesto{r.richiesto_il ? ` il ${r.richiesto_il.slice(8, 10)}/${r.richiesto_il.slice(5, 7)}` : ""}{r.richiesto_da ? ` da ${r.richiesto_da}` : ""}: in coda per l&apos;acquisto</div>}
-          {r.nota && <div className="text-xs text-muted-foreground sm:col-span-7">{r.nota}</div>}
+          {r.stato === "richiesto" && <div className="text-xs font-medium text-blue-800 sm:col-span-6">🛒 Ordine richiesto{r.richiesto_il ? ` il ${r.richiesto_il.slice(8, 10)}/${r.richiesto_il.slice(5, 7)}` : ""}{r.richiesto_da ? ` da ${r.richiesto_da}` : ""}: in coda per l&apos;acquisto</div>}
+          {r.nota && <div className="text-xs text-muted-foreground sm:col-span-6">{r.nota}</div>}
         </div>
       ))}
       {!ro && cambiate && <div className="flex justify-end"><Button size="sm" disabled={busy} onClick={salva}>{busy ? <Loader2 className="animate-spin" /> : <Save />}Salva ricambi</Button></div>}

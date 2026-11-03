@@ -13,7 +13,7 @@ const AZIONI: Record<string, string> = {
   arrivato: "Dispositivo arrivato", preventivo: "Vai al preventivo", invia_preventivo: "INVIA PREVENTIVO", esito: "Accettato / Rifiutato",
   pronto: "PRONTO", incassa: "Incassa / Pagato", consegna: "CONSEGNA", spedisci: "🚚 Crea l'etichetta di riconsegna",
   assegna_verifica: "Assegna in verifica", chiudi_verifica: "Scrivi e chiudi la verifica", assegna_riparazione: "Assegna in riparazione",
-  stato_riparazione: "Stato riparazione", aggiornamento: "Aggiornamento al cliente", trova: "Invia le istruzioni «Trova il mio»",
+  stato_riparazione: "Stato riparazione", ricambi: "Vai ai ricambi", aggiornamento: "Aggiornamento al cliente", trova: "Invia le istruzioni «Trova il mio»",
   rimontaggio: "Da richiudere: assegna a un tecnico", rimontato: "✔ Richiuso", risposta_cliente: "✔ Il cliente ha risposto",
   ricevuta: "INVIA RICEVUTA", in_vendita: "🏷️ Metti IN VENDITA", richiedi_etichetta: "📨 Pagamento arrivato: chiedi l'etichetta di ritorno",
 };
