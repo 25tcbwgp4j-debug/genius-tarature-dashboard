@@ -88,8 +88,8 @@ function RigaRicambio({ r, operatore, onCambiata }: { r: Riga; operatore: string
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="min-w-0 flex-1 basis-48 text-[15px] font-semibold">{r.cosa || "(senza descrizione)"}{r.fornitore ? <span className="font-normal text-muted-foreground"> · {r.fornitore}</span> : null}</span>
-        {r.link
-          ? <a className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-700 px-3 text-sm font-medium text-white" href={r.link} target="_blank" rel="noreferrer"><ExternalLink className="size-4" />Apri il link</a>
+        {r.link && /^https?:\/\//i.test(r.link)
+          ? <a className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-700 px-3 text-sm font-medium text-white" href={r.link} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" />Apri il link</a>
           : <span className="text-xs text-amber-700">Nessun link: aggiungilo dalla scheda</span>}
         {r.stato === "da_ordinare" && <>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => setApriOrdine((x) => !x)}><Truck />Ho ordinato</Button>
