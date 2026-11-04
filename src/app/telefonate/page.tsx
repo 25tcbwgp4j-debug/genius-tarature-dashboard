@@ -10,7 +10,7 @@ import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 
 type Telefonata = {
-  id: string; da_richiamare?: boolean; richiamato_il?: string | null; nota?: string | null; nota_il?: string | null;
+  id: string; contatto?: string | null; da_richiamare?: boolean; richiamato_il?: string | null; nota?: string | null; nota_il?: string | null;
   inizio: string; direzione: "entrante" | "uscente"; numero: string | null; nome: string | null; interno: string | null;
   linee: (string | null)[]; durata_sec: number; squillo_sec: number | null; risposta: boolean;
 };
@@ -48,6 +48,7 @@ function Tipo({ t }: { t: Telefonata }) {
 function Riga({ t, conData, onCambiata }: { t: Telefonata; conData?: boolean; onCambiata: (nuova: Telefonata) => void }) {
   const [noteAperte, setNoteAperte] = useState(false);
   const [testo, setTesto] = useState(t.nota || "");
+  const [nomeNumero, setNomeNumero] = useState(t.contatto || "");
   const [busy, setBusy] = useState(false);
 
   async function salva(corpo: { da_richiamare?: boolean; nota?: string }) {
@@ -65,6 +66,20 @@ function Riga({ t, conData, onCambiata }: { t: Telefonata; conData?: boolean; on
     }
   }
 
+  async function salvaNome() {
+    if (!t.numero) return;
+    setBusy(true);
+    try {
+      await fetchAPI(`/api/telefonate/contatti/${encodeURIComponent(t.numero)}`, { method: "PUT", body: JSON.stringify({ nome: nomeNumero }) });
+      window.dispatchEvent(new Event("telefonate-cambiate"));   // lo stesso numero può comparire su altre righe
+      toast.success(nomeNumero.trim() ? "Nome salvato" : "Nome tolto");
+    } catch (e) {
+      toastErrore(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const segnata = !!t.da_richiamare;
   return (
     <>
@@ -72,7 +87,8 @@ function Riga({ t, conData, onCambiata }: { t: Telefonata; conData?: boolean; on
         <td className="whitespace-nowrap p-2.5 tabular-nums">{conData ? dataOra(t.inizio) : ora(t.inizio)}</td>
         <td className="p-2.5"><Tipo t={t} /></td>
         <td className="p-2.5 font-medium tabular-nums">
-          {t.numero || <span className="font-normal text-muted-foreground">Numero nascosto</span>}
+          {t.contatto ? <span className="block font-semibold">{t.contatto}</span> : null}
+          {t.numero ? <span className={t.contatto ? "text-xs font-normal text-muted-foreground" : undefined}>{t.numero}</span> : <span className="font-normal text-muted-foreground">Numero nascosto</span>}
           {t.nome ? <span className="block text-xs font-normal text-muted-foreground">{t.nome}</span> : null}
           {t.richiamato_il && !segnata ? <span className="block text-xs font-normal text-emerald-700 dark:text-emerald-400">Richiamato il {dataOra(t.richiamato_il)}</span> : null}
         </td>
@@ -85,7 +101,7 @@ function Riga({ t, conData, onCambiata }: { t: Telefonata; conData?: boolean; on
             <Flag className="mr-1.5 h-4 w-4" /> Da richiamare
           </Button>
           <Button size="sm" variant={t.nota ? "secondary" : "outline"} className="ml-1.5" aria-expanded={noteAperte} onClick={() => setNoteAperte(!noteAperte)}>
-            <NotebookPen className="mr-1.5 h-4 w-4" /> Note
+            <NotebookPen className="mr-1.5 h-4 w-4" /> Nome e note
           </Button>
         </td>
       </tr>
@@ -93,6 +109,13 @@ function Riga({ t, conData, onCambiata }: { t: Telefonata; conData?: boolean; on
       {noteAperte ? (
         <tr className={segnata ? "bg-amber-50 dark:bg-amber-950/30" : undefined}>
           <td colSpan={7} className="p-2.5 pt-0">
+            {t.numero ? (
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <input value={nomeNumero} onChange={(e) => setNomeNumero(e.target.value)} maxLength={120} aria-label={`Nome del numero ${t.numero}`}
+                  placeholder="Di chi è questo numero" className="h-9 min-w-48 flex-1 rounded-md border bg-background px-3 text-sm" />
+                <Button size="sm" variant="outline" disabled={busy || nomeNumero.trim() === (t.contatto || "")} onClick={salvaNome}>Salva il nome</Button>
+              </div>
+            ) : null}
             <textarea value={testo} onChange={(e) => setTesto(e.target.value)} rows={3} maxLength={4000} autoFocus aria-label={`Note sulla telefonata di ${t.numero || "numero nascosto"}`}
               placeholder="Scrivi le note su questa telefonata" className="w-full rounded-md border bg-background p-2 text-sm" />
             <div className="mt-1.5 flex justify-end gap-2">
@@ -114,7 +137,7 @@ function Elenco({ righe, conData, onCambiata }: { righe: Telefonata[]; conData?:
           <tr><th className="p-2.5">{conData ? "Quando" : "Ora"}</th><th className="p-2.5">Tipo</th><th className="p-2.5">Numero</th><th className="p-2.5 text-right">Durata</th><th className="p-2.5">Interno</th><th className="p-2.5">Linea</th><th className="p-2.5"><span className="sr-only">Azioni</span></th></tr>
         </thead>
         <tbody className="divide-y">
-          {righe.map((t) => <Riga key={t.id} t={t} conData={conData} onCambiata={onCambiata} />)}
+          {righe.map((t) => <Riga key={`${t.id}-${t.contatto || ""}`} t={t} conData={conData} onCambiata={onCambiata} />)}
         </tbody>
       </table>
     </div>
@@ -163,8 +186,8 @@ export default function TelefonatePage() {
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-auto text-xl font-semibold tracking-tight">Telefonate</h1>
         <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); setRighe(null); setCerca(testo.trim()); }}>
-          <input value={testo} onChange={(e) => setTesto(e.target.value)} placeholder="Cerca un numero" inputMode="tel"
-            className="h-9 w-44 rounded-md border bg-background px-3 text-sm" aria-label="Cerca un numero in tutte le telefonate" />
+          <input value={testo} onChange={(e) => setTesto(e.target.value)} placeholder="Cerca numero o nome"
+            className="h-9 w-44 rounded-md border bg-background px-3 text-sm" aria-label="Cerca un numero o un nome in tutte le telefonate" />
           <Button type="submit" size="sm" variant="outline"><Search className="mr-1.5 h-4 w-4" /> Cerca</Button>
         </form>
       </div>
@@ -204,7 +227,7 @@ export default function TelefonatePage() {
 
         <section className="min-w-0 space-y-2">
           <h2 className="text-sm font-semibold first-letter:uppercase">{cerca ? `Ricerca «${cerca}»` : titoloGiorno(giorno)}{righe ? ` · ${righe.length} ${righe.length === 1 ? "telefonata" : "telefonate"}` : ""}</h2>
-          {righe === null ? <Loader2 className="animate-spin" /> : !righe.length ? <p className="py-6 text-sm text-muted-foreground">{cerca ? "Nessuna telefonata con questo numero." : "Nessuna telefonata in questo giorno."}</p> : <Elenco righe={righe} conData={!!cerca} onCambiata={(n) => setRighe((x) => (x || []).map((t) => (t.id === n.id ? n : t)))} />}
+          {righe === null ? <Loader2 className="animate-spin" /> : !righe.length ? <p className="py-6 text-sm text-muted-foreground">{cerca ? "Nessuna telefonata trovata." : "Nessuna telefonata in questo giorno."}</p> : <Elenco righe={righe} conData={!!cerca} onCambiata={(n) => setRighe((x) => (x || []).map((t) => (t.id === n.id ? n : t)))} />}
         </section>
       </div>
     </div>
