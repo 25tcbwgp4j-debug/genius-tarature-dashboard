@@ -182,7 +182,7 @@ export default function TelefonatePage() {
   const scegli = (g: string) => { setRighe(null); setCerca(""); setTesto(""); setGiorno(g); };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-3 p-3 md:p-5">
+    <div className="mx-auto max-w-7xl space-y-3 p-3 md:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-auto text-xl font-semibold tracking-tight">Telefonate</h1>
         <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); setRighe(null); setCerca(testo.trim()); }}>
@@ -199,8 +199,9 @@ export default function TelefonatePage() {
         </p>
       ) : null}
 
-      <div className="grid gap-3 lg:grid-cols-[22rem_minmax(0,1fr)]">
-        <section className="self-start rounded-xl border bg-card p-3">
+      {/* col menu laterale la tabella accanto al calendario ci sta solo sugli schermi larghi: altrimenti i pulsanti finiscono fuori vista */}
+      <div className="grid gap-3 2xl:grid-cols-[22rem_minmax(0,1fr)]">
+        <section className="w-full max-w-md self-start rounded-xl border bg-card p-3">
           <div className="mb-2 flex items-center justify-between">
             <Button size="icon" variant="ghost" aria-label="Mese precedente" onClick={() => setMese(spostaMese(mese, -1))}><ChevronLeft className="h-4 w-4" /></Button>
             <span className="text-sm font-semibold capitalize">{titoloMese(mese)}</span>
