@@ -82,7 +82,10 @@ function ChatStaff() {
   const caricaProposte = () => assStaffProposte().then((r) => setProposte(r.proposte)).catch(() => {});
   useEffect(() => { caricaProposte(); const t = setInterval(caricaProposte, 15000); return () => clearInterval(t); }, []);
   const propDi = (chat: string) => proposte.find((p) => p.chat_id === chat);
-  const ordinate = useMemo(() => [...(conv || [])].sort((a, b) => Number(!!propDi(b.chat_id)) - Number(!!propDi(a.chat_id))), [conv, proposte]);
+  // 04/11/2026: sempre in ordine di tempo (prima le chat con proposta restavano in cima e nascondevano i clienti appena arrivati)
+  const [soloAttesa, setSoloAttesa] = useState(false);
+  const inAttesa = useMemo(() => (conv || []).filter((x) => propDi(x.chat_id)).length, [conv, proposte]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ordinate = useMemo(() => (soloAttesa ? (conv || []).filter((x) => propDi(x.chat_id)) : conv || []), [conv, proposte, soloAttesa]); // eslint-disable-line react-hooks/exhaustive-deps
   const c = conv?.find((x) => x.chat_id === sel) || null;
   const dati = useMemo(() => datiCliente((msgs || []).map((m) => ({ direction: m.da_noi ? "outbound" : "inbound", body: m.testo } as ChatMessage))), [msgs]);
   const nomeDi = useNomi((conv || []).map((x) => x.telefono || ""));
@@ -99,8 +102,9 @@ function ChatStaff() {
       {/* 26/10/2026: su telefono (app iPhone) si vede o l'elenco o la conversazione, a tutto schermo */}
       <div className={`${sel ? "hidden md:flex" : "flex"} w-full shrink-0 flex-col rounded-xl border bg-card md:w-80`}>
         <div className="border-b p-2">
-          <div className="mb-1 px-1 text-xs text-muted-foreground">Storico recuperato il 26/10: rivenditori ultimi 2 mesi, altri clienti ultimo mese; poi tutto in diretta. In cima chi aspetta risposta.</div>
+          <div className="mb-1 px-1 text-xs text-muted-foreground">Storico recuperato il 26/10: rivenditori ultimi 2 mesi, altri clienti ultimo mese; poi tutto in diretta. In cima gli ultimi messaggi.</div>
           <input className="h-9 w-full rounded-md border bg-background px-2 text-sm" placeholder="Cerca nome o numero" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Button size="sm" variant={soloAttesa ? "default" : "outline"} className="mt-1 w-full" onClick={() => setSoloAttesa((v) => !v)}>{soloAttesa ? "Mostra tutte le chat" : `Solo chi aspetta risposta (${inAttesa})`}</Button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {!conv ? <div className="p-4 text-center"><Loader2 className="inline animate-spin" /></div> : !conv.length ? <div className="p-4 text-sm text-muted-foreground">Ancora nessun messaggio.</div> : ordinate.map((x) => (
