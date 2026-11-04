@@ -43,6 +43,7 @@ import {
   ListChecks,
   Megaphone,
   Landmark,
+  PhoneCall,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -67,6 +68,7 @@ const COMUNI: Voce[] = [
   { href: "/cassa", label: "Scontrino (registratore)", icon: ShoppingCart },
   { href: "/cassa/giornata", label: "Cassa del giorno", icon: Calculator },
   { href: "/spedizioni", label: "Spedizioni", icon: Truck },
+  { href: "/telefonate", label: "Telefonate", icon: PhoneCall },
   { href: "/ordini", label: "Ordini e preventivi", icon: NotebookPen },
   { href: "/proforma", label: "Pro forma", icon: FileSpreadsheet },
   { href: "/magazzino", label: "Magazzino", icon: Boxes },
