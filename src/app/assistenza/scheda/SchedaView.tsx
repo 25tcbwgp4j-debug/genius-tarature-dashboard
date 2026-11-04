@@ -211,7 +211,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "trova") setDlg({ k: "invio", tipo: "trova" });
     // 02/11/2026 (Christian, 63270): rifiutato → da richiudere (tecnico) → richiuso → solo allora pronto negativo
     // 26/10/2026 (63118): preventivo negativo → RIFIUTATO subito, senza mandarlo da accettare
-    else if (a === "rifiutato_diretto") { if (confirm("Preventivo NEGATIVO: segnare la scheda come RIFIUTATA senza inviare il preventivo al cliente?\nPoi un tecnico lo richiude e si manda il PRONTO (restituzione).")) azione("esito-preventivo", { esito: "rifiutato", canale: "negozio" }, "Preventivo RIFIUTATO (negativo, non inviato)"); }
+    else if (a === "rifiutato_diretto") { if (confirm("Preventivo NEGATIVO: segnare la scheda come RIFIUTATA senza inviare il preventivo al cliente?\nPoi lo si richiude, se è stato smontato, e si manda il PRONTO (restituzione).")) azione("esito-preventivo", { esito: "rifiutato", canale: "negozio" }, "Preventivo RIFIUTATO (negativo, non inviato)"); }
     // 26/10/2026 (63214): la ricevuta d'ingresso si manda a scheda compilata (oppure «Non serve»)
     else if (a === "ricevuta") apriInvio("ricevuta");
     else if (a === "ricevuta_no") { if (s && confirm("Non mandare la ricevuta d'ingresso per questa scheda?")) assModifica(s.id, { ricevuta_da_inviare: false, operatore }).then(async () => { await ricarica(); onCambiata(); }).catch(toastErrore); }
@@ -219,6 +219,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "salta_verifica") { if (confirm("Saltare la verifica? Si passa direttamente al preventivo.")) azione("salta-passo", { passo: "verifica" }, "Verifica saltata"); }
     else if (a === "salta_preventivo") { if (confirm("Saltare il preventivo? Si considera accettato senza inviarlo al cliente e si passa alla riparazione.")) azione("salta-passo", { passo: "preventivo" }, "Preventivo saltato: si passa alla riparazione"); }
     else if (a === "rimontaggio") setDlg({ k: "assegna_rimontaggio" });
+    // 04/11/2026 (Christian): il dispositivo potrebbe non essere mai stato smontato
+    else if (a === "non_richiudere") { if (confirm("Il dispositivo non è stato smontato e non serve richiuderlo?\nSi passa al PRONTO (restituzione).")) azione("rimontaggio", { azione: "non_serve" }, "Non smontato: ora invia il PRONTO (negativo)"); }
     // 02/11/2026 (Christian, 63278): scheda ferma perché abbiamo chiesto qualcosa al cliente
     else if (a === "risposta_cliente") azione("attesa-cliente", { azione: "togli" }, "Il cliente ha risposto: la scheda riprende il suo giro");
     else if (a === "rimontato") azione("rimontaggio", { azione: "fatto" }, "Richiuso: ora invia il PRONTO (negativo)");
@@ -306,7 +308,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
                 title="Rimanda il preventivo (stesse voci): il cliente torna a dover accettare o rifiutare">Preventivo</Button>
               <Button size="xs" variant="outline" disabled={!!busy} onClick={() => apriInvio("aggiornamento")}
                 title="Rimanda l'aggiornamento del preventivo (con il preventivo aggiuntivo, se c'è)">Aggiornamento preventivo</Button></>}
-            {(st === "pronto" || (st === "accettato" && ["finita", "non_riparabile"].includes(s.riparazione_stato || "")) || (st === "rifiutato" && s.rimontaggio === "fatto")) && (
+            {(st === "pronto" || (st === "accettato" && ["finita", "non_riparabile"].includes(s.riparazione_stato || "")) || (st === "rifiutato" && ["fatto", "non_serve"].includes(s.rimontaggio || ""))) && (
               <Button size="xs" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}
                 title="Rimanda il pronto / consuntivo da pagare (mail + WhatsApp, con IBAN e PDF)">Pronto da pagare</Button>)}</>}
           {/* 28/10/2026 (Christian): preventivi e modifiche dettate anche da iPhone */}
@@ -374,7 +376,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           <Button size="sm" variant="outline" disabled={!!busy} title="Abbiamo chiesto qualcosa al cliente: la scheda resta ferma nella sua sezione finché non risponde. Non manda nulla al cliente."
             onClick={() => azione("attesa-cliente", { azione: "metti" }, "Scheda in attesa di risposta dal cliente")}>💬 In attesa di risposta dal cliente</Button>)}
         {!ro && st === "accettato" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "invio", tipo: "aggiornamento_riparazione" })}><MessageSquareText />Aggiornamento riparazione</Button>}
-        {!ro && st !== "in_arrivo" && st !== "consegnato" && !(st === "rifiutato" && s.rimontaggio !== "fatto") && <Button size="sm" variant={(st === "accettato" && ["finita", "non_riparabile"].includes(s.riparazione_stato || "")) || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
+        {!ro && st !== "in_arrivo" && st !== "consegnato" && !(st === "rifiutato" && !["fatto", "non_serve"].includes(s.rimontaggio || "")) && <Button size="sm" variant={(st === "accettato" && ["finita", "non_riparabile"].includes(s.riparazione_stato || "")) || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
         {!ro && st === "pronto" && <Button size="sm" variant={s.pagata || s.saldo <= 0 ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "consegna" })}>CONSEGNA</Button>}
         <span className="mx-0.5 hidden h-6 w-px bg-border sm:block" />
         <MenuPdf id={s.id} prima={() => salva(true)} />
@@ -468,9 +470,11 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           }} />
       </div>
 
+      {/* 04/11/2026 (Christian): la lavorazione a tutta larghezza, come il preventivo */}
+      <div ref={refLav} className="scroll-mt-28"><Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} busy={!!busy}
+        onNonFatta={(chiave, non_fatta) => azione("voce-non-fatta", { chiave, non_fatta }, non_fatta ? "Voce segnata NON FATTA: tolta da lavorazione e totale" : "Voce di nuovo da fare: rimessa in lavorazione e totale")} /></div>
       <div className="grid gap-3 xl:grid-cols-[3fr_2fr]">
-        <div ref={refLav} className="scroll-mt-28"><Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} /></div>
-        <div ref={refDoc} className="scroll-mt-28 space-y-3">
+        <div ref={refDoc} className="scroll-mt-28">
           <Documenti s={s} ro={ro} busy={!!busy} onFatturaEliminata={async () => { await ricarica(); onCambiata(); }}
             onScontrino={async () => { if (sporca && !(await salva(true))) return; router.push(`/cassa?scheda=${s.id}`); }}
             onAcconto={async () => {
@@ -492,10 +496,10 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
               await azione("pagamento-anticipato", { documento }, `Richiesta di pagamento anticipato di ${eur(s.saldo)} inviata`);
             }}
             onVendi={vendi} onPagato={() => setDlg({ k: "pagato" })} onCorriere={() => setDlg({ k: "corriere" })} />
-          <Sezione titolo="Nota interna" sottotitolo="mai al cliente">
-            <textarea className={area} rows={3} disabled={ro} value={(v("note_interne") as string) || ""} onChange={(e) => set("note_interne", e.target.value)} />
-          </Sezione>
         </div>
+        <Sezione titolo="Nota interna" sottotitolo="mai al cliente">
+          <textarea className={area} rows={3} disabled={ro} value={(v("note_interne") as string) || ""} onChange={(e) => set("note_interne", e.target.value)} />
+        </Sezione>
       </div>
 
       {/* 24/10/2026 (Christian): comunicazioni e fasi si aprono con un clic, così la scheda non è infinita */}
@@ -556,7 +560,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         testo="Chi fa la riparazione? Poi si aggiorna lo stato: attesa ricambi, aggiornamento al cliente, serve più tempo, «Trova il mio dispositivo», finita."
         onClose={() => setDlg(null)} onAssegna={async (t, m) => !!(await azione("assegna-riparazione", { tecnico: t, messaggio: m }, `Riparazione assegnata a ${t}${m ? " con messaggio" : ""}`))} />}
       {dlg?.k === "assegna_rimontaggio" && <DialogoAssegna titolo={`Rifiutato da richiudere — scheda ${s.sigla}`} tecnici={tecnici} attuale={s.tecnico_riparazione}
-        testo="Il preventivo è rifiutato: chi richiude il dispositivo? Quando l'ha richiuso il tecnico segna «Richiuso» e solo allora si invia il PRONTO negativo."
+        testo="Il preventivo è rifiutato: chi richiude il dispositivo? Quando l'ha richiuso il tecnico segna «Richiuso» e solo allora si invia il PRONTO negativo. Se non è stato smontato, chiudi questa finestra e premi «Non smontato: non richiudere»."
         onClose={() => setDlg(null)} onAssegna={async (t) => !!(await azione("rimontaggio", { azione: "serve", tecnico: t }, `Da richiudere: assegnato a ${t}`))} />}
       {dlg?.k === "stesso" && <DialogoStessoModello s={s} ro={ro} onClose={() => setDlg(null)} onApri={onApri}
         onCopia={(r) => { setBz((x) => ({ ...x, righe: r })); setDlg(null); toast.success("Preventivo copiato: controlla i prezzi e salva"); }} />}

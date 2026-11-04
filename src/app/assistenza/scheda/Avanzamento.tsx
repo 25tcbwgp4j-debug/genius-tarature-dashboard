@@ -7,7 +7,7 @@ import type React from "react";
 import { ArrowRight, Check, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Avanzamento as Av } from "@/lib/assistenza";
+import { dataOra, type Avanzamento as Av } from "@/lib/assistenza";
 
 const AZIONI: Record<string, string> = {
   arrivato: "Dispositivo arrivato", preventivo: "Vai al preventivo", invia_preventivo: "INVIA PREVENTIVO", esito: "Accettato / Rifiutato",
@@ -45,6 +45,8 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
               <span className={cn("h-0.5 flex-1", i === av.passi.length - 1 ? "opacity-0" : p.stato === "fatto" ? "bg-emerald-500" : "bg-border")} />
             </div>
             <span className={cn("text-[11px] leading-tight", p.stato === "attuale" ? "font-semibold text-foreground" : "text-muted-foreground")}>{p.etichetta}</span>
+            {/* 04/11/2026 (Christian): giorno e ora sotto ogni passo, senza dover aprire «Fasi e registro» */}
+            {p.quando && <span className="whitespace-pre-line text-[10px] font-medium leading-tight tabular-nums text-foreground/80">{dataOra(p.quando).replace(", ", "\n")}</span>}
             {p.dettaglio && <span className="text-[10px] leading-tight text-muted-foreground">{p.dettaglio}</span>}
           </li>
         ))}
@@ -68,6 +70,10 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
           {av.prossimo.alternativa === "rifiutato_diretto" && (
             <Button size="sm" variant="outline" className="ml-auto border-red-300 text-red-700" disabled={disabilitato} onClick={() => onAzione("rifiutato_diretto")}
               title="Preventivo negativo (es. irreparabile): si segna RIFIUTATO senza mandarlo al cliente da accettare, poi si va al PRONTO">Negativo: segna RIFIUTATO</Button>)}
+          {/* 04/11/2026 (Christian): rifiutato ma mai smontato → non c'è niente da richiudere */}
+          {av.prossimo.alternativa === "non_richiudere" && (
+            <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("non_richiudere")}
+              title="Il dispositivo non è stato smontato: non serve un tecnico, si passa al PRONTO">Non smontato: non richiudere</Button>)}
           {/* 29/10/2026 (Christian): verifica e preventivo si saltano quando non servono */}
           {(az === "assegna_verifica" || az === "chiudi_verifica") && <Button size="sm" variant="ghost" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("salta_verifica")} title="La verifica non serve: si passa al preventivo">Non serve: salta la verifica</Button>}
           {(az === "preventivo" || az === "invia_preventivo") && <Button size="sm" variant="ghost" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("salta_preventivo")} title="Prezzo già concordato: si considera accettato senza inviarlo e si va alla riparazione">Non serve: salta il preventivo</Button>}

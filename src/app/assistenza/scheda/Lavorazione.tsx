@@ -5,12 +5,15 @@
 // (precompilata dall'ipotesi accettata), totale, esito. Tutto ciò che è interno non va mai sui PDF del cliente.
 import { Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { eur, type Scheda } from "@/lib/assistenza";
+import { eur, type Scheda, type VoceLavorazione } from "@/lib/assistenza";
+import { cn } from "@/lib/utils";
 import { Campo, Pill, Scelta, Sezione, area, campo } from "./ui";
 
 type V = <K extends keyof Scheda>(k: K) => Scheda[K] | undefined;
 
-export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: (k: keyof Scheda, val: unknown) => void; ro: boolean; tecnici: string[] }) {
+export function Lavorazione({ s, v, set, ro, tecnici, busy, onNonFatta }: { s: Scheda; v: V; set: (k: keyof Scheda, val: unknown) => void; ro: boolean; tecnici: string[]; busy: boolean;
+  onNonFatta: (chiave: string, nonFatta: boolean) => void;
+}) {
   const tl = v("totale_lavorazione");
   // 27/10/2026 (63182): con i totali vuoti vale il totale ricavato dal backend (voci accettate + spedizione)
   const tot = tl !== null && tl !== undefined && String(tl) !== "" ? tl : (s.preventivo_totale ?? s.totale_dovuto);
@@ -28,6 +31,43 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
     <Sezione titolo="Lavorazione" icona={<Wrench />} sottotitolo={s.preventivo_stato === "accettato" ? <Pill tono="verde">in riparazione</Pill> : null}>
       <datalist id="tecnici-assistenza">{tecnici.map((t) => <option key={t} value={t} />)}</datalist>
       <div className="space-y-3">
+        <VociLavorazione voci={s.voci_lavorazione || []} modificabile={!ro && s.stato === "accettato" && s.riparazione_stato !== "non_riparabile"} busy={busy} onNonFatta={onNonFatta} />
+        {/* 26/10/2026 (Christian): la lavorazione a tutta larghezza (prima stava accanto alla colonna stretta) */}
+        <div className="grid gap-3">
+          <div className="space-y-2">
+          <Campo label="Lavorazione effettuata (va al cliente)" aiuto={s.preventivo_stato === "accettato" ? "Precompilata con l'ipotesi accettata e il suo importo: correggi se serve." : undefined}>
+            {/* 26/10/2026 (Christian, 63079): riquadro grande, si legge tutto il testo (anche le righe lunghe) */}
+            <textarea className={`${area} min-h-[160px] resize-y text-[14px] leading-relaxed`} disabled={ro} value={(v("lavorazione") as string) || ""} onChange={(e) => set("lavorazione", e.target.value)}
+              rows={Math.min(40, Math.max(6, String(v("lavorazione") || "").split("\n").reduce((n, r) => n + Math.max(1, Math.ceil(r.length / 120)), 0) + 1))} />
+          </Campo>
+          {/* 26/10/2026 (Christian, 63123): AirPods con cuffia o custodia sostituita → il cliente deve disassociarle e riassociarle */}
+          {!ro && avvisoAirpods(s, String(v("lavorazione") || "")) && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+              <span>🎧 AirPods con un componente sostituito: aggiungo alla lavorazione l&apos;avviso per il cliente (disassociare e riassociare)?</span>
+              <Button size="xs" className="ml-auto" onClick={() => set("lavorazione", `${String(v("lavorazione") || "").trimEnd()}\n${NOTA_AIRPODS}`.trim())}>Aggiungi l&apos;avviso</Button>
+            </div>
+          )}
+          </div>
+          {/* 04/11/2026 (Christian): totali su una riga, non uno sopra l'altro */}
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <Campo label="Totale lavorazione € (IVA compresa)">
+              <input className={`${campo} text-right font-semibold`} inputMode="decimal" disabled={ro} value={v("totale_lavorazione") ?? ""} onChange={(e) => set("totale_lavorazione", e.target.value.replace(",", "."))} />
+            </Campo>
+            <Campo label="Acconto €">
+              <input className={`${campo} text-right`} inputMode="decimal" disabled={ro} value={v("acconto") ?? ""} onChange={(e) => set("acconto", e.target.value.replace(",", "."))} />
+            </Campo>
+            <Campo label="Esito">
+              <select className={campo} disabled={ro} value={(v("esito") as string) || ""} onChange={(e) => set("esito", e.target.value)}>
+                <option value="">—</option><option value="EFFETTUATO">Effettuato</option><option value="NEGATIVO">Negativo</option><option value="DA ULTIMARE">Da ultimare</option></select>
+            </Campo>
+            {/* 24/10/2026: se la scheda risulta pagata (scontrino, fattura, bonifico) il saldo non si mostra come «da pagare» */}
+            {s.pagata ? (
+              <div className="rounded-md bg-emerald-50 px-2.5 py-2 text-sm text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">Totale <b>{eur(tot)}</b> · <b>PAGATA</b><br /><span className="text-xs">vedi «Documenti, pagamento e spedizioni»</span></div>
+            ) : (
+              <div className={`rounded-md px-2.5 py-2 text-sm ${saldo > 0 ? "bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" : "bg-muted/50"}`}>Totale <b>{eur(tot)}</b> · acconto {eur(acc)}<br />{saldo > 0 ? "DA PAGARE" : "SALDO"} <b className="text-base">{eur(saldo)}</b></div>
+            )}
+          </div>
+        </div>
         {/* 27/10/2026 (Christian, 63121): dispositivo SOSTITUITO (iPhone, iPad, Pencil…) → nuovo seriale/IMEI, comunicato al cliente
             in evidenza in pronto, consuntivo, spedizione (mail, WhatsApp e PDF) */}
         <div className="rounded-lg border border-sky-300 bg-sky-50/60 p-3 dark:border-sky-900 dark:bg-sky-950/20">
@@ -99,43 +139,43 @@ export function Lavorazione({ s, v, set, ro, tecnici }: { s: Scheda; v: V; set: 
           </div>
         </div>
         </details>
-        {/* 26/10/2026 (Christian): la lavorazione a tutta larghezza (prima stava accanto alla colonna stretta) */}
-        <div className="grid gap-3">
-          <div className="space-y-2">
-          <Campo label="Lavorazione effettuata (va al cliente)" aiuto={s.preventivo_stato === "accettato" ? "Precompilata con l'ipotesi accettata e il suo importo: correggi se serve." : undefined}>
-            {/* 26/10/2026 (Christian, 63079): riquadro grande, si legge tutto il testo (anche le righe lunghe) */}
-            <textarea className={`${area} min-h-[160px] resize-y text-[14px] leading-relaxed`} disabled={ro} value={(v("lavorazione") as string) || ""} onChange={(e) => set("lavorazione", e.target.value)}
-              rows={Math.min(40, Math.max(6, String(v("lavorazione") || "").split("\n").reduce((n, r) => n + Math.max(1, Math.ceil(r.length / 120)), 0) + 1))} />
-          </Campo>
-          {/* 26/10/2026 (Christian, 63123): AirPods con cuffia o custodia sostituita → il cliente deve disassociarle e riassociarle */}
-          {!ro && avvisoAirpods(s, String(v("lavorazione") || "")) && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-              <span>🎧 AirPods con un componente sostituito: aggiungo alla lavorazione l&apos;avviso per il cliente (disassociare e riassociare)?</span>
-              <Button size="xs" className="ml-auto" onClick={() => set("lavorazione", `${String(v("lavorazione") || "").trimEnd()}\n${NOTA_AIRPODS}`.trim())}>Aggiungi l&apos;avviso</Button>
-            </div>
-          )}
-          </div>
-          <div className="space-y-2">
-            <Campo label="Totale lavorazione € (IVA compresa)">
-              <input className={`${campo} text-right font-semibold`} inputMode="decimal" disabled={ro} value={v("totale_lavorazione") ?? ""} onChange={(e) => set("totale_lavorazione", e.target.value.replace(",", "."))} />
-            </Campo>
-            <Campo label="Acconto €">
-              <input className={`${campo} text-right`} inputMode="decimal" disabled={ro} value={v("acconto") ?? ""} onChange={(e) => set("acconto", e.target.value.replace(",", "."))} />
-            </Campo>
-            <Campo label="Esito">
-              <select className={campo} disabled={ro} value={(v("esito") as string) || ""} onChange={(e) => set("esito", e.target.value)}>
-                <option value="">—</option><option value="EFFETTUATO">Effettuato</option><option value="NEGATIVO">Negativo</option><option value="DA ULTIMARE">Da ultimare</option></select>
-            </Campo>
-            {/* 24/10/2026: se la scheda risulta pagata (scontrino, fattura, bonifico) il saldo non si mostra come «da pagare» */}
-            {s.pagata ? (
-              <div className="rounded-md bg-emerald-50 px-2.5 py-2 text-sm text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">Totale <b>{eur(tot)}</b> · <b>PAGATA</b><br /><span className="text-xs">vedi «Documenti, pagamento e spedizioni»</span></div>
-            ) : (
-              <div className={`rounded-md px-2.5 py-2 text-sm ${saldo > 0 ? "bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" : "bg-muted/50"}`}>Totale <b>{eur(tot)}</b> · acconto {eur(acc)}<br />{saldo > 0 ? "DA PAGARE" : "SALDO"} <b className="text-base">{eur(saldo)}</b></div>
-            )}
-          </div>
-        </div>
       </div>
     </Sezione>
+  );
+}
+
+
+const STILE_VOCE: Record<VoceLavorazione["stato"], { riga: string; etichetta: string; tono: "verde" | "rosso" | "ambra" | undefined }> = {
+  accettata: { riga: "border-emerald-400 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30", etichetta: "ACCETTATA", tono: "verde" },
+  non_accettata: { riga: "border-red-400 bg-red-50/70 dark:border-red-900 dark:bg-red-950/30", etichetta: "NON ACCETTATA", tono: "rosso" },
+  non_fatta: { riga: "border-orange-400 bg-orange-50/80 dark:border-orange-800 dark:bg-orange-950/30", etichetta: "NON FATTA", tono: "ambra" },
+  attesa: { riga: "border-slate-200 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-900/30", etichetta: "IN ATTESA DI RISPOSTA", tono: undefined },
+};
+
+/** 04/11/2026 (Christian): copia del preventivo mandato, riga intera per riga intera, con il colore di come è andata. */
+function VociLavorazione({ voci, modificabile, busy, onNonFatta }: { voci: VoceLavorazione[]; modificabile: boolean; busy: boolean; onNonFatta: (chiave: string, nonFatta: boolean) => void }) {
+  if (!voci.length) return null;
+  return (
+    <div className="space-y-1.5" data-testid="voci-lavorazione">
+      <div className="text-xs font-medium text-muted-foreground">Voci del preventivo mandato</div>
+      {voci.map((x) => {
+        const st = STILE_VOCE[x.stato];
+        const segnabile = modificabile && x.chiave !== "spedizione" && (x.stato === "accettata" || x.stato === "non_fatta");
+        return (
+          <div key={x.chiave} className={cn("flex flex-wrap items-start gap-2 rounded-xl border-2 p-2.5", st.riga)}>
+            <div className="min-w-[240px] flex-1">
+              <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground"><Pill tono={st.tono}>{st.etichetta}</Pill>{x.tipo}{x.aggiuntivo && x.tipo !== "preventivo aggiuntivo" ? " · preventivo aggiuntivo" : ""}</div>
+              <div className={cn("text-[14px] leading-snug", x.stato === "non_accettata" && "line-through decoration-red-500/60")}>{x.testo}</div>
+            </div>
+            <span className="ml-auto flex items-center gap-2">
+              {segnabile && <Button size="xs" variant="outline" disabled={busy} onClick={() => onNonFatta(x.chiave, x.stato === "accettata")}
+                title="Toglie la voce dalla lavorazione che va al cliente e il suo importo dal totale">{x.stato === "accettata" ? "Non fatta" : "Rimetti"}</Button>}
+              <b className="w-20 text-right text-base tabular-nums">{x.importo != null ? eur(x.importo) : "—"}</b>
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

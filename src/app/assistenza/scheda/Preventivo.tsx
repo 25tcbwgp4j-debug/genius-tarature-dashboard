@@ -53,6 +53,19 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
   const rigaDa = (v: VoceProposta, b: number): EstimateLine => ({ t: v.descrizione, p: v.prezzo ?? "", listino: v.scontato_da || null, nota: null, b, voce_id: v.id, opt: null, on: false });
   function inserisciCombo(c: Combo) {
     const b = bloccoAttivo;
+    // 04/11/2026 (Christian): aggiornamento OpenCore = voce fissa + eventuale extra (conservazione di dati e programmi)
+    if (c.fissa) {
+      const { fissa, tre } = c;
+      setRighe((r) => {
+        const presente = (id: string) => r.some((x) => blocco(x) === b && x.voce_id === id);
+        const nuove: EstimateLine[] = [];
+        if (!presente(fissa.id)) nuove.push(rigaDa(fissa, b));
+        if (tre && !presente(tre.id)) nuove.push({ ...rigaDa(tre, b), opt: nuovoOpt(r, b), agg: true, on: false });
+        return [...r, ...nuove];
+      });
+      toast.success(`Inserita la voce fissa${tre ? " con l'extra aggiungibile" : ""}: controlla i prezzi`);
+      return;
+    }
     const esistenti = ipotesiDelBlocco(righe, b);
     if (esistenti.length && !confirm(`Sostituire le ${esistenti.length} ipotesi già scritte con la combinazione «${c.etichetta}»? (le voci fisse restano)`)) return;
     setRighe((r) => {

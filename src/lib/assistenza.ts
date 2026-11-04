@@ -75,9 +75,14 @@ export interface Scheda extends SchedaBreve {
   verifica_assegnata_il: string | null; verifica_assegnata_da: string | null; verifica_chiusa_il: string | null; verifica_chiusa_da: string | null;
   riparazione_assegnata_il: string | null; preventivo_risposta_canale: string | null; preventivo_risposta_il: string | null;
   avanzamento: Avanzamento; saldo: number; pagata: boolean; comunicazioni: Comunicazione[]; wa_linea_attiva: boolean;
-  preventivo_totale: number | null; opencore_avviso?: string | null;
+  preventivo_totale: number | null; opencore_avviso?: string | null; voci_lavorazione?: VoceLavorazione[];
 }
-export interface Passo { codice: string; etichetta: string; stato: "fatto" | "attuale" | "da_fare" | "saltato"; dettaglio: string }
+export interface Passo { codice: string; etichetta: string; stato: "fatto" | "attuale" | "da_fare" | "saltato"; dettaglio: string;
+  /** 04/11/2026 (Christian): giorno e ora del passo */
+  quando?: string | null }
+/** 04/11/2026 (Christian): una riga della lavorazione effettuata, copia della riga del preventivo */
+export interface VoceLavorazione { chiave: string; testo: string; importo: number | null; tipo: string; aggiuntivo: boolean;
+  stato: "accettata" | "non_accettata" | "non_fatta" | "attesa" }
 export interface Avanzamento { passi: Passo[]; attuale: string | null;
   /** 26/10/2026: blocco «trova» = «Trova il mio» attivo; riconsegna = cosa si riconsegna davvero (es. solo l'hard disk) */
   prossimo: { azione?: string; testo?: string; blocco?: string; riconsegna?: string; avviso?: string; poi?: string; alternativa?: string } }
@@ -89,6 +94,8 @@ export interface ModelloVoci { chiave: string; nome: string; anno: number | null
 /** COMBO «1ª + 2ª ipotesi abbinate» dello stesso intervento e modello (+ 3ª aggiungibile) — 05/10/2026 §10.2 */
 export interface Combo { fonte?: string;  modello_chiave: string | null; modello: string | null; intervento: string; etichetta: string;
   uno: VoceProposta | null; due: VoceProposta | null; tre: VoceProposta | null;
+  /** 04/11/2026 (Christian): aggiornamento OpenCore, voce fissa senza ipotesi (con «tre» come extra) */
+  fissa?: VoceProposta | null;
   /** 26/10/2026: Touch ID da sostituire insieme alla scheda logica ufficiale (MacBook con Touch ID) */
   due_touch_id?: VoceProposta | null; totale_2?: number | null }
 export interface Proposte { modello_nome?: string | null; modello_come?: string;  modello_chiave: string | null; famiglia: string | null;

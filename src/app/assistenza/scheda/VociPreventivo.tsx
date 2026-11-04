@@ -47,7 +47,7 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
   const filtrato = !!(f.q || f.modello || f.pollici || f.anno);
   const combo = useMemo(() => prop?.combo || [], [prop]);
   // le voci che non stanno già in una combo (voci senza ipotesi, o di interventi senza 1ª/2ª)
-  const inCombo = useMemo(() => new Set(combo.flatMap((c) => [c.uno?.id, c.due?.id, c.tre?.id]).filter(Boolean) as string[]), [combo]);
+  const inCombo = useMemo(() => new Set(combo.flatMap((c) => [c.fissa?.id, c.uno?.id, c.due?.id, c.tre?.id]).filter(Boolean) as string[]), [combo]);
   const sciolte = (prop?.voci || []).filter((v) => !inCombo.has(v.id));
   const mostraModello = prop && prop.fonte !== "modello";
 
@@ -123,17 +123,17 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
       {combo.length > 0 && (
         <div className="mt-3 grid gap-2 lg:grid-cols-2">
           {combo.slice(0, 40).map((c) => (
-            <div key={`${c.modello_chiave}-${c.intervento}`} className="rounded-lg border bg-background p-2.5" data-testid="combo">
+            <div key={`${c.modello_chiave}-${c.intervento}-${c.fissa?.id || ""}`} className="rounded-lg border bg-background p-2.5" data-testid="combo">
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs">
                 <b className="text-sm">{c.etichetta}</b>
                 {mostraModello && c.modello && <span className="text-muted-foreground">· {c.modello}</span>}
                 {c.fonte === "prezzi_ufficiali" && <Pill tono="blu" title="Prezzi dalla pagina Prezzi ufficiali (GSX + regole del titolare)">prezzi ufficiali</Pill>}
-                {[c.uno, c.due, c.tre].some((v) => v?.da_verificare) && <Pill tono="ambra" title="Prezzi dello storico che non collimano: verificare su GSX">da verificare</Pill>}
+                {[c.fissa, c.uno, c.due, c.tre].some((v) => v?.da_verificare) && <Pill tono="ambra" title="Prezzi dello storico che non collimano: verificare su GSX">da verificare</Pill>}
               </div>
               <div className="space-y-1 text-[13px]">
-                {([["1ª", c.uno], ["2ª", c.due], ["3ª +", c.tre]] as const).map(([n, v]) => v && (
+                {([["Fissa", c.fissa], ["1ª", c.uno], ["2ª", c.due], [c.fissa ? "Extra" : "3ª +", c.tre]] as const).map(([n, v]) => v && (
                   <div key={n} className="flex items-start gap-2">
-                    <span className={cn("mt-0.5 w-9 shrink-0 rounded px-1 text-center text-[10px] font-semibold", n === "1ª" ? "bg-primary/10 text-primary" : n === "2ª" ? "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100" : "bg-muted text-muted-foreground")}>{n}</span>
+                    <span className={cn("mt-0.5 w-9 shrink-0 rounded px-1 text-center text-[10px] font-semibold", n === "1ª" || n === "Fissa" ? "bg-primary/10 text-primary" : n === "2ª" ? "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100" : "bg-muted text-muted-foreground")}>{n}</span>
                     <span className="min-w-0 flex-1 leading-snug">{v.descrizione}</span>
                     <b className="shrink-0 tabular-nums">{v.prezzo != null ? eur(v.prezzo) : "—"}</b>
                   </div>
@@ -147,7 +147,7 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
                 )}
               </div>
               <Button size="sm" className="mt-2 w-full" onClick={() => onCombo(c)}>
-                <Sparkles />Inserisci {c.uno && c.due ? "1ª + 2ª" : c.uno ? "1ª" : "2ª"}{c.tre ? " (+ 3ª aggiungibile)" : ""}</Button>
+                <Sparkles />{c.fissa ? <>Inserisci voce fissa{c.tre ? " (+ extra aggiungibile)" : ""}</> : <>Inserisci {c.uno && c.due ? "1ª + 2ª" : c.uno ? "1ª" : "2ª"}{c.tre ? " (+ 3ª aggiungibile)" : ""}</>}</Button>
             </div>
           ))}
         </div>
