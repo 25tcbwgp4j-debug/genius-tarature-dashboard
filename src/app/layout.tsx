@@ -10,6 +10,7 @@ import { PermessiProvider } from "@/components/permessi";
 import { AutorizzazioneDialog } from "@/components/AutorizzazioneDialog";
 import { GuardiaTitolare } from "@/components/RiservatoTitolare";
 import { BonificiAvviso } from "@/components/BonificiAvviso";
+import { DaRichiamare } from "@/components/DaRichiamare";
 import { DopoBonifico } from "@/components/DopoBonifico";
 import { StripeAvviso } from "@/components/StripeAvviso";
 import { DaGestireTarature } from "@/components/DaGestireTarature";
@@ -85,6 +86,8 @@ export default function RootLayout({
             <StripeAvviso />
             {/* 02/11/2026: le cose da gestire delle Tarature, su ogni pagina come bonifici e Stripe */}
             <DaGestireTarature />
+            {/* 04/11/2026: telefonate col flag «da richiamare», su ogni pagina finché qualcuno non le segna fatte */}
+            <DaRichiamare />
             {/* dopo l'abbinamento di un bonifico: avviso ritiro / etichetta / spedizione della scheda (29/10/2026) */}
             <DopoBonifico />
            </AttivitaProvider>

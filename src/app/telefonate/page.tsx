@@ -3,12 +3,14 @@
 // TELEFONATE (04/11/2026, Christian): agenda con tutti i giorni e le telefonate del centralino, entranti e uscenti,
 // per ritrovare i numeri di chi ha chiamato. I dati vengono dal tabulato del Panasonic (agente sul PC HP del negozio).
 import { useEffect, useState } from "react";
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, PhoneIncoming, PhoneMissed, PhoneOutgoing, Search } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Flag, Loader2, NotebookPen, PhoneIncoming, PhoneMissed, PhoneOutgoing, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { fetchAPI } from "@/lib/api";
+import { toastErrore } from "@/lib/errori";
 
 type Telefonata = {
+  id: string; da_richiamare?: boolean; richiamato_il?: string | null; nota?: string | null; nota_il?: string | null;
   inizio: string; direzione: "entrante" | "uscente"; numero: string | null; nome: string | null; interno: string | null;
   linee: (string | null)[]; durata_sec: number; squillo_sec: number | null; risposta: boolean;
 };
@@ -43,24 +45,76 @@ function Tipo({ t }: { t: Telefonata }) {
   return <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-emerald-700 dark:text-emerald-400"><PhoneIncoming className="h-4 w-4" /> Entrante</span>;
 }
 
-function Elenco({ righe, conData }: { righe: Telefonata[]; conData?: boolean }) {
+function Riga({ t, conData, onCambiata }: { t: Telefonata; conData?: boolean; onCambiata: (nuova: Telefonata) => void }) {
+  const [noteAperte, setNoteAperte] = useState(false);
+  const [testo, setTesto] = useState(t.nota || "");
+  const [busy, setBusy] = useState(false);
+
+  async function salva(corpo: { da_richiamare?: boolean; nota?: string }) {
+    setBusy(true);
+    try {
+      const r = await fetchAPI(`/api/telefonate/${t.id}`, { method: "PATCH", body: JSON.stringify(corpo) });
+      onCambiata({ ...t, da_richiamare: r.telefonata.da_richiamare, richiamato_il: r.telefonata.richiamato_il, nota: r.telefonata.nota, nota_il: r.telefonata.nota_il });
+      window.dispatchEvent(new Event("telefonate-cambiate"));
+      return true;
+    } catch (e) {
+      toastErrore(e);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const segnata = !!t.da_richiamare;
+  return (
+    <>
+      <tr className={segnata ? "bg-amber-50 dark:bg-amber-950/30" : undefined}>
+        <td className="whitespace-nowrap p-2.5 tabular-nums">{conData ? dataOra(t.inizio) : ora(t.inizio)}</td>
+        <td className="p-2.5"><Tipo t={t} /></td>
+        <td className="p-2.5 font-medium tabular-nums">
+          {t.numero || <span className="font-normal text-muted-foreground">Numero nascosto</span>}
+          {t.nome ? <span className="block text-xs font-normal text-muted-foreground">{t.nome}</span> : null}
+          {t.richiamato_il && !segnata ? <span className="block text-xs font-normal text-emerald-700 dark:text-emerald-400">Richiamato il {dataOra(t.richiamato_il)}</span> : null}
+        </td>
+        <td className="p-2.5 text-right tabular-nums">{durata(t.durata_sec)}</td>
+        <td className="p-2.5">{t.interno || "—"}</td>
+        <td className="p-2.5">{t.linee.filter(Boolean).join(", ") || "—"}</td>
+        <td className="whitespace-nowrap p-2.5 text-right">
+          <Button size="sm" variant={segnata ? "default" : "outline"} disabled={busy} aria-pressed={segnata} className={segnata ? "bg-amber-600 text-white hover:bg-amber-700" : undefined}
+            onClick={() => salva({ da_richiamare: !segnata })}>
+            <Flag className="mr-1.5 h-4 w-4" /> Da richiamare
+          </Button>
+          <Button size="sm" variant={t.nota ? "secondary" : "outline"} className="ml-1.5" aria-expanded={noteAperte} onClick={() => setNoteAperte(!noteAperte)}>
+            <NotebookPen className="mr-1.5 h-4 w-4" /> Note
+          </Button>
+        </td>
+      </tr>
+      {t.nota && !noteAperte ? <tr className={segnata ? "bg-amber-50 dark:bg-amber-950/30" : undefined}><td colSpan={7} className="whitespace-pre-wrap break-words px-2.5 pb-2.5 pt-0 text-xs text-muted-foreground">{t.nota}</td></tr> : null}
+      {noteAperte ? (
+        <tr className={segnata ? "bg-amber-50 dark:bg-amber-950/30" : undefined}>
+          <td colSpan={7} className="p-2.5 pt-0">
+            <textarea value={testo} onChange={(e) => setTesto(e.target.value)} rows={3} maxLength={4000} autoFocus aria-label={`Note sulla telefonata di ${t.numero || "numero nascosto"}`}
+              placeholder="Scrivi le note su questa telefonata" className="w-full rounded-md border bg-background p-2 text-sm" />
+            <div className="mt-1.5 flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => { setTesto(t.nota || ""); setNoteAperte(false); }}>Annulla</Button>
+              <Button size="sm" disabled={busy || testo.trim() === (t.nota || "")} onClick={async () => { if (await salva({ nota: testo })) { setNoteAperte(false); toast.success("Nota salvata"); } }}>Salva la nota</Button>
+            </div>
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
+function Elenco({ righe, conData, onCambiata }: { righe: Telefonata[]; conData?: boolean; onCambiata: (nuova: Telefonata) => void }) {
   return (
     <div className="overflow-x-auto rounded-xl border bg-card">
-      <table className="w-full min-w-[640px] text-sm">
+      <table className="w-full min-w-[820px] text-sm">
         <thead className="border-b text-left text-xs text-muted-foreground">
-          <tr><th className="p-2.5">{conData ? "Quando" : "Ora"}</th><th className="p-2.5">Tipo</th><th className="p-2.5">Numero</th><th className="p-2.5 text-right">Durata</th><th className="p-2.5">Interno</th><th className="p-2.5">Linea</th></tr>
+          <tr><th className="p-2.5">{conData ? "Quando" : "Ora"}</th><th className="p-2.5">Tipo</th><th className="p-2.5">Numero</th><th className="p-2.5 text-right">Durata</th><th className="p-2.5">Interno</th><th className="p-2.5">Linea</th><th className="p-2.5"><span className="sr-only">Azioni</span></th></tr>
         </thead>
         <tbody className="divide-y">
-          {righe.map((t, i) => (
-            <tr key={`${t.inizio}-${i}`}>
-              <td className="whitespace-nowrap p-2.5 tabular-nums">{conData ? dataOra(t.inizio) : ora(t.inizio)}</td>
-              <td className="p-2.5"><Tipo t={t} /></td>
-              <td className="p-2.5 font-medium tabular-nums">{t.numero || <span className="font-normal text-muted-foreground">Numero nascosto</span>}{t.nome ? <span className="block text-xs font-normal text-muted-foreground">{t.nome}</span> : null}</td>
-              <td className="p-2.5 text-right tabular-nums">{durata(t.durata_sec)}</td>
-              <td className="p-2.5">{t.interno || "—"}</td>
-              <td className="p-2.5">{t.linee.filter(Boolean).join(", ") || "—"}</td>
-            </tr>
-          ))}
+          {righe.map((t) => <Riga key={t.id} t={t} conData={conData} onCambiata={onCambiata} />)}
         </tbody>
       </table>
     </div>
@@ -90,6 +144,15 @@ export default function TelefonatePage() {
       .then((r) => { if (vivo) setRighe(r.telefonate); })
       .catch((e) => { if (vivo) { toast.error(e instanceof Error ? e.message : "Errore nel caricamento"); setRighe([]); } });
     return () => { vivo = false; };
+  }, [giorno, cerca]);
+
+  // «Richiamato» dal pulsante che sta su ogni pagina: la riga aperta qui si riallinea
+  useEffect(() => {
+    const ricarica = () => {
+      fetchAPI(cerca ? `/api/telefonate?q=${encodeURIComponent(cerca)}` : `/api/telefonate?giorno=${giorno}`, {}, false).then((r) => setRighe(r.telefonate)).catch(() => undefined);
+    };
+    window.addEventListener("telefonate-cambiate", ricarica);
+    return () => window.removeEventListener("telefonate-cambiate", ricarica);
   }, [giorno, cerca]);
 
   const perGiorno = new Map(giorni.map((g) => [g.giorno, g]));
@@ -141,7 +204,7 @@ export default function TelefonatePage() {
 
         <section className="min-w-0 space-y-2">
           <h2 className="text-sm font-semibold first-letter:uppercase">{cerca ? `Ricerca «${cerca}»` : titoloGiorno(giorno)}{righe ? ` · ${righe.length} ${righe.length === 1 ? "telefonata" : "telefonate"}` : ""}</h2>
-          {righe === null ? <Loader2 className="animate-spin" /> : !righe.length ? <p className="py-6 text-sm text-muted-foreground">{cerca ? "Nessuna telefonata con questo numero." : "Nessuna telefonata in questo giorno."}</p> : <Elenco righe={righe} conData={!!cerca} />}
+          {righe === null ? <Loader2 className="animate-spin" /> : !righe.length ? <p className="py-6 text-sm text-muted-foreground">{cerca ? "Nessuna telefonata con questo numero." : "Nessuna telefonata in questo giorno."}</p> : <Elenco righe={righe} conData={!!cerca} onCambiata={(n) => setRighe((x) => (x || []).map((t) => (t.id === n.id ? n : t)))} />}
         </section>
       </div>
     </div>
