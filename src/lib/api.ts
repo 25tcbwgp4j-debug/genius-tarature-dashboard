@@ -338,6 +338,7 @@ export async function addInstrument(data: {
   manufacturer?: string;
   model?: string;
   serial_number?: string;
+  measurement_range?: string;
   price?: number;
   // Unita' base + sonda = un solo rapporto: serial_number e' la base
   probe_model?: string;

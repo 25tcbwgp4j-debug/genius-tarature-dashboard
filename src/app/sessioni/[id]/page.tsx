@@ -96,8 +96,25 @@ interface PastInstrument {
   serial_number?: string;
   price?: number;
   rdt_number?: string | null;
-  calibration_date?: string | null;
+  measurement_range?: string | null;
+  probe_model?: string | null;
+  probe_serial_number?: string | null;
+  ultima_data?: string | null;
+  da_verificare?: boolean;
   instrument_types?: { id: string; name: string; price: number } | null;
+}
+
+// Stessa matricola scritta in modi diversi (00527821 e 527821): come storico_strumenti.py
+const MATRICOLE_FINTE = new Set(["", "ND", "NA", "SN", "NONLEGGIBILE", "NONPRESENTE", "ASSENTE", "NESSUNA"]);
+function normaMatricola(valore?: string | null): string {
+  const testo = (valore || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (MATRICOLE_FINTE.has(testo) || !testo.replace(/0/g, "")) return "";
+  return testo.replace(/^0+/, "");
+}
+function dataBreve(iso?: string | null): string {
+  if (!iso) return "";
+  const [a, m, g] = iso.slice(0, 10).split("-");
+  return g && m && a ? `${g}/${m}/${a}` : "";
 }
 
 // Regola del laboratorio (28/09/2026): un rapporto = un pezzo unico OPPURE
@@ -346,30 +363,65 @@ export default function SessionDetail() {
       .catch(() => setPastInstruments([]));
   }, [session?.customer_id]);
 
+  // Lo strumento dello storico è già in questa sessione?
+  const giaInSessione = (past: PastInstrument) => {
+    const matricola = normaMatricola(past.serial_number);
+    return instruments.some((i: { serial_number?: string; model?: string; manufacturer?: string; probe_serial_number?: string }) =>
+      matricola
+        ? normaMatricola(i.serial_number) === matricola && normaMatricola(i.probe_serial_number) === normaMatricola(past.probe_serial_number)
+        : (i.model || "").toUpperCase() === (past.model || "").toUpperCase() &&
+          (i.manufacturer || "").toUpperCase() === (past.manufacturer || "").toUpperCase()
+    );
+  };
+
+  const inserisciDaStorico = (past: PastInstrument) =>
+    addInstrument({
+      session_id: sessionId,
+      customer_id: session.customer_id,
+      instrument_type_id: past.instrument_type_id || past.instrument_types?.id || undefined,
+      instrument_name: past.instrument_types?.name || past.instrument_name || "",
+      manufacturer: past.manufacturer,
+      model: past.model,
+      serial_number: past.serial_number,
+      measurement_range: past.measurement_range || undefined,
+      probe_model: past.probe_model || undefined,
+      probe_serial_number: past.probe_serial_number || undefined,
+      price: Number(past.price ?? past.instrument_types?.price ?? 0),
+    });
+
   // Riutilizza uno strumento storico: inserisce nella sessione corrente senza bisogno di reinserirlo
   const reuseInstrument = async (past: PastInstrument) => {
     setActionLoading("reuse_" + past.id);
     try {
-      const typeId = past.instrument_type_id || past.instrument_types?.id || "";
-      const typeName = past.instrument_types?.name || past.instrument_name || "";
-      const price = Number(past.price ?? past.instrument_types?.price ?? 0);
-      await addInstrument({
-        session_id: sessionId,
-        customer_id: session.customer_id,
-        instrument_type_id: typeId || undefined,
-        instrument_name: typeName,
-        manufacturer: past.manufacturer,
-        model: past.model,
-        serial_number: past.serial_number,
-        price,
-      });
+      await inserisciDaStorico(past);
       await loadSession();
-      toast.success(`Strumento "${typeName}" aggiunto dalla storia`);
+      toast.success(`Strumento "${past.instrument_types?.name || past.instrument_name || ""}" aggiunto dallo storico`);
     } catch {
       toast.error("Errore inserimento strumento");
     } finally {
       setActionLoading(null);
     }
+  };
+
+  // Più strumenti insieme (04/11/2026): uno alla volta, così un errore non ferma gli altri e nessuno entra due volte
+  const reuseInstruments = async (elenco: PastInstrument[]) => {
+    setActionLoading("reuse_tutti");
+    let inseriti = 0;
+    let errori = 0;
+    let daCompletare = 0;
+    for (const past of elenco) {
+      try {
+        await inserisciDaStorico(past);
+        inseriti += 1;
+        if (past.da_verificare) daCompletare += 1;
+      } catch {
+        errori += 1;
+      }
+    }
+    await loadSession();
+    setActionLoading(null);
+    if (errori) toast.error(`Aggiunti ${inseriti} strumenti, ${errori} non inseriti: riprova con quelli rimasti`);
+    else toast.success(`Aggiunti ${inseriti} strumenti dallo storico${daCompletare ? `, ${daCompletare} da completare` : ""}`);
   };
 
   // Apre il PDF ricevuta in una nuova tab (per stampa/salvataggio/invio)
@@ -1050,7 +1102,7 @@ export default function SessionDetail() {
                 Strumenti gia registrati per questo cliente ({pastInstruments.length})
               </span>
               <span className="text-xs text-amber-700">
-                — clicca per riutilizzarli senza reinserirli
+                — clicca per vederli e riutilizzarli
               </span>
             </div>
             {showPastInstruments ? (
@@ -1059,15 +1111,31 @@ export default function SessionDetail() {
               <ChevronDown className="w-5 h-5 text-amber-700" />
             )}
           </button>
+          {(() => {
+            const mancanti = pastInstruments.filter((p) => !giaInSessione(p));
+            const ultimaData = pastInstruments[0]?.ultima_data || "";
+            const ultimi = mancanti.filter((p) => p.ultima_data === ultimaData);
+            if (!mancanti.length) return null;
+            const occupato = actionLoading === "reuse_tutti";
+            return (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {ultimi.length > 0 && ultimi.length < mancanti.length && (
+                  <Button size="sm" className="bg-amber-600 hover:bg-amber-700 h-8" disabled={occupato} onClick={() => reuseInstruments(ultimi)}>
+                    {occupato ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3 mr-1" />}
+                    Aggiungi quelli dell&apos;ultima taratura ({ultimi.length}){dataBreve(ultimaData) ? ` · ${dataBreve(ultimaData)}` : ""}
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" className="h-8 border-amber-400 text-amber-900" disabled={occupato} onClick={() => reuseInstruments(mancanti)}>
+                  {occupato ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3 mr-1" />}
+                  Aggiungi tutti ({mancanti.length})
+                </Button>
+              </div>
+            );
+          })()}
           {showPastInstruments && (
             <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
               {pastInstruments.map((past: PastInstrument) => {
-                const alreadyInSession = instruments.some(
-                  (i: { serial_number?: string; model?: string; manufacturer?: string }) =>
-                    (i.serial_number || "").toUpperCase() === (past.serial_number || "").toUpperCase() &&
-                    (i.model || "").toUpperCase() === (past.model || "").toUpperCase() &&
-                    (i.manufacturer || "").toUpperCase() === (past.manufacturer || "").toUpperCase()
-                );
+                const alreadyInSession = giaInSessione(past);
                 const typeName = past.instrument_types?.name || past.instrument_name || "—";
                 const price = Number(past.price ?? past.instrument_types?.price ?? 0);
                 return (
@@ -1080,7 +1148,10 @@ export default function SessionDetail() {
                       <div className="text-xs text-gray-600">
                         {past.manufacturer || "—"} {past.model || ""} - Matr. {past.serial_number || "—"}
                         {past.rdt_number && (
-                          <span className="ml-2 text-gray-500">(ultimo RDT: {past.rdt_number})</span>
+                          <span className="ml-2 text-gray-500">(ultimo RDT: {past.rdt_number}{dataBreve(past.ultima_data) ? ` del ${dataBreve(past.ultima_data)}` : ""})</span>
+                        )}
+                        {past.da_verificare && (
+                          <span className="ml-2 rounded bg-orange-100 px-1.5 py-0.5 text-orange-800">tipo o portata da completare dopo l&apos;inserimento</span>
                         )}
                       </div>
                     </div>
@@ -1095,7 +1166,7 @@ export default function SessionDetail() {
                           size="sm"
                           className="bg-amber-600 hover:bg-amber-700 h-8"
                           onClick={() => reuseInstrument(past)}
-                          disabled={actionLoading === "reuse_" + past.id}
+                          disabled={actionLoading === "reuse_" + past.id || actionLoading === "reuse_tutti"}
                         >
                           {actionLoading === "reuse_" + past.id ? (
                             <Loader2 className="w-3 h-3 animate-spin" />
