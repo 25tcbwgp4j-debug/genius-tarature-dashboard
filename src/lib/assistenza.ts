@@ -132,7 +132,7 @@ export const assCruscotto = (): Promise<{ fasi: FaseCruscotto[]; tecnici: { codi
 export interface CaricoTecnico { tecnico: string; n: number; sotto: { codice: string; etichetta: string; n: number }[] }
 /** 27/10/2026: quello che è stato fatto in automatico / da Claude, banner sul banco finché non si clicca «Ho visto». */
 export interface AvvisoDashboard { id: string; created_at: string; updated_at?: string; titolo: string; scheda_id: string | null; sigla?: string | null;
-  origine: string; livello: "info" | "attenzione" | "errore"; visto_il: string | null; visto_da: string | null;
+  origine: string; fonte?: "gestionale" | "skill"; livello: "info" | "attenzione" | "errore"; visto_il: string | null; visto_da: string | null;
   voci: { icona: string; testo: string; link?: string; il?: string }[];
   /** 27/10/2026: pulsante sul banner (es. Gianni Gallo: spedisci + fattura da incassare) */
   azione?: { tipo: "spedisci_fattura"; etichetta?: string } | null }
@@ -140,7 +140,7 @@ export interface AvvisoDashboard { id: string; created_at: string; updated_at?: 
 export interface NotificaGestire { id: string; created_at: string; updated_at?: string; scheda_id: string | null; sigla?: string | null;
   cliente?: string | null; prodotto?: string | null; titolo: string; storia: string | null; da_fare: string | null;
   livello: "info" | "attenzione" | "urgente"; creata_da: string | null; letta_il: string | null; letta_da: string | null;
-  chiusa_il: string | null; chiusa_da: string | null; esito: string | null; telegram_inviato?: boolean }
+  chiusa_il: string | null; chiusa_da: string | null; esito: string | null; telegram_inviato?: boolean; fonte?: "gestionale" | "skill" }
 export const assNotifiche = (stato: "aperte" | "chiuse" | "tutte" = "aperte", schedaId?: string): Promise<{ notifiche: NotificaGestire[] }> =>
   fetchAPI(`/api/assistenza/notifiche-gestire?stato=${stato}${schedaId ? `&scheda_id=${encodeURIComponent(schedaId)}` : ""}`);
 export const assNotificheConteggio = (): Promise<{ aperte: number }> => fetchAPI("/api/assistenza/notifiche-gestire/conteggio");
@@ -152,11 +152,11 @@ export const assNotificaChiudi = (id: string, esito: string, operatore: string):
 export const assNotificaRiapri = (id: string, operatore: string): Promise<NotificaGestire> => fetchAPI(`/api/assistenza/notifiche-gestire/${id}/riapri`, j({ operatore }));
 export const assAvvisi = (visti = false, attivita: "apple" | "tarature" = "apple"): Promise<{ avvisi: AvvisoDashboard[] }> =>
   fetchAPI(`/api/assistenza/avvisi?attivita=${attivita}${visti ? "&visti=true" : ""}`);
-export const assAvvisiVistiTutti = (attivita: "apple" | "tarature", operatore: string): Promise<{ visti: number }> =>
-  fetchAPI("/api/assistenza/avvisi/visti-tutti", j({ attivita, operatore }));
+export const assAvvisiVistiTutti = (attivita: "apple" | "tarature", operatore: string, fonte?: "gestionale" | "skill"): Promise<{ visti: number }> =>
+  fetchAPI("/api/assistenza/avvisi/visti-tutti", j({ attivita, operatore, fonte }));
 /** 02/11/2026: le cose da gestire delle Tarature, per il pulsante presente su ogni pagina. */
 export interface TaratureDaFare { session_id: string; numero: string; cliente: string; tipo: "da_tarare" | "da_pronto" | "da_consegnare"; testo: string }
-export interface TaratureDaGestire { da_fare: TaratureDaFare[]; notifiche: NotificaGestire[]; avvisi: AvvisoDashboard[]; totale: number }
+export interface TaratureDaGestire { da_fare: TaratureDaFare[]; notifiche: NotificaGestire[]; avvisi: AvvisoDashboard[]; avvisi_skill: AvvisoDashboard[]; totale: number }
 export const assTaratureDaGestire = (): Promise<TaratureDaGestire> => fetchAPI("/api/assistenza/tarature/da-gestire");
 export const assAvvisoVisto = (id: string, operatore: string): Promise<AvvisoDashboard> =>
   fetchAPI(`/api/assistenza/avvisi/${id}/visto`, { method: "POST", body: JSON.stringify({ operatore }) });

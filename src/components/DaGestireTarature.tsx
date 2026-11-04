@@ -3,6 +3,7 @@
 // 02/11/2026 (Christian): come per Apple, le cose da gestire delle TARATURE devono comparire a prescindere.
 // Pulsante rosso su ogni pagina (anche con il selettore su Apple). Con il selettore su Tarature il pannello si apre
 // da solo quando arriva qualcosa di nuovo. Notifiche e avvisi sono gli stessi componenti del banco Apple.
+// 04/11/2026 (Christian): il gestionale Tarature sta da una parte, quello che nasce dalle skill WhatsApp e mail dall'altra.
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -56,7 +57,8 @@ export function DaGestireTarature() {
     return () => { clearInterval(t); window.removeEventListener("focus", carica); };
   }, [fuori, carica]);
 
-  if (fuori || !dati || !dati.totale) return null;
+  const nSkill = dati?.avvisi_skill?.length || 0;
+  if (fuori || !dati || (!dati.totale && !nSkill)) return null;
   const urgenti = dati.notifiche.length + dati.avvisi.filter((a) => a.livello !== "info").length;
 
   return (
@@ -65,7 +67,7 @@ export function DaGestireTarature() {
         <button type="button" onClick={() => setAperto(true)} title="Cose da gestire delle Tarature"
           className={`fixed bottom-28 right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-lg print:hidden ${urgenti ? "bg-red-600 hover:bg-red-700" : "bg-indigo-600 hover:bg-indigo-700"}`}>
           {urgenti > 0 && <span className="absolute -left-1 -top-1 size-3 animate-ping rounded-full bg-red-400" />}
-          <BellRing className="size-4" /> Tarature: {dati.totale} da gestire
+          <BellRing className="size-4" /> {dati.totale ? `Tarature: ${dati.totale} da gestire` : `Tarature: ${nSkill} dalle skill`}
         </button>
       )}
       {aperto && <Pannello dati={dati} onCambiati={carica} onClose={() => setAperto(false)} />}
@@ -76,12 +78,16 @@ export function DaGestireTarature() {
 function Pannello({ dati, onCambiati, onClose }: { dati: TaratureDaGestire; onCambiati: () => void; onClose: () => void }) {
   const [operatore, setOperatore] = useOperatore();
   const [busy, setBusy] = useState(false);
+  const avvisiSkill = dati.avvisi_skill || [];
+  const notificheGestionale = dati.notifiche.filter((n) => n.fonte !== "skill");
+  const notificheSkill = dati.notifiche.filter((n) => n.fonte === "skill");
 
-  async function vistiTutti() {
+  async function vistiTutti(fonte: "gestionale" | "skill") {
     if (!operatore) { toast.error("Scegli chi sei (CHR · VALE · DUMY · ALTRO)"); return; }
-    if (!confirm(`Segnare come visti tutti i ${dati.avvisi.length} avvisi? Restano nello storico.`)) return;
+    const quanti = fonte === "skill" ? avvisiSkill.length : dati.avvisi.length;
+    if (!confirm(`Segnare come visti tutti i ${quanti} avvisi? Restano nello storico.`)) return;
     setBusy(true);
-    try { const r = await assAvvisiVistiTutti("tarature", operatore); toast.success(`${r.visti} avvisi segnati come visti`); onCambiati(); }
+    try { const r = await assAvvisiVistiTutti("tarature", operatore, fonte); toast.success(`${r.visti} avvisi segnati come visti`); onCambiati(); }
     catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
 
@@ -94,10 +100,11 @@ function Pannello({ dati, onCambiati, onClose }: { dati: TaratureDaGestire; onCa
         </div>
         <SceltaOperatore value={operatore} onChange={setOperatore} />
 
-        {dati.notifiche.length > 0 && (
+        <h3 className="border-b pb-1 text-base font-bold">Gestionale Tarature</h3>
+        {notificheGestionale.length > 0 && (
           <section className="space-y-2">
-            <h3 className="font-semibold">Notifiche da gestire ({dati.notifiche.length})</h3>
-            {dati.notifiche.map((n) => <NotificaCard key={n.id} n={n} operatore={operatore} onCambiata={onCambiati} compatta />)}
+            <h3 className="font-semibold">Notifiche da gestire ({notificheGestionale.length})</h3>
+            {notificheGestionale.map((n) => <NotificaCard key={n.id} n={n} operatore={operatore} onCambiata={onCambiati} compatta />)}
           </section>
         )}
 
@@ -116,10 +123,27 @@ function Pannello({ dati, onCambiati, onClose }: { dati: TaratureDaGestire; onCa
         <section className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-semibold">Fatto in automatico ({dati.avvisi.length})</h3>
-            {dati.avvisi.length > 1 && <Button size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={vistiTutti}>✔ Ho visto tutti</Button>}
+            {dati.avvisi.length > 1 && <Button size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => vistiTutti("gestionale")}>✔ Ho visto tutti</Button>}
           </div>
-          <AvvisiAutomatici avvisi={dati.avvisi} operatore={operatore} attivita="tarature" onVisto={onCambiati} />
+          <AvvisiAutomatici avvisi={dati.avvisi} operatore={operatore} attivita="tarature" fonte="gestionale" onVisto={onCambiati} />
         </section>
+
+        <h3 className="border-b pb-1 pt-2 text-base font-bold">Dalle skill: WhatsApp e mail</h3>
+        {notificheSkill.length > 0 && (
+          <section className="space-y-2">
+            <h3 className="font-semibold">Da decidere ({notificheSkill.length})</h3>
+            {notificheSkill.map((n) => <NotificaCard key={n.id} n={n} operatore={operatore} onCambiata={onCambiati} compatta />)}
+          </section>
+        )}
+        <details className="space-y-2">
+          <summary className="cursor-pointer font-semibold">Fatto dalle skill ({avvisiSkill.length})</summary>
+          {avvisiSkill.length > 1 && (
+            <div className="mt-2 flex justify-end">
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => vistiTutti("skill")}>✔ Ho visto tutti</Button>
+            </div>
+          )}
+          <div className="mt-2"><AvvisiAutomatici avvisi={avvisiSkill} operatore={operatore} attivita="tarature" fonte="skill" onVisto={onCambiati} /></div>
+        </details>
       </div>
     </div>
   );

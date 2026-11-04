@@ -32,8 +32,10 @@ function Voci({ a, onScheda }: { a: AvvisoDashboard; onScheda?: (id: string) => 
   );
 }
 
-export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto, attivita = "apple" }: {
+export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto, attivita = "apple", fonte }: {
   avvisi: AvvisoDashboard[]; operatore: Operatore | ""; onScheda?: (id: string) => void; onVisto: () => void; attivita?: "apple" | "tarature";
+  /** 04/11/2026: nelle Tarature gestionale e skill hanno ognuno il proprio storico */
+  fonte?: "gestionale" | "skill";
 }) {
   const [chi, setChi] = useState<Operatore | "">("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -63,7 +65,10 @@ export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto, attivit
   }
   async function apriStorico() {
     if (storico) { setStorico(null); return; }
-    try { setStorico((await assAvvisi(true, attivita)).avvisi); } catch (e) { toastErrore(e); }
+    try {
+      const { avvisi: visti } = await assAvvisi(true, attivita);
+      setStorico(fonte ? visti.filter((a) => (a.fonte || "gestionale") === fonte) : visti);
+    } catch (e) { toastErrore(e); }
   }
 
   if (!avvisi.length && !storico) {
