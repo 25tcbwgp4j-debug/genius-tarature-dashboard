@@ -1113,7 +1113,8 @@ export default function SessionDetail() {
           </button>
           {(() => {
             const mancanti = pastInstruments.filter((p) => !giaInSessione(p));
-            const ultimaData = pastInstruments[0]?.ultima_data || "";
+            // La data si prende da quelli non ancora inseriti: le righe di questa sessione hanno la data di oggi
+            const ultimaData = mancanti[0]?.ultima_data || "";
             const ultimi = mancanti.filter((p) => p.ultima_data === ultimaData);
             if (!mancanti.length) return null;
             const occupato = actionLoading === "reuse_tutti";
