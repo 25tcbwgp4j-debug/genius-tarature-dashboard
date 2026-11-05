@@ -437,6 +437,14 @@ export interface ProformaAllineamento {
   /** aggiorna = pro forma aperto · aggiorna_con_fattura = convertito in fattura BOZZA · fatturazione = fattura già numerata/inviata/pagata · scontrino */
   azione: 'aggiorna' | 'aggiorna_con_fattura' | 'fatturazione' | 'scontrino' | null;
   fattura: { id: string; numero: string | null; stato: string; totale: number; link: string; motivo: string | null } | null;
+  /** Dati del cliente confrontati con l'anagrafica attuale (05/11/2026) */
+  cliente?: ProformaStatoCliente | null;
+}
+export interface ProformaDifferenzaCliente { campo: string; etichetta: string; documento: string; anagrafica: string }
+export interface ProformaStatoCliente {
+  differenze: ProformaDifferenzaCliente[];
+  fattura_bozza: { id: string; link: string; differenze: ProformaDifferenzaCliente[] } | null;
+  fattura_emessa: { id: string; numero: string | null; link: string } | null;
 }
 export interface ProformaSessioneStato {
   documento: (DocumentoCliente & { righe_calcolate: ProformaRigaCalcolata[]; imponibile: number; iva: number; allineamento?: ProformaAllineamento | null }) | null;
@@ -453,6 +461,14 @@ export interface ProformaAggiornato {
 /** «Aggiorna il pro forma» (08/10/2026): righe e totali di nuovo dalla sessione, stesso numero. */
 export async function proformaSessioneAggiorna(sessionId: string, operatore: string, aggiornaFattura = false): Promise<ProformaAggiornato> {
   return fetchAPI(`/api/sessions/${sessionId}/proforma-documento/aggiorna`, { method: 'POST', body: JSON.stringify({ operatore, aggiorna_fattura: aggiornaFattura }) });
+}
+/** «Rigenera pro forma» (05/11/2026): dati del cliente di nuovo dall'anagrafica; numero, righe e totale restano. */
+export async function proformaSessioneAggiornaCliente(sessionId: string, operatore: string, aggiornaFattura = false): Promise<{
+  documento: DocumentoCliente; differenze: ProformaDifferenzaCliente[]; nota: string;
+  fattura: { id: string; link: string; aggiornata: boolean } | null;
+  fattura_emessa: { id: string; numero: string | null; link: string } | null;
+}> {
+  return fetchAPI(`/api/sessions/${sessionId}/proforma-documento/aggiorna-cliente`, { method: 'POST', body: JSON.stringify({ operatore, aggiorna_fattura: aggiornaFattura }) });
 }
 export async function proformaSessioneCrea(sessionId: string, operatore: string): Promise<{ gia_presente: boolean; documento: DocumentoCliente }> {
   return fetchAPI(`/api/sessions/${sessionId}/proforma-documento`, { method: 'POST', body: JSON.stringify({ operatore }) });

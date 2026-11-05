@@ -13,6 +13,8 @@
 // «non corrisponde più alla sessione» con il pulsante che ricostruisce righe e totale (stesso numero e data). Convertito in
 // fattura BOZZA: si aggiornano insieme pro forma e bozza (con conferma). Fattura numerata/inviata o scontrino: si spiega
 // di andare in Fatturazione / Cassa. Dopo l'aggiornamento: «Vedi» e «Rimanda al cliente» con la dicitura «versione aggiornata».
+// 05/11/2026 — «Rigenera pro forma» (sessione 262): se l'anagrafica è stata corretta dopo il pro forma, riporta i dati del cliente
+// sul documento (anche convertito o pagato), con la fattura bozza se serve. Numero, data, righe e totale restano.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -21,7 +23,7 @@ import { AlertTriangle, Banknote, Euro, ExternalLink, Eye, FileOutput, FileSprea
 import { Button } from "@/components/ui/button";
 import { OPERATORI_TARATURE, useOperatore, type Operatore } from "@/components/Operatore";
 import {
-  fetchAPI, fattCollegaSessione, fattDaSessione, incSessione, markSessionPaid, proformaSessioneAggiorna,
+  fetchAPI, fattCollegaSessione, fattDaSessione, incSessione, markSessionPaid, proformaSessioneAggiorna, proformaSessioneAggiornaCliente,
   type ApiError, type DaSpedire, type ProformaAggiornato, type ProformaSessioneStato, type StatoPagamentoSessione,
 } from "@/lib/api";
 import { dataIt, testoPagamento } from "./PagamentoStato";
@@ -180,6 +182,40 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
     }));
   }
 
+  // RIGENERA (05/11/2026): prima i dati del cliente, poi le righe se anche quelle sono cambiate
+  const cl = al?.cliente || null;
+  const bozzaDiversa = !!cl?.fattura_bozza?.differenze.length;
+  const clienteDiverso = !!cl?.differenze.length || bozzaDiversa;
+  const [clienteAggiornato, setClienteAggiornato] = useState<{ bozza: boolean } | null>(null);
+  async function aggiornaCliente() {
+    if (!operatore) { toast.error("Scegli chi sta facendo l'operazione (Christian o Dumy) in alto, accanto a «Genera rapporti»"); return false; }
+    setActionLoading("pf_cliente");
+    try {
+      const r = await proformaSessioneAggiornaCliente(sessionId, operatore, bozzaDiversa);
+      setClienteAggiornato({ bozza: !!r.fattura?.aggiornata });
+      toast.success(`Pro forma ${pf?.sigla || ""}: dati del cliente aggiornati` + (r.fattura?.aggiornata ? ", anche sulla fattura bozza" : ""), { duration: 8000 });
+      if (bozzaDiversa && !r.fattura?.aggiornata) toast.warning("La fattura non è più in bozza: non è stata modificata. Controllala in Fatturazione", { duration: 10000 });
+      onRicarica?.();
+      return true;
+    } catch (e) { toast.error((e as Error).message, { duration: 10000 }); return false; }
+    finally { setActionLoading(null); }
+  }
+  async function rigenera() {
+    if (!pf) return;
+    if (!al) { toast.error("Confronto con la sessione non riuscito: ricarica la pagina e riprova"); return; }
+    if (clienteDiverso && cl) {
+      const voci = (x: { etichetta: string; documento: string; anagrafica: string }[]) => x.map((v) => `• ${v.etichetta}: ${v.documento} → ${v.anagrafica || "(vuoto)"}`).join("\n");
+      const testo = `Aggiornare i dati del cliente con quelli dell'anagrafica?\n\n`
+        + (cl.differenze.length ? `Pro forma ${pf.sigla}:\n${voci(cl.differenze)}\n\n` : "")
+        + (bozzaDiversa ? `Fattura bozza (non numerata, non inviata):\n${voci(cl.fattura_bozza!.differenze)}\n\n` : "")
+        + "Numero, data, righe, totale e pagamenti restano. Non parte nessun invio al cliente.";
+      if (!confirm(testo) || !(await aggiornaCliente())) return;
+    }
+    if (al.diverso && (al.azione === "aggiorna" || al.azione === "aggiorna_con_fattura")) chiediAggiorna();
+    else if (al.diverso) toast.warning("Righe e totale non si aggiornano da qui: il documento è già chiuso (vedi l'avviso sopra)", { duration: 8000 });
+    else if (!clienteDiverso) toast.info(`Il pro forma ${pf.sigla} è già allineato alla sessione e all'anagrafica`);
+  }
+
   // 08/10/2026: con una riga di assistenza ancora a 0 né scontrino né fattura (il preventivo va scritto o la riga tolta)
   async function assistenzaOk(poi: () => void) {
     try {
@@ -291,6 +327,36 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
           <span><b>Il pro forma n. {pf.sigla} ({eur(al.totale_proforma)}) non corrisponde più alla sessione ({eur(al.totale_sessione)})</b>, ma è già chiuso con lo scontrino: la differenza si gestisce dalla Cassa.</span>
         </div>
       )}
+      {/* DATI DEL CLIENTE DIVERSI DALL'ANAGRAFICA (05/11/2026) */}
+      {pf && cl && clienteDiverso && (
+        <div className="flex flex-col gap-1.5 rounded-md border-2 border-orange-400 bg-orange-100 p-2 text-sm text-orange-950">
+          <p className="flex items-start gap-1.5"><AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span><b>{cl.differenze.length ? `Il pro forma n. ${pf.sigla}` : "La fattura bozza"} ha dati del cliente diversi dall&apos;anagrafica</b>
+              {" "}({[...new Set([...cl.differenze, ...(cl.fattura_bozza?.differenze || [])].map((x) => x.etichetta))].join(", ")})</span></p>
+          {bozzaDiversa && <p className="text-xs">Si aggiorna anche la fattura <b>bozza</b> (non numerata, non inviata).</p>}
+          {cl.fattura_emessa && <p className="text-xs">La fattura {cl.fattura_emessa.numero || ""} è già emessa e non cambia: <a className="underline" href={cl.fattura_emessa.link}>controllala in Fatturazione</a>.</p>}
+          <Button className="h-10 self-start bg-orange-600 font-semibold text-white hover:bg-orange-700" disabled={occupato} onClick={rigenera}>
+            {actionLoading === "pf_cliente" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            Rigenera pro forma
+          </Button>
+        </div>
+      )}
+      {clienteAggiornato && (
+        <div className="flex flex-col gap-1.5 rounded-md border-2 border-emerald-400 bg-emerald-50 p-2 text-sm text-emerald-950">
+          <p className="flex items-start gap-1.5">
+            <span className="flex-1"><b>✓ Dati del cliente aggiornati sul pro forma {pf?.sigla}</b>{clienteAggiornato.bozza ? " e sulla fattura bozza" : ""}</span>
+            <button type="button" title="Chiudi" onClick={() => setClienteAggiornato(null)}><X className="size-4" /></button>
+          </p>
+          <p className="text-xs">Niente è stato inviato. Rimanda al cliente la <b>versione aggiornata</b> (vedi l&apos;anteprima prima dell&apos;invio):</p>
+          <div className="flex flex-wrap gap-1.5">
+            <Button variant="outline" className="h-9" onClick={apriDialogProforma}><Eye className="size-4" /> Vedi</Button>
+            <Button className="h-9 bg-orange-600 text-white hover:bg-orange-700" disabled={occupato || previewLoading}
+              onClick={() => apriAnteprimaProforma("email", true)}><Mail className="size-4" /> Rimanda via mail</Button>
+            <Button className="h-9 bg-orange-700 text-white hover:bg-orange-800" disabled={occupato || previewLoading}
+              onClick={() => apriAnteprimaProforma("whatsapp", true)}><MessageCircle className="size-4" /> Rimanda via WhatsApp</Button>
+          </div>
+        </div>
+      )}
       {aggiornato && (
         <div className="flex flex-col gap-1.5 rounded-md border-2 border-emerald-400 bg-emerald-50 p-2 text-sm text-emerald-950">
           <p className="flex items-start gap-1.5">
@@ -334,10 +400,10 @@ export function BloccoProforma({ sessionId, session, pfDoc, statoPag, actionLoad
             </div>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
-            <Button variant="outline" disabled={occupato || !!pf || !!fattura} onClick={() => controllaRegistrazione("preparare il pro forma di fattura", apriDialogProforma)}
+            <Button variant="outline" disabled={occupato || (!pf && !!fattura)} onClick={() => pf ? rigenera() : controllaRegistrazione("preparare il pro forma di fattura", apriDialogProforma)}
               className={`${btn} border-orange-300 text-orange-800 hover:bg-orange-50`}
-              title={pf ? `Il pro forma ${pf.sigla} c'è già` : fattura ? "La sessione ha già la fattura" : "Anteprima del pro forma con le righe della fattura; si crea solo se confermi"}>
-              <FileSpreadsheet className="size-4 shrink-0" /> {pf ? "Pro forma pronto" : "Prepara pro forma di fattura"}
+              title={pf ? `Riporta sul pro forma ${pf.sigla} i dati attuali del cliente e della sessione: stesso numero e data` : fattura ? "La sessione ha già la fattura" : "Anteprima del pro forma con le righe della fattura; si crea solo se confermi"}>
+              {pf ? <RefreshCw className="size-4 shrink-0" /> : <FileSpreadsheet className="size-4 shrink-0" />} {pf ? "Rigenera pro forma" : "Prepara pro forma di fattura"}
             </Button>
             <Button disabled={!pfAperto || !!fattura} onClick={() => pfAperto && controllaRegistrazione("convertire il pro forma in fattura", () => assistenzaOk(() => router.push(`/proforma?id=${pfAperto.id}`)))}
               className={`${btn} bg-emerald-600 font-semibold text-white hover:bg-emerald-700`}
