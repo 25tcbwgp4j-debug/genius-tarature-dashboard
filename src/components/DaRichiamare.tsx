@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 
-type Riga = { id: string; data_ora: string; direzione: string; numero: string | null; nome: string | null; contatto?: string | null; nota: string | null };
+type Riga = { id: string; data_ora: string; direzione: string; numero: string | null; nome: string | null; contatto?: string | null; internazionale?: string | null; paese?: string | null; nota: string | null };
 
 const SENZA = ["/login", "/forgot-password", "/reset-password"];
 const dataOra = (d: string) => new Date(d).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -48,7 +48,7 @@ export function DaRichiamare() {
       setRighe(resto);
       if (!resto.length) setAperto(false);
       window.dispatchEvent(new Event("telefonate-cambiate"));
-      toast.success(`${r.contatto || r.numero || "Numero nascosto"}: richiamato`);
+      toast.success(`${r.contatto || r.internazionale || r.numero || "Numero nascosto"}: richiamato`);
     } catch (e) {
       toastErrore(e);
     } finally {
@@ -76,7 +76,7 @@ export function DaRichiamare() {
               {righe.map((r) => (
                 <li key={r.id} className="flex items-start gap-3 p-4">
                   <div className="min-w-0 flex-1">
-                    <p className="text-base font-semibold tabular-nums">{r.contatto ? `${r.contatto} · ` : ""}{r.numero || "Numero nascosto"}</p>
+                    <p className="text-base font-semibold tabular-nums">{r.contatto ? `${r.contatto} · ` : ""}{r.internazionale || r.numero || "Numero nascosto"}{r.paese && r.paese !== "Italia" ? ` (${r.paese})` : ""}</p>
                     <p className="text-xs text-muted-foreground">{r.direzione === "uscente" ? "Chiamata fatta" : "Ha chiamato"} il {dataOra(r.data_ora)}{r.nome ? ` · ${r.nome}` : ""}</p>
                     {r.nota ? <p className="mt-1 whitespace-pre-wrap break-words text-sm">{r.nota}</p> : null}
                   </div>

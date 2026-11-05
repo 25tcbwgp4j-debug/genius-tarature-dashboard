@@ -10,7 +10,7 @@ import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 
 type Telefonata = {
-  id: string; contatto?: string | null; da_richiamare?: boolean; richiamato_il?: string | null; nota?: string | null; nota_il?: string | null;
+  id: string; contatto?: string | null; internazionale?: string | null; paese?: string | null; da_richiamare?: boolean; richiamato_il?: string | null; nota?: string | null; nota_il?: string | null;
   inizio: string; direzione: "entrante" | "uscente"; numero: string | null; nome: string | null; interno: string | null;
   linee: (string | null)[]; durata_sec: number; squillo_sec: number | null; risposta: boolean;
 };
@@ -88,7 +88,7 @@ function Riga({ t, conData, onCambiata }: { t: Telefonata; conData?: boolean; on
         <td className="p-2.5"><Tipo t={t} /></td>
         <td className="p-2.5 font-medium tabular-nums">
           {t.contatto ? <span className="block font-semibold">{t.contatto}</span> : null}
-          {t.numero ? <span className={t.contatto ? "text-xs font-normal text-muted-foreground" : undefined}>{t.numero}</span> : <span className="font-normal text-muted-foreground">Numero nascosto</span>}
+          {t.numero ? <span className="block whitespace-nowrap">{t.internazionale || t.numero}{t.paese && t.paese !== "Italia" ? <span className="ml-1.5 text-xs font-normal text-muted-foreground">{t.paese}</span> : null}</span> : <span className="font-normal text-muted-foreground">Numero nascosto</span>}
           {t.nome ? <span className="block text-xs font-normal text-muted-foreground">{t.nome}</span> : null}
           {t.richiamato_il && !segnata ? <span className="block text-xs font-normal text-emerald-700 dark:text-emerald-400">Richiamato il {dataOra(t.richiamato_il)}</span> : null}
         </td>
