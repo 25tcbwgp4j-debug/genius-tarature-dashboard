@@ -11,8 +11,9 @@ import { Campo, Pill, Scelta, Sezione, area, campo } from "./ui";
 
 type V = <K extends keyof Scheda>(k: K) => Scheda[K] | undefined;
 
-export function Lavorazione({ s, v, set, ro, tecnici, busy, onNonFatta }: { s: Scheda; v: V; set: (k: keyof Scheda, val: unknown) => void; ro: boolean; tecnici: string[]; busy: boolean;
+export function Lavorazione({ s, v, set, ro, tecnici, busy, onNonFatta, onPressoCliente }: { s: Scheda; v: V; set: (k: keyof Scheda, val: unknown) => void; ro: boolean; tecnici: string[]; busy: boolean;
   onNonFatta: (chiave: string, nonFatta: boolean) => void;
+  onPressoCliente: (azione: "riconsegnato" | "annulla" | "richiedi" | "riportato") => void;
 }) {
   const tl = v("totale_lavorazione");
   // 27/10/2026 (63182): con i totali vuoti vale il totale ricavato dal backend (voci accettate + spedizione)
@@ -109,6 +110,7 @@ export function Lavorazione({ s, v, set, ro, tecnici, busy, onNonFatta }: { s: S
             </>);
           })()}
         </div>
+        <PressoCliente s={s} ro={ro} busy={busy} onAzione={onPressoCliente} />
         <div className="space-y-2 rounded-lg border p-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">Ricambi</span>
@@ -153,6 +155,42 @@ const STILE_VOCE: Record<VoceLavorazione["stato"], { riga: string; etichetta: st
 };
 
 /** 04/11/2026 (Christian): copia del preventivo mandato, riga intera per riga intera, con il colore di come è andata. */
+/** 05/11/2026 (Christian, 63331): dispositivo riconsegnato al cliente finché non arriva il ricambio, poi si chiede di riportarlo. */
+function PressoCliente({ s, ro, busy, onAzione }: { s: Scheda; ro: boolean; busy: boolean; onAzione: (azione: "riconsegnato" | "annulla" | "richiedi" | "riportato") => void }) {
+  const p = (s.fasi as Record<string, { il?: string; richiesto_il?: string; riportato_il?: string } | undefined> | undefined)?.presso_cliente;
+  const attivo = !!p?.il && !p.riportato_il;
+  if (s.stato !== "accettato" && !attivo) return null;
+  const quando = (d?: string) => (d ? new Date(d).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" }) : "");
+  const ricambi = (s.ricambi_attesi || []).filter((r) => r && typeof r === "object");
+  const arrivati = (ricambi.length > 0 && ricambi.every((r) => r.stato === "arrivato")) || s.riparazione_stato === "ricambio_arrivato";
+  const ordinati = ricambi.length > 0 && ricambi.every((r) => r.stato === "ordinato" || r.stato === "arrivato");
+  return (
+    <div className={cn("space-y-2 rounded-lg border p-3", attivo && arrivati && !p?.richiesto_il && "border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30")}>
+      <label className="flex items-center gap-1.5 text-sm font-medium">
+        <input type="checkbox" className="size-4" disabled={ro || busy} checked={attivo}
+          onChange={(e) => { if (e.target.checked) onAzione("riconsegnato"); else if (confirm("Il dispositivo non è dal cliente? Tolgo la riconsegna.")) onAzione("annulla"); }} />
+        Riconsegnato al cliente in attesa del ricambio
+      </label>
+      {p?.riportato_il && <p className="text-xs text-muted-foreground">Riportato dal cliente il {quando(p.riportato_il)}.</p>}
+      {attivo && (
+        <div className="space-y-1.5 text-sm">
+          <div>✅ Riconsegnato al cliente il {quando(p?.il)}</div>
+          <div>{arrivati ? "✅ Ricambio arrivato" : ordinati ? "⏳ Ricambio ordinato, in arrivo" : "⚠️ Ricambio da ordinare: scrivilo nei ricambi della scheda"}</div>
+          <div>{p?.richiesto_il ? `✅ Chiesto al cliente di riportarlo il ${quando(p.richiesto_il)}` : arrivati ? "👉 Da chiedere al cliente di riportarlo" : "⏳ Quando arriva il ricambio si chiede al cliente di riportarlo"}</div>
+          {!ro && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {!p?.richiesto_il && <Button size="sm" variant={arrivati ? "default" : "outline"} disabled={busy || !arrivati}
+                title={arrivati ? "Parte una mail e un WhatsApp" : "Si attiva quando il ricambio risulta arrivato"}
+                onClick={() => { if (confirm("Mando al cliente mail e WhatsApp: ricambio arrivato, può riportare il dispositivo?")) onAzione("richiedi"); }}>Chiedi al cliente di riportarlo</Button>}
+              <Button size="sm" variant={p?.richiesto_il ? "default" : "outline"} disabled={busy} onClick={() => onAzione("riportato")}>Il cliente lo ha riportato</Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VociLavorazione({ voci, modificabile, busy, onNonFatta }: { voci: VoceLavorazione[]; modificabile: boolean; busy: boolean; onNonFatta: (chiave: string, nonFatta: boolean) => void }) {
   if (!voci.length) return null;
   return (

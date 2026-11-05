@@ -473,7 +473,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
 
       {/* 04/11/2026 (Christian): la lavorazione a tutta larghezza, come il preventivo */}
       <div ref={refLav} className="scroll-mt-28"><Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} busy={!!busy}
-        onNonFatta={(chiave, non_fatta) => azione("voce-non-fatta", { chiave, non_fatta }, non_fatta ? "Voce segnata NON FATTA: tolta da lavorazione e totale" : "Voce di nuovo da fare: rimessa in lavorazione e totale")} /></div>
+        onNonFatta={(chiave, non_fatta) => azione("voce-non-fatta", { chiave, non_fatta }, non_fatta ? "Voce segnata NON FATTA: tolta da lavorazione e totale" : "Voce di nuovo da fare: rimessa in lavorazione e totale")}
+        onPressoCliente={(a) => azione("presso-cliente", { azione: a }, { riconsegnato: "Segnato: riconsegnato al cliente in attesa del ricambio", annulla: "Riconsegna tolta", richiedi: "Chiesto al cliente di riportarlo", riportato: "Dispositivo riportato: torna in lavorazione" }[a])} /></div>
       <div className="grid gap-3 xl:grid-cols-[3fr_2fr]">
         <div ref={refDoc} className="scroll-mt-28">
           <Documenti s={s} ro={ro} busy={!!busy} onFatturaEliminata={async () => { await ricarica(); onCambiata(); }}
