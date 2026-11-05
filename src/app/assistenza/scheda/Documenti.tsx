@@ -30,8 +30,8 @@ export function Documenti({ s, ro, busy, onScontrino, onAcconto, onRichiediAccon
         {!ro && (
           <div className="grid grid-cols-2 gap-1.5 [&_button]:h-auto [&_button]:min-h-9 [&_button]:whitespace-normal [&_button]:py-1.5 [&_button]:text-left">
             <Button variant="outline" onClick={onScontrino} title="Apre la cassa con le righe della scheda"><ShoppingCart />Scontrino</Button>
-            <Button variant="outline" onClick={onAcconto} title="Scontrino d'acconto: al saldo si scala da solo"><Receipt />Acconto</Button>
-            <Button variant="outline" disabled={busy} onClick={onRichiediAcconto} title="Chiede al cliente un acconto (importo a scelta) per mail e WhatsApp, con IBAN, causale e preventivo allegato"><Send />Richiedi acconto</Button>
+            <Button variant="outline" onClick={onAcconto} title="Incassa adesso l'acconto: contanti, bonifico o POS, con fattura d'acconto o scontrino. Al saldo si scala da solo"><Receipt />Acconto</Button>
+            <Button variant="outline" disabled={busy} onClick={onRichiediAcconto} title="Apre il pop-up: chiedi il bonifico per mail e WhatsApp, oppure incassa adesso"><Send />Richiedi acconto</Button>
             <Button variant="outline" disabled={!!s.fattura_id || busy} onClick={() => onVendi("fattura")} title="Fattura in bozza con le righe della scheda (nulla va allo SdI finché non la emetti)"><FileText />Fattura</Button>
             <Button variant="outline" disabled={!!s.documento_id || busy} onClick={() => onVendi("proforma")} title="Pro forma per il pagamento con bonifico (poi «Converti in fattura»)"><FileText />Pro forma</Button>
             <Button variant={s.stato === "pronto" && !s.pagata ? "default" : "outline"} disabled={busy || s.pagata} onClick={onPagato} title="Pagamento arrivato (bonifico, PayPal, contanti, POS)"><CheckCircle2 />Pagato</Button>

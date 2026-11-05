@@ -26,6 +26,7 @@ import { Avanzamento } from "./Avanzamento";
 import { CercaCliente, RiepilogoCliente, SchedaClienteModal } from "./Cliente";
 import { Comunicazioni, Registro } from "./Comunicazioni";
 import { DialogoCambiaStato, DialogoChiudiTutto, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoStessoModello, type TipoInvio } from "./Dialoghi";
+import { DialogoAcconto } from "./Acconto";
 import { Aggiuntivi } from "./Aggiuntivi";
 import { Documenti } from "./Documenti";
 import { InviiProgrammati } from "./InviiProgrammati";
@@ -37,7 +38,7 @@ import { Badge, Campo, Modale, Pill, Sezione, area, campo } from "./ui";
 import { DialogoDuplica, nuovaChiave } from "./SchedaDoppia";
 
 type Bozza = Partial<Scheda>;
-type Dialogo = null | { k: "invio"; tipo: TipoInvio } | { k: "chiudi_tutto" } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
+type Dialogo = null | { k: "acconto"; inizio: "invia" | "incassa" } | { k: "invio"; tipo: TipoInvio } | { k: "chiudi_tutto" } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
   | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" } | { k: "stato_riparazione"; stato: string } | { k: "trova_dopo_preventivo" };
 
 function bozzaPreventivo(m: Partial<Scheda>): BozzaPreventivo {
@@ -477,18 +478,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <div ref={refDoc} className="scroll-mt-28">
           <Documenti s={s} ro={ro} busy={!!busy} onFatturaEliminata={async () => { await ricarica(); onCambiata(); }}
             onScontrino={async () => { if (sporca && !(await salva(true))) return; router.push(`/cassa?scheda=${s.id}`); }}
-            onAcconto={async () => {
-              if (sporca && !(await salva(true))) return;
-              const x = prompt("Importo dell'acconto (€)", "");
-              const imp = Number(String(x || "").replace(",", "."));
-              if (imp > 0) router.push(`/cassa?${new URLSearchParams({ scheda: s.id, acconto: imp.toFixed(2) })}`);
-            }}
-            onRichiediAcconto={async () => {
-              const x = prompt("Acconto da chiedere al cliente (€) — parte una mail e un WhatsApp con IBAN, causale e il preventivo allegato", "");
-              const imp = Number(String(x || "").replace(",", "."));
-              if (!(imp > 0)) return;
-              await azione("richiesta-acconto", { importo: imp }, `Richiesta di acconto di ${eur(imp)} inviata`);
-            }}
+            onAcconto={() => setDlg({ k: "acconto", inizio: "incassa" })}
+            onRichiediAcconto={() => setDlg({ k: "acconto", inizio: "invia" })}
             onPagamentoAnticipato={async (documento) => {
               if (sporca && !(await salva(true))) return;
               const cosa = documento === "proforma" ? "il PRO FORMA" : "la FATTURA (va allo SdI da incassare)";
@@ -538,6 +529,10 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       {dlg?.k === "pronto" && <DialogoPronto paypalFee={cfg?.paypal_fee} s={s} lavorazione={String(v("lavorazione") || "")} totale={(v("totale_lavorazione") as number | null) ?? null} onClose={() => setDlg(null)}
         onInvia={async (body) => { const r = await azione("pronto", body, body.programma_il ? "PRONTO programmato" : "PRONTO"); return r ? (r.esito as Esito) : null; }} />}
       {dlg?.k === "cambia_stato" && <DialogoCambiaStato s={s} onClose={() => setDlg(null)} onConferma={async (b) => !!(await azione("riapri", b, "Stato della scheda cambiato"))} />}
+      {dlg?.k === "acconto" && <DialogoAcconto s={s} operatore={operatore} inizio={dlg.inizio} onClose={() => setDlg(null)}
+        onRichiedi={async (body) => !!(await azione("richiesta-acconto", body, `Richiesta di acconto di ${eur(body.importo)} inviata`))}
+        onScontrino={async (imp) => { if (sporca && !(await salva(true))) return; router.push(`/cassa?${new URLSearchParams({ scheda: s.id, acconto: imp.toFixed(2) })}`); }}
+        onIncassato={async () => { setDlg(null); await ricarica(); onCambiata(); }} />}
       {dlg?.k === "pagato" && <DialogoPagato s={s} onClose={() => setDlg(null)} onPagato={async (body) => !!(await azione("pagamento", body, "Pagamento registrato"))} />}
       {dlg?.k === "consegna" && <DialogoConsegna s={s} onClose={() => setDlg(null)} onConsegna={async (modo) => {
         // 14/10/2026: con un saldo aperto il backend ferma la consegna; si va avanti solo con conferma esplicita
