@@ -400,11 +400,12 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
     setBusy(true);
     try {
       const r = await assAzione(s.id, "spedizione", { operatore, corriere, direzione: dir, indirizzo: ind, giorno_ritiro: giorno || undefined, test: inProva,
-        prenota: dir === "riconsegna" ? prenotaDaNoi : undefined, stampa: inProva ? false : stampa, forza: nonPagata || undefined,
+        prenota: dir === "riconsegna" ? prenotaDaNoi : undefined, stampa: inProva || dir === "ritiro" ? false : stampa, forza: nonPagata || undefined,
         invia_mail: avvisaMail, invia_wa: avvisaWa,
         ...(dir === "riconsegna" && !inProva ? { chiudi: parte === "oggi", partenza_il: parte === "dopo" && partenzaIl ? partenzaIl : undefined } : {}) });
       toast.success(`${r.corriere} ${r.test ? "(PROVA) " : ""}${r.tracking}${r.prn ? ` · ritiro ${r.prn}` : ""}${r.pickup_error ? ` · ERRORE ritiro: ${r.pickup_error}` : ""}` + (r.esito?.mail ? ` · mail ${r.esito.mail}` : "") + (r.esito?.whatsapp ? ` · WhatsApp ${r.esito.whatsapp}` : ""), { duration: 10000 });
-      if (!r.stampa || !r.stampa.agente_attivo) window.open(`/api/backend${r.label_url}`, "_blank");
+      // 05/11/2026 (Christian): il ritiro non si stampa e non si apre: lo stampa il cliente, l'etichetta resta in scheda
+      if (dir !== "ritiro" && (!r.stampa || !r.stampa.agente_attivo)) window.open(`/api/backend${r.label_url}`, "_blank");
       onFatta();
     } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
@@ -471,8 +472,8 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
             <div className="flex flex-wrap gap-4 text-sm">
               <label className="flex items-center gap-1.5"><input type="checkbox" checked={inProva} disabled={provaForzata} onChange={(e) => setProva(e.target.checked)} />
                 Ambiente di PROVA {corriere} (nessun costo, nessun corriere)</label>
-              {!inProva && <label className="flex items-center gap-1.5"><input type="checkbox" checked={stampa} onChange={(e) => setStampa(e.target.checked)} />
-                Stampa l&apos;etichetta al banco ({dir === "ritiro" ? "1 copia" : "2 copie"})</label>}
+              {!inProva && dir !== "ritiro" && <label className="flex items-center gap-1.5"><input type="checkbox" checked={stampa} onChange={(e) => setStampa(e.target.checked)} />
+                Stampa l&apos;etichetta al banco (2 copie)</label>}
               <label className="flex items-center gap-1.5"><input type="checkbox" checked={avvisaMail} onChange={(e) => setAvvisaMail(e.target.checked)} />
                 Mail al cliente con l&apos;etichetta</label>
               <label className="flex items-center gap-1.5"><input type="checkbox" checked={avvisaWa} onChange={(e) => setAvvisaWa(e.target.checked)} />

@@ -205,8 +205,9 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
       if (!form.test) await salvaCosto();
       chiudi();
       await load();
-      // 14/10/2026: l'etichetta va in stampa da sola al banco (backend); «Stampa etichetta» la ristampa
-      if (!form.test) toast.success("Etichetta mandata in stampa al banco", { duration: 8000 });
+      // 14/10/2026: l'etichetta va in stampa da sola al banco (backend); «Stampa etichetta» la ristampa.
+      // 05/11/2026 (Christian): i ritiri non si stampano mai.
+      if (!form.test && form.direction !== "ritiro") toast.success("Etichetta mandata in stampa al banco", { duration: 8000 });
     } catch (e: unknown) {
       toast.error((e as Error).message || "Errore spedizione", { duration: 12000 });
     } finally {
@@ -449,9 +450,11 @@ export function ShipmentsPanel({ sessionId, session, onSessioneAggiornata }: {
               <span className={r.whatsapp?.status === "failed" ? "text-red-600" : "text-muted-foreground"}>
                 WhatsApp: {r.whatsapp ? ({ pending: "in coda", sending: "in invio", sent: "inviato", failed: "non inviato" } as Record<string, string>)[r.whatsapp.status] || r.whatsapp.status : "—"}
               </span>
-              <Button size="sm" variant="outline" className="h-7" onClick={() => stampaEtichetta(r.id)}>
-                <Printer className="w-3 h-3 mr-1" /> Stampa etichetta
-              </Button>
+              {r.direction !== "ritiro" && (
+                <Button size="sm" variant="outline" className="h-7" onClick={() => stampaEtichetta(r.id)}>
+                  <Printer className="w-3 h-3 mr-1" /> Stampa etichetta
+                </Button>
+              )}
               <a href={getShipmentLabelUrl(r.id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700">
                 <FileText className="w-3 h-3" /> Apri PDF
               </a>

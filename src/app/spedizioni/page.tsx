@@ -183,14 +183,14 @@ function NuovaSpedizione({ stato, onFatta }: { stato: SpedStato; onFatta: () => 
         const r = await createShipment(pratica.id, { ...corpoSessione(), operator: operatore || undefined });
         id = r.id; tracking = r.tracking;
         extra = `${r.pickup_prn ? ` · ritiro ${r.pickup_prn}` : ""}${r.pickup_error ? ` · ERRORE ritiro: ${r.pickup_error}` : ""} · mail: ${r.email} · WhatsApp: ${r.whatsapp}`;
-        if (!prova && banco) await spedStampaBanco(r.id).catch(toastErrore);
+        if (!prova && banco && direzione !== "ritiro") await spedStampaBanco(r.id).catch(toastErrore);
       } else if (modo === "scheda" && pratica) {
         const r = await assAzione(pratica.id, "spedizione", corpoScheda());
         id = r.id; tracking = r.tracking;
         extra = `${r.prn ? ` · ritiro ${r.prn}` : ""}${r.pickup_error ? ` · ERRORE ritiro: ${r.pickup_error}` : ""}${r.esito?.mail ? ` · mail ${r.esito.mail}` : ""}`;
       }
       toast.success(`${corriere} ${prova ? "(PROVA) " : ""}${tracking}${extra}`, { duration: 12000 });
-      if (id && (prova || !banco)) window.open(getShipmentLabelUrl(id), "_blank");
+      if (id && direzione !== "ritiro" && (prova || !banco)) window.open(getShipmentLabelUrl(id), "_blank");
       onFatta();
       setAnte(null);
       if (modo === "libera") { setInd({}); setEmail(null); setCustomerId(null); setRiferimento(""); setContenuto(""); setNote(""); }
@@ -285,7 +285,7 @@ function NuovaSpedizione({ stato, onFatta }: { stato: SpedStato; onFatta: () => 
               PROVA (ambiente di test {corriere}: gratis, nessun corriere{modo === "sessione" ? ", niente mail né WhatsApp" : `, mail solo a ${stato.email_test}`})</label>
             <label className="flex items-center gap-1"><input type="checkbox" checked={mail} onChange={(e) => setMail(e.target.checked)} /> Mail con l&apos;etichetta / il tracking</label>
             {modo === "sessione" && <label className="flex items-center gap-1"><input type="checkbox" checked={wa} onChange={(e) => setWa(e.target.checked)} /> WhatsApp dalla linea staff</label>}
-            {!prova && <label className="flex items-center gap-1"><input type="checkbox" checked={banco} onChange={(e) => setBanco(e.target.checked)} /> Stampa al banco (agente di stampa)</label>}
+            {!prova && direzione !== "ritiro" && <label className="flex items-center gap-1"><input type="checkbox" checked={banco} onChange={(e) => setBanco(e.target.checked)} /> Stampa al banco (agente di stampa)</label>}
           </div>
           {corriere === "DHL" && !stato.dhl_configurato && <p className="text-sm text-red-700">DHL non configurato sul server.</p>}
           {corriere === "DHL" && stato.dhl_configurato && !prova && !stato.dhl_produzione && <p className="text-sm text-amber-800">DHL produzione non ancora attiva sul server: per ora solo in prova (sandpit).</p>}
@@ -425,8 +425,8 @@ function Elenco({ versione, vedeSchede }: { versione: number; vedeSchede: boolea
                 <span className={r.email_error ? "text-red-700" : "text-muted-foreground"}>mail: {r.email_sent_at ? `inviata${r.email_to ? ` a ${r.email_to}` : ""}` : r.email_error ? "errore" : "—"}</span>
                 <span className="ml-auto flex gap-1">
                   <a href={getShipmentLabelUrl(r.id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 px-1"><FileText className="w-3 h-3" />PDF</a>
-                  <Button size="sm" variant="outline" className="h-7" onClick={() => stampaBrowser(r.id)}><Printer className="w-3 h-3 mr-1" />Stampa</Button>
-                  {!annullata && !r.test_mode && <Button size="sm" variant="outline" className="h-7" disabled={busy === r.id} onClick={() => banco(r)}>Al banco</Button>}
+                  {r.direction !== "ritiro" && <Button size="sm" variant="outline" className="h-7" onClick={() => stampaBrowser(r.id)}><Printer className="w-3 h-3 mr-1" />Stampa</Button>}
+                  {!annullata && !r.test_mode && r.direction !== "ritiro" && <Button size="sm" variant="outline" className="h-7" disabled={busy === r.id} onClick={() => banco(r)}>Al banco</Button>}
                   {!annullata && <Button size="sm" variant="ghost" className="h-7 text-red-700" disabled={busy === r.id} onClick={() => annulla(r)}><X className="w-3 h-3 mr-1" />Annulla</Button>}
                 </span>
               </div>
