@@ -23,6 +23,7 @@ import {
   type SpedIndirizzo, type SpedPratica, type SpedRiga, type SpedRubrica, type SpedStato, type SpedTipo,
 } from "@/lib/api";
 import { assAzione } from "@/lib/assistenza";
+import { BadgeFase, SituazionePacchi } from "./SituazionePacchi";
 
 const TIPI: { k: SpedTipo; l: string; d: string }[] = [
   { k: "ritiro_prenotato", l: "Ritiro con prenotazione", d: "dal cliente verso di noi, il corriere passa da lui nel giorno scelto" },
@@ -85,6 +86,7 @@ function Spedizioni() {
         <h1 className="text-2xl font-bold">Spedizioni</h1>
         <span className="text-sm text-muted-foreground">UPS e DHL · Tarature e Apple · una società</span>
       </div>
+      <SituazionePacchi versione={versione} />
       {stato && <NuovaSpedizione stato={stato} onFatta={() => setVersione((v) => v + 1)} />}
       <Elenco versione={versione} vedeSchede={!!stato?.vede_assistenza} />
     </div>
@@ -419,6 +421,8 @@ function Elenco({ versione, vedeSchede }: { versione: number; vedeSchede: boolea
                   : <span className="text-muted-foreground">{r.riferimento || "Libera"}</span>}
                 <span>{r.controparte}{r.address?.city ? ` (${r.address.city})` : ""}</span>
                 {r.tracking_url ? <a href={r.tracking_url} target="_blank" rel="noreferrer" className="font-mono text-blue-700 inline-flex items-center gap-1">{r.tracking}<ExternalLink className="w-3 h-3" /></a> : <span className="font-mono">{r.tracking}</span>}
+                {!annullata && !r.test_mode && <BadgeFase r={r} />}
+                {r.avviso_pacco && <span className="text-red-700">{r.avviso_pacco}</span>}
                 {r.pickup_prn && <span>ritiro {r.pickup_prn}{r.pickup_date ? ` il ${dataIt(r.pickup_date)}` : ""}{r.pickup_location === "lab" ? " da noi" : ""}</span>}
                 {r.pickup_error && <span className="text-red-700">ritiro NON prenotato: {r.pickup_error}</span>}
                 {r.packages > 1 && <span>{r.packages} colli</span>}

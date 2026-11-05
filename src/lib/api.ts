@@ -1082,7 +1082,14 @@ export interface SpedRiga {
   pickup_error: string | null; packages: number; cost: number | null; currency: string | null; address: Partial<ShipmentAddress> | null;
   email_to: string | null; email_sent_at: string | null; email_error: string | null; status: string; created_by: string | null; created_at: string;
   pratica: { tipo: 'sessione' | 'scheda' | 'libera'; id: string | null; titolo: string }; controparte: string; tracking_url: string | null; label_url: string;
+  tracking_fase: SpedFase | null; tracking_descrizione: string | null; tracking_luogo: string | null; tracking_ultimo_movimento: string | null;
+  tracking_consegna_prevista: string | null; tracking_consegnata_il: string | null; tracking_errore: string | null; avviso_pacco: string | null;
 }
+export type SpedFase = 'da_ritirare' | 'al_punto' | 'in_viaggio' | 'in_consegna' | 'problema' | 'consegnata';
+export interface SpedSituazione { in_arrivo: SpedRiga[]; in_uscita: SpedRiga[]; da_accettare: SpedRiga[]; aggiornato_at: string | null }
+export const spedSituazione = (): Promise<SpedSituazione> => fetchAPI('/api/spedizioni/situazione');
+export const spedSituazioneAggiorna = (): Promise<{ controllati: number; aggiornati: number; consegnati: number; errori: number }> =>
+  fetchAPI('/api/spedizioni/situazione/aggiorna', { method: 'POST', body: '{}' });
 const postJ = (b: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(b) });
 export const spedStato = (): Promise<SpedStato> => fetchAPI('/api/spedizioni/stato');
 export const spedRubrica = (q: string): Promise<{ risultati: SpedRubrica[] }> => fetchAPI(`/api/spedizioni/rubrica?q=${encodeURIComponent(q)}`);
