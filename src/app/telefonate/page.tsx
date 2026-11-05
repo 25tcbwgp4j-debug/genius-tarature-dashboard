@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
+import { PulsanteChiama } from "@/components/PulsanteChiama";
 
 type Telefonata = {
   id: string; contatto?: string | null; internazionale?: string | null; paese?: string | null; da_richiamare?: boolean; richiamato_il?: string | null; nota?: string | null; nota_il?: string | null;
@@ -103,6 +104,7 @@ function Riga({ t, conData, onCambiata }: { t: Telefonata; conData?: boolean; on
           <Button size="sm" variant={t.nota ? "secondary" : "outline"} className="ml-1.5" aria-expanded={noteAperte} onClick={() => setNoteAperte(!noteAperte)}>
             <NotebookPen className="mr-1.5 h-4 w-4" /> Nome e note
           </Button>
+          {t.numero ? <span className="ml-1.5"><PulsanteChiama numero={t.numero} /></span> : null}
         </td>
       </tr>
       {t.nota && !noteAperte ? <tr className={segnata ? "bg-amber-50 dark:bg-amber-950/30" : undefined}><td colSpan={7} className="whitespace-pre-wrap break-words px-2.5 pb-2.5 pt-0 text-xs text-muted-foreground">{t.nota}</td></tr> : null}

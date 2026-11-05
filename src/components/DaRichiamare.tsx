@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
+import { PulsanteChiama } from "@/components/PulsanteChiama";
 
 type Riga = { id: string; data_ora: string; direzione: string; numero: string | null; nome: string | null; contatto?: string | null; internazionale?: string | null; paese?: string | null; nota: string | null };
 
@@ -80,9 +81,12 @@ export function DaRichiamare() {
                     <p className="text-xs text-muted-foreground">{r.direzione === "uscente" ? "Chiamata fatta" : "Ha chiamato"} il {dataOra(r.data_ora)}{r.nome ? ` · ${r.nome}` : ""}</p>
                     {r.nota ? <p className="mt-1 whitespace-pre-wrap break-words text-sm">{r.nota}</p> : null}
                   </div>
-                  <Button size="sm" disabled={busy === r.id} onClick={() => fatto(r)}>
-                    {busy === r.id ? <Loader2 className="animate-spin" /> : <Check />} Richiamato
-                  </Button>
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    {r.numero ? <PulsanteChiama numero={r.numero} /> : null}
+                    <Button size="sm" disabled={busy === r.id} onClick={() => fatto(r)}>
+                      {busy === r.id ? <Loader2 className="animate-spin" /> : <Check />} Richiamato
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>

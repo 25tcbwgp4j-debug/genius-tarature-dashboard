@@ -11,6 +11,7 @@ import { AutorizzazioneDialog } from "@/components/AutorizzazioneDialog";
 import { GuardiaTitolare } from "@/components/RiservatoTitolare";
 import { BonificiAvviso } from "@/components/BonificiAvviso";
 import { DaRichiamare } from "@/components/DaRichiamare";
+import { ChiamataInArrivo } from "@/components/ChiamataInArrivo";
 import { DopoBonifico } from "@/components/DopoBonifico";
 import { StripeAvviso } from "@/components/StripeAvviso";
 import { DaGestireTarature } from "@/components/DaGestireTarature";
@@ -88,6 +89,8 @@ export default function RootLayout({
             <DaGestireTarature />
             {/* 04/11/2026: telefonate col flag «da richiamare», su ogni pagina finché qualcuno non le segna fatte */}
             <DaRichiamare />
+            {/* 05/11/2026: chi sta chiamando mentre il telefono squilla, con le sue ultime schede (collegamento CTI del centralino) */}
+            <ChiamataInArrivo />
             {/* dopo l'abbinamento di un bonifico: avviso ritiro / etichetta / spedizione della scheda (29/10/2026) */}
             <DopoBonifico />
            </AttivitaProvider>

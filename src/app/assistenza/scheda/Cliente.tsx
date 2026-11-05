@@ -12,6 +12,7 @@ import { toastErrore } from "@/lib/errori";
 import { assClienti, assSalvaCliente, assSchedaCliente, dataOra, TIPI_CLIENTE, type Anagrafica, type SchedaCliente } from "@/lib/assistenza";
 import { Badge, Campo, Modale, Pill, Scelta, campo, area } from "./ui";
 import { PerCliente } from "../PerCliente";
+import { PulsanteChiama } from "@/components/PulsanteChiama";
 
 export function iconaTipo(t?: string | null) {
   return t === "rivenditore" ? <Store className="size-3" /> : t === "azienda" ? <Building2 className="size-3" /> : <UserRound className="size-3" />;
@@ -226,6 +227,7 @@ export function RiepilogoCliente({ a, nome, telefono, email }: { a: Anagrafica |
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
         {cell && <span className="inline-flex items-center gap-1"><Phone className="size-3.5" />{cell}</span>}
+        {cell && <span className="print:hidden"><PulsanteChiama numero={cell} /></span>}
         {a?.cellulare_whatsapp && <span className="inline-flex items-center gap-1"><MessageCircle className="size-3.5" />WhatsApp</span>}
         {email && <span className="inline-flex items-center gap-1"><Mail className="size-3.5" />{email}</span>}
         {a?.piva && <span>P.IVA {a.piva}</span>}
