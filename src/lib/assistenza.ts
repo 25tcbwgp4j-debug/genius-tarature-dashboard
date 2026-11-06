@@ -96,6 +96,8 @@ export interface Combo { fonte?: string;  modello_chiave: string | null; modello
   uno: VoceProposta | null; due: VoceProposta | null; tre: VoceProposta | null;
   /** 04/11/2026 (Christian): aggiornamento OpenCore, voce fissa senza ipotesi (con «tre» come extra) */
   fissa?: VoceProposta | null;
+  /** 06/11/2026 (Christian): OpenCore, voce fissa UNICA installazione + dati (€ 119) per chi accetta a voce, senza opzione */
+  unica?: VoceProposta | null;
   /** 26/10/2026: Touch ID da sostituire insieme alla scheda logica ufficiale (MacBook con Touch ID) */
   due_touch_id?: VoceProposta | null; totale_2?: number | null }
 export interface Proposte { modello_nome?: string | null; modello_come?: string;  modello_chiave: string | null; famiglia: string | null;

@@ -148,6 +148,11 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
               </div>
               <Button size="sm" className="mt-2 w-full" onClick={() => onCombo(c)}>
                 <Sparkles />{c.fissa ? <>Inserisci voce fissa{c.tre ? " (+ extra aggiungibile)" : ""}</> : <>Inserisci {c.uno && c.due ? "1ª + 2ª" : c.uno ? "1ª" : "2ª"}{c.tre ? " (+ 3ª aggiungibile)" : ""}</>}</Button>
+              {c.unica && (
+                <Button size="sm" variant="outline" className="mt-1.5 h-auto w-full whitespace-normal py-1.5" data-testid="combo-unica"
+                  title={c.unica.descrizione} onClick={() => onVoce(c.unica!, "fissa")}>
+                  Voce fissa unica con dati e programmi conservati{c.unica.prezzo != null ? ` · ${eur(c.unica.prezzo)}` : ""} (accettata a voce)</Button>
+              )}
             </div>
           ))}
         </div>
