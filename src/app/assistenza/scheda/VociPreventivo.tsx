@@ -161,6 +161,29 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
         <div className="mt-3 text-xs text-muted-foreground">Nessuna combinazione 1ª + 2ª per questa scelta: usa le voci singole qui sotto, la ricerca o un altro modello.</div>
       )}
 
+      {/* 06/11/2026 (Christian): ricerca libera anche nei TESTI dei preventivi già fatti (es. «head») */}
+      {f.q && (prop?.storico?.length ?? 0) > 0 && (
+        <div className="mt-3" data-testid="storico-preventivi">
+          <div className="mb-1 text-xs font-semibold text-muted-foreground">Dai preventivi già fatti ({prop!.storico!.length})</div>
+          <div className="max-h-72 divide-y overflow-y-auto rounded-md border bg-background">
+            {prop!.storico!.map((r, i) => {
+              const v: VoceProposta = { id: `storico:${r.numero}:${i}`, intervento: "storico", ipotesi: null, descrizione: r.testo, prezzo: r.prezzo,
+                scontato_da: null, nota: null, da_verificare: true, fonte: "storico", modello: r.prodotto, aggiornato_il: r.data, tipo_ricambio: null };
+              return (
+                <div key={v.id} className="flex flex-wrap items-center gap-2 px-2.5 py-1.5 text-sm">
+                  <span className="min-w-0 flex-1">{r.testo}<span className="text-xs text-muted-foreground"> · scheda {r.numero}{r.prodotto ? ` · ${r.prodotto}` : ""}{r.esito ? ` · ${r.esito}` : ""}</span></span>
+                  <b className="w-20 text-right tabular-nums">{r.prezzo != null ? eur(r.prezzo) : "—"}</b>
+                  <span className="flex gap-1">
+                    <Button size="xs" variant="outline" onClick={() => onVoce(v, "ipotesi")} title="Nuova ipotesi alternativa"><Plus />ipotesi</Button>
+                    <Button size="xs" variant="outline" onClick={() => onVoce(v, "fissa")} title="Voce fissa (si somma sempre)"><Plus />fissa</Button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* voci singole (anche senza ipotesi): si aggiungono come ipotesi alternativa, aggiungibile o voce fissa */}
       {sciolte.length > 0 && (
         <div className="mt-3">

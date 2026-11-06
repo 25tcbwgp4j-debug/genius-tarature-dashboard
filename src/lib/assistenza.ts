@@ -104,7 +104,10 @@ export interface Proposte { modello_nome?: string | null; modello_come?: string;
   fonte: "modello" | "famiglia" | "tutte" | "vicino" | "ricerca" | "modello_scelto" | "filtro" | ""; nota?: string; vicini?: ModelloVoci[];
   voci: VoceProposta[]; combo: Combo[]; pollici_scheda?: number | null; anno_scheda?: number | null;
   filtri?: { pollici: number[]; anni: number[]; modelli: ModelloVoci[] };
-  interventi: { codice: string; etichetta: string; voci: number }[] }
+  interventi: { codice: string; etichetta: string; voci: number }[];
+  /** 06/11/2026 (Christian): con la ricerca libera, le righe dei preventivi già fatti (accettati o no) che la contengono */
+  storico?: RigaStorico[] }
+export interface RigaStorico { numero: number; prodotto: string | null; esito: string | null; data: string; testo: string; prezzo: number | null }
 export interface GruppoProdotti { gruppo: string; famiglia: string; voci: string[] }
 export type FatturaCollegata = { id: string; numero: string | null; stato: string; totale: number; data?: string | null; pagamento_stato?: string | null;
   pagamento_modalita?: string | null; pagato_il?: string | null; tipo_documento?: string | null };
