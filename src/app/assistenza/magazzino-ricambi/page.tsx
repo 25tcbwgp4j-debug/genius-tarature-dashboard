@@ -63,11 +63,25 @@ const STATI_TESTO: Record<string, string> = {
   funzionante: "Funzionante", rotto: "Rotto", usato: "Usato", da_verificare: "Da verificare", nuovo: "Nuovo", riservato: "Riservato",
   x_sostituzione: "Per sostituzione", da_riparare: "Da riparare",
 };
+// 07/11/2026 (Christian): colori con un senso logico — nuove e funzionanti verdi, usate celesti, rotte e per sostituzione
+// rosse, da riparare arancioni (riquadro dello stato e bordo sinistro della riga)
 const COLORE_STATO: Record<string, string> = {
-  funzionante: "bg-green-100 text-green-800", rotto: "bg-red-100 text-red-800", usato: "bg-amber-100 text-amber-800",
-  da_verificare: "bg-gray-100 text-gray-700", nuovo: "bg-blue-100 text-blue-800", riservato: "bg-purple-100 text-purple-800",
-  x_sostituzione: "bg-orange-100 text-orange-800", da_riparare: "bg-pink-100 text-pink-800",
+  funzionante: "bg-green-100 text-green-800", nuovo: "bg-green-100 text-green-800", usato: "bg-sky-100 text-sky-800",
+  rotto: "bg-red-100 text-red-800", x_sostituzione: "bg-red-100 text-red-800", da_riparare: "bg-orange-100 text-orange-800",
+  da_verificare: "bg-gray-100 text-gray-700", riservato: "bg-purple-100 text-purple-800",
 };
+const BORDO_STATO: Record<string, string> = {
+  funzionante: "border-l-4 border-l-green-500", nuovo: "border-l-4 border-l-green-500", usato: "border-l-4 border-l-sky-400",
+  rotto: "border-l-4 border-l-red-500", x_sostituzione: "border-l-4 border-l-red-500", da_riparare: "border-l-4 border-l-orange-500",
+};
+// filtro per stato delle schede logiche e dei display (i gruppi che servono al banco)
+const FILTRI_STATO: { k: string; t: string; stati: (string | null)[]; colore: string }[] = [
+  { k: "nuove", t: "Nuove", stati: ["nuovo", "funzionante"], colore: "bg-green-600" },
+  { k: "usate", t: "Usate", stati: ["usato"], colore: "bg-sky-500" },
+  { k: "sostituzione", t: "Rotte / per sostituzione", stati: ["x_sostituzione", "rotto"], colore: "bg-red-600" },
+  { k: "riparare", t: "Da riparare", stati: ["da_riparare"], colore: "bg-orange-500" },
+  { k: "verificare", t: "Da verificare / senza stato", stati: ["da_verificare", null], colore: "bg-gray-500" },
+];
 const inp = "border rounded px-2 py-1 text-sm bg-white dark:bg-gray-900";
 const dove = (r: Partial<Riga>) => [r.posizione && `reparto ${r.posizione}`, r.scaffale, r.confezione?.toLowerCase()].filter(Boolean).join(" · ");
 const norm = (t: string | null | undefined) => (t || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -304,6 +318,8 @@ export default function MagazzinoRicambi() {
   // 24/10/2026: display e schede logiche filtrabili per modello
   const [modello, setModello] = useState("");
   const [sezione, setSezione] = useState("");
+  const [anno, setAnno] = useState("");
+  const [filtroStato, setFiltroStato] = useState("");
   const [eliminati, setEliminati] = useState(false);
   const [carico, setCarico] = useState(true);
   const [evid, setEvid] = useState<number | null>(null);
@@ -340,14 +356,20 @@ export default function MagazzinoRicambi() {
         ? [...righe].sort((a, b) => (a.etichetta || "~").localeCompare(b.etichetta || "~", "it", { numeric: true }))
         : righe;
     const perSezione = tipo === "scheda_logica" && sezione ? ordinate.filter((r) => sezioneLogica(r.etichetta).t === sezione) : ordinate;
-    const perModello = modello ? perSezione.filter((r) => (r.modelli || "").trim() === modello) : perSezione;
+    const perAnno = anno ? perSezione.filter((r) => String(r.anno || "").trim() === anno) : perSezione;
+    const fs = FILTRI_STATO.find((x) => x.k === filtroStato);
+    const perStato = fs ? perAnno.filter((r) => fs.stati.includes(r.stato || null)) : perAnno;
+    const perModello = modello ? perStato.filter((r) => (r.modelli || "").trim() === modello) : perStato;
     if (!t.length) return perModello;
     // 24/10/2026: italiano e inglese («dissipatore» = «Heat Sink»), senza badare a spazi e trattini
     return perModello.filter((r) => corrisponde(
       [r.codice, r.codice_ricambio, r.mpn, r.descrizione, r.modelli, r.posizione, r.scaffale, r.seriale, r.note, r.stato, r.etichetta, r.colore, r.grado, r.condizioni, r.codici_alt].join(" "), q));
-  }, [righe, q, modello, tipo, sezione]);
+  }, [righe, q, modello, tipo, sezione, anno, filtroStato]);
   const modelliTipo = useMemo(() => [...new Set(righe.map((r) => (r.modelli || "").trim()).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "it", { numeric: true })), [righe]);
+  // anni presenti nella sezione scelta (o in tutte), per guardarle tutte insieme
+  const anniTipo = useMemo(() => [...new Set(righe.filter((r) => tipo !== "scheda_logica" || !sezione || sezioneLogica(r.etichetta).t === sezione)
+    .map((r) => String(r.anno || "").trim()).filter(Boolean))].sort(), [righe, tipo, sezione]);
 
   const vaiA = (r: Riga, m: Modo = modo) => {
     setScelte(null); setQ(""); setEliminati(false);
@@ -452,7 +474,7 @@ export default function MagazzinoRicambi() {
       <div className="flex flex-wrap gap-3 items-center">
         <div className="inline-flex rounded-md border overflow-hidden text-sm">
           {TIPI.map((x) => (
-            <button key={x.k} type="button" onClick={() => { setTipo(x.k); setEvid(null); setModello(""); setSezione(""); }}
+            <button key={x.k} type="button" onClick={() => { setTipo(x.k); setEvid(null); setModello(""); setSezione(""); setAnno(""); setFiltroStato(""); }}
               className={`px-3 py-1.5 ${tipo === x.k ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-900"}`}>
               {x.t} ({conteggi[x.k] ?? 0})
             </button>
@@ -464,7 +486,7 @@ export default function MagazzinoRicambi() {
             className="w-full border rounded-md pl-8 pr-2 py-1.5 text-sm bg-white dark:bg-gray-900" />
         </div>
         {tipo === "scheda_logica" && (
-          <select value={sezione} onChange={(e) => setSezione(e.target.value)} aria-label="Sezione"
+          <select value={sezione} onChange={(e) => { setSezione(e.target.value); setAnno(""); }} aria-label="Sezione"
             className="border rounded-md px-2 py-1.5 text-sm bg-white dark:bg-gray-900 max-w-[300px]">
             <option value="">Tutte le sezioni</option>
             {[...SEZIONI_LOGICHE.map((x) => x.t), SEZIONE_ALTRE].map((t) => {
@@ -480,11 +502,35 @@ export default function MagazzinoRicambi() {
             {modelliTipo.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         )}
+        {(tipo === "display" || tipo === "scheda_logica") && anniTipo.length > 0 && (
+          <select value={anno} onChange={(e) => setAnno(e.target.value)} aria-label="Anno"
+            className="border rounded-md px-2 py-1.5 text-sm bg-white dark:bg-gray-900">
+            <option value="">Tutti gli anni</option>
+            {anniTipo.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
         <label className="text-sm flex items-center gap-2"><input type="checkbox" checked={eliminati} onChange={(e) => setEliminati(e.target.checked)} /> Eliminati</label>
         <button type="button" onClick={() => setMod({ r: null })} className="px-3 py-1.5 rounded bg-green-600 text-white text-sm inline-flex items-center gap-1">
           <Plus className="h-4 w-4" /> Aggiungi
         </button>
       </div>
+
+      {pezzi && !gar && (
+        <div className="flex flex-wrap gap-1.5 items-center text-sm" data-testid="filtro-stato">
+          <button type="button" onClick={() => setFiltroStato("")}
+            className={`px-3 py-1 rounded-full border ${!filtroStato ? "bg-gray-800 text-white" : "bg-white dark:bg-gray-900"}`}>Tutte</button>
+          {FILTRI_STATO.map((f) => {
+            const n = righe.filter((r) => (tipo !== "scheda_logica" || !sezione || sezioneLogica(r.etichetta).t === sezione)
+              && (!anno || String(r.anno || "").trim() === anno) && f.stati.includes(r.stato || null)).length;
+            return (
+              <button key={f.k} type="button" onClick={() => setFiltroStato(filtroStato === f.k ? "" : f.k)}
+                className={`px-3 py-1 rounded-full border inline-flex items-center gap-1.5 ${filtroStato === f.k ? `${f.colore} text-white border-transparent` : "bg-white dark:bg-gray-900"}`}>
+                <span className={`inline-block h-2.5 w-2.5 rounded-full ${f.colore}`} />{f.t} ({n})
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {!eliminati && stampabili.length > 0 && (
         <div className="flex flex-wrap gap-2 items-center text-sm">
@@ -535,7 +581,7 @@ export default function MagazzinoRicambi() {
                     </td>
                   </tr>
                 )}
-                <tr id={`riga-${r.id}`} className={`border-t align-top ${evid === r.id ? "bg-yellow-100 dark:bg-yellow-900/40" : ""}`}>
+                <tr id={`riga-${r.id}`} className={`border-t align-top ${pezzi ? BORDO_STATO[r.stato || ""] || "" : ""} ${evid === r.id ? "bg-yellow-100 dark:bg-yellow-900/40" : ""}`}>
                   <td className="p-2">{r.attivo && <input type="checkbox" aria-label="Spunta per le etichette" checked={sel.has(r.id)} onChange={() => spunta(r.id)} />}</td>
                   <td className="p-2 font-mono whitespace-nowrap">{r.etichetta ? <div className="font-bold">{r.etichetta}</div> : null}{r.codice}{r.codice_ricambio ? <div className="text-xs">ricambio {r.codice_ricambio}</div> : null}{r.codici_alt ? <div className="text-xs text-gray-500">= {r.codici_alt}</div> : null}
                     {r.mpn ? <div className="text-xs text-gray-500">{r.mpn}</div> : null}
