@@ -14,7 +14,7 @@
 // sezione» = le righe visibili col filtro) e si stampano in blocco, copie = giacenza; il codice a barre RA<id> si spara qui.
 
 import { corrisponde } from "@/lib/ricercaRicambi";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Boxes, Check, History, Loader2, Minus, Pencil, Plus, Printer, RotateCcw, ScanLine, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
@@ -42,6 +42,23 @@ const TIPI: { k: Tipo; t: string }[] = [
   { k: "top_case", t: "Top case" }, { k: "garanzia", t: "Dispositivi in garanzia" },
   { k: "rotto", t: "Ricambi rotti (per sostituzione)" },   // 01/11/2026: difettosi tenuti per la sostituzione, a quantità
 ];
+// 07/11/2026 (Christian): le schede logiche divise per sezione come nel file Excel «MACBOOK LOGICHE», nello stesso ordine.
+// La sezione si riconosce dalla sigla (AIR12 → «AIR»); dentro la sezione l'ordine delle sigle è quello del file (MBRN poi MBRG).
+const SEZIONI_LOGICHE: { t: string; sigle: string[] }[] = [
+  { t: "MacBook Air 2010-2017", sigle: ["AIR"] },
+  { t: "MacBook Pro Retina 13\" 2012-2015", sigle: ["MBR"] },
+  { t: "MacBook Pro 15\" 2008-2012", sigle: ["MBG"] },
+  { t: "MacBook Pro 13\" 2008-2012", sigle: ["MBP"] },
+  { t: "MacBook Air + Pro 13\" Retina USB-C 2016-2022", sigle: ["MBRN", "MBRG"] },
+  { t: "iMac 21\" + 27\" Retina 2012-2019", sigle: ["IMR"] },
+];
+const SEZIONE_ALTRE = "Senza sezione";
+function sezioneLogica(etichetta: string | null): { i: number; t: string; s: number; n: number } {
+  const m = /^([A-Z]+)(\d+)$/.exec((etichetta || "").trim().toUpperCase());
+  const i = m ? SEZIONI_LOGICHE.findIndex((x) => x.sigle.includes(m[1])) : -1;
+  return i < 0 ? { i: SEZIONI_LOGICHE.length, t: SEZIONE_ALTRE, s: 0, n: 0 }
+    : { i, t: SEZIONI_LOGICHE[i].t, s: SEZIONI_LOGICHE[i].sigle.indexOf(m![1]), n: Number(m![2]) };
+}
 const STATI_TESTO: Record<string, string> = {
   funzionante: "Funzionante", rotto: "Rotto", usato: "Usato", da_verificare: "Da verificare", nuovo: "Nuovo", riservato: "Riservato",
   x_sostituzione: "Per sostituzione", da_riparare: "Da riparare",
@@ -286,6 +303,7 @@ export default function MagazzinoRicambi() {
   const [q, setQ] = useState("");
   // 24/10/2026: display e schede logiche filtrabili per modello
   const [modello, setModello] = useState("");
+  const [sezione, setSezione] = useState("");
   const [eliminati, setEliminati] = useState(false);
   const [carico, setCarico] = useState(true);
   const [evid, setEvid] = useState<number | null>(null);
@@ -313,15 +331,21 @@ export default function MagazzinoRicambi() {
   const visibili = useMemo(() => {
     const t = q.toLowerCase().split(/\s+/).filter(Boolean);
     // display, schede, top case: in ordine di sigla (AIR1, AIR2… AIR10), i ricambi per codice
-    const ordinate = righe.some((r) => r.etichetta)
-      ? [...righe].sort((a, b) => (a.etichetta || "~").localeCompare(b.etichetta || "~", "it", { numeric: true }))
-      : righe;
-    const perModello = modello ? ordinate.filter((r) => (r.modelli || "").trim() === modello) : ordinate;
+    const ordinate = tipo === "scheda_logica"
+      ? [...righe].sort((a, b) => {
+          const x = sezioneLogica(a.etichetta), y = sezioneLogica(b.etichetta);
+          return x.i - y.i || x.s - y.s || x.n - y.n || (a.etichetta || "~").localeCompare(b.etichetta || "~", "it", { numeric: true });
+        })
+      : righe.some((r) => r.etichetta)
+        ? [...righe].sort((a, b) => (a.etichetta || "~").localeCompare(b.etichetta || "~", "it", { numeric: true }))
+        : righe;
+    const perSezione = tipo === "scheda_logica" && sezione ? ordinate.filter((r) => sezioneLogica(r.etichetta).t === sezione) : ordinate;
+    const perModello = modello ? perSezione.filter((r) => (r.modelli || "").trim() === modello) : perSezione;
     if (!t.length) return perModello;
     // 24/10/2026: italiano e inglese («dissipatore» = «Heat Sink»), senza badare a spazi e trattini
     return perModello.filter((r) => corrisponde(
       [r.codice, r.codice_ricambio, r.mpn, r.descrizione, r.modelli, r.posizione, r.scaffale, r.seriale, r.note, r.stato, r.etichetta, r.colore, r.grado, r.condizioni, r.codici_alt].join(" "), q));
-  }, [righe, q, modello]);
+  }, [righe, q, modello, tipo, sezione]);
   const modelliTipo = useMemo(() => [...new Set(righe.map((r) => (r.modelli || "").trim()).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "it", { numeric: true })), [righe]);
 
@@ -428,7 +452,7 @@ export default function MagazzinoRicambi() {
       <div className="flex flex-wrap gap-3 items-center">
         <div className="inline-flex rounded-md border overflow-hidden text-sm">
           {TIPI.map((x) => (
-            <button key={x.k} type="button" onClick={() => { setTipo(x.k); setEvid(null); setModello(""); }}
+            <button key={x.k} type="button" onClick={() => { setTipo(x.k); setEvid(null); setModello(""); setSezione(""); }}
               className={`px-3 py-1.5 ${tipo === x.k ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-900"}`}>
               {x.t} ({conteggi[x.k] ?? 0})
             </button>
@@ -439,6 +463,16 @@ export default function MagazzinoRicambi() {
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtra in italiano o inglese (dissipatore = heat sink), codice, scheda 820-…, modello…"
             className="w-full border rounded-md pl-8 pr-2 py-1.5 text-sm bg-white dark:bg-gray-900" />
         </div>
+        {tipo === "scheda_logica" && (
+          <select value={sezione} onChange={(e) => setSezione(e.target.value)} aria-label="Sezione"
+            className="border rounded-md px-2 py-1.5 text-sm bg-white dark:bg-gray-900 max-w-[300px]">
+            <option value="">Tutte le sezioni</option>
+            {[...SEZIONI_LOGICHE.map((x) => x.t), SEZIONE_ALTRE].map((t) => {
+              const n = righe.filter((r) => sezioneLogica(r.etichetta).t === t).length;
+              return n ? <option key={t} value={t}>{t} ({n})</option> : null;
+            })}
+          </select>
+        )}
         {(tipo === "display" || tipo === "scheda_logica") && modelliTipo.length > 0 && (
           <select value={modello} onChange={(e) => setModello(e.target.value)} aria-label="Modello"
             className="border rounded-md px-2 py-1.5 text-sm bg-white dark:bg-gray-900 max-w-[280px]">
@@ -491,8 +525,17 @@ export default function MagazzinoRicambi() {
               </tr>
             </thead>
             <tbody>
-              {visibili.map((r) => (
-                <tr key={r.id} id={`riga-${r.id}`} className={`border-t align-top ${evid === r.id ? "bg-yellow-100 dark:bg-yellow-900/40" : ""}`}>
+              {visibili.map((r, i) => (
+                <Fragment key={r.id}>
+                {tipo === "scheda_logica" && (i === 0 || sezioneLogica(visibili[i - 1].etichetta).t !== sezioneLogica(r.etichetta).t) && (
+                  <tr className="border-t bg-blue-50 dark:bg-blue-950/40" data-testid="sezione-logiche">
+                    <td colSpan={20} className="p-2 font-semibold text-blue-900 dark:text-blue-100">
+                      {sezioneLogica(r.etichetta).t}
+                      <span className="ml-2 text-xs font-normal text-gray-500">{visibili.filter((x) => sezioneLogica(x.etichetta).t === sezioneLogica(r.etichetta).t).length} schede</span>
+                    </td>
+                  </tr>
+                )}
+                <tr id={`riga-${r.id}`} className={`border-t align-top ${evid === r.id ? "bg-yellow-100 dark:bg-yellow-900/40" : ""}`}>
                   <td className="p-2">{r.attivo && <input type="checkbox" aria-label="Spunta per le etichette" checked={sel.has(r.id)} onChange={() => spunta(r.id)} />}</td>
                   <td className="p-2 font-mono whitespace-nowrap">{r.etichetta ? <div className="font-bold">{r.etichetta}</div> : null}{r.codice}{r.codice_ricambio ? <div className="text-xs">ricambio {r.codice_ricambio}</div> : null}{r.codici_alt ? <div className="text-xs text-gray-500">= {r.codici_alt}</div> : null}
                     {r.mpn ? <div className="text-xs text-gray-500">{r.mpn}</div> : null}
@@ -538,6 +581,7 @@ export default function MagazzinoRicambi() {
                     )}
                   </td>
                 </tr>
+                </Fragment>
               ))}
             </tbody>
             <tfoot>
