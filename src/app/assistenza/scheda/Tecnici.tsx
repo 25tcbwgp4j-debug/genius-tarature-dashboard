@@ -74,7 +74,7 @@ export function DialogoChiudiVerifica({ s, tecnici, onClose, onChiudi }: {
 /** Pannello in testa alla lavorazione: chi verifica / chi ripara e lo STATO DELLA RIPARAZIONE a un clic. */
 // 03/11/2026 (Christian, 63185): gli stati della riparazione a gruppi, con preventivo e lavorazione effettuata sott'occhio
 const GRUPPI_RIPARAZIONE: { titolo: string; stati: string[] }[] = [
-  { titolo: "A che punto è", stati: ["in_corso", "attesa_ricambi", "ricambio_arrivato", "piu_tempo", "ritirato_temporaneo"] },
+  { titolo: "A che punto è", stati: ["in_corso", "attesa_ricambi", "ricambio_arrivato", "piu_tempo"] },
   { titolo: "Serve il cliente", stati: ["aggiornamento_cliente", "disabilitare_trova"] },
   { titolo: "Com'è finita", stati: ["finita", "non_riparabile"] },
 ];
@@ -194,8 +194,8 @@ export function PannelloTecnici({ s, tecnici, ro, busy, onAssegnaVerifica, onChi
               ))}
             </div>
           )}
-          {/* 09/11/2026 (Christian, 63349/63351): il cliente si riprende il dispositivo prima del preventivo e lo riporterà */}
-          {!ro && (st === "da_preventivare" || st === "preventivo_inviato") && (
+          {/* 09/11/2026 (Christian, 63349/63351): il cliente può riprendersi il dispositivo in qualsiasi fase e riportarlo */}
+          {!ro && ["da_preventivare", "preventivo_inviato", "accettato", "rifiutato", "pronto"].includes(st) && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {s.riparazione_stato === "ritirato_temporaneo" ? <>
                 <Pill tono="ambra">📦 Ritirato dal cliente, lo riporterà</Pill>
