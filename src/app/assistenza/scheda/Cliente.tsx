@@ -200,7 +200,7 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
                 {c.schede.map((s) => (
                   <button key={s.id} type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-muted" onClick={() => onApriScheda?.(s.id)}>
                     <b className="tabular-nums">{s.sigla}</b><span className="truncate text-muted-foreground">{s.modello || s.prodotto} · {s.difetto}</span>
-                    <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">{dataOra(s.created_at)}<Badge stato={s.stato} /></span>
+                    <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">{dataOra(s.created_at)}<Badge stato={s.stato} rip={(s as { riparazione_stato?: string | null }).riparazione_stato} /></span>
                   </button>
                 ))}
               </div>

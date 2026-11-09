@@ -252,7 +252,7 @@ export function Banco() {
                   <b className="tabular-nums">{s.sigla}</b>
                   <span className="truncate">{s.azienda || s.nominativo}</span>
                   {s.passaggio && !s.passaggio.letto_il && <span className="rounded bg-blue-600 px-1.5 text-[10px] font-bold text-white" title={`Messaggio di ${s.passaggio.da} per ${s.passaggio.a}`}>📨 per {s.passaggio.a}</span>}
-                  <span className="ml-auto"><Badge stato={s.stato} /></span>
+                  <span className="ml-auto"><Badge stato={s.stato} rip={s.riparazione_stato} /></span>
                 </div>
                 <div className="truncate text-xs text-muted-foreground">{s.prodotto}{s.anno ? ` ${s.anno}` : ""}{s.difetto ? ` · ${s.difetto}` : ""}</div>
                 {(s.stato === "da_preventivare" && s.tecnico_verifica) || (s.stato === "accettato" && s.tecnico_riparazione) ? (

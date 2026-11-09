@@ -271,7 +271,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           <span className="text-2xl font-bold tabular-nums tracking-tight">{s.sigla}</span>
           {rifCliente(s) && <span className="rounded-md border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:bg-blue-950/30 dark:text-blue-100" title="Riferimento del rivenditore / cliente">Vs. rif. {rifCliente(s)}</span>}
           <Button size="icon-xs" variant="outline" disabled={!s.successiva} onClick={() => s.successiva && onApri(s.successiva.id)} title="Successiva (Alt+→)"><ArrowRight /></Button>
-          <Badge stato={st} />
+          <Badge stato={st} rip={s.riparazione_stato} />
           {s.prova && s.origine === "prova" && <Pill tono="ambra">PROVA</Pill>}
           {s.sola_lettura && <Pill>storica FileMaker</Pill>}
           <span className="hidden min-w-0 truncate text-sm text-muted-foreground md:inline">{s.azienda || s.nominativo} · {s.modello || s.prodotto}</span>

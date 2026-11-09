@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Smartphone, PackageCheck, Euro, Landmark, Mail, Calculator, Clock, Plus, FileQuestion } from "lucide-react";
 import { fetchAPI } from "@/lib/api";
 import { usePermessi } from "@/components/permessi";
+import { FuoriDalCliente } from "@/app/assistenza/scheda/ui";
 import { COLORE_STATO, ETICHETTA_STATO, dataOra, eur, type SchedaBreve, type ConfigAssistenza, type FaseCruscotto } from "@/lib/assistenza";
 
 // letture silenziose: un 403 o un backend in avvio non deve aprire finestre di errore sulla home
@@ -35,7 +36,7 @@ function RigaScheda({ s, extra }: { s: SchedaBreve; extra?: React.ReactNode }) {
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {extra}
-        <Stato s={s.stato} />
+        <Stato s={s.stato} />{(s as { riparazione_stato?: string | null }).riparazione_stato === "ritirato_temporaneo" && <FuoriDalCliente />}
       </div>
     </Link>
   );

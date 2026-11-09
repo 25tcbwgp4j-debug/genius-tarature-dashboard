@@ -10,8 +10,14 @@ export const campo = "h-9 w-full rounded-md border border-input bg-background px
 export const area = "w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-70";
 export const etich = "mb-0.5 block text-xs font-medium text-muted-foreground";
 
-export function Badge({ stato }: { stato: string }) {
-  return <span className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${COLORE_STATO[stato] || ""}`}>{ETICHETTA_STATO[stato] || stato}</span>;
+export function Badge({ stato, rip }: { stato: string; rip?: string | null }) {
+  const b = <span className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${COLORE_STATO[stato] || ""}`}>{ETICHETTA_STATO[stato] || stato}</span>;
+  // 09/11/2026 (Christian, 63350): il dispositivo è dal cliente → accanto allo stato, altrimenti sembra in negozio
+  if (rip !== "ritirato_temporaneo" || ["consegnato", "annullata"].includes(stato)) return b;
+  return <span className="inline-flex flex-wrap items-center gap-1">{b}<FuoriDalCliente /></span>;
+}
+export function FuoriDalCliente() {
+  return <span className="inline-block whitespace-nowrap rounded-full border border-orange-300 bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-900 dark:bg-orange-900/40 dark:text-orange-100">📦 Dal cliente: attendiamo che lo riporti</span>;
 }
 
 export function Pill({ children, tono = "grigio", title }: { children: React.ReactNode; tono?: "grigio" | "verde" | "ambra" | "rosso" | "blu"; title?: string }) {
