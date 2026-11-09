@@ -126,7 +126,9 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
       azioni={<span className="text-sm">Totale proposto <b className="text-base">{eur(tot)}</b> <span className="text-xs text-muted-foreground">IVA compresa</span></span>}>
       <div className="space-y-4">
         <Campo label="Test in ingresso (diagnosi)">
-          <input className={campo} disabled={ro} placeholder="es. SCHEDA LOGICA IN CORTO" value={bz.diagnosi} onChange={(e) => setBz((b) => ({ ...b, diagnosi: e.target.value }))} />
+          {/* 09/11/2026 (Christian, 63352): il test in ingresso lungo si legge tutto: il campo cresce con il testo */}
+          <textarea className={`${area} min-h-9 resize-y [field-sizing:content]`} rows={Math.max(1, Math.ceil((bz.diagnosi || "").length / 90))} disabled={ro}
+            placeholder="es. SCHEDA LOGICA IN CORTO" value={bz.diagnosi} onChange={(e) => setBz((b) => ({ ...b, diagnosi: e.target.value }))} />
         </Campo>
 
         {bb.map((b) => (
@@ -306,7 +308,7 @@ function Riga({ r, i, ro, upd, togli, etichetta }: { r: EstimateLine; i: number;
     <div className="space-y-1">
       <div className="flex items-start gap-1.5">
         {etichetta && <span className="mt-2.5 w-16 shrink-0 text-[11px] text-muted-foreground">{etichetta}</span>}
-        <textarea className={`${area} min-h-9 flex-1 resize-y`} rows={Math.min(4, Math.max(1, Math.ceil(r.t.length / 70)))} disabled={ro} value={r.t} placeholder="Descrizione della voce" onChange={(e) => upd(i, "t", e.target.value)} />
+        <textarea className={`${area} min-h-9 flex-1 resize-y [field-sizing:content]`} rows={Math.max(1, Math.ceil(r.t.length / 70))} disabled={ro} value={r.t} placeholder="Descrizione della voce" onChange={(e) => upd(i, "t", e.target.value)} />
         <div className="relative w-24 shrink-0">
           <span className="pointer-events-none absolute left-2 top-2 text-sm text-muted-foreground">€</span>
           <input className={`${campo} pl-5 text-right font-semibold tabular-nums`} disabled={ro} inputMode="decimal" value={r.p ?? ""} onChange={(e) => upd(i, "p", e.target.value.replace(",", "."))} />
