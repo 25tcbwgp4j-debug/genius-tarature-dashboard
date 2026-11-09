@@ -373,6 +373,11 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {!ro && <Button size="sm" variant="outline" disabled={!!busy || st === "in_arrivo"} onClick={() => setDlg({ k: "invio", tipo: "ricevuta" })}><Mail />Ricevuta</Button>}
         {!ro && (st === "preventivo_inviato" || (st === "da_preventivare" && bz.righe.length > 0)) && (
           <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "esito" })}>Accettato / Rifiutato</Button>)}
+        {/* 09/11/2026 (Christian, 63303): voci aggiunte a una scheda già accettata (preventivo aggiuntivo) che il cliente ha
+            accettato al banco o al telefono → si segnano accettate SENZA mandargli l'aggiornamento */}
+        {!ro && st === "accettato" && bz.righe.some((r) => (r.b ?? 0) > 0 && !r.acc && String(r.t || "").trim()) && (
+          <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "esito" })}
+            title="Il cliente ha accettato le voci aggiunte (al banco o al telefono): si segnano accettate senza inviare l'aggiornamento">Aggiuntivo accettato / rifiutato</Button>)}
         {!ro && ["da_preventivare", "preventivo_inviato", "accettato"].includes(st) && !s.attesa_cliente_il && (
           <Button size="sm" variant="outline" disabled={!!busy} title="Abbiamo chiesto qualcosa al cliente: la scheda resta ferma nella sua sezione finché non risponde. Non manda nulla al cliente."
             onClick={() => azione("attesa-cliente", { azione: "metti" }, "Scheda in attesa di risposta dal cliente")}>💬 In attesa di risposta dal cliente</Button>)}
