@@ -260,7 +260,8 @@ export const SPEDIZIONI: [string, string][] = [["nessuna", "Nessuna"], ["ar", "A
 export const TIPI_CLIENTE: [string, string][] = [["privato", "Privato"], ["azienda", "Azienda"], ["rivenditore", "Rivenditore"]];
 export const STATI_RIPARAZIONE: [string, string][] = [["in_corso", "In riparazione"], ["attesa_ricambi", "⏳ In attesa ricambi"], ["ricambio_arrivato", "🔧 Ricambio arrivato"],
   ["piu_tempo", "Serve più tempo"], ["aggiornamento_cliente", "Aggiornamento da fare al cliente"],
-  ["disabilitare_trova", "Disabilitare «Trova il mio dispositivo»"], ["finita", "✔ Finita"], ["non_riparabile", "✖ Non riparabile"]];
+  ["disabilitare_trova", "Disabilitare «Trova il mio dispositivo»"], ["finita", "✔ Finita"], ["non_riparabile", "✖ Non riparabile"],
+  ["ritirato_temporaneo", "📦 Ritirato dal cliente, lo riporterà"]];  // 09/11/2026 (Christian, 63349/63351)
 export const CANALI_RISPOSTA: [string, string][] = [["telefono", "Telefono"], ["whatsapp", "WhatsApp"], ["mail", "Mail"], ["negozio", "In negozio"], ["online", "Online"]];
 /** Nome del tecnico dal codice (ALEX → Alex). */
 export const nomeTecnico = (cod: string | null | undefined, tecnici: { codice: string; nome: string }[] = []) =>

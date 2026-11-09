@@ -32,6 +32,7 @@ const STILE_RIP: Record<string, string> = {
   aggiornamento_cliente: "bg-violet-100 text-violet-900 dark:bg-violet-900/40 dark:text-violet-100",
   disabilitare_trova: "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100",
   piu_tempo: "bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100",
+  ritirato_temporaneo: "bg-orange-100 text-orange-900 dark:bg-orange-900/40 dark:text-orange-100",
 };
 
 // Tutte le schede che rispondono a ricerca/filtro, a blocchi da 500 (il massimo del backend), 4 richieste per volta.

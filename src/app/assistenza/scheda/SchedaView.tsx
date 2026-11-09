@@ -247,7 +247,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     return !!r;
   }
   function statoRiparazione(stato: string) {
-    if (["attesa_ricambi", "piu_tempo", "finita", "non_riparabile"].includes(stato)) setDlg({ k: "stato_riparazione", stato });
+    if (["attesa_ricambi", "piu_tempo", "finita", "non_riparabile", "ritirato_temporaneo"].includes(stato)) setDlg({ k: "stato_riparazione", stato });
     else salvaStatoRiparazione(stato);
   }
 

@@ -74,7 +74,7 @@ export function DialogoChiudiVerifica({ s, tecnici, onClose, onChiudi }: {
 /** Pannello in testa alla lavorazione: chi verifica / chi ripara e lo STATO DELLA RIPARAZIONE a un clic. */
 // 03/11/2026 (Christian, 63185): gli stati della riparazione a gruppi, con preventivo e lavorazione effettuata sott'occhio
 const GRUPPI_RIPARAZIONE: { titolo: string; stati: string[] }[] = [
-  { titolo: "A che punto è", stati: ["in_corso", "attesa_ricambi", "ricambio_arrivato", "piu_tempo"] },
+  { titolo: "A che punto è", stati: ["in_corso", "attesa_ricambi", "ricambio_arrivato", "piu_tempo", "ritirato_temporaneo"] },
   { titolo: "Serve il cliente", stati: ["aggiornamento_cliente", "disabilitare_trova"] },
   { titolo: "Com'è finita", stati: ["finita", "non_riparabile"] },
 ];
@@ -91,6 +91,7 @@ export function DialogoStatoRiparazione({ stato, serveRicambio, totale, onClose,
   const testi: Record<string, [string, string, string]> = {
     attesa_ricambi: ["In attesa ricambi", serveRicambio ? "Quale ricambio serve? Va tra i ricambi da ordinare." : "Nota sul ricambio (facoltativa): dove è ordinato, quando arriva.", "es. batteria Dell PKWVM 95Wh"],
     piu_tempo: ["Serve più tempo", "Perché serve più tempo? (facoltativo)", ""],
+    ritirato_temporaneo: ["Ritirato dal cliente, lo riporterà", "Cosa resta da fare quando lo riporta? (facoltativo)", "es. salva i dati a casa, poi aggiornamento da € 89"],
     finita: ["Riparazione finita", "Cosa hai fatto? Resta nelle note di riparazione.", "es. sostituita scheda logica, test finale OK"],
     non_riparabile: ["Non riparabile", "Perché non è riparabile? Va nella lavorazione effettuata e nel PRONTO al cliente.", "es. processore morto"],
   };
@@ -191,6 +192,15 @@ export function PannelloTecnici({ s, tecnici, ro, busy, onAssegnaVerifica, onChi
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {/* 09/11/2026 (Christian, 63349/63351): il cliente si riprende il dispositivo prima del preventivo e lo riporterà */}
+          {!ro && (st === "da_preventivare" || st === "preventivo_inviato") && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {s.riparazione_stato === "ritirato_temporaneo" ? <>
+                <Pill tono="ambra">📦 Ritirato dal cliente, lo riporterà</Pill>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => onStato("rientrato")}>✔ Rientrato in negozio</Button>
+              </> : <Button size="sm" variant="outline" disabled={busy} onClick={() => onStato("ritirato_temporaneo")}>📦 Ritirato dal cliente, lo riporterà</Button>}
             </div>
           )}
         </div>
