@@ -54,16 +54,22 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
   function inserisciCombo(c: Combo) {
     const b = bloccoAttivo;
     // 04/11/2026 (Christian): aggiornamento OpenCore = voce fissa + eventuale extra (conservazione di dati e programmi)
+    // 09/11/2026 (Christian, 63351): tutta la parte software è UNA voce fissa, backup compreso (niente ipotesi aggiungibile):
+    // si usa la voce unica del listino (installazione + dati); se il modello non l'ha, installazione e backup come voci fisse
     if (c.fissa) {
-      const { fissa, tre } = c;
+      const { fissa, tre, unica } = c;
       setRighe((r) => {
         const presente = (id: string) => r.some((x) => blocco(x) === b && x.voce_id === id);
         const nuove: EstimateLine[] = [];
-        if (!presente(fissa.id)) nuove.push(rigaDa(fissa, b));
-        if (tre && !presente(tre.id)) nuove.push({ ...rigaDa(tre, b), opt: nuovoOpt(r, b), agg: true, on: false });
+        if (unica) { if (!presente(unica.id)) nuove.push(rigaDa(unica, b)); }
+        else {
+          if (!presente(fissa.id)) nuove.push(rigaDa(fissa, b));
+          if (tre && !presente(tre.id)) nuove.push(rigaDa(tre, b));
+        }
         return [...r, ...nuove];
       });
-      toast.success(`Inserita la voce fissa${tre ? " con l'extra aggiungibile" : ""}: controlla i prezzi`);
+      toast.success(unica ? "Inserita la voce fissa unica (aggiornamento + dati e programmi): controlla il prezzo"
+        : `Inserita la voce fissa${tre ? " con il backup, anch'esso voce fissa" : ""}: controlla i prezzi`);
       return;
     }
     const esistenti = ipotesiDelBlocco(righe, b);
@@ -284,6 +290,9 @@ function Blocco({ b, righe, ro, attivo, onAttiva, upd, togli, setRighe, accettat
             <span className="text-muted-foreground">{accettato && ip.scelta ? <Pill tono="verde">ACCETTATA</Pill> : ip.agg ? "si somma all'ipotesi scelta" : ip.scelta ? "quella proposta (nel totale)" : "alternativa"}</span>
             <span className={`ml-auto font-bold tabular-nums ${ip.scelta ? "text-lg" : "text-sm text-muted-foreground"}`}>{eur(ip.totale)}</span>
             {!ro && <Button size="xs" variant="ghost" onClick={() => setRighe((rr) => [...rr, { t: "", p: "", opt: ip.opt, on: ip.scelta, agg: ip.agg, b }])} title="Altra voce nella stessa ipotesi"><Plus />voce</Button>}
+            {/* 09/11/2026 (Christian, 63351): un'ipotesi (anche aggiungibile) diventa voce fissa, sempre nel totale */}
+            {!ro && <Button size="xs" variant="ghost" title="Trasforma questa ipotesi in voce fissa (sempre nel totale)"
+              onClick={() => setRighe((rr) => rr.map((x) => (blocco(x) === b && x.opt === ip.opt ? { ...x, opt: null, agg: false, on: false } : x)))}>→ voce fissa</Button>}
           </div>
           <div className="space-y-1.5">{ip.righe.map(({ r, i }) => <Riga key={i} r={r} i={i} ro={ro} upd={upd} togli={togli} />)}</div>
         </div>
