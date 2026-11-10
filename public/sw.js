@@ -4,7 +4,7 @@
 // la rete incerta, poteva servire un bundle vecchio. Ora: solo icone/manifest in cache, pagina offline di ripiego,
 // e all'attivazione si cancellano le cache vecchie (tarature-v1).
 
-const CACHE_NAME = 'tarature-v2';
+const CACHE_NAME = 'tarature-v3'; // v3 (10/11/2026): icone nuove Genius Lab
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icon-192.png',
