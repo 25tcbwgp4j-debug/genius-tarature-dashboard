@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
   // niente <base> o moduli verso altri domini, niente Referer con token, niente sniffing dei tipi.
   async headers() {
     return [{
+      // 10/11/2026: associazione app iOS ↔ dominio per il riempimento automatico delle password (Portachiavi)
+      source: "/.well-known/apple-app-site-association",
+      headers: [{ key: "Content-Type", value: "application/json" }],
+    }, {
       source: "/(.*)",
       headers: [
         { key: "Content-Security-Policy", value: "frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" },
