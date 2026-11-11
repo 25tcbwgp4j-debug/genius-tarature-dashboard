@@ -4,13 +4,13 @@
 // dalla decodifica con la FONTE detta chiaro («decodificato dal seriale» / «già passato nella scheda 61941: modello
 // preso da lì»), DIFETTO INDICATO in evidenza, accessori consegnati, «con alimentatore» per i non Apple; email,
 // codice/password e Apple ID SEMPRE in chiaro (26/10/2026, Christian): servono subito al banco.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, Cpu, ExternalLink, History, Loader2, ScanLine } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
-import { assSeriale, FAMIGLIE_DEFAULT, type GruppoProdotti, type Seriale } from "@/lib/assistenza";
-import { gsxDispositivo, type GsxDispositivo } from "@/lib/gsx";
+import { assSeriale, FAMIGLIE_DEFAULT, type GruppoProdotti, type Scheda, type Seriale } from "@/lib/assistenza";
+import { gsxAggiornaScheda, gsxCompleto, type GsxDispositivo, type GsxPrincipale } from "@/lib/gsx";
 import { GsxPannello } from "./GsxPannello";
 import { AnnoInput, ProdottoCombo } from "./Prodotto";
 import { Campo, area, campo, etich } from "./ui";
@@ -40,14 +40,21 @@ export function etichettaFamiglia(codice?: string | null, famiglie = FAMIGLIE_DE
   return famiglie.find((f) => f.codice === codice)?.etichetta || "";
 }
 
-export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti = [], idScheda, onApri, compatto }: {
+export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti = [], idScheda, onApri, compatto, operatore, onSchedaAggiornata, onInserisci, onTrova, trovaAttivo }: {
   v: ValoriApparecchio; set: (k: K, val: unknown) => void; ro?: boolean; famiglie?: { codice: string; etichetta: string }[];
   prodotti?: GruppoProdotti[]; idScheda?: string; onApri?: (id: string) => void; compatto?: boolean;
+  /** 12/11/2026: scheda esistente → la Decodifica legge GSX e lo SALVA subito nella scheda (torna la scheda aggiornata) */
+  operatore?: string | null; onSchedaAggiornata?: (s: Scheda) => void;
+  /** 12/11/2026: dal pannello GSX si inserisce 1ª + 2ª ipotesi nel preventivo · si segna «Trova il mio» attivo */
+  onInserisci?: (p: GsxPrincipale) => void; onTrova?: () => void; trovaAttivo?: boolean;
 }) {
   const [ser, setSer] = useState<Seriale | null>(null);
   const [busy, setBusy] = useState(false);
-  const [gsx, setGsx] = useState<GsxDispositivo | null>(v.gsx && v.gsx.seriale === v.seriale ? v.gsx : null);
+  // i dati GSX salvati nella scheda (campo gsx) si vedono subito, anche riaprendola dopo giorni
+  const gsxSalvato = v.gsx && v.gsx.seriale === String(v.seriale || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "") ? v.gsx : null;
+  const [gsx, setGsx] = useState<GsxDispositivo | null>(gsxSalvato);
   const [gsxErr, setGsxErr] = useState<string | null>(null);
+  useEffect(() => { setGsx(gsxSalvato); }, [gsxSalvato]);
   const fam = v.famiglia || "";
   const nonApple = fam === "non_apple";
   const telefono = fam === "iphone" || fam === "ipad" || fam === "watch";
@@ -56,13 +63,22 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
     const s = String(v.seriale || "").trim();
     if (!s) return;
     setBusy(true);
-    // 11/11/2026: in parallelo alla decodifica interna si legge Apple GSX (via ponte); GSX vince sul modello
+    // 11/11/2026: in parallelo alla decodifica interna si legge Apple GSX (via ponte); GSX vince sul modello.
+    // 12/11/2026: lettura COMPLETA (dispositivo, ricambi col preventivo pronto, riparazioni GSX). Sulla scheda esistente la
+    // fa il server, che la SALVA subito nella scheda: così i dati restano parte della scheda, anche senza premere Salva.
     setGsxErr(null);
-    const gsxP = gsxDispositivo(s).then((g) => { setGsx(g); return g; })
+    let nuovaScheda: Scheda | null = null;
+    const gsxP = (idScheda && onSchedaAggiornata
+      ? gsxAggiornaScheda<Scheda>(idScheda, operatore, s).then((n) => { nuovaScheda = n; return (n.gsx || null) as GsxDispositivo | null; })
+      : gsxCompleto(s)
+    ).then((g) => { setGsx(g); return g; })
       .catch((e: unknown) => { setGsx(null); setGsxErr(e instanceof Error ? e.message : String(e)); return null; });
     try {
       const r = await assSeriale(s);
       setSer(r);
+      // con la scheda esistente modello/prodotto/anno li ha già scritti il server dalla lettura GSX (se è riuscita)
+      const g0 = await gsxP;
+      if (g0 && nuovaScheda) { onSchedaAggiornata?.(nuovaScheda); setBusy(false); return; }
       if (r.modello && (!v.modello || v.modello_fonte !== "manuale")) {
         set("modello", r.modello);
         set("modello_fonte", r.fonte || "seriale");
@@ -90,6 +106,12 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
       set("gsx", g); set("gsx_letto_il", g.letto_il);
     }
     setBusy(false);
+  }
+  async function aggiornaGsx() {
+    if (!idScheda || !onSchedaAggiornata) { decodifica(); return; }
+    setBusy(true); setGsxErr(null);
+    try { const n = await gsxAggiornaScheda<Scheda>(idScheda, operatore, String(v.seriale || "").trim() || null); setGsx((n.gsx || null) as GsxDispositivo | null); onSchedaAggiornata(n); toast.success("Dati Apple GSX aggiornati e salvati nella scheda"); }
+    catch (e) { setGsxErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   }
   const altrePrecedenti = (ser?.precedenti || []).filter((p) => p.id !== idScheda);
 
@@ -148,7 +170,8 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
         </div>
       )}
 
-      {(gsx || gsxErr) && <GsxPannello g={gsx} errore={gsxErr} />}
+      {(gsx || gsxErr) && <GsxPannello g={gsx} errore={gsxErr} compatto={compatto} onInserisci={ro ? undefined : onInserisci} onTrova={ro ? undefined : onTrova} trovaAttivo={trovaAttivo}
+        onAggiorna={ro || !v.seriale ? undefined : aggiornaGsx} aggiornando={busy} />}
 
       <Campo label="Modello esatto" aiuto={v.modello && v.modello_fonte ? <>Fonte: <b>{v.modello_fonte === "scheda_precedente" && v.modello_da_scheda ? `già passato nella scheda ${v.modello_da_scheda}: modello preso da lì` : FONTE_TESTO[v.modello_fonte] || v.modello_fonte}</b></> : "si compila dalla decodifica del seriale (o da GSX)"}>
         <div className="flex gap-1.5">

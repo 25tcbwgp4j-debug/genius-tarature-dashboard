@@ -138,6 +138,12 @@ function PaginaGsx() {
                 <Riga k="Operatore telefonico" v={g.operatore_telefonico ? `${g.operatore_telefonico}${g.sbloccato_operatore === false ? " (bloccato)" : g.sbloccato_operatore ? " (sbloccato)" : ""}` : "—"} />
                 <Riga k="Dispositivo in prestito" v={g.prestito ? "sì" : "no"} />
                 <Riga k="Letto su GSX" v={ora(g.letto_il)} />
+                {/* 12/11/2026: dalla pagina GSX si apre la scheda del gestionale con questo seriale */}
+                {!!g.schede_gestionale?.length && <Riga k="Schede del gestionale" v={<span className="flex flex-wrap gap-1">{g.schede_gestionale.map((x) => (
+                  <a key={x.id} href={`/assistenza?id=${x.id}`} className="rounded border px-1.5 py-0.5 font-mono text-xs hover:bg-muted" title={`${x.prodotto || ""} ${x.modello || ""} · ${x.creata}`}>{x.sigla} <span className="font-sans text-muted-foreground">{x.stato}</span></a>))}</span>} />}
+                {g.dep && <Riga k="DEP / MDM aziendale" v={<b className="text-violet-700">sì</b>} />}
+                {g.modalita_riparazione != null && <Riga k="Modalità riparazione" v={g.modalita_riparazione ? <b className="text-emerald-700">attiva</b> : "no"} />}
+                {g.sostituito && <Riga k="Sostituito da Apple" v={<b className="text-red-700">sì → nuovo S/N {g.sostituito.seriale_nuovo}</b>} />}
                 {g.configurazione_completa && <details className="mt-2 text-xs"><summary className="cursor-pointer">Configurazione completa</summary><pre className="whitespace-pre-wrap">{g.configurazione_completa}</pre></details>}
               </Card>
               <Card className="p-3">
@@ -149,6 +155,10 @@ function PaginaGsx() {
                 <Riga k="Data e paese acquisto" v={`${data(g.data_acquisto)}${g.paese_acquisto ? ` · ${g.paese_acquisto}` : ""}`} />
                 <Riga k="Ricambi / manodopera" v={`${g.ricambi_coperti ? "coperti" : "non coperti"} / ${g.manodopera_coperta ? "coperta" : "non coperta"}`} />
                 <Riga k="AppleCare+" v={g.applecare === "Y" ? "sì" : g.applecare === "N" ? "no" : "—"} />
+                {g.tipo_contratto && <Riga k="Contratto" v={`${g.tipo_contratto}${g.contratto_fine ? ` · fino al ${data(g.contratto_fine)}` : ""}`} />}
+                {g.registrato_il && <Riga k="Registrato il" v={data(g.registrato_il)} />}
+                {!!g.codici_cs?.length && <Riga k="Codici CS Apple" v={g.codici_cs.map((c) => `${c.codice}${c.nota ? ` · ${c.nota}` : ""}`).join(" · ")} />}
+                {!!g.consumer_law?.length && <Riga k="Consumer law" v={g.consumer_law.map((c) => `${c.tipo || ""}${c.pop_obbligatoria ? " (serve la prova d'acquisto)" : ""}`).join(" · ")} />}
                 {g.garanzia_legale && (
                   <Riga k="Garanzia legale (24 mesi)" v={<span className={g.garanzia_legale.attiva ? "font-semibold text-emerald-700" : ""}>
                     {g.garanzia_legale.attiva ? `ATTIVA fino al ${data(g.garanzia_legale.fino)} (${g.garanzia_legale.giorni} gg)` : `scaduta il ${data(g.garanzia_legale.fino)}`}
@@ -161,7 +171,7 @@ function PaginaGsx() {
             </div>
           )}
 
-          {sez === "ricambi" && <GsxPannello g={g} autoRicambi />}
+          {sez === "ricambi" && <GsxPannello g={g} autoRicambi compatto />}
 
           {sez === "riparazioni" && (
             <Card className="overflow-x-auto p-3">

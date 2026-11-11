@@ -1,6 +1,7 @@
 // SCHEDE DI ASSISTENZA Apple (ex FileMaker) — client delle API /api/assistenza (02/10/2026).
 import { fetchAPI } from "@/lib/api";
 import type { EstimateLine } from "@/lib/assistenza-preventivo";
+import type { GsxDispositivo } from "@/lib/gsx";
 
 export type StatoScheda = "in_arrivo" | "da_preventivare" | "preventivo_inviato" | "accettato" | "rifiutato" | "pronto" | "consegnato" | "annullata";
 export interface Fase { il: string; operatore?: string | null; sede?: string | null }
@@ -46,6 +47,8 @@ export interface Scheda extends SchedaBreve {
   attesa_cliente_il?: string | null; attesa_cliente_nota?: string | null;
   /** 27/10/2026 (63182): calcolati dal backend (stessa regola di pronto, PDF, mail) */
   totale_dovuto?: number; esito_pronto?: string; seriale_nuovo?: string | null; imei_nuovo?: string | null; consegna_effettiva?: "ritiro" | "spedizione";
+  /** 12/11/2026: ultima lettura Apple GSX salvata nella scheda (Decodifica): dispositivo, garanzia, ricambi col preventivo pronto, riparazioni GSX */
+  gsx?: GsxDispositivo | null; gsx_letto_il?: string | null;
   anagrafica_id: string | null; referente: string | null; telefono_referente: string | null; indirizzo_spedizione: string | null; imei: string | null;
   acquistato_il: string | null; anno_garanzia: string | null; password_dispositivo: string | null; apple_id: string | null; password_apple_id: string | null;
   /** 30/10/2026: notifiche da gestire APERTE della scheda */
@@ -100,6 +103,8 @@ export interface VoceProposta { id: string; intervento: string; ipotesi: string 
 export interface ModelloVoci { chiave: string; nome: string; anno: number | null; pollici: number | null; voci: number }
 /** COMBO «1ª + 2ª ipotesi abbinate» dello stesso intervento e modello (+ 3ª aggiungibile) — 05/10/2026 §10.2 */
 export interface Combo { fonte?: string;  modello_chiave: string | null; modello: string | null; intervento: string; etichetta: string;
+  /** 12/11/2026: combo dai prezzi GSX letti alla Decodifica (fonte «gsx»), o nota di confronto sulla combo del listino */
+  gsx_letto_il?: string | null; nota_gsx?: string | null; codice?: string | null; costo_gsx?: number | null;
   uno: VoceProposta | null; due: VoceProposta | null; tre: VoceProposta | null;
   /** 04/11/2026 (Christian): aggiornamento OpenCore, voce fissa senza ipotesi (con «tre» come extra) */
   fissa?: VoceProposta | null;

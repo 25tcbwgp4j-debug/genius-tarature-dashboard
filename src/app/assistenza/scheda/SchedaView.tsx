@@ -20,7 +20,8 @@ import {
   assAzione, assDocUrl, assEtichettaUrl, assModifica, assScheda, assTrackUrl, dataOra, DOCUMENTI_PDF, eur, nomeTecnico, pagaFineMese, type ConfigAssistenza, type DocPdf, type Esito, type Scheda,
 } from "@/lib/assistenza";
 import { BannerDati } from "./DatiCliente";
-import type { EstimateLine } from "@/lib/assistenza-preventivo";
+import { blocchi, blocco, type EstimateLine } from "@/lib/assistenza-preventivo";
+import type { GsxPrincipale, GsxRigaPreventivo } from "@/lib/gsx";
 import { Apparecchio, type ValoriApparecchio } from "./Apparecchio";
 import { Assistente } from "./Assistente";
 import { Avanzamento } from "./Avanzamento";
@@ -261,9 +262,28 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     seriale: v("seriale"), imei: v("imei"), difetto: v("difetto"), accessori: v("accessori"), con_alimentatore: v("con_alimentatore"),
     password_dispositivo: v("password_dispositivo"), apple_id: v("apple_id"), password_apple_id: v("password_apple_id"),
     numero_interno: v("numero_interno"),
+    gsx: v("gsx"), gsx_letto_il: v("gsx_letto_il"),   // 12/11/2026: i dati GSX salvati nella scheda si rivedono riaprendola
   };
   const bz = bozzaPreventivo({ ...s, ...b });
   const st = s.stato;
+  // 12/11/2026 (Christian): dal pannello GSX della scheda → 1ª + 2ª ipotesi (e Touch ID abbinato) direttamente nel preventivo,
+  // nel blocco attivo (l'ultimo); le ipotesi già scritte si sostituiscono dopo conferma, le voci fisse restano
+  function inserisciDaGsx(p: GsxPrincipale) {
+    const pr = p.preventivo;
+    if (!pr) return;
+    const bl = Math.max(...blocchi(bz.righe));
+    const esistenti = bz.righe.filter((x) => blocco(x) === bl && x.opt != null);
+    if (esistenti.length && !confirm(`Sostituire le ${esistenti.length} voci di ipotesi già scritte con «${pr.etichetta}» (prezzi GSX)? Le voci fisse restano.`)) return;
+    const riga = (r: GsxRigaPreventivo, opt: number, on: boolean): EstimateLine =>
+      ({ t: r.t, p: r.p, listino: r.listino ?? null, nota: null, opt, on, agg: false, b: bl, voce_id: `gsx:${p.codice}:${opt}` });
+    const nuove: EstimateLine[] = [];
+    if (pr.uno) nuove.push(riga(pr.uno, 0, true));
+    nuove.push(riga(pr.due, pr.uno ? 1 : 0, !pr.uno));
+    if (pr.due_touch_id) nuove.push(riga(pr.due_touch_id, pr.uno ? 1 : 0, !pr.uno));
+    setBz((cur) => ({ ...cur, righe: [...cur.righe.filter((x) => !(blocco(x) === bl && x.opt != null)), ...nuove] }));
+    toast.success(`${pr.etichetta}: ${pr.uno ? "1ª + 2ª ipotesi" : "ipotesi"} inserite dal GSX${pr.due_touch_id ? " (Touch ID nella 2ª)" : ""}: controlla e salva`);
+    setTimeout(() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
 
   return (
     <div className="space-y-3">
@@ -448,7 +468,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         </Sezione>
 
         <Sezione titolo="Apparecchio" icona={<FileText />} sottotitolo={`accettato ${dataOra(s.fasi?.accettazione?.il || s.created_at)}${s.operatore_accettazione ? ` · ${s.operatore_accettazione}` : ""}`}>
-          <Apparecchio v={appV} set={(k, val) => set(k as keyof Scheda, val)} ro={ro} famiglie={cfg?.famiglie} prodotti={cfg?.prodotti} idScheda={s.id} onApri={onApri} />
+          <Apparecchio v={appV} set={(k, val) => set(k as keyof Scheda, val)} ro={ro} famiglie={cfg?.famiglie} prodotti={cfg?.prodotti} idScheda={s.id} onApri={onApri}
+            operatore={operatore} onSchedaAggiornata={(n) => { setS(n); onCambiata(); }} onInserisci={inserisciDaGsx}
+            onTrova={() => trova("attivo")} trovaAttivo={s.trova_il_mio === "attivo" || s.riparazione_stato === "disabilitare_trova"} />
         </Sezione>
       </div>
 

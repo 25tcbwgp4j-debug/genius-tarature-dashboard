@@ -1,4 +1,6 @@
 // 11/11/2026 — GSX Apple via ponte sul server (backend/gsx_api.py): dati del dispositivo e ricambi dal seriale.
+// 12/11/2026 — lettura COMPLETA alla Decodifica (dispositivo + ricambi con preventivo pronto + riparazioni GSX), salvata nella
+// scheda (campo gsx) così resta parte della scheda; confronto col listino (Prezzi ufficiali); schede del gestionale col seriale.
 import { fetchAPI } from "@/lib/api";
 
 export type GsxDispositivo = {
@@ -11,10 +13,23 @@ export type GsxDispositivo = {
   pratiche_apple: { caseId?: string; createdDateTime?: string; summary?: string }[]; sostituzioni: GsxSostituzione[]; messaggi: string[];
   prodotto_menu: string | null; famiglia_menu: string | null; anno: number | null; letto_il: string;
   garanzia_legale?: { dal: string; fonte: string; fino: string; attiva: boolean; giorni: number; nota: string } | null;
+  /** 12/11/2026: altri dati Apple utili al banco */
+  dep?: boolean | null; modalita_riparazione?: boolean | null; ship_mode?: boolean | null; codice_config?: string | null; linea_prodotto?: string | null;
+  sold_to_nome?: string | null; garanzia_limitata?: boolean | null; tipo_contratto?: string | null; contratto_fine?: string | null; registrato_il?: string | null;
+  inizio_copertura?: string | null; personalizzato?: boolean | null;
+  codici_cs?: { codice: string; nota?: string | null; ricambi?: boolean | null; manodopera?: boolean | null }[];
+  consumer_law?: { tipo?: string | null; pop_obbligatoria?: boolean | null; ricambi_ammessi?: string | null }[];
+  applecare_contratti?: unknown[]; messaggi_tipo?: { tipo: string; testo: string }[];
+  /** il dispositivo è stato SOSTITUITO da Apple: il seriale nuovo */
+  sostituito?: { seriale_nuovo: string; imei_nuovo: string | null; data: string | null; stato: string | null } | null;
+  trova_il_mio_probabile?: boolean;
+  schede_gestionale?: { id: string; sigla: string; stato: string | null; prodotto: string | null; modello: string | null; creata: string }[];
+  /** presenti solo nella lettura completa (Decodifica della scheda) */
+  ricambi?: GsxRicambi | null; riparazioni?: GsxRiparazione[] | null; errori?: Record<string, string> | null;
 };
 
 export type GsxSostituzione = { data: string | null; stato: string | null; codice_stato?: string; seriale_vecchio: string | null; imei_vecchio: string | null; seriale_nuovo: string | null; imei_nuovo: string | null };
-export type GsxRiparazione = { id: string; tipo: string; stato: string; codice_stato: string; creata: string | null; chiusa: string | null; po: string | null; applecare_consumato: boolean | null; cliente: string; difetti: string[]; ricambi: { codice: string; descrizione: string }[] };
+export type GsxRiparazione = { id: string; tipo: string; stato: string; codice_stato: string; creata: string | null; chiusa: string | null; po: string | null; applecare_consumato: boolean | null; cliente: string; difetti: string[]; ricambi: { codice: string; descrizione: string }[]; aperta?: boolean };
 export type GsxDiagnosi = {
   seriale: string; console: string | null; errore_test?: string | null; lanciare_test: string;
   test_disponibili: { id: string; nome: string; minuti: { minimum?: string; maximum?: string } }[];
@@ -27,9 +42,15 @@ export type GsxRicambio = {
   costo_stock?: number | null; costo_sostituzione?: number | null; opzioni_prezzo?: { voce: string; prezzo: number | null }[];
 };
 
+/** riga di preventivo pronta (stesso formato delle righe della scheda: testo, prezzo, «scontato da», nota recupero dati) */
+export type GsxRigaPreventivo = { t: string; p: number; listino: number | null; nota: string | null; fonte?: string };
+
 export type GsxPrincipale = {
   categoria: string; codice: string; descrizione: string; ipotesi: string; nota?: string | null; altri_codici: number;
   prezzi: { gsx?: number; costo?: number; proposto: number; listino: number };
+  /** 12/11/2026: il LISTINO della pagina Prezzi ufficiali per lo stesso componente e il confronto con GSX di oggi */
+  ufficiale?: { modello: string | null; prezzo: number | null; scontato_da: number | null; stato: string | null; costo_gsx: number | null; aggiornato_il: string | null; costo_diverso: boolean; prezzo_diverso: boolean } | null;
+  preventivo?: { uno: GsxRigaPreventivo | null; due: GsxRigaPreventivo; due_touch_id: GsxRigaPreventivo | null; totale_2: number; etichetta: string } | null;
 };
 
 export type GsxRicambi = {
@@ -48,3 +69,10 @@ export const gsxAvviaTest = (s: string, suite: string): Promise<{ avviato: boole
   fetchAPI(`/api/assistenza/gsx/diagnosi/avvia`, { method: "POST", body: JSON.stringify({ s, suite }) });
 export const gsxStatoTest = (s: string): Promise<GsxStatoTest> => fetchAPI(`/api/assistenza/gsx/diagnosi/stato?s=${encodeURIComponent(s)}`);
 export const gsxReport = (evento: string): Promise<{ customerReportUrl?: string }> => fetchAPI(`/api/assistenza/gsx/report?evento=${encodeURIComponent(evento)}`);
+/** lettura completa senza scheda (scheda nuova): dispositivo + ricambi con preventivo + riparazioni */
+export const gsxCompleto = (s: string): Promise<GsxDispositivo> => fetchAPI(`/api/assistenza/gsx/completo?s=${encodeURIComponent(s)}`);
+/** DECODIFICA sulla scheda esistente: legge GSX e lo SALVA nella scheda (gsx, modello, anno, prodotto, IMEI, seriale nuovo); torna la scheda aggiornata */
+export const gsxAggiornaScheda = <T,>(sid: string, operatore?: string | null, s?: string | null): Promise<T> =>
+  fetchAPI(`/api/assistenza/gsx/scheda/${sid}`, { method: "POST", body: JSON.stringify({ operatore: operatore || null, s: s || null }) });
+export const gsxSincronizzaPrezzi = (): Promise<{ codici_listino: number; trovati_nel_catalogo: number; aggiornati: number; cambi: unknown[] }> =>
+  fetchAPI(`/api/assistenza/gsx/catalogo/sincronizza-prezzi`, { method: "POST" });

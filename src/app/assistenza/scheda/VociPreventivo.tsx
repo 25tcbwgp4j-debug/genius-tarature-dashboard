@@ -128,6 +128,10 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
                 <b className="text-sm">{c.etichetta}</b>
                 {mostraModello && c.modello && <span className="text-muted-foreground">· {c.modello}</span>}
                 {c.fonte === "prezzi_ufficiali" && <Pill tono="blu" title="Prezzi dalla pagina Prezzi ufficiali (GSX + regole del titolare)">prezzi ufficiali</Pill>}
+                {/* 12/11/2026: prezzi letti su GSX alla Decodifica della scheda (campo gsx), o confronto col listino */}
+                {c.fonte === "gsx" && <Pill tono="blu" title={`Prezzi calcolati dal costo Apple letto su GSX alla Decodifica${c.codice ? ` · ricambio ${c.codice}` : ""}`}>GSX{c.gsx_letto_il ? ` ${new Date(c.gsx_letto_il).toLocaleDateString("it-IT")}` : ""}</Pill>}
+                {c.nota_gsx && <Pill tono="ambra" title="Il prezzo del listino non coincide con il calcolo di oggi dal costo GSX: decidere quale vale">{c.nota_gsx}</Pill>}
+                {c.fonte === "prezzi_ufficiali" && c.gsx_letto_il && !c.nota_gsx && <Pill tono="verde" title="Prezzo del listino uguale al calcolo dal costo GSX letto alla Decodifica">= GSX</Pill>}
                 {[c.fissa, c.uno, c.due, c.tre].some((v) => v?.da_verificare) && <Pill tono="ambra" title="Prezzi dello storico che non collimano: verificare su GSX">da verificare</Pill>}
               </div>
               <div className="space-y-1 text-[13px]">
