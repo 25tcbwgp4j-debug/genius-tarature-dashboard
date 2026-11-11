@@ -20,8 +20,9 @@ import {
   assAzione, assDocUrl, assEtichettaUrl, assModifica, assScheda, assTrackUrl, dataOra, DOCUMENTI_PDF, eur, nomeTecnico, pagaFineMese, type ConfigAssistenza, type DocPdf, type Esito, type Scheda,
 } from "@/lib/assistenza";
 import { BannerDati } from "./DatiCliente";
-import { blocchi, blocco, type EstimateLine } from "@/lib/assistenza-preventivo";
-import type { GsxPrincipale, GsxRigaPreventivo } from "@/lib/gsx";
+import { blocchi, blocco, totaleConSpedizione, type EstimateLine } from "@/lib/assistenza-preventivo";
+import { gsxSchedaIdoneita, type CoperturaScheda, type DifettoApple, type GsxPrincipale, type GsxRigaPreventivo } from "@/lib/gsx";
+import { Intervento } from "./Intervento";
 import { Apparecchio, type ValoriApparecchio } from "./Apparecchio";
 import { Assistente } from "./Assistente";
 import { Avanzamento } from "./Avanzamento";
@@ -78,6 +79,18 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const refRic = useRef<HTMLDivElement>(null);
   const refDoc = useRef<HTMLDivElement>(null);
   const refTec = useRef<HTMLDivElement>(null);
+  const refInt = useRef<HTMLDivElement>(null);
+  // 12/11/2026 (Christian): la scheda è lunga → ogni sezione si apre e si chiude da una barra di pulsanti (si ricorda la scelta)
+  type SezId = "cliente" | "apparecchio" | "intervento" | "tecnici" | "preventivo" | "lavorazione" | "documenti" | "ricambi";
+  const SEZ: { id: SezId; nome: string }[] = [
+    { id: "cliente", nome: "Cliente" }, { id: "apparecchio", nome: "Apparecchio e GSX" }, { id: "intervento", nome: "Intervento" }, { id: "ricambi", nome: "Pronto pezzi" },
+    { id: "tecnici", nome: "Tecnici" }, { id: "preventivo", nome: "Preventivo" }, { id: "lavorazione", nome: "Lavorazione" }, { id: "documenti", nome: "Documenti e pagamento" },
+  ];
+  const [busyIdon, setBusyIdon] = useState(false);
+  const [chiuse, setChiuse] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem("gl_scheda_chiuse") || "{}"); } catch { return {}; } });
+  const toggleSez = (id: SezId) => setChiuse((x) => { const n = { ...x, [id]: !x[id] }; try { localStorage.setItem("gl_scheda_chiuse", JSON.stringify(n)); } catch { /* niente memoria locale */ } return n; });
+  const refDi = (id: SezId) => ({ preventivo: refPrev, lavorazione: refLav, ricambi: refRic, documenti: refDoc, tecnici: refTec, intervento: refInt } as Partial<Record<SezId, React.RefObject<HTMLDivElement | null>>>)[id];
+  const vaiA = (id: SezId) => { if (chiuse[id]) toggleSez(id); setTimeout(() => (refDi(id)?.current || document.getElementById(`sez-${id}`))?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); };
   const tecnici = (cfg?.tecnici || []).filter((t) => t.attivo !== false);
   const admin = !!cfg?.admin;
 
@@ -277,17 +290,35 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     // 12/11/2026: COPERTURA — se l'idoneità Apple dice che il ricambio è coperto (garanzia, programma, AppleCare+ senza franchigia)
     // la 2ª ipotesi (ufficiale) va a 0 € ed è quella proposta; il listino non si tocca, è la copertura che decide
     const idon = (v("gsx") as Scheda["gsx"])?.idoneita;
-    const copertoP = (codice: string) => !!idon?.parti?.find((x) => x.codice === codice)?.coperto;
-    const coperto = copertoP(p.codice);
-    const riga = (r: GsxRigaPreventivo, opt: number, on: boolean, zero = false): EstimateLine =>
-      ({ t: zero ? `${r.t} — COPERTO DA APPLE (${idon?.copertura || "in garanzia"}): € 0` : r.t, p: zero ? 0 : r.p, listino: zero ? null : (r.listino ?? null), nota: null, opt, on, agg: false, b: bl, voce_id: `gsx:${p.codice}:${opt}` });
+    const cop = (v("copertura") as CoperturaScheda | null)?.tipo || "apple";
+    const franchigia = cop === "applecare_franchigia" ? Number((v("copertura") as CoperturaScheda | null)?.franchigia || 0) : 0;
+    // chi paga: «apple» = come dice l'idoneità (ricambio coperto → 0 €) · programma → 0 € · AppleCare+ → la franchigia · danno/pagamento → listino
+    const copertoP = (codice: string) => cop === "programma" ? true : cop === "apple" ? !!idon?.parti?.find((x) => x.codice === codice)?.coperto : false;
+    const coperto = copertoP(p.codice) || cop === "applecare_franchigia";
+    const motivo = cop === "programma" ? "PROGRAMMA APPLE / GARANZIA SULLA RIPARAZIONE" : cop === "applecare_franchigia" ? "COPERTO DA APPLECARE+" : `COPERTO DA APPLE (${idon?.copertura || "in garanzia"})`;
+    const riga = (r: GsxRigaPreventivo, opt: number, on: boolean, zero = false, prezzo?: number): EstimateLine =>
+      ({ t: zero ? `${r.t} — ${motivo}: ${prezzo ? `FRANCHIGIA ${eur(prezzo)}` : "€ 0"}` : r.t, p: zero ? (prezzo || 0) : r.p, listino: zero ? null : (r.listino ?? null), nota: null, opt, on, agg: false, b: bl, voce_id: `gsx:${p.codice}:${opt}` });
     const nuove: EstimateLine[] = [];
     if (pr.uno) nuove.push(riga(pr.uno, 0, !coperto));
-    nuove.push(riga(pr.due, pr.uno ? 1 : 0, !pr.uno || coperto, coperto));
-    if (pr.due_touch_id) nuove.push(riga(pr.due_touch_id, pr.uno ? 1 : 0, !pr.uno || coperto, coperto && copertoP("661-15683") ? true : coperto));
+    nuove.push(riga(pr.due, pr.uno ? 1 : 0, !pr.uno || coperto, coperto, franchigia || undefined));
+    if (pr.due_touch_id) nuove.push(riga(pr.due_touch_id, pr.uno ? 1 : 0, !pr.uno || coperto, coperto));
     setBz((cur) => ({ ...cur, righe: [...cur.righe.filter((x) => !(blocco(x) === bl && x.opt != null)), ...nuove] }));
-    toast.success(`${pr.etichetta}: ${pr.uno ? "1ª + 2ª ipotesi" : "ipotesi"} inserite dal GSX${pr.due_touch_id ? " (Touch ID nella 2ª)" : ""}${coperto ? " · COPERTO DA APPLE: 2ª a € 0" : ""}: controlla e salva`);
+    toast.success(`${pr.etichetta}: ${pr.uno ? "1ª + 2ª ipotesi" : "ipotesi"} inserite dal GSX${pr.due_touch_id ? " (Touch ID nella 2ª)" : ""}${coperto ? " · COPERTO: 2ª a € 0" : franchigia ? ` · AppleCare+: 2ª alla franchigia ${eur(franchigia)}` : ""}: controlla e salva`);
+    if (chiuse.preventivo) toggleSez("preventivo");
     setTimeout(() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
+  // 12/11/2026: idoneità e copertura Apple (repair/eligibility) col difetto Apple della sezione «Intervento»; il server salva gsx.idoneita
+  async function verificaIdoneita() {
+    const dif = (v("difetto_apple") as DifettoApple[] | null) || [];
+    if (!s) return;
+    if (!dif.length) { toast.error("Scegli prima il difetto nei codici Apple"); return; }
+    setBusyIdon(true);
+    try {
+      const n = await gsxSchedaIdoneita<Scheda>(s.id, { difetti: dif, operatore });
+      setS(n); onCambiata();
+      const i = n.gsx?.idoneita;
+      toast[i?.bloccata ? "error" : "success"](i?.bloccata ? `Apple BLOCCA la riparazione: ${i.blocchi[0] || ""}` : `Apple: ${i?.copertura || "idoneità letta"}${i?.coperto ? " · ricambi coperti" : ""}`);
+    } catch (e) { toastErrore(e); } finally { setBusyIdon(false); }
   }
 
   return (
@@ -310,7 +341,17 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           </div>
         </div>
         {/* l'operatore serve anche sulle schede chiuse (Duplica) */}
-        <div className="mt-2"><SceltaOperatore value={operatore as Operatore} onChange={setOperatore} compatto /></div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <SceltaOperatore value={operatore as Operatore} onChange={setOperatore} compatto />
+          {/* 12/11/2026 (Christian): pulsanti delle sezioni — pieno = aperta, vuoto = chiusa; clic = apri/chiudi e vai lì */}
+          <div className="ml-auto flex flex-wrap items-center gap-1">
+            {SEZ.filter((x) => x.id !== "ricambi" || !["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0).map((x) => (
+              <button key={x.id} type="button" onClick={() => (chiuse[x.id] ? vaiA(x.id) : toggleSez(x.id))} onDoubleClick={() => vaiA(x.id)}
+                title={chiuse[x.id] ? `Apri «${x.nome}»` : `Chiudi «${x.nome}» (doppio clic: vai alla sezione)`}
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${chiuse[x.id] ? "bg-background text-muted-foreground hover:bg-muted" : "border-primary/40 bg-primary/10 text-primary"}`}>
+                {x.nome}{x.id === "preventivo" && bz.righe.length ? ` · ${eur(totaleConSpedizione(bz.righe, Number(bz.spedizione_tipo && bz.spedizione_tipo !== "nessuna" ? bz.spedizione_importo : 0) || 0))}` : ""}{x.id === "ricambi" && (s.ricambi_attesi || []).length ? ` · ${(s.ricambi_attesi || []).length}` : ""}</button>))}
+          </div>
+        </div>
       </div>
 
       {/* 30/10/2026 (Christian): notifiche da gestire della scheda, in alto finché non sono chiuse con l'esito */}
@@ -374,8 +415,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       {/* 30/10/2026: preventivo e pronto programmati (come le Tarature): Invia subito · Modifica orario · Annulla, poi l'esito */}
       <InviiProgrammati key={`prog-${s.id}-${s.preventivo_prog_il}-${s.pronto_prog_il}`} s={s} ro={ro} operatore={operatore || ""} onScheda={(x) => { setS(x); onCambiata(); }} />
       {/* 28/10/2026 (Christian): la sezione RICAMBI c'è in qualunque stato (anche prima dell'accettazione o dopo il pronto) */}
-      {(!["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0) && <div ref={refRic} className="scroll-mt-28"><RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
-        onSalvata={async () => { await ricarica(); onCambiata(); }} /></div>}
+      {(!["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0) && <div ref={refRic} className="scroll-mt-28"><Piega id="ricambi" nome="Pronto pezzi (ricambi della scheda)" chiusa={!!chiuse.ricambi} onApri={() => toggleSez("ricambi")} riassunto={`${(s.ricambi_attesi || []).length} ricambi`}><RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
+        onSalvata={async () => { await ricarica(); onCambiata(); }} /></Piega></div>}
       {!ro && s.stato !== "annullata" && <ComunicazioneCliente key={`com-${s.id}`} s={s} operatore={operatore} invia={(b) => azione("comunicazione", b, "Comunicazione inviata al cliente")}
         togli={async () => { if (!confirm("Togliere la comunicazione dalla scheda? Non comparirà più nelle prossime mail, WhatsApp e PDF.")) return;
           try { await assModifica(s.id, { comunicazione_cliente: null, operatore }); await ricarica(); onCambiata(); toast.success("Comunicazione tolta"); } catch (e) { toastErrore(e); } }} />}
@@ -450,6 +491,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       </div>
 
       <div className="grid gap-3 xl:grid-cols-2">
+        <Piega id="cliente" nome="Cliente" chiusa={!!chiuse.cliente} onApri={() => toggleSez("cliente")} riassunto={`${s.azienda || s.nominativo || "—"}${s.telefono ? ` · ${s.telefono}` : ""}`}>
         <Sezione titolo="Cliente" icona={<UserRound />}
           azioni={<Button size="sm" variant="outline" onClick={() => setDlg({ k: "cliente" })}>{s.anagrafica ? "Scheda cliente" : "Crea scheda cliente"}</Button>}>
           <div className="space-y-3">
@@ -471,25 +513,42 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             <RiferimentiScheda s={s} v={v} set={set} ro={ro} operatore={operatore} onApri={onApri} onCambiata={onCambiata} salva={salva} />
           </div>
         </Sezione>
+        </Piega>
 
+        <Piega id="apparecchio" nome="Apparecchio e GSX" chiusa={!!chiuse.apparecchio} onApri={() => toggleSez("apparecchio")} riassunto={`${v("prodotto") || "—"} · ${v("modello") || ""} · S/N ${v("seriale") || "—"}`}>
         <Sezione titolo="Apparecchio" icona={<FileText />} sottotitolo={`accettato ${dataOra(s.fasi?.accettazione?.il || s.created_at)}${s.operatore_accettazione ? ` · ${s.operatore_accettazione}` : ""}`}>
           <Apparecchio v={appV} set={(k, val) => set(k as keyof Scheda, val)} ro={ro} famiglie={cfg?.famiglie} prodotti={cfg?.prodotti} idScheda={s.id} onApri={onApri}
             operatore={operatore} onSchedaAggiornata={(n) => { setS(n); onCambiata(); }} onInserisci={inserisciDaGsx}
             onTrova={() => trova("attivo")} trovaAttivo={s.trova_il_mio === "attivo" || s.riparazione_stato === "disabilitare_trova"} />
         </Sezione>
+        </Piega>
       </div>
+
+      {/* 12/11/2026 (Christian): INTERVENTO — difetto nei codici Apple, idoneità e copertura, riparazione tipo, chi paga */}
+      {v("famiglia") !== "non_apple" && (
+        <div ref={refInt} className="scroll-mt-28">
+          <Piega id="intervento" nome="Intervento" chiusa={!!chiuse.intervento} onApri={() => toggleSez("intervento")}
+            riassunto={`${((v("difetto_apple") as DifettoApple[] | null) || []).map((d) => d.issueDescription || d.issueCode).join(", ") || "difetto Apple da scegliere"}${(v("gsx") as Scheda["gsx"])?.idoneita ? ` · ${(v("gsx") as Scheda["gsx"])!.idoneita!.copertura || "idoneità letta"}` : ""}`}>
+            <Intervento seriale={v("seriale")} gsx={v("gsx")} difetto={v("difetto_apple")} copertura={v("copertura")} ro={ro} operatore={operatore}
+              onDifetto={(d) => set("difetto_apple", d)} onCopertura={(c) => set("copertura", c)} onIdoneita={verificaIdoneita} idoneitaBusy={busyIdon} onInserisci={inserisciDaGsx} />
+          </Piega>
+        </div>
+      )}
 
       <Aggiuntivi s={s} ro={ro} busy={!!busy} azione={azione} stampa={stampaAggiuntivo} />
 
       <div ref={refTec} className="scroll-mt-28">
+        <Piega id="tecnici" nome="Verifica e riparazione (tecnici)" chiusa={!!chiuse.tecnici} onApri={() => toggleSez("tecnici")} riassunto={`${s.tecnico_verifica ? `verifica ${nomeTecnico(s.tecnico_verifica)}` : "verifica da assegnare"}${s.tecnico_riparazione ? ` · riparazione ${nomeTecnico(s.tecnico_riparazione)}` : ""}`}>
         <PannelloTecnici s={s} tecnici={tecnici} ro={ro} busy={!!busy}
           onAssegnaVerifica={() => setDlg({ k: "assegna_verifica" })} onChiudiVerifica={() => setDlg({ k: "chiudi_verifica" })}
           onRiapriVerifica={() => azione("riapri-verifica", {}, "Verifica riaperta")}
           onAssegnaRiparazione={() => setDlg({ k: "assegna_riparazione" })} onStato={statoRiparazione}
           onVai={(dove) => (dove === "preventivo" ? refPrev : refLav).current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+        </Piega>
       </div>
 
       <div ref={refPrev} className="scroll-mt-28">
+        <Piega id="preventivo" nome="Preventivo" chiusa={!!chiuse.preventivo} onApri={() => toggleSez("preventivo")} riassunto={`${bz.righe.length} voci · ${eur(totaleConSpedizione(bz.righe, Number(bz.spedizione_tipo && bz.spedizione_tipo !== "nessuna" ? bz.spedizione_importo : 0) || 0))} · ${s.preventivo_stato || "da fare"}`}>
         {!ro && bz.righe.length > 0 && ["da_preventivare", "preventivo_inviato", "accettato"].includes(st) && (
           <VerificaPreventivo s={s} admin={admin} busy={!!busy}
             onAzione={(az, nota) => azione("verifica-preventivo", { azione: az, nota },
@@ -513,14 +572,16 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
               toast.success("Preventivo modificato e ACCETTATO (concordato col cliente): lavorazione e totale aggiornati");
             } catch (e) { toastErrore(e); }
           }} />
+        </Piega>
       </div>
 
       {/* 04/11/2026 (Christian): la lavorazione a tutta larghezza, come il preventivo */}
-      <div ref={refLav} className="scroll-mt-28"><Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} busy={!!busy}
+      <div ref={refLav} className="scroll-mt-28"><Piega id="lavorazione" nome="Lavorazione" chiusa={!!chiuse.lavorazione} onApri={() => toggleSez("lavorazione")} riassunto={(s.lavorazione || "").split("\n")[0] || "—"}><Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} busy={!!busy}
         onNonFatta={(chiave, non_fatta) => azione("voce-non-fatta", { chiave, non_fatta }, non_fatta ? "Voce segnata NON FATTA: tolta da lavorazione e totale" : "Voce di nuovo da fare: rimessa in lavorazione e totale")}
-        onPressoCliente={(a) => azione("presso-cliente", { azione: a }, { riconsegnato: "Segnato: riconsegnato al cliente in attesa del ricambio", annulla: "Riconsegna tolta", richiedi: "Chiesto al cliente di riportarlo", riportato: "Dispositivo riportato: torna in lavorazione" }[a])} /></div>
+        onPressoCliente={(a) => azione("presso-cliente", { azione: a }, { riconsegnato: "Segnato: riconsegnato al cliente in attesa del ricambio", annulla: "Riconsegna tolta", richiedi: "Chiesto al cliente di riportarlo", riportato: "Dispositivo riportato: torna in lavorazione" }[a])} /></Piega></div>
       <div className="grid gap-3 xl:grid-cols-[3fr_2fr]">
         <div ref={refDoc} className="scroll-mt-28">
+          <Piega id="documenti" nome="Documenti e pagamento" chiusa={!!chiuse.documenti} onApri={() => toggleSez("documenti")} riassunto={`${s.pagamento_modo || "pagamento da definire"}${s.fattura_id ? " · fattura" : s.scontrino_id ? " · scontrino" : ""}`}>
           <Documenti s={s} ro={ro} busy={!!busy} onFatturaEliminata={async () => { await ricarica(); onCambiata(); }}
             onScontrino={async () => { if (sporca && !(await salva(true))) return; router.push(`/cassa?scheda=${s.id}`); }}
             onAcconto={() => setDlg({ k: "acconto", inizio: "incassa" })}
@@ -532,6 +593,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
               await azione("pagamento-anticipato", { documento }, `Richiesta di pagamento anticipato di ${eur(s.saldo)} inviata`);
             }}
             onVendi={vendi} onPagato={() => setDlg({ k: "pagato" })} onCorriere={() => setDlg({ k: "corriere" })} />
+          </Piega>
         </div>
         <Sezione titolo="Nota interna" sottotitolo="mai al cliente">
           <textarea className={area} rows={3} disabled={ro} value={(v("note_interne") as string) || ""} onChange={(e) => set("note_interne", e.target.value)} />
@@ -634,6 +696,18 @@ function MenuPdf({ id, prima }: { id: string; prima: () => Promise<boolean> }) {
       <button type="button" className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs hover:bg-muted" onClick={() => apri(false)}><FileText className="size-3.5" />Apri</button>
       <button type="button" className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs hover:bg-muted" onClick={() => apri(true)}><Download className="size-3.5" />Scarica</button>
     </span>
+  );
+}
+
+/** 12/11/2026 (Christian): sezione chiudibile — chiusa = una riga con il riassunto e «apri»; aperta = il contenuto com'è. */
+function Piega({ id, nome, chiusa, onApri, riassunto, children }: { id: string; nome: string; chiusa: boolean; onApri: () => void; riassunto?: string; children: React.ReactNode }) {
+  if (!chiusa) return <div id={`sez-${id}`} className="min-w-0">{children}</div>;
+  return (
+    <button id={`sez-${id}`} type="button" onClick={onApri} className="flex w-full min-w-0 items-center gap-2 rounded-xl border bg-card px-4 py-2.5 text-left text-sm shadow-sm hover:bg-muted/50">
+      <ChevronRight className="size-4 shrink-0" /><span className="font-semibold">{nome}</span>
+      {riassunto && <span className="min-w-0 truncate text-xs text-muted-foreground">{riassunto}</span>}
+      <span className="ml-auto shrink-0 text-xs text-muted-foreground">apri</span>
+    </button>
   );
 }
 

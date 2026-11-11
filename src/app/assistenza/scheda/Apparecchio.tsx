@@ -10,8 +10,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { assSeriale, FAMIGLIE_DEFAULT, type GruppoProdotti, type Scheda, type Seriale } from "@/lib/assistenza";
-import { gsxAggiornaScheda, gsxCompleto, gsxSchedaIdoneita, type DifettoApple, type GsxDispositivo, type GsxPrincipale } from "@/lib/gsx";
-import { DifettoAppleScelta } from "./DifettoApple";
+import { gsxAggiornaScheda, gsxCompleto, type DifettoApple, type GsxDispositivo, type GsxPrincipale } from "@/lib/gsx";
 import { GsxPannello } from "./GsxPannello";
 import { AnnoInput, ProdottoCombo } from "./Prodotto";
 import { Campo, area, campo, etich } from "./ui";
@@ -116,16 +115,7 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
     try { const n = await gsxAggiornaScheda<Scheda>(idScheda, operatore, String(v.seriale || "").trim() || null); setGsx((n.gsx || null) as GsxDispositivo | null); onSchedaAggiornata(n); toast.success("Dati Apple GSX aggiornati e salvati nella scheda"); }
     catch (e) { setGsxErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   }
-  // 12/11/2026: idoneità e copertura Apple (repair/eligibility) col difetto Apple della scheda; il server la salva in gsx.idoneita
-  const [busyIdon, setBusyIdon] = useState(false);
-  async function verificaIdoneita() {
-    if (!idScheda || !onSchedaAggiornata) return;
-    if (!(v.difetto_apple || []).length) { toast.error("Scegli prima il difetto Apple (codici GSX) qui sopra"); return; }
-    setBusyIdon(true);
-    try { const n = await gsxSchedaIdoneita<Scheda>(idScheda, { difetti: v.difetto_apple || [], operatore }); setGsx((n.gsx || null) as GsxDispositivo | null); onSchedaAggiornata(n);
-      const i = n.gsx?.idoneita; toast[i?.bloccata ? "error" : "success"](i?.bloccata ? `Apple BLOCCA la riparazione: ${i.blocchi[0] || ""}` : `Apple: ${i?.copertura || "idoneità letta"}`); }
-    catch (e) { toastErrore(e); } finally { setBusyIdon(false); }
-  }
+
   const altrePrecedenti = (ser?.precedenti || []).filter((p) => p.id !== idScheda);
 
   const mancano = [!v.seriale && "seriale", !v.modello && "modello esatto"].filter(Boolean) as string[];
@@ -184,8 +174,7 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
       )}
 
       {(gsx || gsxErr) && <GsxPannello g={gsx} errore={gsxErr} compatto={compatto} onInserisci={ro ? undefined : onInserisci} onTrova={ro ? undefined : onTrova} trovaAttivo={trovaAttivo}
-        onAggiorna={ro || !v.seriale ? undefined : aggiornaGsx} aggiornando={busy} serialeNuovoScheda={v.seriale_nuovo}
-        onIdoneita={ro || !idScheda ? undefined : verificaIdoneita} idoneitaBusy={busyIdon} haDifetto={(v.difetto_apple || []).length > 0} />}
+        onAggiorna={ro || !v.seriale ? undefined : aggiornaGsx} aggiornando={busy} serialeNuovoScheda={v.seriale_nuovo} ridotto={!!idScheda} />}
 
       <Campo label="Modello esatto" aiuto={v.modello && v.modello_fonte ? <>Fonte: <b>{v.modello_fonte === "scheda_precedente" && v.modello_da_scheda ? `già passato nella scheda ${v.modello_da_scheda}: modello preso da lì` : FONTE_TESTO[v.modello_fonte] || v.modello_fonte}</b></> : "si compila dalla decodifica del seriale (o da GSX)"}>
         <div className="flex gap-1.5">
@@ -204,8 +193,6 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
       <Campo label="Difetto indicato dal cliente *">
         <textarea className={`${area} min-h-[84px] border-primary/40 bg-primary/[0.03] text-[15px] font-medium`} rows={3} disabled={ro}
           placeholder="Cosa non funziona, secondo il cliente" value={v.difetto || ""} onChange={(e) => set("difetto", e.target.value)} />
-        {/* 12/11/2026: il difetto nei codici Apple (componente → difetto), per copertura/idoneità e riparazione GSX */}
-        {!nonApple && <div className="mt-1.5"><DifettoAppleScelta seriale={v.seriale} valore={v.difetto_apple} ro={ro} onChange={(d) => set("difetto_apple", d)} /></div>}
       </Campo>
 
       <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">

@@ -17,7 +17,7 @@ const data = (s?: string | null) => (s ? s.slice(0, 10).split("-").reverse().joi
 const ora = (s?: string | null) => (s ? new Date(s).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" }) : "—");
 const RIP_TIPI: Record<string, string> = { CIN: "carry-in", CRBR: "carry-in con ricambi", WUMS: "sostituzione integrale", MINS: "mail-in", SVNR: "assistenza senza riparazione" };
 
-export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, aggiornando, onTrova, trovaAttivo, serialeNuovoScheda, compatto, onIdoneita, idoneitaBusy, haDifetto }: {
+export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, aggiornando, onTrova, trovaAttivo, serialeNuovoScheda, compatto, onIdoneita, idoneitaBusy, haDifetto, ridotto }: {
   g: GsxDispositivo | null; errore?: string | null; autoRicambi?: boolean;
   /** scheda: mette 1ª + 2ª ipotesi (e Touch ID abbinato) nel preventivo */
   onInserisci?: (p: GsxPrincipale) => void;
@@ -30,6 +30,8 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
   /** scheda: idoneità e copertura Apple (repair/eligibility) col difetto Apple scelto */
   onIdoneita?: () => void; idoneitaBusy?: boolean; haDifetto?: boolean;
   compatto?: boolean;
+  /** scheda: parte chiusa (una riga + avvisi), i dettagli si aprono con un clic — così la scheda non è infinita (Christian 12/11) */
+  ridotto?: boolean;
 }) {
   const [ricLetti, setRic] = useState<GsxRicambi | null>(null);
   const [ripLetti, setRip] = useState<GsxRiparazione[] | null>(null);
@@ -37,6 +39,9 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
   const [filtro, setFiltro] = useState("");
   const [varianti, setVarianti] = useState(false);
   const [tutti, setTutti] = useState(false);
+  const [dettagli, setDettagli] = useState<boolean>(() => { try { return localStorage.getItem("gl_gsx_dettagli") === "1"; } catch { return false; } });
+  const apertoDettagli = !ridotto || dettagli;
+  function toggleDettagli() { setDettagli((x) => { try { localStorage.setItem("gl_gsx_dettagli", x ? "0" : "1"); } catch { /* niente memoria locale */ } return !x; }); }
   // i dati salvati nella scheda vincono; altrimenti quelli letti qui
   const ric = (g?.ricambi && g.ricambi.seriale === g.seriale ? g.ricambi : null) || ricLetti;
   const rip = g?.riparazioni ?? ripLetti;
@@ -104,6 +109,8 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
             {busy ? <Loader2 className="animate-spin" /> : <Package />}Ricambi Apple</Button>}
           <a className="inline-flex h-8 items-center justify-center gap-1 rounded-md border px-2 text-xs hover:bg-muted" target="_blank" rel="noreferrer"
             href={`/assistenza/gsx?s=${encodeURIComponent(g.seriale)}`} title="Pagina GSX completa: diagnosi, test Apple, cronologia riparazioni"><ExternalLink className="size-3.5" />Pagina GSX</a>
+          {ridotto && <Button type="button" variant={dettagli ? "secondary" : "outline"} className="h-8" onClick={toggleDettagli} title="Prezzi dei ricambi, riparazioni GSX, seriali sostituiti, programmi Apple">
+            {dettagli ? "Chiudi dettagli" : `Dettagli GSX${(rip?.length || 0) + (g.articoli ? g.articoli.programmi.length : 0) ? ` (${rip?.length || 0} rip. · ${g.articoli?.programmi.length || 0} progr.)` : ""}`}</Button>}
         </div>
       </div>
 
@@ -129,7 +136,7 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
       )}
 
       {/* 12/11/2026: IDONEITÀ E COPERTURA Apple (repair/eligibility) — col difetto Apple scelto nella scheda */}
-      {(onIdoneita || g.idoneita) && (
+      {(onIdoneita || (g.idoneita && !ridotto)) && (
         <div className={`mt-2 rounded-md border p-2 text-xs ${g.idoneita ? (g.idoneita.bloccata ? "border-red-200 bg-red-50/40 dark:bg-red-950/20" : g.idoneita.coperto ? "border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/30" : "border-slate-200") : "border-dashed"}`}>
           <div className="flex flex-wrap items-center gap-2">
             <ShieldCheck className="size-4" /><b>Idoneità e copertura Apple</b>
@@ -150,7 +157,7 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
       )}
 
       {/* 12/11/2026: PROGRAMMI DI RIPARAZIONE e problemi noti Apple del modello (articoli GSX per seriale) */}
-      {g.articoli && (g.articoli.programmi.length > 0 || g.articoli.del_modello.length > 0) && (
+      {apertoDettagli && g.articoli && (g.articoli.programmi.length > 0 || g.articoli.del_modello.length > 0) && (
         <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/50 p-2 text-xs dark:bg-amber-950/20">
           <div className="font-semibold">Programmi e problemi noti Apple per questo modello ({g.articoli.programmi.length + g.articoli.del_modello.length})
             <a className="ml-2 font-normal underline" href={`/assistenza/gsx?s=${encodeURIComponent(g.seriale)}&sez=articoli`} target="_blank" rel="noreferrer">tutti gli articoli ({g.articoli.totale})</a></div>
@@ -163,7 +170,7 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
       )}
 
       {/* preventivo pronto */}
-      {ric && ric.principali.length > 0 && (
+      {apertoDettagli && ric && ric.principali.length > 0 && (
         <div className="mt-2 rounded-md border border-sky-200 bg-sky-50/60 p-2 text-xs dark:bg-sky-950/30">
           <div className="mb-1 flex flex-wrap items-center gap-2 font-semibold">Preventivo pronto · prezzi da GSX {ric.letto_il ? `(letti il ${ora(ric.letto_il)})` : ""}
             <span className="font-normal text-muted-foreground">regola del listino: +10% Bagnetti +IVA → proposto → listino · «Listino» = pagina Prezzi ufficiali</span></div>
@@ -203,7 +210,7 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
       )}
 
       {/* riparazioni GSX e seriali sostituiti */}
-      {!compatto && rip && rip.length > 0 && (
+      {apertoDettagli && !compatto && rip && rip.length > 0 && (
         <div className="mt-2 overflow-x-auto rounded-md border p-2 text-xs">
           <div className="mb-1 font-semibold">Riparazioni GSX su questo seriale ({rip.length})</div>
           <table className="w-full">
@@ -226,14 +233,14 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
           </table>
         </div>
       )}
-      {!compatto && g.sostituzioni.length > 0 && (
+      {apertoDettagli && !compatto && g.sostituzioni.length > 0 && (
         <div className="mt-2 rounded-md border p-2 text-xs">
           <div className="mb-1 font-semibold">Seriali sostituiti da Apple ({g.sostituzioni.length})</div>
           {g.sostituzioni.map((x, i) => <div key={i}>{data(x.data)} · {x.stato} · <span className="font-mono">{x.seriale_vecchio}</span> → <span className="font-mono font-semibold">{x.seriale_nuovo}</span>{x.imei_nuovo ? ` · IMEI ${x.imei_nuovo}` : ""}</div>)}
         </div>
       )}
 
-      {ric && (
+      {apertoDettagli && ric && (
         <div className="mt-2 border-t pt-2">
           {ric.scheda_logica && (
             <div className="mb-2 rounded-md border border-emerald-200 bg-emerald-50/70 p-2 text-xs dark:bg-emerald-950/30">

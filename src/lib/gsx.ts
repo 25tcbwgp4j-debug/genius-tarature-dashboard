@@ -42,8 +42,19 @@ export type GsxRiparazioneDettaglio = {
 export type GsxRiparazione = { id: string; tipo: string; stato: string; codice_stato: string; creata: string | null; chiusa: string | null; po: string | null; applecare_consumato: boolean | null; cliente: string; difetti: string[]; ricambi: { codice: string; descrizione: string }[]; aperta?: boolean; dettaglio?: GsxRiparazioneDettaglio | null };
 export type GsxDifetti = { seriale: string; totale_difetti: number; componenti: { codice: string; componente: string; difetti: { codice: string; descrizione: string }[] }[] };
 export const gsxDifetti = (s: string): Promise<GsxDifetti> => fetchAPI(`/api/assistenza/gsx/difetti?s=${encodeURIComponent(s)}`);
+/** 12/11/2026: copertura dell'intervento scelta nella sezione «Intervento» della scheda */
+export type CoperturaScheda = { tipo: "apple" | "pagamento" | "danno" | "applecare_franchigia" | "programma"; franchigia?: number | null; nota?: string | null; scelta_da?: string | null; scelta_il?: string | null };
+export const COPERTURE: { tipo: CoperturaScheda["tipo"]; nome: string; testo: string; copre: boolean | "apple" }[] = [
+  { tipo: "apple", nome: "Come dice Apple", copre: "apple", testo: "La copertura la decide l'idoneità GSX: ricambio coperto → 0 €, altrimenti a pagamento." },
+  { tipo: "programma", nome: "Programma Apple / garanzia sulla riparazione", copre: true, testo: "Programma di assistenza Apple per questo difetto, oppure garanzia sulla riparazione già fatta: al cliente 0 €." },
+  { tipo: "applecare_franchigia", nome: "Danno accidentale con AppleCare+", copre: true, testo: "Ricambi coperti da AppleCare+: il cliente paga solo la franchigia (importo letto su GSX)." },
+  { tipo: "danno", nome: "Danno accertato dal tecnico", copre: false, testo: "Liquido, urto, manomissione: la garanzia non vale, a pagamento anche se Apple indica il dispositivo in garanzia." },
+  { tipo: "pagamento", nome: "A pagamento", copre: false, testo: "Fuori garanzia o il cliente paga a listino comunque." },
+];
 /** difetto Apple scelto nella scheda (componentissue), max 3 */
 export type DifettoApple = { componentCode: string; componentDescription?: string | null; issueCode: string; issueDescription?: string | null; reproducibility?: string };
+/** codici Apple di riproducibilità del difetto (repair/eligibility · repair/create) */
+export const RIPRODUCIBILITA: [string, string][] = [["A", "non indicata"], ["B", "sempre (continuo)"], ["C", "a volte (intermittente)"], ["D", "dopo un po' (a caldo)"], ["E", "solo in certe condizioni"], ["F", "non riprodotto dal tecnico"]];
 /** idoneità e copertura Apple (repair/eligibility) */
 export type GsxIdoneita = {
   seriale: string; tipo: string; difetti: DifettoApple[]; copertura: string | null; codice_copertura: string | null; coperto: boolean;
