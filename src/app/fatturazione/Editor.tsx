@@ -249,6 +249,16 @@ export function Editor({
   }
   const serveEstremi = righe.some((r) => Number(r.aliquota) === 0 && r.natura && r.natura !== "N5");
   const [estremi, setEstremi] = useState(iniziale?.estremi_esenzione || "");
+  // 11/11/2026: riferimenti dell'ordine del cliente (Edison & co.) nei campi giusti del tracciato, mai come righe a 0 €
+  const ord0 = iniziale?.dati_ordine?.[0];
+  const [ordNum, setOrdNum] = useState(ord0?.id_documento || "");
+  const [ordData, setOrdData] = useState(ord0?.data || "");
+  const [ordItem, setOrdItem] = useState(ord0?.num_item || "");
+  const [ordCig, setOrdCig] = useState(ord0?.cig || "");
+  const [ordCup, setOrdCup] = useState(ord0?.cup || "");
+  const [ddtNum, setDdtNum] = useState(iniziale?.dati_ddt?.[0]?.numero || "");
+  const [ddtData, setDdtData] = useState(iniziale?.dati_ddt?.[0]?.data || "");
+  const [giorniTermini, setGiorniTermini] = useState(iniziale?.giorni_termini ? String(iniziale.giorni_termini) : "");
 
   // modello canoni Avantifiori → Gingy
   const [canDa, setCanDa] = useState(() => `${oggiRoma().slice(0, 4)}-01`);
@@ -294,6 +304,10 @@ export function Editor({
           : { natura: Number(r.aliquota) === 0 ? (r.natura || "N2.2") : null, regime: null, costo_acquisto: null }),
       })),
       estremi_esenzione: estremi.trim() || null,
+      dati_ordine: ordNum.trim() ? [{ id_documento: ordNum.trim(), data: ordData || null, num_item: ordItem.trim() || null,
+        cig: ordCig.trim().toUpperCase() || null, cup: ordCup.trim().toUpperCase() || null }] : null,
+      dati_ddt: ddtNum.trim() && ddtData ? [{ numero: ddtNum.trim(), data: ddtData }] : null,
+      giorni_termini: giorniTermini ? Number(giorniTermini) : null,
       pagamento_modalita: modalita, scadenza: scadenza || null, causale, note,
       customer_id: customerId || undefined,
       anagrafica_id: anagraficaId || undefined,
@@ -586,6 +600,27 @@ export function Editor({
               <input type="date" className={campo} value={scadenza} onChange={(e) => setScadenza(e.target.value)} /></label>
             <div className="col-span-2 space-y-1 sm:col-span-4"><div className={lab}>Causale (compare in fattura)</div>
               <input className={campo} value={causale} onChange={(e) => setCausale(e.target.value)} placeholder="es. Tarature sessione n. 165 — vs. ordine n. …" /></div>
+            <div className="col-span-2 rounded-md border border-dashed p-2 sm:col-span-4">
+              <div className="mb-1 text-xs font-medium">Ordine del cliente (campi della fattura elettronica: ordine, CIG, entrata merci) — <span className="text-muted-foreground">mai come righe a 0 €</span></div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <label className="space-y-1"><div className={lab}>N. ordine</div>
+                  <input className={campo} value={ordNum} onChange={(e) => { setOrdNum(e.target.value); setSporco(true); }} placeholder="es. 7000036350" /></label>
+                <label className="space-y-1"><div className={lab}>Data ordine</div>
+                  <input type="date" className={campo} value={ordData} onChange={(e) => { setOrdData(e.target.value); setSporco(true); }} /></label>
+                <label className="space-y-1"><div className={lab}>Entrata merci (BEM) / SAL</div>
+                  <input className={campo} value={ordItem} onChange={(e) => { setOrdItem(e.target.value); setSporco(true); }} placeholder="NumItem" /></label>
+                <label className="space-y-1"><div className={lab}>CIG</div>
+                  <input className={campo} value={ordCig} onChange={(e) => { setOrdCig(e.target.value); setSporco(true); }} placeholder="10 caratteri" /></label>
+                <label className="space-y-1"><div className={lab}>CUP (se indicato)</div>
+                  <input className={campo} value={ordCup} onChange={(e) => { setOrdCup(e.target.value); setSporco(true); }} /></label>
+                <label className="space-y-1"><div className={lab}>DDT n. (solo forniture)</div>
+                  <input className={campo} value={ddtNum} onChange={(e) => { setDdtNum(e.target.value); setSporco(true); }} /></label>
+                <label className="space-y-1"><div className={lab}>Data DDT</div>
+                  <input type="date" className={campo} value={ddtData} onChange={(e) => { setDdtData(e.target.value); setSporco(true); }} /></label>
+                <label className="space-y-1"><div className={lab}>Termini pagamento (giorni)</div>
+                  <input type="number" min={0} className={campo} value={giorniTermini} onChange={(e) => { setGiorniTermini(e.target.value); setSporco(true); }} placeholder="es. 30" /></label>
+              </div>
+            </div>
             <div className="col-span-2 space-y-1 sm:col-span-4"><div className={lab}>Note interne (non vanno in fattura)</div>
               <input className={campo} value={note} onChange={(e) => setNote(e.target.value)} /></div>
           </div>

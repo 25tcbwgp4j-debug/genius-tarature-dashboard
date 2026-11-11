@@ -1173,6 +1173,10 @@ export interface Fattura {
   nc_regolazione?: NcRegolazione | null;
   /** estremi della dichiarazione/attestazione del cliente (es. modulo dell'ambasciata, art. 72): stampati in fattura */
   estremi_esenzione?: string | null;
+  /** 11/11/2026: ordine del cliente nei campi FatturaPA 2.1.2 (Edison: ordine 10 cifre, data, BEM/SAL, CIG) */
+  dati_ordine?: { id_documento: string; data?: string | null; num_item?: string | null; commessa?: string | null; cup?: string | null; cig?: string | null }[] | null;
+  dati_ddt?: { numero: string; data: string }[] | null;
+  giorni_termini?: number | null;
   origine?: string; anagrafica_id?: string | null; operatore?: string | null; vista_il?: string | null;
   /** Genius Lab Gestionale: tarature | apple (solo indicazione, numerazione unica) */
   attivita?: 'tarature' | 'apple' | null; attivita_nota?: string | null;
