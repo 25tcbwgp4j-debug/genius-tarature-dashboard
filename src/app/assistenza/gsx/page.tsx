@@ -14,6 +14,7 @@ import {
   type GsxDiagnosi, type GsxDispositivo, type GsxRiparazione,
 } from "@/lib/gsx";
 import { GsxPannello } from "../scheda/GsxPannello";
+import { CatalogoGsx } from "./Catalogo";
 
 const SEZIONI = [
   { id: "generale", nome: "Generale e garanzia" }, { id: "ricambi", nome: "Ricambi e preventivo" },
@@ -35,6 +36,7 @@ function PaginaGsx() {
   const [input, setInput] = useState(sp.get("s") || "");
   const [ser, setSer] = useState(sp.get("s") || "");
   const [sez, setSez] = useState<Sez>("generale");
+  const [modo, setModo] = useState<"seriale" | "catalogo">(sp.get("catalogo") ? "catalogo" : "seriale");
   const [g, setG] = useState<GsxDispositivo | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -72,6 +74,11 @@ function PaginaGsx() {
         <h1 className="flex items-center gap-2 text-xl font-semibold"><Apple className="h-5 w-5" /> GSX Apple</h1>
         <p className="mt-1 text-sm text-muted-foreground">Tutto quello che Apple sa di un seriale: letto dal GSX di Bagnetti attraverso il nostro server (solo lettura).</p>
       </div>
+      <div className="flex gap-1">
+        <Button size="sm" variant={modo === "seriale" ? "default" : "outline"} onClick={() => setModo("seriale")}>Cerca per seriale</Button>
+        <Button size="sm" variant={modo === "catalogo" ? "default" : "outline"} onClick={() => setModo("catalogo")}>Catalogo ricambi completo</Button>
+      </div>
+      {modo === "catalogo" ? <CatalogoGsx /> : <>
       <Card className="flex flex-wrap items-center gap-2 p-3">
         <div className="relative min-w-[220px] flex-1">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -199,6 +206,7 @@ function PaginaGsx() {
           {sez === "grezzi" && <Card className="p-3"><pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify({ dispositivo: g, riparazioni: rip, diagnosi: diag }, null, 2)}</pre></Card>}
         </>
       )}
+      </>}
     </div>
   );
 }
