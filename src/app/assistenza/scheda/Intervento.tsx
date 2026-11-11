@@ -41,7 +41,7 @@ export function Intervento({ seriale, gsx, difetto, copertura, ro, operatore, on
           {difetti.length > 0 && (
             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
               <span className="text-muted-foreground">Riproducibilità (codice Apple):</span>
-              <select className={`${campo} h-7 w-auto text-xs`} disabled={ro} value={difetti[0].reproducibility || "A"}
+              <select className={`${campo} h-7 max-w-[300px] text-xs`} disabled={ro} value={difetti[0].reproducibility || "A"}
                 onChange={(e) => onDifetto(difetti.map((d, i) => (i === 0 ? { ...d, reproducibility: e.target.value } : d)))}>
                 {RIPRODUCIBILITA.map(([k, l]) => <option key={k} value={k}>{k} · {l}</option>)}
               </select>
@@ -61,7 +61,7 @@ export function Intervento({ seriale, gsx, difetto, copertura, ro, operatore, on
           </div>
           {idon && (
             <div className="mt-1 space-y-0.5 text-xs">
-              {idon.blocchi.length > 0 && <ul className="list-disc pl-4 text-red-800 dark:text-red-200">{idon.blocchi.map((b, i) => <li key={i}>{b}</li>)}</ul>}
+              {idon.blocchi.length > 0 && <ul className="list-disc pl-4 text-red-800 dark:text-red-200">{idon.blocchi.map((b, i) => <li key={i}>{b.replace(/<a [^>]*>(\d+)<\/a>/g, "articolo $1").replace(/<[^>]+>/g, "")}</li>)}</ul>}
               <div>Ricambi: {idon.parti.map((p) => <span key={p.codice} className={`mr-2 ${p.coperto ? "font-semibold text-emerald-700" : ""}`}>{p.codice} {p.coperto ? "coperto" : "a pagamento"}</span>)}</div>
               <div className="text-muted-foreground">Tipi ammessi: {idon.tipi_riparazione.map((t) => t.nome).filter((x, i, a) => a.indexOf(x) === i).join(" · ") || "—"} · tecnico certificato {idon.tecnico_obbligatorio ? "obbligatorio" : "non obbligatorio"}{idon.trova_il_mio ? " · «Trova il mio» ATTIVO" : ""}</div>
             </div>

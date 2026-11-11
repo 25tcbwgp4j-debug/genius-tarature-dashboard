@@ -15,6 +15,8 @@ import { gsxRicambi, gsxRiparazioni, type GsxDispositivo, type GsxPrincipale, ty
 const euro = (n?: number | null) => (n == null ? "—" : Number(n).toLocaleString("it-IT", { style: "currency", currency: "EUR" }));
 const data = (s?: string | null) => (s ? s.slice(0, 10).split("-").reverse().join("/") : "—");
 const ora = (s?: string | null) => (s ? new Date(s).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" }) : "—");
+/** «MacBook Pro (13 pollici, 2018…), MacBook Pro (16 pollici, 2019): assenza di alimentazione» → «Assenza di alimentazione» */
+const titoloBreve = (t: string) => { const i = t.lastIndexOf(": "); const c = i > 40 ? t.slice(i + 2) : t; return c.charAt(0).toUpperCase() + c.slice(1); };
 const RIP_TIPI: Record<string, string> = { CIN: "carry-in", CRBR: "carry-in con ricambi", WUMS: "sostituzione integrale", MINS: "mail-in", SVNR: "assistenza senza riparazione" };
 
 export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, aggiornando, onTrova, trovaAttivo, serialeNuovoScheda, compatto, onIdoneita, idoneitaBusy, haDifetto, ridotto }: {
@@ -121,7 +123,7 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
             🔁 <b>DISPOSITIVO SOSTITUITO DA APPLE</b>{g.sostituito.data ? ` il ${data(g.sostituito.data)}` : ""}: il seriale nuovo è <span className="font-mono font-semibold">{g.sostituito.seriale_nuovo}</span>{g.sostituito.imei_nuovo ? ` · IMEI ${g.sostituito.imei_nuovo}` : ""}. Nella scheda va come «nuovo S/N».
             {serialeNuovoScheda && serialeNuovoScheda.replace(/[^A-Z0-9]/gi, "").toUpperCase() !== g.sostituito.seriale_nuovo.toUpperCase() && <div className="mt-0.5 font-semibold">⚠️ Nella scheda il nuovo S/N è <span className="font-mono">{serialeNuovoScheda}</span>, Apple dice <span className="font-mono">{g.sostituito.seriale_nuovo}</span>: controllare sul dispositivo e correggere.</div>}</div>}
           {g.idoneita?.bloccata && <div className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-red-950 dark:bg-red-950/30 dark:text-red-100">
-            ⛔ <b>Apple BLOCCA la riparazione</b> ({g.idoneita.copertura || "—"}): {g.idoneita.blocchi.join(" · ")}</div>}
+            ⛔ <b>Apple BLOCCA la riparazione</b> ({g.idoneita.copertura || "—"}): {apertoDettagli ? g.idoneita.blocchi.join(" · ") : `${g.idoneita.blocchi[0] || ""}${g.idoneita.blocchi.length > 1 ? ` (+${g.idoneita.blocchi.length - 1} avvisi: vedi «Intervento»)` : ""}`}</div>}
           {aperte.length > 0 && <div className="rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
             🛠 <b>Riparazione GSX aperta</b>: {aperte.map((r) => `${r.id} (${r.stato})`).join(" · ")}</div>}
           {g.trova_il_mio_probabile && !trovaAttivo && <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
@@ -163,7 +165,7 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
             <a className="ml-2 font-normal underline" href={`/assistenza/gsx?s=${encodeURIComponent(g.seriale)}&sez=articoli`} target="_blank" rel="noreferrer">tutti gli articoli ({g.articoli.totale})</a></div>
           <ul className="mt-0.5 list-disc pl-4">
             {[...g.articoli.programmi, ...g.articoli.del_modello].slice(0, 12).map((a) => <li key={a.id}>
-              <a className="hover:underline" href={`/assistenza/gsx?s=${encodeURIComponent(g.seriale)}&sez=articoli&art=${a.id}`} target="_blank" rel="noreferrer" title={a.sommario || ""}>{a.titolo}</a>
+              <a className="hover:underline" href={`/assistenza/gsx?s=${encodeURIComponent(g.seriale)}&sez=articoli&art=${a.id}`} target="_blank" rel="noreferrer" title={`${a.titolo}${a.sommario ? ` — ${a.sommario}` : ""}`}>{titoloBreve(a.titolo)}</a>
               {a.priorita && a.priorita !== "LOW" ? <span className="ml-1 rounded bg-amber-200 px-1 text-[10px]">{a.priorita}</span> : null}</li>)}
           </ul>
         </div>
@@ -171,13 +173,13 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
 
       {/* preventivo pronto */}
       {apertoDettagli && ric && ric.principali.length > 0 && (
-        <div className="mt-2 rounded-md border border-sky-200 bg-sky-50/60 p-2 text-xs dark:bg-sky-950/30">
+        <div className="mt-2 overflow-x-auto rounded-md border border-sky-200 bg-sky-50/60 p-2 text-xs dark:bg-sky-950/30">
           <div className="mb-1 flex flex-wrap items-center gap-2 font-semibold">Preventivo pronto · prezzi da GSX {ric.letto_il ? `(letti il ${ora(ric.letto_il)})` : ""}
             <span className="font-normal text-muted-foreground">regola del listino: +10% Bagnetti +IVA → proposto → listino · «Listino» = pagina Prezzi ufficiali</span></div>
-          <table className="w-full">
+          <table className="w-full [&_td]:px-1.5 [&_th]:px-1.5 [&_td]:align-top">
             <thead><tr className="text-left">
-              <th>Componente</th><th>Codice</th>{ric.costi_visibili && <><th className="text-right">GSX</th><th className="text-right">Ci costa</th></>}
-              <th className="text-right">Proposto</th><th className="text-right">Scontato da</th><th className="text-right">Listino</th><th></th>
+              <th>Componente</th><th>Codice</th>{ric.costi_visibili && <><th className="whitespace-nowrap text-right">GSX</th><th className="whitespace-nowrap text-right">Ci costa</th></>}
+              <th className="whitespace-nowrap text-right">Proposto</th><th className="whitespace-nowrap text-right">Scontato da</th><th className="whitespace-nowrap text-right">Listino</th><th></th>
             </tr></thead>
             <tbody>
               {ric.principali.map((p) => {
@@ -187,10 +189,10 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
                     <td className="py-0.5 pr-2 font-semibold">{ric.categorie[p.categoria] || p.categoria}</td>
                     <td className="pr-2"><span className="font-mono">{p.codice}</span><div className="text-muted-foreground">{p.descrizione}{p.altri_codici > 0 ? ` · +${p.altri_codici} codici (preso il più caro)` : ""}</div>
                       {p.nota && <div className="text-amber-700">{p.nota}</div>}</td>
-                    {ric.costi_visibili && <><td className="text-right">{euro(p.prezzi.gsx)}{u?.costo_diverso && <div className="text-amber-700" title="Il listino è stato costruito su un costo Apple diverso">listino: {euro(u.costo_gsx)}</div>}</td><td className="text-right">{euro(p.prezzi.costo)}</td></>}
+                    {ric.costi_visibili && <><td className="whitespace-nowrap text-right">{euro(p.prezzi.gsx)}{u?.costo_diverso && <div className="text-amber-700" title="Il listino è stato costruito su un costo Apple diverso">listino: {euro(u.costo_gsx)}</div>}</td><td className="whitespace-nowrap text-right">{euro(p.prezzi.costo)}</td></>}
                     <td className="text-right font-semibold">{g.idoneita?.parti.find((x) => x.codice === p.codice)?.coperto ? <span className="text-emerald-700" title="Apple copre il ricambio: nel preventivo va a 0 €">0 € <s className="font-normal text-muted-foreground">{euro(p.prezzi.proposto)}</s></span> : euro(p.prezzi.proposto)}</td>
-                    <td className="text-right">{euro(p.prezzi.listino)}</td>
-                    <td className="text-right">{u?.prezzo != null
+                    <td className="whitespace-nowrap text-right">{euro(p.prezzi.listino)}</td>
+                    <td className="whitespace-nowrap text-right">{u?.prezzo != null
                       ? <span className={u.prezzo_diverso ? "font-semibold text-amber-700" : "text-emerald-700"} title={u.prezzo_diverso ? "Il prezzo del listino è diverso da quello calcolato oggi da GSX" : "Uguale al calcolo di oggi"}>
                           {euro(u.prezzo)}<div className="text-[10px] font-normal text-muted-foreground">{u.stato === "convalidato" ? "convalidato" : "proposto"}{u.prezzo_diverso ? " ≠ GSX" : " ✓"}</div></span>
                       : <span className="text-muted-foreground" title="Il modello non è nella pagina Prezzi ufficiali: vale il calcolo da GSX">—</span>}</td>
