@@ -262,7 +262,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     seriale: v("seriale"), imei: v("imei"), difetto: v("difetto"), accessori: v("accessori"), con_alimentatore: v("con_alimentatore"),
     password_dispositivo: v("password_dispositivo"), apple_id: v("apple_id"), password_apple_id: v("password_apple_id"),
     numero_interno: v("numero_interno"),
-    gsx: v("gsx"), gsx_letto_il: v("gsx_letto_il"),   // 12/11/2026: i dati GSX salvati nella scheda si rivedono riaprendola
+    gsx: v("gsx"), gsx_letto_il: v("gsx_letto_il"), seriale_nuovo: v("seriale_nuovo"),   // 12/11/2026: i dati GSX salvati nella scheda si rivedono riaprendola
   };
   const bz = bozzaPreventivo({ ...s, ...b });
   const st = s.stato;

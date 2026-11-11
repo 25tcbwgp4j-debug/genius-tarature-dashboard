@@ -16,7 +16,7 @@ const euro = (n?: number | null) => (n == null ? "—" : Number(n).toLocaleStrin
 const data = (s?: string | null) => (s ? s.slice(0, 10).split("-").reverse().join("/") : "—");
 const ora = (s?: string | null) => (s ? new Date(s).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" }) : "—");
 
-export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, aggiornando, onTrova, trovaAttivo, compatto }: {
+export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, aggiornando, onTrova, trovaAttivo, serialeNuovoScheda, compatto }: {
   g: GsxDispositivo | null; errore?: string | null; autoRicambi?: boolean;
   /** scheda: mette 1ª + 2ª ipotesi (e Touch ID abbinato) nel preventivo */
   onInserisci?: (p: GsxPrincipale) => void;
@@ -24,6 +24,8 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
   onAggiorna?: () => void; aggiornando?: boolean;
   /** scheda: segna «Trova il mio» attivo quando Apple oscura i dati */
   onTrova?: () => void; trovaAttivo?: boolean;
+  /** scheda: il «nuovo S/N» scritto nella scheda, da confrontare con quello che dice Apple */
+  serialeNuovoScheda?: string | null;
   compatto?: boolean;
 }) {
   const [ricLetti, setRic] = useState<GsxRicambi | null>(null);
@@ -106,7 +108,8 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
       {(g.sostituito || g.trova_il_mio_probabile || g.dep || g.modalita_riparazione || g.prestito || aperte.length > 0) && (
         <div className="mt-2 space-y-1 text-xs">
           {g.sostituito && <div className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-red-950 dark:bg-red-950/30 dark:text-red-100">
-            🔁 <b>DISPOSITIVO SOSTITUITO DA APPLE</b>{g.sostituito.data ? ` il ${data(g.sostituito.data)}` : ""}: il seriale nuovo è <span className="font-mono font-semibold">{g.sostituito.seriale_nuovo}</span>{g.sostituito.imei_nuovo ? ` · IMEI ${g.sostituito.imei_nuovo}` : ""}. Nella scheda va come «nuovo S/N».</div>}
+            🔁 <b>DISPOSITIVO SOSTITUITO DA APPLE</b>{g.sostituito.data ? ` il ${data(g.sostituito.data)}` : ""}: il seriale nuovo è <span className="font-mono font-semibold">{g.sostituito.seriale_nuovo}</span>{g.sostituito.imei_nuovo ? ` · IMEI ${g.sostituito.imei_nuovo}` : ""}. Nella scheda va come «nuovo S/N».
+            {serialeNuovoScheda && serialeNuovoScheda.replace(/[^A-Z0-9]/gi, "").toUpperCase() !== g.sostituito.seriale_nuovo.toUpperCase() && <div className="mt-0.5 font-semibold">⚠️ Nella scheda il nuovo S/N è <span className="font-mono">{serialeNuovoScheda}</span>, Apple dice <span className="font-mono">{g.sostituito.seriale_nuovo}</span>: controllare sul dispositivo e correggere.</div>}</div>}
           {aperte.length > 0 && <div className="rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
             🛠 <b>Riparazione GSX aperta</b>: {aperte.map((r) => `${r.id} (${r.stato})`).join(" · ")}</div>}
           {g.trova_il_mio_probabile && !trovaAttivo && <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">

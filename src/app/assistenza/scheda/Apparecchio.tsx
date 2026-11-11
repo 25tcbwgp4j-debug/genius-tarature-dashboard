@@ -21,6 +21,7 @@ export type ValoriApparecchio = {
   password_dispositivo?: string | null; apple_id?: string | null; password_apple_id?: string | null;
   numero_interno?: string | null;   // 26/10/2026 (62588): riferimento del rivenditore/cliente
   gsx?: GsxDispositivo | null; gsx_letto_il?: string | null;   // 11/11/2026: ultima lettura Apple GSX (via ponte)
+  seriale_nuovo?: string | null;   // 12/11/2026: per confrontarlo con quello che dice Apple (dispositivo sostituito)
 };
 type K = keyof ValoriApparecchio;
 
@@ -171,7 +172,7 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
       )}
 
       {(gsx || gsxErr) && <GsxPannello g={gsx} errore={gsxErr} compatto={compatto} onInserisci={ro ? undefined : onInserisci} onTrova={ro ? undefined : onTrova} trovaAttivo={trovaAttivo}
-        onAggiorna={ro || !v.seriale ? undefined : aggiornaGsx} aggiornando={busy} />}
+        onAggiorna={ro || !v.seriale ? undefined : aggiornaGsx} aggiornando={busy} serialeNuovoScheda={v.seriale_nuovo} />}
 
       <Campo label="Modello esatto" aiuto={v.modello && v.modello_fonte ? <>Fonte: <b>{v.modello_fonte === "scheda_precedente" && v.modello_da_scheda ? `già passato nella scheda ${v.modello_da_scheda}: modello preso da lì` : FONTE_TESTO[v.modello_fonte] || v.modello_fonte}</b></> : "si compila dalla decodifica del seriale (o da GSX)"}>
         <div className="flex gap-1.5">
