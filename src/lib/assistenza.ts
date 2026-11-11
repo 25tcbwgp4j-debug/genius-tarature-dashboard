@@ -65,7 +65,7 @@ export interface Scheda extends SchedaBreve {
     scontrino?: { id: string; stato: string; totale: number; numero_rt?: string | null; data_rt?: string | null; pagamenti?: { importo: number; modalita: string }[] } | null;
     fattura?: FatturaCollegata | null; documento?: { id: string; sigla: string; stato: string; totale: number } | null;
     /** 24/10/2026: altre fatture che citano la scheda, bonifici arrivati con la scheda in causale, come risulta pagata */
-    altre_fatture?: FatturaCollegata[]; combinata?: { id: string; sigla: string; stato: string; prodotto: string | null; rif_cliente: string | null }[]; bonifici?: { id: string; data: string; importo: number; ordinante: string | null; causale: string | null; stato: string }[];
+    altre_fatture?: FatturaCollegata[]; combinata?: { id: string; sigla: string; stato: string; prodotto: string | null; rif_cliente: string | null }[]; ex_schede?: ExScheda[]; bonifici?: { id: string; data: string; importo: number; ordinante: string | null; causale: string | null; stato: string }[];
     pagamento?: { il: string | null; modo: string | null; fonte: string; rimborso?: { importo: number; note_credito: string } } | null;
     note_credito?: { id: string; numero: string; data: string; totale: number }[] };
   anagrafica: Anagrafica | null; etichetta_stato: string; prova: boolean;
@@ -314,3 +314,10 @@ export const assStaffConfermaEsito = (id: string, b: { esito?: string; ipotesi?:
 export interface NomeNumero { nome: string; fonte: string; anagrafica_id: string | null; rubrica_334: string | null }
 export const assNomiNumeri = (tel: string[]): Promise<{ nomi: Record<string, NomeNumero> }> =>
   fetchAPI(`/api/chat-apple-nomi?t=${encodeURIComponent(tel.slice(0, 400).join(","))}`);
+
+/** 11/11/2026 (Christian): ex scheda di assistenza dello stesso dispositivo (backend ex_schede.py). */
+export type ExScheda = {
+  id: string; sigla: string; stato: string | null; esito: string | null; data: string; consegnata_il: string | null;
+  prodotto: string | null; difetto: string; test_ingresso: string; lavorazione: string; totale: number | null;
+  garanzia: { attiva: boolean; fino_al: string } | null;
+};

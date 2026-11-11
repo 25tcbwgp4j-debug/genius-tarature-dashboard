@@ -24,6 +24,7 @@ import type { EstimateLine } from "@/lib/assistenza-preventivo";
 import { Apparecchio, type ValoriApparecchio } from "./Apparecchio";
 import { Assistente } from "./Assistente";
 import { Avanzamento } from "./Avanzamento";
+import { ExSchede } from "./ExSchede";
 import { CercaCliente, RiepilogoCliente, SchedaClienteModal } from "./Cliente";
 import { Comunicazioni, Registro } from "./Comunicazioni";
 import { DialogoCambiaStato, DialogoChiudiTutto, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoStessoModello, type TipoInvio } from "./Dialoghi";
@@ -307,9 +308,10 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           toast.success(valore === "importanti" ? "Segnato: DATI IMPORTANTI, non formattare" : valore ? "Segnato: si può formattare" : "Dati: non indicato"); onCambiata(); return true; }
         catch (e) { toastErrore(e); return false; }
       }} />
+      <ExSchede ex={s.collegamenti?.ex_schede} />
       <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={() => setDlg({ k: "invio", tipo: "trova" })}
         onPreventivo={() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
-      <Avanzamento av={s.avanzamento} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)} nome={(c) => nomeTecnico(c, tecnici)}
+      <Avanzamento av={s.avanzamento} prontoProgrammato={s.pronto_prog_stato === "programmato" ? s.pronto_prog_il || null : null} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)} nome={(c) => nomeTecnico(c, tecnici)}
         rinvii={<>
           {!ro && st !== "in_arrivo" && st !== "annullata" && <>
             <span className="text-xs font-medium text-muted-foreground">📨 Rinvia al cliente:</span>

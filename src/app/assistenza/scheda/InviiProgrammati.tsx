@@ -67,9 +67,15 @@ function Riga({ s, cosa, ro, operatore, onScheda }: { s: Scheda; cosa: Cosa; ro:
     const canali = cosa === "preventivo" && s.preventivo_prog_body
       ? [s.preventivo_prog_body.invia_mail !== false && "mail", s.preventivo_prog_body.invia_wa !== false && "WhatsApp"].filter(Boolean).join(" + ") : "";
     return (
-      <div className="space-y-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
+      // 11/11/2026 (Christian, 63354): il PRONTO PROGRAMMATO deve leggersi subito: grande, in rosso, con il «per quando»
+      <div className={cosa === "pronto"
+        ? "space-y-1.5 rounded-xl border-2 border-red-500 bg-red-50 px-3 py-2.5 text-red-900 shadow-sm dark:bg-red-950/40 dark:text-red-100"
+        : "space-y-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm text-sky-950 dark:bg-sky-950/30 dark:text-sky-100"}>
         <div className="flex flex-wrap items-center gap-2">
-          <span>⏰ <b>{nome}</b> programmato per {quandoLungo(c.il)}{canali && ` · ${canali}`}{c.da && <span className="text-xs text-muted-foreground"> · da {c.da}</span>}</span>
+          {cosa === "pronto"
+            ? <span className="text-base sm:text-lg">⏰ <b className="text-lg font-extrabold uppercase tracking-wide text-red-700 sm:text-xl dark:text-red-300">Pronto programmato</b>{" "}
+                <span className="font-bold">per {quandoLungo(c.il)}</span>{c.da && <span className="text-xs font-normal text-red-800/70 dark:text-red-200/70"> · da {c.da}</span>}</span>
+            : <span>⏰ <b>{nome}</b> programmato per {quandoLungo(c.il)}{canali && ` · ${canali}`}{c.da && <span className="text-xs text-muted-foreground"> · da {c.da}</span>}</span>}
           {!ro && <span className="ml-auto flex flex-wrap gap-1.5">
             <Button size="xs" disabled={!!busy} onClick={subito}>{busy === "subito" && <Loader2 className="animate-spin" />}Invia subito</Button>
             <Button size="xs" variant="outline" disabled={!!busy} onClick={() => setSposta((x) => !x)}>Modifica orario</Button>

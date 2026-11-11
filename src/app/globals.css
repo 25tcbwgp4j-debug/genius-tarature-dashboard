@@ -146,3 +146,7 @@
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
   .safe-x { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 }
+/* 11/11/2026 (Christian): menu nascosto sul computer → spazio in alto per il pulsante ☰ */
+@media (min-width: 64rem) {
+  html[data-menu="nascosto"] main { padding-top: 3.5rem; }
+}

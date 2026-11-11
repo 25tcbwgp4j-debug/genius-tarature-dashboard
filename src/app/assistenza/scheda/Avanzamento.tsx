@@ -8,6 +8,7 @@ import { ArrowRight, Check, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { dataOra, type Avanzamento as Av, type Situazione } from "@/lib/assistenza";
+import { quandoLungo } from "./InviiProgrammati";
 
 // 11/11/2026 (Christian): colori della SITUAZIONE ATTUALE — verde = in corso e assegnato · ambra = si aspetta qualcuno ·
 // rosso = bloccata / decisione urgente · blu = tocca al banco · grigio = chiusa
@@ -36,8 +37,10 @@ const AZIONI: Record<string, string> = {
   ricevuta: "INVIA RICEVUTA", in_vendita: "🏷️ Metti IN VENDITA", richiedi_etichetta: "📨 Pagamento arrivato: chiedi l'etichetta di ritorno",
 };
 
-export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, onRiconsegna, rinvii, nome }: {
-  av: Av; onAzione: (azione: string) => void; disabilitato?: boolean;
+export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, onRiconsegna, rinvii, nome, prontoProgrammato }: {
+  av: Av;
+  /** 11/11/2026 (Christian, 63354): PRONTO PROGRAMMATO → scritta grande in rosso con il «per quando» nella situazione attuale */
+  prontoProgrammato?: string | null; onAzione: (azione: string) => void; disabilitato?: boolean;
   /** 11/11/2026: nome leggibile del tecnico (ALEX → Alex) nella situazione attuale */
   nome?: (codice: string) => string;
   /** 27/10/2026 (Christian, 63224): i RINVII al cliente (ricevuta, preventivo, aggiornamento, pronto da pagare) e CAMBIA STATO,
@@ -52,7 +55,7 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
   const tono = TONI[sit?.tono || (bloccata ? "rosso" : "blu")];
   const titolo = sit ? (sit.chi && nome ? sit.titolo.split(sit.chi).join(nome(sit.chi) || sit.chi) : sit.titolo) : "";
   return (
-    <div className="rounded-xl border bg-card p-3 shadow-sm">
+    <div className="min-w-0 rounded-xl border bg-card p-3 shadow-sm">
       {/* 11/11/2026 (Christian): SITUAZIONE ATTUALE grande e colorata — chi ce l'ha, cosa si aspetta, da quando — col prossimo passo */}
       {(sit || av.prossimo?.testo) && (
         <div className={cn("mb-3 rounded-xl border-2 px-3 py-2.5", tono.box)} data-testid="situazione" data-tono={sit?.tono}>
@@ -63,6 +66,7 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
               <span className="text-lg font-bold leading-tight sm:text-xl">{titolo}</span>
               {sit.da && <span className="text-sm font-medium tabular-nums opacity-80" title={dataOra(sit.da)}>{daQuanto(sit.da)} · {dataOra(sit.da)}</span>}
               {sit.dettaglio && <span className="w-full text-sm opacity-90">{sit.dettaglio}</span>}
+              {prontoProgrammato && <span className="w-full rounded-lg border-2 border-red-500 bg-red-100 px-2 py-1 text-base font-extrabold uppercase tracking-wide text-red-700 dark:bg-red-950/60 dark:text-red-200" data-testid="pronto-programmato">⏰ Pronto programmato per {quandoLungo(prontoProgrammato)}</span>}
             </div>
           )}
           {av.prossimo?.testo && (
@@ -97,7 +101,7 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
           )}
         </div>
       )}
-      <ol className="flex items-stretch gap-1 overflow-x-auto pb-1">
+      <ol className="flex min-w-0 items-stretch gap-1 overflow-x-auto pb-1">
         {av.passi.map((p, i) => (
           <li key={p.codice} className="flex min-w-[78px] flex-1 flex-col items-center gap-1 text-center">
             <div className="flex w-full items-center">

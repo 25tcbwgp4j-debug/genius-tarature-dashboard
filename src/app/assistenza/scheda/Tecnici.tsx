@@ -146,7 +146,7 @@ export function PannelloTecnici({ s, tecnici, ro, busy, onAssegnaVerifica, onChi
   const vs = s.verifica_stato;
   const inRiparazione = st === "accettato";
   return (
-    <Sezione titolo="Verifica e riparazione" icona={<ClipboardCheck />} className="border-primary/30" sottotitolo="tecnici: Alex, Roberto, Christian, Dumi">
+    <Sezione titolo="Verifica e riparazione" icona={<ClipboardCheck />} className="border-primary/30" sottotitolo="tecnici: Alex, Roberto, Christian, Dumi, Martina">
       <div className="grid gap-3 md:grid-cols-2">
         <div className="rounded-lg border p-3" data-testid="pannello-verifica">
           <div className="mb-1 flex flex-wrap items-center gap-2 text-sm">

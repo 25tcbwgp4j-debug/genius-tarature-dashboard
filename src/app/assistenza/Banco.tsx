@@ -91,7 +91,17 @@ export function Banco() {
   const [apertaLocale, setAperta] = useState<string | null>(null);
   const aperta = apertaLocale ?? idLink;
   // elenco richiudibile per dare più spazio alla scheda (desktop); su telefono/iPad la scheda prende tutto lo schermo
-  const [elencoChiuso, setElencoChiuso] = useState(false);
+  // 11/11/2026 (Christian: «l'elenco prende una bella fetta di pagina»): con una scheda aperta l'elenco è NASCOSTO di
+  // default e la scheda prende tutta la larghezza; il pulsante «Elenco» lo riapre. La scelta resta su questo dispositivo.
+  const [elencoChiuso, setElencoChiuso] = useState(true);
+  useEffect(() => {
+    try { const v = localStorage.getItem("gl_elenco_chiuso"); if (v !== null) setElencoChiuso(v === "1"); } catch { /* storage non disponibile */ }
+  }, []);
+  const cambiaElenco = (v: boolean) => {
+    setElencoChiuso(v);
+    try { localStorage.setItem("gl_elenco_chiuso", v ? "1" : "0"); } catch { /* storage non disponibile */ }
+  };
+  const nascondiElenco = elencoChiuso && !!aperta;
 
   useEffect(() => { assConfig().then(setCfg).catch(() => undefined); }, []);
   // 04/10/2026 (Christian): come in FileMaker la ricerca vale su TUTTE le schede (non solo sul filtro scelto)
@@ -170,8 +180,10 @@ export function Banco() {
   return (
     <div className="space-y-2 p-0 sm:p-1">
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="icon-sm" variant="ghost" className="hidden lg:inline-flex" onClick={() => setElencoChiuso((x) => !x)} title={elencoChiuso ? "Mostra l'elenco" : "Nascondi l'elenco (più spazio alla scheda)"}>
-          {elencoChiuso ? <PanelLeftOpen /> : <PanelLeftClose />}</Button>
+        {aperta && (
+          <Button size="sm" variant="outline" className="hidden lg:inline-flex" onClick={() => cambiaElenco(!nascondiElenco)} title={nascondiElenco ? "Mostra l'elenco delle schede" : "Nascondi l'elenco (la scheda a pagina piena)"}>
+            {nascondiElenco ? <PanelLeftOpen /> : <PanelLeftClose />}{nascondiElenco ? "Elenco" : "Nascondi elenco"}</Button>
+        )}
         <Wrench className="size-5" />
         <h1 className="mr-2 text-xl font-semibold tracking-tight">Schede di assistenza</h1>
         {cfg && !cfg.numerazione_live && (
@@ -205,7 +217,7 @@ export function Banco() {
         onApriScheda={(r) => { setDaRichiesta(r); setNuova(true); }} />
       {/* 24/10/2026 (Christian): con una scheda aperta il cruscotto si riduce a una riga (prima occupava mezzo schermo) */}
       {aperta && !mostraCr ? (
-        <button type="button" onClick={() => setMostraCr(true)} className="flex w-full items-center gap-2 rounded-xl border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm hover:bg-muted/50">
+        <button type="button" onClick={() => setMostraCr(true)} className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm hover:bg-muted/50">
           <span className="font-semibold text-foreground">Cruscotto</span>
           {(cruscotto || []).filter((f) => f.n > 0).slice(0, 8).map((f) => <span key={f.codice}>{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
           <span className="ml-auto underline">mostra</span>
@@ -223,9 +235,9 @@ export function Banco() {
       </>
       )}
 
-      <div className={`grid gap-3 ${elencoChiuso ? "" : "lg:grid-cols-[300px_minmax(0,1fr)]"}`}>
+      <div className={`grid grid-cols-1 gap-3 [&>*]:min-w-0 ${nascondiElenco ? "" : "lg:grid-cols-[300px_minmax(0,1fr)]"}`}>  {/* 11/11/2026: grid-cols-1 + min-w-0 = niente sbordi su iPhone (la pagina non si rimpicciolisce più) */}
         {/* elenco */}
-        <div className={`flex max-h-[calc(100vh-7rem)] flex-col gap-2 rounded-xl border bg-card p-2 shadow-sm lg:sticky lg:top-2 ${elencoChiuso ? "hidden" : aperta ? "hidden lg:flex" : ""}`}>
+        <div className={`flex max-h-[calc(100vh-7rem)] flex-col gap-2 rounded-xl border bg-card p-2 shadow-sm lg:sticky lg:top-2 ${nascondiElenco ? "hidden" : aperta ? "hidden lg:flex" : ""}`}>
           <div className="flex gap-1">
             <div className="relative flex-1">
               <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />

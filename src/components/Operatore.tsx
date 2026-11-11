@@ -1,6 +1,6 @@
 "use client";
 
-// OPERATORE del negozio (01/10/2026): chi sta facendo il documento — CHR · VALE · DUMY · ALTRO.
+// OPERATORE del negozio (01/10/2026): chi sta facendo il documento — CHR · VALE · DUMY · MARTINA · ALTRO.
 // Obbligatorio prima di emettere/salvare scontrini, fatture, pro forma, preventivi, ordini, righe di cassa e storni:
 // senza scelta i pulsanti restano bloccati. L'ultimo operatore scelto si ricorda su questo dispositivo (localStorage)
 // ed è sempre mostrato in evidenza; tutte le schede/finestre aperte restano allineate.
@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const OPERATORI = ["CHR", "VALE", "DUMY", "ALTRO"] as const;
+export const OPERATORI = ["CHR", "VALE", "DUMY", "MARTINA", "ALTRO"] as const;   // 11/11/2026: + Martina
 export type Operatore = (typeof OPERATORI)[number];
 
 // Pagina SESSIONE Tarature (07/10/2026, Christian): lì si sceglie solo tra Christian e Dumy, senza «Altro».

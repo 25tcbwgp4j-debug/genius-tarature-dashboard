@@ -45,6 +45,8 @@ import {
   Megaphone,
   Landmark,
   PhoneCall,
+  PanelLeftClose,
+  Pin,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 import { getStats } from "@/lib/chat-api";
@@ -141,6 +143,20 @@ export function Sidebar() {
   const [apertoSu, setApertoSu] = useState<string | null>(null);
   const mobileOpen = apertoSu === pathname;
   const setMobileOpen = (v: boolean) => setApertoSu(v ? pathname : null);
+  // 11/11/2026 (Christian): sul computer il menu si può NASCONDERE per dare tutta la pagina alla scheda; la scelta resta
+  // su questo dispositivo. Nascosto, si comporta come su iPhone: pulsante ☰ in alto a sinistra che lo apre sopra la pagina.
+  const [menuNascosto, setMenuNascosto] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- preferenza del dispositivo letta dopo l'idratazione
+    try { setMenuNascosto(localStorage.getItem("gl_menu_nascosto") === "1"); } catch { /* storage non disponibile */ }
+  }, []);
+  useEffect(() => {
+    document.documentElement.dataset.menu = menuNascosto ? "nascosto" : "";
+  }, [menuNascosto]);
+  const cambiaMenu = (v: boolean) => {
+    setMenuNascosto(v); setApertoSu(null);
+    try { localStorage.setItem("gl_menu_nascosto", v ? "1" : "0"); } catch { /* storage non disponibile */ }
+  };
   const { theme, toggleTheme } = useTheme();
   const push = usePushNotifications();
   const { admin, nInAttesa, permessi } = usePermessi();
@@ -217,7 +233,7 @@ export function Sidebar() {
         type="button"
         onClick={() => setMobileOpen(true)}
         aria-label="Apri menu"
-        className="lg:hidden print:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm"
+        className={`${menuNascosto ? "" : "lg:hidden"} print:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm`}
         style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
       >
         <Menu className="w-5 h-5 text-gray-700 dark:text-gray-200" />
@@ -229,13 +245,14 @@ export function Sidebar() {
           type="button"
           onClick={() => setMobileOpen(false)}
           aria-label="Chiudi menu"
-          className="lg:hidden print:hidden fixed inset-0 bg-black/40 z-40"
+          className={`${menuNascosto ? "" : "lg:hidden"} print:hidden fixed inset-0 bg-black/40 z-40`}
         />
       )}
 
       <aside
-        className={`print:hidden w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col fixed lg:static inset-y-0 left-0 z-50 transform transition-transform lg:transform-none ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        className={`print:hidden w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col fixed inset-y-0 left-0 z-50 transform transition-transform ${
+          menuNascosto ? (mobileOpen ? "translate-x-0" : "-translate-x-full")
+            : `lg:static lg:transform-none ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`
         }`}
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
@@ -244,14 +261,26 @@ export function Sidebar() {
             <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Genius Lab Gestionale</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{attivita === "apple" ? "Assistenza Mac e iPhone" : "Laboratorio tarature F-GAS"}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setMobileOpen(false)}
-            aria-label="Chiudi"
-            className="lg:hidden p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* 11/11/2026: sul computer «nascondi menu» (più spazio alla scheda) oppure, se è nascosto, «fissa» per tenerlo sempre aperto */}
+            <button
+              type="button"
+              onClick={() => cambiaMenu(!menuNascosto)}
+              aria-label={menuNascosto ? "Tieni il menu sempre aperto" : "Nascondi il menu"}
+              title={menuNascosto ? "Tieni il menu sempre aperto" : "Nascondi il menu (più spazio alla pagina)"}
+              className="hidden lg:inline-flex p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            >
+              {menuNascosto ? <Pin className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Chiudi"
+              className={`${menuNascosto ? "" : "lg:hidden"} p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200`}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         <div className="px-4 pt-4 space-y-2">
           <SelettoreAttivita onCambia={cambiaDivisione} />
