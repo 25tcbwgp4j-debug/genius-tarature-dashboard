@@ -30,8 +30,9 @@ export interface Novita { id: string; sigla: string; cliente: string | null; pro
   rimontaggio?: string | null; da_richiudere?: boolean }
 
 function dopoRifiuto(x: Novita): string {
-  if (!x.da_richiudere) return "→ invia il pronto (restituzione)";
-  return x.rimontaggio === "da_fare" && x.tecnico ? `→ da richiudere — assegnato a ${x.tecnico.charAt(0)}${x.tecnico.slice(1).toLowerCase()}` : "→ da richiudere: assegnalo a un tecnico";
+  const tec = x.tecnico ? `${x.tecnico.charAt(0)}${x.tecnico.slice(1).toLowerCase()}` : "";
+  if (!x.da_richiudere) return x.rimontaggio === "fatto" ? `→ è stato richiuso${tec ? ` da ${tec}` : ""}: invia il pronto per la restituzione` : "→ invia il pronto per la restituzione";
+  return x.rimontaggio === "da_fare" && tec ? `→ da richiudere — in riparazione a ${tec}` : "→ da richiudere: assegnalo a un tecnico";
 }
 
 export function DaGestire({ fasi, onApri, novita = [], onScheda }: {
@@ -57,7 +58,7 @@ export function DaGestire({ fasi, onApri, novita = [], onScheda }: {
       {novita.map((x) => (
         <button key={`${x.id}-${x.il}`} type="button" onClick={() => onScheda?.(x.id)}
           className={`flex w-full flex-wrap items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left ${x.tipo === "accettato" ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30" : "border-red-300 bg-red-50 dark:bg-red-950/30"}`}>
-          <span className={`rounded px-1.5 text-[11px] font-bold text-white ${x.tipo === "accettato" ? "bg-emerald-600" : "bg-red-600"}`}>🆕 {x.aggiuntivo ? "AGGIUNTIVO " : ""}{x.tipo === "accettato" ? "ACCETTATO" : "RIFIUTATO"}</span>
+          <span className={`rounded px-1.5 text-[11px] font-bold text-white ${x.tipo === "accettato" ? "bg-emerald-600" : "bg-red-600"}`}>🆕 {x.aggiuntivo ? "AGGIUNTIVO " : ""}{x.tipo === "accettato" ? "ACCETTATO" : x.da_richiudere ? "RIFIUTATO · DA RICHIUDERE" : "RIFIUTATO"}</span>
           <b>Scheda {x.sigla}</b><span>{x.cliente}</span><span className="text-xs text-muted-foreground">{x.prodotto}</span>
           <span className="text-xs text-muted-foreground">{x.canale ? `${x.canale} · ` : ""}{new Date(x.il).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
           <span className="text-xs font-medium">{x.tipo === "accettato" ? "→ assegna la riparazione" : dopoRifiuto(x)}</span>
