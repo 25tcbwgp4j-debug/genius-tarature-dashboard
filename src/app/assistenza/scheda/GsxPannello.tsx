@@ -3,6 +3,7 @@
 // garanzia e acquisto, e con «Ricambi Apple» i pezzi del dispositivo con la scheda logica esatta e il suo costo.
 import { useMemo, useState } from "react";
 import { Apple, Loader2, Package } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { gsxRicambi, type GsxDispositivo, type GsxRicambi } from "@/lib/gsx";
@@ -58,6 +59,32 @@ export function GsxPannello({ g, errore }: { g: GsxDispositivo | null; errore?: 
         <Button type="button" variant="outline" className="h-8 shrink-0" disabled={busy} onClick={caricaRicambi} title="Pezzi del dispositivo secondo Apple GSX">
           {busy ? <Loader2 className="animate-spin" /> : <Package />}Ricambi Apple</Button>
       </div>
+
+      {ric && ric.principali.length > 0 && (
+        <div className="mt-2 rounded-md border border-sky-200 bg-sky-50/60 p-2 text-xs dark:bg-sky-950/30">
+          <div className="mb-1 font-semibold">Preventivo pronto · prezzi da GSX (regola del listino: +10% Bagnetti +IVA → proposto → listino)</div>
+          <table className="w-full">
+            <thead><tr className="text-left">
+              <th>Componente</th><th>Codice</th>{ric.costi_visibili && <><th className="text-right">GSX</th><th className="text-right">Ci costa</th></>}
+              <th className="text-right">Proposto</th><th className="text-right">Listino</th><th></th>
+            </tr></thead>
+            <tbody>
+              {ric.principali.map((p) => (
+                <tr key={p.categoria} className="border-t align-top">
+                  <td className="py-0.5 pr-2 font-semibold">{ric.categorie[p.categoria] || p.categoria}</td>
+                  <td className="pr-2"><span className="font-mono">{p.codice}</span><div className="text-muted-foreground">{p.descrizione}{p.altri_codici > 0 ? ` · +${p.altri_codici} codici (preso il più caro)` : ""}</div>
+                    {p.nota && <div className="text-amber-700">{p.nota}</div>}</td>
+                  {ric.costi_visibili && <><td className="text-right">{euro(p.prezzi.gsx)}</td><td className="text-right">{euro(p.prezzi.costo)}</td></>}
+                  <td className="text-right font-semibold">{euro(p.prezzi.proposto)}</td>
+                  <td className="text-right">{euro(p.prezzi.listino)}</td>
+                  <td className="pl-2"><Button type="button" variant="outline" className="h-6 px-2 text-[11px]" title={p.ipotesi}
+                    onClick={() => { navigator.clipboard?.writeText(`2° IPOTESI: ${p.ipotesi}`); toast.success("Ipotesi copiata"); }}>Copia ipotesi</Button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {ric && (
         <div className="mt-2 border-t pt-2">

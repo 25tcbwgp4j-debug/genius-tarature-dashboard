@@ -18,7 +18,13 @@ export type GsxRicambio = {
   costo_stock?: number | null; costo_sostituzione?: number | null; opzioni_prezzo?: { voce: string; prezzo: number | null }[];
 };
 
+export type GsxPrincipale = {
+  categoria: string; codice: string; descrizione: string; ipotesi: string; nota?: string | null; altri_codici: number;
+  prezzi: { gsx?: number; costo?: number; proposto: number; listino: number };
+};
+
 export type GsxRicambi = {
+  principali: GsxPrincipale[];
   seriale: string; modello: string | null; configurazione: string | null; configurazione_riconosciuta: string[];
   categorie: Record<string, string>; scheda_logica: GsxRicambio | null; ricambi: GsxRicambio[]; costi_visibili: boolean; letto_il: string;
 };
