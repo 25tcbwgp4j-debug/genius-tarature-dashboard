@@ -8,8 +8,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Apple, ExternalLink, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { toast } from "sonner";
 import { toastErrore } from "@/lib/errori";
 import {
+  gsxAvviaTest, gsxStatoTest, type GsxStatoTest,
   gsxDiagnosi, gsxDispositivo, gsxReport, gsxRiparazione, gsxRiparazioni,
   type GsxDiagnosi, type GsxDispositivo, type GsxRiparazione,
 } from "@/lib/gsx";
@@ -42,6 +44,26 @@ function PaginaGsx() {
   const [busy, setBusy] = useState(false);
   const [rip, setRip] = useState<GsxRiparazione[] | null>(null);
   const [diag, setDiag] = useState<GsxDiagnosi | null>(null);
+  const [avvio, setAvvio] = useState<string | null>(null);
+  const [statoTest, setStatoTest] = useState<GsxStatoTest | null>(null);
+  async function aggiornaStato() {
+    try { const st = await gsxStatoTest(ser); setStatoTest(st); return st; } catch (e) { toastErrore(e); return null; }
+  }
+  async function avviaTest(id: string, nome: string) {
+    setAvvio(id);
+    try {
+      const r = await gsxAvviaTest(ser, id);
+      if (!r.avviato) { toast.error(`Apple non ha avviato «${nome}»: il dispositivo è acceso, online e in modalità diagnosi?`); return; }
+      toast.success(`Test «${nome}» avviato sul dispositivo`);
+      // segue l'avanzamento ogni 15 s fino a fine test (max 30 min)
+      for (let i = 0; i < 120; i++) {
+        const st = await aggiornaStato();
+        if (!st || st.stato === "COMPLETED" || st.stato === "NO_DIAGNOSTIC_SESSION") break;
+        await new Promise((ok) => setTimeout(ok, 15000));
+      }
+      gsxDiagnosi(ser).then(setDiag).catch(() => {});
+    } catch (e) { toastErrore(e); } finally { setAvvio(null); }
+  }
   const [aperta, setAperta] = useState<{ id: string; dettaglio: Record<string, unknown>; cronologia: unknown } | null>(null);
 
   const carica = useCallback(async (s: string) => {
@@ -184,7 +206,11 @@ function PaginaGsx() {
                   <Card className="p-3 text-sm">
                     <div className="mb-1 font-semibold">Test che Apple permette di lanciare su questo dispositivo</div>
                     {diag.test_disponibili.length === 0 ? <div className="text-muted-foreground">{diag.errore_test || "nessuno"}</div> : (
-                      <ul className="grid gap-x-4 sm:grid-cols-2">{diag.test_disponibili.map((t) => <li key={t.id}>• {t.nome} <span className="text-muted-foreground">({t.minuti.minimum}-{t.minuti.maximum} min)</span></li>)}</ul>)}
+                      <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2">{diag.test_disponibili.map((t) => <li key={t.id} className="flex items-center gap-2">
+                        <button disabled={!!avvio} onClick={() => avviaTest(t.id, t.nome)} className="inline-flex h-7 items-center gap-1 rounded-md border px-2 text-xs hover:bg-muted disabled:opacity-50">{avvio === t.id ? <Loader2 className="size-3 animate-spin" /> : "▶"} Avvia</button>
+                        {t.nome} <span className="text-muted-foreground">({t.minuti.minimum}-{t.minuti.maximum} min)</span></li>)}</ul>)}
+                    {statoTest && <div className="mt-2 rounded-md bg-muted p-2 text-xs">Stato test: <b>{statoTest.stato_it}</b>{statoTest.test ? ` · ${statoTest.test}` : ""}{statoTest.stato === "IN_PROGRESS" ? ` · ${statoTest.percento}%` : ""}
+                      <button className="ml-2 underline" onClick={aggiornaStato}>aggiorna</button></div>}
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {diag.console && <a className="inline-flex h-8 items-center gap-1 rounded-md border px-2 text-xs hover:bg-muted" href={diag.console} target="_blank" rel="noreferrer"><ExternalLink className="size-3.5" />Apri Apple Service Toolkit (AST 2)</a>}
                       <span className="text-xs text-muted-foreground">Lanciare i test da qui: {diag.lanciare_test}</span>

@@ -43,4 +43,8 @@ export const gsxRicambi = (s: string): Promise<GsxRicambi> => fetchAPI(`/api/ass
 export const gsxRiparazioni = (s: string): Promise<{ seriale: string; riparazioni: GsxRiparazione[] }> => fetchAPI(`/api/assistenza/gsx/riparazioni?s=${encodeURIComponent(s)}`);
 export const gsxRiparazione = (id: string): Promise<{ id: string; dettaglio: Record<string, unknown>; cronologia: unknown }> => fetchAPI(`/api/assistenza/gsx/riparazione?id=${encodeURIComponent(id)}`);
 export const gsxDiagnosi = (s: string): Promise<GsxDiagnosi> => fetchAPI(`/api/assistenza/gsx/diagnosi?s=${encodeURIComponent(s)}`);
+export type GsxStatoTest = { seriale: string; stato: string | null; stato_it: string | null; test: string | null; suite: string | null; percento: number };
+export const gsxAvviaTest = (s: string, suite: string): Promise<{ avviato: boolean; apple: unknown }> =>
+  fetchAPI(`/api/assistenza/gsx/diagnosi/avvia`, { method: "POST", body: JSON.stringify({ s, suite }) });
+export const gsxStatoTest = (s: string): Promise<GsxStatoTest> => fetchAPI(`/api/assistenza/gsx/diagnosi/stato?s=${encodeURIComponent(s)}`);
 export const gsxReport = (evento: string): Promise<{ customerReportUrl?: string }> => fetchAPI(`/api/assistenza/gsx/report?evento=${encodeURIComponent(evento)}`);
