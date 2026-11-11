@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { assSeriale, FAMIGLIE_DEFAULT, type GruppoProdotti, type Seriale } from "@/lib/assistenza";
+import { gsxDispositivo, type GsxDispositivo } from "@/lib/gsx";
+import { GsxPannello } from "./GsxPannello";
 import { AnnoInput, ProdottoCombo } from "./Prodotto";
 import { Campo, area, campo, etich } from "./ui";
 
@@ -18,6 +20,7 @@ export type ValoriApparecchio = {
   seriale?: string | null; imei?: string | null; difetto?: string | null; accessori?: string | null; con_alimentatore?: boolean | null;
   password_dispositivo?: string | null; apple_id?: string | null; password_apple_id?: string | null;
   numero_interno?: string | null;   // 26/10/2026 (62588): riferimento del rivenditore/cliente
+  gsx?: GsxDispositivo | null; gsx_letto_il?: string | null;   // 11/11/2026: ultima lettura Apple GSX (via ponte)
 };
 type K = keyof ValoriApparecchio;
 
@@ -43,6 +46,8 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
 }) {
   const [ser, setSer] = useState<Seriale | null>(null);
   const [busy, setBusy] = useState(false);
+  const [gsx, setGsx] = useState<GsxDispositivo | null>(v.gsx && v.gsx.seriale === v.seriale ? v.gsx : null);
+  const [gsxErr, setGsxErr] = useState<string | null>(null);
   const fam = v.famiglia || "";
   const nonApple = fam === "non_apple";
   const telefono = fam === "iphone" || fam === "ipad" || fam === "watch";
@@ -51,6 +56,10 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
     const s = String(v.seriale || "").trim();
     if (!s) return;
     setBusy(true);
+    // 11/11/2026: in parallelo alla decodifica interna si legge Apple GSX (via ponte); GSX vince sul modello
+    setGsxErr(null);
+    const gsxP = gsxDispositivo(s).then((g) => { setGsx(g); return g; })
+      .catch((e: unknown) => { setGsx(null); setGsxErr(e instanceof Error ? e.message : String(e)); return null; });
     try {
       const r = await assSeriale(s);
       setSer(r);
@@ -68,7 +77,19 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
         if (!v.prodotto) set("prodotto", etichettaFamiglia(r.famiglia_menu, famiglie).toUpperCase());
       }
       if (r.anno && (!v.anno || v.modello_fonte !== "manuale")) set("anno", r.anno);
-    } catch (e) { toastErrore(e); } finally { setBusy(false); }
+    } catch (e) { toastErrore(e); }
+    const g = await gsxP;
+    if (g && g.modello) {
+      if (v.modello_fonte !== "manuale") {
+        set("modello", g.modello); set("modello_fonte", "gsx"); set("modello_da_scheda", null);
+        if (g.anno) set("anno", g.anno);
+      }
+      if (g.prodotto_menu) { set("prodotto", g.prodotto_menu); if (g.famiglia_menu) set("famiglia", g.famiglia_menu); }
+      else if (g.famiglia_menu && !v.famiglia) set("famiglia", g.famiglia_menu);
+      if (g.imei && !v.imei) set("imei", g.imei);
+      set("gsx", g); set("gsx_letto_il", g.letto_il);
+    }
+    setBusy(false);
   }
   const altrePrecedenti = (ser?.precedenti || []).filter((p) => p.id !== idScheda);
 
@@ -126,6 +147,8 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
           </div>
         </div>
       )}
+
+      {(gsx || gsxErr) && <GsxPannello g={gsx} errore={gsxErr} />}
 
       <Campo label="Modello esatto" aiuto={v.modello && v.modello_fonte ? <>Fonte: <b>{v.modello_fonte === "scheda_precedente" && v.modello_da_scheda ? `già passato nella scheda ${v.modello_da_scheda}: modello preso da lì` : FONTE_TESTO[v.modello_fonte] || v.modello_fonte}</b></> : "si compila dalla decodifica del seriale (o da GSX)"}>
         <div className="flex gap-1.5">
