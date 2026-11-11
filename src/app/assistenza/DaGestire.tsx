@@ -12,7 +12,9 @@ const VOCI: [string, (n: number) => string][] = [
   ["ricambi_arrivati", (n) => `🔧 ${n} ${n === 1 ? "ricambio arrivato" : "ricambi arrivati"}: il tecnico può riparare`],
   ["da_assegnare_riparazione", (n) => `👍 ${n} ${n === 1 ? "preventivo accettato" : "preventivi accettati"}: assegna la riparazione`],
   ["preventivi_da_inviare", (n) => `📨 ${n} ${n === 1 ? "preventivo pronto" : "preventivi pronti"} da inviare`],
-  ["rifiutati", (n) => `↩️ ${n} ${n === 1 ? "rifiutato" : "rifiutati"}: da richiudere, poi il pronto (restituzione)`],
+  // 11/11/2026 (Christian): prima «da richiudere» (il tecnico), solo DOPO «invia il pronto»
+  ["rifiutati_da_rimontare", (n) => `🔩 ${n} ${n === 1 ? "rifiutato" : "rifiutati"} da richiudere (tecnico)`],
+  ["rifiutati", (n) => `↩️ ${n} ${n === 1 ? "rifiutato richiuso" : "rifiutati richiusi"}: invia il pronto (restituzione)`],
   ["da_spedire_noi", (n) => `📦 ${n} ${n === 1 ? "pagato" : "pagati"} da spedire`],
   ["trova_attivo", (n) => `🔒 ${n} con «Trova il mio» da disattivare`],
   ["da_assegnare_verifica", (n) => `🔍 ${n} da assegnare in verifica`],
@@ -23,7 +25,14 @@ const CHIAVE = "assistenza-da-gestire-visti";
 export interface Novita { id: string; sigla: string; cliente: string | null; prodotto: string | null; tipo: "accettato" | "rifiutato";
   il: string; canale: string | null; richiesta: string | null;
   /** 30/10/2026 (63249): risposta a un preventivo AGGIUNTIVO su una scheda già in riparazione → avvisato il tecnico */
-  aggiuntivo?: boolean; tecnico?: string | null }
+  aggiuntivo?: boolean; tecnico?: string | null;
+  /** 11/11/2026: rifiutato ancora da richiudere (rimontaggio da_fare / non deciso) */
+  rimontaggio?: string | null; da_richiudere?: boolean }
+
+function dopoRifiuto(x: Novita): string {
+  if (!x.da_richiudere) return "→ invia il pronto (restituzione)";
+  return x.rimontaggio === "da_fare" && x.tecnico ? `→ da richiudere — assegnato a ${x.tecnico.charAt(0)}${x.tecnico.slice(1).toLowerCase()}` : "→ da richiudere: assegnalo a un tecnico";
+}
 
 export function DaGestire({ fasi, onApri, novita = [], onScheda }: {
   fasi: FaseCruscotto[] | null; onApri: (fase: string) => void; novita?: Novita[]; onScheda?: (id: string) => void;
@@ -51,7 +60,7 @@ export function DaGestire({ fasi, onApri, novita = [], onScheda }: {
           <span className={`rounded px-1.5 text-[11px] font-bold text-white ${x.tipo === "accettato" ? "bg-emerald-600" : "bg-red-600"}`}>🆕 {x.aggiuntivo ? "AGGIUNTIVO " : ""}{x.tipo === "accettato" ? "ACCETTATO" : "RIFIUTATO"}</span>
           <b>Scheda {x.sigla}</b><span>{x.cliente}</span><span className="text-xs text-muted-foreground">{x.prodotto}</span>
           <span className="text-xs text-muted-foreground">{x.canale ? `${x.canale} · ` : ""}{new Date(x.il).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-          <span className="text-xs font-medium">{x.tipo === "accettato" ? "→ assegna la riparazione" : "→ invia il pronto (restituzione)"}</span>
+          <span className="text-xs font-medium">{x.tipo === "accettato" ? "→ assegna la riparazione" : dopoRifiuto(x)}</span>
           {x.richiesta && <span className="w-full text-xs"><b>Il cliente chiede:</b> {x.richiesta}</span>}
         </button>
       ))}

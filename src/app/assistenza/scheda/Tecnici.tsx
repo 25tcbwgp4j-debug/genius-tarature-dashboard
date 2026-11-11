@@ -73,17 +73,29 @@ export function DialogoChiudiVerifica({ s, tecnici, onClose, onChiudi }: {
 
 /** Pannello in testa alla lavorazione: chi verifica / chi ripara e lo STATO DELLA RIPARAZIONE a un clic. */
 // 03/11/2026 (Christian, 63185): gli stati della riparazione a gruppi, con preventivo e lavorazione effettuata sott'occhio
+// 11/11/2026 (Christian): ampliati con gli stati visti davvero in questi giorni (registro + gruppo staff dal 23/10)
 const GRUPPI_RIPARAZIONE: { titolo: string; stati: string[] }[] = [
-  { titolo: "A che punto è", stati: ["in_corso", "attesa_ricambi", "ricambio_arrivato", "piu_tempo"] },
-  { titolo: "Serve il cliente", stati: ["aggiornamento_cliente", "disabilitare_trova"] },
+  { titolo: "Al lavoro (verde)", stati: ["in_corso", "su_banco", "test_in_corso", "copia_dati", "piu_tempo"] },
+  { titolo: "Ricambi e partner", stati: ["attesa_ricambi", "ricambio_arrivato", "attesa_partner"] },
+  { titolo: "Serve il cliente", stati: ["attesa_cliente", "aggiornamento_cliente", "disabilitare_trova"] },
+  { titolo: "Chiusura", stati: ["da_richiudere", "test_finale"] },
   { titolo: "Com'è finita", stati: ["finita", "non_riparabile"] },
 ];
+/** colore del pulsante dello stato SELEZIONATO: verde al lavoro, ambra in attesa, rosso non riparabile */
+const ATTESA = ["attesa_ricambi", "attesa_partner", "attesa_cliente", "aggiornamento_cliente", "disabilitare_trova", "ritirato_temporaneo"];
+function colorePill(k: string): "verde" | "ambra" | "rosso" | "blu" {
+  return k === "non_riparabile" ? "rosso" : ATTESA.includes(k) ? "ambra" : k === "finita" ? "blu" : "verde";
+}
 
 /** La nota che accompagna lo stato della riparazione (prima era un prompt del browser). */
-export function DialogoStatoRiparazione({ stato, serveRicambio, totale, onClose, onConferma }: {
-  stato: string; serveRicambio: boolean; totale: number | null | undefined; onClose: () => void; onConferma: (nota: string, importo?: number) => Promise<boolean>;
+export function DialogoStatoRiparazione({ stato, serveRicambio, totale, onClose, onConferma, notaClienteIniziale = "" }: {
+  stato: string; serveRicambio: boolean; totale: number | null | undefined; onClose: () => void;
+  /** 11/11/2026: notaCliente = NOTA PER IL CLIENTE (solo «finita» / «non riparabile»): va nel PRONTO, non parte adesso */
+  onConferma: (nota: string, importo?: number, notaCliente?: string) => Promise<boolean>; notaClienteIniziale?: string;
 }) {
   const [nota, setNota] = useState("");
+  const esito = stato === "finita" || stato === "non_riparabile";
+  const [notaCliente, setNotaCliente] = useState(notaClienteIniziale);
   const [importo, setImporto] = useState("0");
   const [busy, setBusy] = useState(false);
   const nonRip = stato === "non_riparabile";
@@ -92,7 +104,10 @@ export function DialogoStatoRiparazione({ stato, serveRicambio, totale, onClose,
     attesa_ricambi: ["In attesa ricambi", serveRicambio ? "Quale ricambio serve? Va tra i ricambi da ordinare." : "Nota sul ricambio (facoltativa): dove è ordinato, quando arriva.", "es. batteria Dell PKWVM 95Wh"],
     piu_tempo: ["Serve più tempo", "Perché serve più tempo? (facoltativo)", ""],
     ritirato_temporaneo: ["Ritirato dal cliente, lo riporterà", "Cosa resta da fare quando lo riporta? (facoltativo)", "es. salva i dati a casa, poi aggiornamento da € 89"],
-    finita: ["Riparazione finita", "Cosa hai fatto? Resta nelle note di riparazione.", "es. sostituita scheda logica, test finale OK"],
+    finita: ["Riparazione finita", "Cosa hai fatto? (INTERNO: resta nelle note di riparazione, il cliente non lo vede)", "es. sostituita scheda logica, test finale OK"],
+    attesa_cliente: ["In attesa del cliente", "Cosa aspettiamo dal cliente? (password, codice, conferma…)", "es. codice di sblocco dell'iPhone"],
+    attesa_partner: ["In attesa del partner", "Da chi e per cosa? (facoltativo)", "es. Bagnetti: sostituzione Apple in corso"],
+    copia_dati: ["Copia dati in corso", "Nota sulla copia (facoltativa): quanti dati, dove, tempi.", "es. 1,8 TB su chiavetta del cliente, circa 2 giorni"],
     non_riparabile: ["Non riparabile", "Perché non è riparabile? Va nella lavorazione effettuata e nel PRONTO al cliente.", "es. processore morto"],
   };
   const [titolo, testo, esempio] = testi[stato];
@@ -101,11 +116,16 @@ export function DialogoStatoRiparazione({ stato, serveRicambio, totale, onClose,
       <Button variant="outline" onClick={onClose}>Annulla</Button>
       <Button disabled={busy || (obbligatoria && !nota.trim())} onClick={async () => {
         setBusy(true);
-        try { if (await onConferma(nota.trim(), nonRip ? Number(importo.replace(",", ".")) || 0 : undefined)) onClose(); } finally { setBusy(false); }
+        try { if (await onConferma(nota.trim(), nonRip ? Number(importo.replace(",", ".")) || 0 : undefined, esito ? notaCliente.trim() : undefined)) onClose(); } finally { setBusy(false); }
       }}>{busy && <Loader2 className="animate-spin" />}Conferma</Button>
     </>}>
       <div className="space-y-3">
         <Campo label={testo}><textarea className={`${area} min-h-[84px]`} autoFocus value={nota} placeholder={esempio} onChange={(e) => setNota(e.target.value)} /></Campo>
+        {esito && (
+          <Campo label="📣 Nota per il CLIENTE (facoltativa)" aiuto="Va nel PRONTO al cliente (mail, WhatsApp e PDF) e nel consuntivo. Ora non parte niente: il pronto lo manda il banco.">
+            <textarea className={`${area} min-h-[70px] border-sky-400`} value={notaCliente} onChange={(e) => setNotaCliente(e.target.value)} maxLength={1500}
+              placeholder={stato === "finita" ? "es. Il dispositivo è stato riparato ed è funzionante: funziona tutto ad eccezione dell'eSIM" : "es. La scheda logica ha il processore danneggiato: la riparazione non è possibile"} />
+          </Campo>)}
         {nonRip && (
           <Campo label="Importo da far pagare €" aiuto={`Sostituisce il totale del preventivo${totale != null ? ` (${eur(Number(totale))})` : ""}. Comprendi le spese di spedizione, se ci sono. Il cliente lo riceve solo quando mandi il PRONTO.`}>
             <input className={campo} type="number" min={0} step={1} value={importo} onChange={(e) => setImporto(e.target.value)} />
@@ -152,11 +172,19 @@ export function PannelloTecnici({ s, tecnici, ro, busy, onAssegnaVerifica, onChi
         <div className="rounded-lg border p-3" data-testid="pannello-riparazione">
           <div className="mb-1 flex flex-wrap items-center gap-2 text-sm">
             <b>Riparazione</b>
-            {s.tecnico_riparazione ? <Pill tono={s.riparazione_stato === "finita" ? "verde" : "blu"}>{nomeTecnico(s.tecnico_riparazione, tecnici)}
+            {s.tecnico_riparazione ? <Pill tono={colorePill(s.riparazione_stato || "in_corso")}>{nomeTecnico(s.tecnico_riparazione, tecnici)}
               {s.riparazione_stato ? ` · ${STATI_RIPARAZIONE.find(([k]) => k === s.riparazione_stato)?.[1] || s.riparazione_stato}` : ""}</Pill>
               : inRiparazione ? <Pill tono="ambra">da assegnare</Pill> : <Pill>—</Pill>}
           </div>
-          {s.riparazione_assegnata_il && <div className="text-xs text-muted-foreground">assegnata {dataOra(s.riparazione_assegnata_il)}</div>}
+          {s.riparazione_assegnata_il && <div className="text-xs text-muted-foreground">assegnata {dataOra(s.riparazione_assegnata_il)}
+            {/* 11/11/2026: da quando e da chi è in questo stato */}
+            {s.riparazione_stato_il && s.riparazione_stato && <> · stato dal {dataOra(s.riparazione_stato_il)}{s.riparazione_stato_da ? ` (${s.riparazione_stato_da})` : ""}</>}</div>}
+          {/* 11/11/2026 (Christian): rifiutato da richiudere — si vede a chi è assegnato finché non è richiuso */}
+          {st === "rifiutato" && (
+            <div className="mt-1">{s.rimontaggio === "da_fare" ? <Pill tono="verde">🔩 Da richiudere — {nomeTecnico(s.tecnico_riparazione, tecnici) || "da assegnare"}</Pill>
+              : s.rimontaggio === "fatto" ? <Pill tono="blu">Richiuso · {nomeTecnico(s.tecnico_riparazione, tecnici)}: invia il pronto</Pill>
+                : s.rimontaggio === "non_serve" ? <Pill>Non smontato: invia il pronto</Pill> : <Pill tono="rosso">Da richiudere: assegna a un tecnico</Pill>}</div>)}
+          {s.nota_cliente_esito && <div className="mt-2 rounded-md border border-sky-300 bg-sky-50 p-2 text-sm dark:bg-sky-950/30"><b>📣 Nota per il cliente:</b> {s.nota_cliente_esito}</div>}
           {["accettato", "pronto", "consegnato"].includes(st) && (
             <div className="mt-2 grid gap-1 rounded-md bg-muted/40 p-2 text-sm">
               <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => onVai("preventivo")}>
@@ -185,7 +213,8 @@ export function PannelloTecnici({ s, tecnici, ro, busy, onAssegnaVerifica, onChi
                     {STATI_RIPARAZIONE.filter(([k]) => g.stati.includes(k)).map(([k, l]) => (
                       <button key={k} type="button" disabled={busy} onClick={() => onStato(k)} aria-pressed={s.riparazione_stato === k}
                         className={cn("rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-60",
-                          s.riparazione_stato === k ? (k === "finita" ? "border-emerald-600 bg-emerald-600 text-white" : k === "non_riparabile" ? "border-rose-700 bg-rose-700 text-white" : "border-primary bg-primary text-primary-foreground")
+                          s.riparazione_stato === k ? (k === "finita" ? "border-emerald-600 bg-emerald-600 text-white" : k === "non_riparabile" ? "border-rose-700 bg-rose-700 text-white"
+                            : ATTESA.includes(k) ? "border-amber-500 bg-amber-500 text-white" : "border-emerald-600 bg-emerald-600 text-white")
                             : k === "disabilitare_trova" || k === "non_riparabile" ? "border-rose-300 bg-rose-50 text-rose-900 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-100" : "bg-background hover:bg-muted")}>
                         {l}</button>
                     ))}

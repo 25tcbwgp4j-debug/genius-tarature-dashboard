@@ -24,7 +24,10 @@ export interface SchedaBreve {
   /** 27/10/2026: verifica del titolare sui preventivi del banco */
   preventivo_verifica?: { stato: "richiesta" | "approvato" | "da_correggere"; richiesta_da?: string; richiesta_il?: string; nota?: string | null;
     risposta?: string | null; risposta_da?: string; risposta_il?: string } | null; passaggio?: { da: string; a: string; testo: string; il: string; letto_il: string | null } | null;
+  /** 11/11/2026 (Christian): DATI DEL CLIENTE (importanti = tentare il recupero, NON formattare · formattabile) */
+  dati_cliente?: DatiCliente | null; dati_cliente_nota?: string | null; rimontaggio?: string | null; riparazione_stato_il?: string | null;
 }
+export type DatiCliente = "importanti" | "formattabile";
 export interface Evento { id: string; tipo: string; descrizione: string; operatore: string | null; creato_da: string | null; created_at: string; dati?: Record<string, unknown> }
 export interface Anagrafica { id: string; denominazione: string; piva?: string | null; cf?: string | null; telefono?: string | null; email?: string | null;
   referente?: string | null; indirizzo?: string | null; cap?: string | null; comune?: string | null; provincia?: string | null; paese?: string | null;
@@ -37,7 +40,9 @@ export interface Anagrafica { id: string; denominazione: string; piva?: string |
   spedizioni_carico?: "noi" | "cliente" | "misto" | null; spedizione_tipo_default?: "ar" | "solo_ritiro" | "solo_ritorno" | null; spedizione_importo_default?: number | string | null }
 export interface SchedaCliente extends Anagrafica { schede: { id: string; sigla: string; prodotto: string | null; modello: string | null; difetto: string | null; stato: string; created_at: string }[] }
 export interface Scheda extends SchedaBreve {
-  rimontaggio?: string | null;
+  /** 11/11/2026: chi/quando ha scelto i dati · proposta dai testi (solo visiva) · nota per il cliente all'esito · ultimo stato riparazione */
+  dati_cliente_il?: string | null; dati_cliente_da?: string | null; dati_cliente_proposta?: { valore: DatiCliente; motivo: string } | null;
+  nota_cliente_esito?: string | null; riparazione_stato_da?: string | null;
   attesa_cliente_il?: string | null; attesa_cliente_nota?: string | null;
   /** 27/10/2026 (63182): calcolati dal backend (stessa regola di pronto, PDF, mail) */
   totale_dovuto?: number; esito_pronto?: string; seriale_nuovo?: string | null; imei_nuovo?: string | null; consegna_effettiva?: "ritiro" | "spedizione";
@@ -83,7 +88,9 @@ export interface Passo { codice: string; etichetta: string; stato: "fatto" | "at
 /** 04/11/2026 (Christian): una riga della lavorazione effettuata, copia della riga del preventivo */
 export interface VoceLavorazione { chiave: string; testo: string; importo: number | null; tipo: string; aggiuntivo: boolean;
   stato: "accettata" | "non_accettata" | "non_fatta" | "attesa" }
-export interface Avanzamento { passi: Passo[]; attuale: string | null;
+/** 11/11/2026 (Christian): SITUAZIONE ATTUALE del dispositivo (chi ce l'ha, cosa si aspetta, da quando) — assistenza_v2.situazione */
+export interface Situazione { titolo: string; dettaglio: string; chi: string; da: string | null; tono: "verde" | "ambra" | "rosso" | "blu" | "grigio" }
+export interface Avanzamento { passi: Passo[]; attuale: string | null; situazione?: Situazione;
   /** 26/10/2026: blocco «trova» = «Trova il mio» attivo; riconsegna = cosa si riconsegna davvero (es. solo l'hard disk) */
   prossimo: { azione?: string; testo?: string; blocco?: string; riconsegna?: string; avviso?: string; poi?: string; alternativa?: string } }
 export interface Comunicazione { id: string; tipo: string; canale: "mail" | "whatsapp"; descrizione: string; created_at: string; operatore: string | null;
@@ -261,7 +268,16 @@ export const TIPI_CLIENTE: [string, string][] = [["privato", "Privato"], ["azien
 export const STATI_RIPARAZIONE: [string, string][] = [["in_corso", "In riparazione"], ["attesa_ricambi", "⏳ In attesa ricambi"], ["ricambio_arrivato", "🔧 Ricambio arrivato"],
   ["piu_tempo", "Serve più tempo"], ["aggiornamento_cliente", "Aggiornamento da fare al cliente"],
   ["disabilitare_trova", "Disabilitare «Trova il mio dispositivo»"], ["finita", "✔ Finita"], ["non_riparabile", "✖ Non riparabile"],
-  ["ritirato_temporaneo", "📦 Ritirato dal cliente, lo riporterà"]];  // 09/11/2026 (Christian, 63349/63351)
+  ["ritirato_temporaneo", "📦 Ritirato dal cliente, lo riporterà"],  // 09/11/2026 (Christian, 63349/63351)
+  // 11/11/2026 (Christian): stati visti davvero in questi giorni (registro + gruppo staff)
+  ["su_banco", "🔧 In lavorazione sul banco"], ["test_in_corso", "🧪 Test in corso (AST2 / MRI)"], ["copia_dati", "💾 Copia dati in corso"],
+  ["attesa_cliente", "💬 In attesa del cliente (password, codice, conferma)"], ["attesa_partner", "🏢 In attesa del partner (Bagnetti / Apple)"],
+  ["da_richiudere", "🔩 Da richiudere"], ["test_finale", "✅ Richiuso: test finale"]];
+/** 11/11/2026: testo e colori dei DATI DEL CLIENTE (banner della scheda, badge dell'elenco) */
+export const DATI_CLIENTE: Record<DatiCliente, { breve: string; lungo: string }> = {
+  importanti: { breve: "⚠️ DATI IMPORTANTI", lungo: "DATI IMPORTANTI: tentare il recupero, NON formattare" },
+  formattabile: { breve: "✅ Formattabile", lungo: "Si può formattare / resettare: dati non importanti o salvati altrove" },
+};
 export const CANALI_RISPOSTA: [string, string][] = [["telefono", "Telefono"], ["whatsapp", "WhatsApp"], ["mail", "Mail"], ["negozio", "In negozio"], ["online", "Online"]];
 /** Nome del tecnico dal codice (ALEX → Alex). */
 export const nomeTecnico = (cod: string | null | undefined, tecnici: { codice: string; nome: string }[] = []) =>

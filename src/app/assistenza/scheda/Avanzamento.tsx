@@ -7,7 +7,25 @@ import type React from "react";
 import { ArrowRight, Check, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { dataOra, type Avanzamento as Av } from "@/lib/assistenza";
+import { dataOra, type Avanzamento as Av, type Situazione } from "@/lib/assistenza";
+
+// 11/11/2026 (Christian): colori della SITUAZIONE ATTUALE — verde = in corso e assegnato · ambra = si aspetta qualcuno ·
+// rosso = bloccata / decisione urgente · blu = tocca al banco · grigio = chiusa
+const TONI: Record<Situazione["tono"], { box: string; pallino: string; etichetta: string }> = {
+  verde: { box: "border-emerald-500 bg-emerald-50 text-emerald-950 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-50", pallino: "bg-emerald-500", etichetta: "IN CORSO" },
+  ambra: { box: "border-amber-400 bg-amber-50 text-amber-950 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-50", pallino: "bg-amber-500", etichetta: "IN ATTESA" },
+  rosso: { box: "border-red-500 bg-red-50 text-red-950 dark:border-red-600 dark:bg-red-950/40 dark:text-red-50", pallino: "bg-red-600", etichetta: "BLOCCATA / DA DECIDERE" },
+  blu: { box: "border-sky-400 bg-sky-50 text-sky-950 dark:border-sky-600 dark:bg-sky-950/40 dark:text-sky-50", pallino: "bg-sky-500", etichetta: "TOCCA AL BANCO" },
+  grigio: { box: "border-border bg-muted/60 text-foreground", pallino: "bg-muted-foreground", etichetta: "CHIUSA" },
+};
+
+/** «da 3 giorni» / «da oggi» / «da ieri» */
+function daQuanto(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const giorni = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (Number.isNaN(giorni)) return "";
+  return giorni <= 0 ? "da oggi" : giorni === 1 ? "da ieri" : `da ${giorni} giorni`;
+}
 
 const AZIONI: Record<string, string> = {
   arrivato: "Dispositivo arrivato", preventivo: "Vai al preventivo", invia_preventivo: "INVIA PREVENTIVO", esito: "Accettato / Rifiutato",
@@ -18,8 +36,10 @@ const AZIONI: Record<string, string> = {
   ricevuta: "INVIA RICEVUTA", in_vendita: "🏷️ Metti IN VENDITA", richiedi_etichetta: "📨 Pagamento arrivato: chiedi l'etichetta di ritorno",
 };
 
-export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, onRiconsegna, rinvii }: {
+export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, onRiconsegna, rinvii, nome }: {
   av: Av; onAzione: (azione: string) => void; disabilitato?: boolean;
+  /** 11/11/2026: nome leggibile del tecnico (ALEX → Alex) nella situazione attuale */
+  nome?: (codice: string) => string;
   /** 27/10/2026 (Christian, 63224): i RINVII al cliente (ricevuta, preventivo, aggiornamento, pronto da pagare) e CAMBIA STATO,
    *  qui accanto al prossimo passo, in qualsiasi momento */
   rinvii?: React.ReactNode;
@@ -28,8 +48,55 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
 }) {
   const az = av.prossimo?.azione || "";
   const bloccata = av.prossimo?.blocco === "trova";
+  const sit = av.situazione;
+  const tono = TONI[sit?.tono || (bloccata ? "rosso" : "blu")];
+  const titolo = sit ? (sit.chi && nome ? sit.titolo.split(sit.chi).join(nome(sit.chi) || sit.chi) : sit.titolo) : "";
   return (
     <div className="rounded-xl border bg-card p-3 shadow-sm">
+      {/* 11/11/2026 (Christian): SITUAZIONE ATTUALE grande e colorata — chi ce l'ha, cosa si aspetta, da quando — col prossimo passo */}
+      {(sit || av.prossimo?.testo) && (
+        <div className={cn("mb-3 rounded-xl border-2 px-3 py-2.5", tono.box)} data-testid="situazione" data-tono={sit?.tono}>
+          {sit && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide opacity-80">
+                <span className={cn("size-2.5 rounded-full", tono.pallino, sit.tono === "verde" && "animate-pulse")} />{tono.etichetta}</span>
+              <span className="text-lg font-bold leading-tight sm:text-xl">{titolo}</span>
+              {sit.da && <span className="text-sm font-medium tabular-nums opacity-80" title={dataOra(sit.da)}>{daQuanto(sit.da)} · {dataOra(sit.da)}</span>}
+              {sit.dettaglio && <span className="w-full text-sm opacity-90">{sit.dettaglio}</span>}
+            </div>
+          )}
+          {av.prossimo?.testo && (
+            <div className={cn("flex flex-wrap items-center gap-2 text-sm", sit && "mt-2 border-t border-current/15 pt-2")}>
+              <span className="font-semibold">{bloccata ? "🔒 Prossimo passo:" : "Prossimo passo:"}</span>
+              <span className="font-medium">{av.prossimo.testo}</span>
+              {av.prossimo.poi && <span className="text-xs opacity-80">· poi: {av.prossimo.poi}</span>}
+              {az === "spedisci" && (
+                <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("consegna")}
+                  title="Il pacco è già partito (etichetta fatta altrove) o il cliente l'ha ritirato: registra solo la consegna">Già spedito: CONSEGNA</Button>)}
+              {av.prossimo.alternativa === "invia_consuntivo" && (
+                <Button size="sm" variant="outline" className="ml-auto border-emerald-400" disabled={disabilitato} onClick={() => onAzione("pronto")}
+                  title="Rimanda al cliente il consuntivo di pagamento (mail + WhatsApp + PDF, con bonifico o PayPal + commissione): si apre il pannello PRONTO già compilato">📨 Invia consuntivo di pagamento</Button>)}
+              {/* 28/10/2026 (63130): corriere del cliente — chiedere (o richiedere di nuovo) l'etichetta, oppure consegnare */}
+              {(av.prossimo.alternativa === "richiedi_etichetta" || (av.prossimo.alternativa === "consegna" && az !== "spedisci")) && (
+                <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione(av.prossimo!.alternativa!)}>
+                  {av.prossimo.alternativa === "consegna" ? "Ho già l'etichetta: CONSEGNA" : "📨 Richiedi di nuovo l'etichetta"}</Button>)}
+              {av.prossimo.alternativa === "rifiutato_diretto" && (
+                <Button size="sm" variant="outline" className="ml-auto border-red-300 text-red-700" disabled={disabilitato} onClick={() => onAzione("rifiutato_diretto")}
+                  title="Preventivo negativo (es. irreparabile): si segna RIFIUTATO senza mandarlo al cliente da accettare, poi si va al PRONTO">Negativo: segna RIFIUTATO</Button>)}
+              {/* 04/11/2026 (Christian): rifiutato ma mai smontato → non c'è niente da richiudere */}
+              {av.prossimo.alternativa === "non_richiudere" && (
+                <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("non_richiudere")}
+                  title="Il dispositivo non è stato smontato: non serve un tecnico, si passa al PRONTO">Non smontato: non richiudere</Button>)}
+              {/* 29/10/2026 (Christian): verifica e preventivo si saltano quando non servono */}
+              {(az === "assegna_verifica" || az === "chiudi_verifica") && <Button size="sm" variant="ghost" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("salta_verifica")} title="La verifica non serve: si passa al preventivo">Non serve: salta la verifica</Button>}
+              {(az === "preventivo" || az === "invia_preventivo") && <Button size="sm" variant="ghost" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("salta_preventivo")} title="Prezzo già concordato: si considera accettato senza inviarlo e si va alla riparazione">Non serve: salta il preventivo</Button>}
+              {az === "ricevuta" && <Button size="sm" variant="ghost" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("ricevuta_no")} title="Il cliente non vuole la ricevuta / l'ha già avuta">Non serve</Button>}
+              {az && <Button size="sm" className={(az === "rimontaggio" && av.passi.find((p) => p.codice === "riparazione")?.stato !== "attuale") || ["ricevuta", "assegna_verifica", "chiudi_verifica", "preventivo", "invia_preventivo"].includes(az) || av.prossimo.alternativa ? "" : "ml-auto"}
+                variant={bloccata ? "destructive" : "default"} disabled={disabilitato} onClick={() => onAzione(az)}>{AZIONI[az] || az}<ArrowRight /></Button>}
+            </div>
+          )}
+        </div>
+      )}
       <ol className="flex items-stretch gap-1 overflow-x-auto pb-1">
         {av.passi.map((p, i) => (
           <li key={p.codice} className="flex min-w-[78px] flex-1 flex-col items-center gap-1 text-center">
@@ -51,37 +118,6 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
           </li>
         ))}
       </ol>
-      {av.prossimo?.testo && (
-        <div className={cn("mt-2 flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm",
-          bloccata ? "border border-red-300 bg-red-50 text-red-950 dark:bg-red-950/30 dark:text-red-100" : "bg-primary/5")}>
-          <span className="font-medium">{bloccata ? "🔒 Prossimo passo:" : "Prossimo passo:"}</span>
-          <span className={bloccata ? "font-medium" : "text-muted-foreground"}>{av.prossimo.testo}</span>
-          {av.prossimo.poi && <span className="text-xs text-muted-foreground">· poi: {av.prossimo.poi}</span>}
-          {az === "spedisci" && (
-            <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("consegna")}
-              title="Il pacco è già partito (etichetta fatta altrove) o il cliente l'ha ritirato: registra solo la consegna">Già spedito: CONSEGNA</Button>)}
-          {av.prossimo.alternativa === "invia_consuntivo" && (
-            <Button size="sm" variant="outline" className="ml-auto border-emerald-400" disabled={disabilitato} onClick={() => onAzione("pronto")}
-              title="Rimanda al cliente il consuntivo di pagamento (mail + WhatsApp + PDF, con bonifico o PayPal + commissione): si apre il pannello PRONTO già compilato">📨 Invia consuntivo di pagamento</Button>)}
-          {/* 28/10/2026 (63130): corriere del cliente — chiedere (o richiedere di nuovo) l'etichetta, oppure consegnare */}
-          {(av.prossimo.alternativa === "richiedi_etichetta" || (av.prossimo.alternativa === "consegna" && az !== "spedisci")) && (
-            <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione(av.prossimo!.alternativa!)}>
-              {av.prossimo.alternativa === "consegna" ? "Ho già l'etichetta: CONSEGNA" : "📨 Richiedi di nuovo l'etichetta"}</Button>)}
-          {av.prossimo.alternativa === "rifiutato_diretto" && (
-            <Button size="sm" variant="outline" className="ml-auto border-red-300 text-red-700" disabled={disabilitato} onClick={() => onAzione("rifiutato_diretto")}
-              title="Preventivo negativo (es. irreparabile): si segna RIFIUTATO senza mandarlo al cliente da accettare, poi si va al PRONTO">Negativo: segna RIFIUTATO</Button>)}
-          {/* 04/11/2026 (Christian): rifiutato ma mai smontato → non c'è niente da richiudere */}
-          {av.prossimo.alternativa === "non_richiudere" && (
-            <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("non_richiudere")}
-              title="Il dispositivo non è stato smontato: non serve un tecnico, si passa al PRONTO">Non smontato: non richiudere</Button>)}
-          {/* 29/10/2026 (Christian): verifica e preventivo si saltano quando non servono */}
-          {(az === "assegna_verifica" || az === "chiudi_verifica") && <Button size="sm" variant="ghost" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("salta_verifica")} title="La verifica non serve: si passa al preventivo">Non serve: salta la verifica</Button>}
-          {(az === "preventivo" || az === "invia_preventivo") && <Button size="sm" variant="ghost" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("salta_preventivo")} title="Prezzo già concordato: si considera accettato senza inviarlo e si va alla riparazione">Non serve: salta il preventivo</Button>}
-          {az === "ricevuta" && <Button size="sm" variant="ghost" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("ricevuta_no")} title="Il cliente non vuole la ricevuta / l'ha già avuta">Non serve</Button>}
-          {az && <Button size="sm" className={(az === "rimontaggio" && av.passi.find((p) => p.codice === "riparazione")?.stato !== "attuale") || ["ricevuta", "assegna_verifica", "chiudi_verifica", "preventivo", "invia_preventivo"].includes(az) || av.prossimo.alternativa ? "" : "ml-auto"}
-            variant={bloccata ? "destructive" : "default"} disabled={disabilitato} onClick={() => onAzione(az)}>{AZIONI[az] || az}<ArrowRight /></Button>}
-        </div>
-      )}
       {rinvii && <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed px-3 py-1.5 text-sm">{rinvii}</div>}
       {av.prossimo?.avviso && (
         <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">🔒 {av.prossimo.avviso}</div>

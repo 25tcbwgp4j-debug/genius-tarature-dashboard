@@ -17,8 +17,9 @@ import { toastErrore } from "@/lib/errori";
 import type { RicambioAtteso } from "@/lib/assistenza";
 import { fetchAPI } from "@/lib/api";
 import {
-  assAzione, assDocUrl, assEtichettaUrl, assModifica, assScheda, assTrackUrl, dataOra, DOCUMENTI_PDF, eur, pagaFineMese, type ConfigAssistenza, type DocPdf, type Esito, type Scheda,
+  assAzione, assDocUrl, assEtichettaUrl, assModifica, assScheda, assTrackUrl, dataOra, DOCUMENTI_PDF, eur, nomeTecnico, pagaFineMese, type ConfigAssistenza, type DocPdf, type Esito, type Scheda,
 } from "@/lib/assistenza";
+import { BannerDati } from "./DatiCliente";
 import type { EstimateLine } from "@/lib/assistenza-preventivo";
 import { Apparecchio, type ValoriApparecchio } from "./Apparecchio";
 import { Assistente } from "./Assistente";
@@ -240,14 +241,16 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     catch (e) { toastErrore(e); }
   }
   // 03/11/2026 (Christian, 63185): la nota si scrive in una finestra vera; «non riparabile» chiede il motivo e l'importo
-  async function salvaStatoRiparazione(stato: string, nota = "", importo?: number) {
+  async function salvaStatoRiparazione(stato: string, nota = "", importo?: number, notaCliente?: string) {
     const finale = stato === "finita" ? "FINITA — ora «PRONTO»" : stato === "non_riparabile" ? "NON RIPARABILE — ora «PRONTO»" : "stato aggiornato";
-    const r = await azione("stato-riparazione", { riparazione_stato: stato, nota, ...(importo !== undefined ? { importo } : {}) }, `Riparazione: ${finale}`);
+    // 11/11/2026 (Christian, 63354): all'esito anche la NOTA PER IL CLIENTE (va nel pronto; non parte niente adesso)
+    const r = await azione("stato-riparazione", { riparazione_stato: stato, nota, ...(importo !== undefined ? { importo } : {}),
+      ...(notaCliente !== undefined ? { nota_cliente: notaCliente } : {}) }, `Riparazione: ${finale}`);
     if (r && (stato === "aggiornamento_cliente" || stato === "disabilitare_trova")) setDlg({ k: "invio", tipo: "aggiornamento_riparazione" });
     return !!r;
   }
   function statoRiparazione(stato: string) {
-    if (["attesa_ricambi", "piu_tempo", "finita", "non_riparabile", "ritirato_temporaneo"].includes(stato)) setDlg({ k: "stato_riparazione", stato });
+    if (["attesa_ricambi", "piu_tempo", "finita", "non_riparabile", "ritirato_temporaneo", "attesa_cliente", "attesa_partner", "copia_dati"].includes(stato)) setDlg({ k: "stato_riparazione", stato });
     else salvaStatoRiparazione(stato);
   }
 
@@ -297,9 +300,16 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <div className="rounded-lg border-2 border-red-500 bg-red-50 px-3 py-3 text-center text-xl font-extrabold text-red-700 dark:bg-red-950/30 dark:text-red-200">
           ⚠️ {s.opencore_avviso}
         </div>)}
+      {/* 11/11/2026 (Christian): DATI DEL CLIENTE in cima, molto evidenti (rosso = non formattare) */}
+      <BannerDati s={s} ro={ro} onSalva={async (valore, nota) => {
+        if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return false; }
+        try { setS(await assModifica(s.id, { dati_cliente: valore, dati_cliente_nota: nota || null, operatore }));
+          toast.success(valore === "importanti" ? "Segnato: DATI IMPORTANTI, non formattare" : valore ? "Segnato: si può formattare" : "Dati: non indicato"); onCambiata(); return true; }
+        catch (e) { toastErrore(e); return false; }
+      }} />
       <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={() => setDlg({ k: "invio", tipo: "trova" })}
         onPreventivo={() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
-      <Avanzamento av={s.avanzamento} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)}
+      <Avanzamento av={s.avanzamento} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)} nome={(c) => nomeTecnico(c, tecnici)}
         rinvii={<>
           {!ro && st !== "in_arrivo" && st !== "annullata" && <>
             <span className="text-xs font-medium text-muted-foreground">📨 Rinvia al cliente:</span>
@@ -531,7 +541,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         onEsito={async (body) => !!(await azione("esito-preventivo", body, body.esito === "accettato" ? "ACCETTATO: in riparazione, lavorazione precompilata" : "Preventivo RIFIUTATO"))} />}
       {dlg?.k === "stato_riparazione" && <DialogoStatoRiparazione stato={dlg.stato} totale={s.totale_lavorazione as number | null | undefined}
         serveRicambio={!(s.ricambi_attesi || []).some((r) => r.stato !== "arrivato")} onClose={() => setDlg(null)}
-        onConferma={(nota, importo) => salvaStatoRiparazione(dlg.stato, nota, importo)} />}
+        notaClienteIniziale={s.nota_cliente_esito || ""}
+        onConferma={(nota, importo, notaCliente) => salvaStatoRiparazione(dlg.stato, nota, importo, notaCliente)} />}
       {dlg?.k === "pronto" && <DialogoPronto paypalFee={cfg?.paypal_fee} s={s} lavorazione={String(v("lavorazione") || "")} totale={(v("totale_lavorazione") as number | null) ?? null} onClose={() => setDlg(null)}
         onInvia={async (body) => { const r = await azione("pronto", body, body.programma_il ? "PRONTO programmato" : "PRONTO"); return r ? (r.esito as Esito) : null; }} />}
       {dlg?.k === "cambia_stato" && <DialogoCambiaStato s={s} onClose={() => setDlg(null)} onConferma={async (b) => !!(await azione("riapri", b, "Stato della scheda cambiato"))} />}
@@ -562,7 +573,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         onClose={() => setDlg(null)} onAssegna={async (t, m) => !!(await azione("assegna-riparazione", { tecnico: t, messaggio: m }, `Riparazione assegnata a ${t}${m ? " con messaggio" : ""}`))} />}
       {dlg?.k === "assegna_rimontaggio" && <DialogoAssegna titolo={`Rifiutato da richiudere — scheda ${s.sigla}`} tecnici={tecnici} attuale={s.tecnico_riparazione}
         testo="Il preventivo è rifiutato: chi richiude il dispositivo? Quando l'ha richiuso il tecnico segna «Richiuso» e solo allora si invia il PRONTO negativo. Se non è stato smontato, chiudi questa finestra e premi «Non smontato: non richiudere»."
-        onClose={() => setDlg(null)} onAssegna={async (t) => !!(await azione("rimontaggio", { azione: "serve", tecnico: t }, `Da richiudere: assegnato a ${t}`))} />}
+        onClose={() => setDlg(null)} onAssegna={async (t, m) => !!(await azione("rimontaggio", { azione: "serve", tecnico: t, messaggio: m }, `Da richiudere: assegnato a ${t} (avvisato nel gruppo)`))} />}
       {dlg?.k === "stesso" && <DialogoStessoModello s={s} ro={ro} onClose={() => setDlg(null)} onApri={onApri}
         onCopia={(r) => { setBz((x) => ({ ...x, righe: r })); setDlg(null); toast.success("Preventivo copiato: controlla i prezzi e salva"); }} />}
       {dlg?.k === "cliente" && <SchedaClienteModal id={s.anagrafica_id}

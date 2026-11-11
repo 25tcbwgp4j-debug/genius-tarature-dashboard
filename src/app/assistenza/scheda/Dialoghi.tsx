@@ -206,6 +206,8 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
   const [tot, setTot] = useState(String(totIniziale ?? ""));
   const [esito, setEsito] = useState(s.esito_pronto || (s.esito === "EFFETTUATO" || s.esito === "NEGATIVO" ? s.esito : (s.preventivo_esito === "rifiutato" ? "NEGATIVO" : "EFFETTUATO")));
   const [ind, setInd] = useState(s.indirizzo_spedizione || "");
+  // 11/11/2026 (Christian, 63354): NOTA PER IL CLIENTE sull'esito, scritta dal tecnico all'esito e correggibile qui
+  const [notaCli, setNotaCli] = useState(s.nota_cliente_esito || "");
   const [mail, setMail] = useState(true);
   const [wa, setWa] = useState(!s.cliente_no_whatsapp);   // 26/10/2026: cliente «niente WhatsApp» → spenta
   const [busy, setBusy] = useState(false);
@@ -220,7 +222,7 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
   const gratis = totNum - (Number(s.acconto) || 0) <= 0.009 || !!s.pagata;
   const pagEff = gratis ? "" : (pag || (cons === "spedizione" ? "bonifico" : ""));
   const corpo = useMemo(() => ({ consegna_modo: cons, pagamento_modo: pagEff, totale_lavorazione: String(tot).trim() === "" ? null : totNum, indirizzo_spedizione: ind,
-    consegna_corriere: cons === "spedizione" ? corr : "", esito }), [cons, pagEff, tot, totNum, ind, corr, esito]);
+    consegna_corriere: cons === "spedizione" ? corr : "", esito, nota_cliente_esito: notaCli.trim() }), [cons, pagEff, tot, totNum, ind, corr, esito, notaCli]);
   async function invia() {
     setBusy(true);
     try {
@@ -256,6 +258,9 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
           {cons === "spedizione" && <Campo label={gratis ? "Indirizzo di spedizione" : "Indirizzo di spedizione (va nella causale del bonifico)"}><input className={campo} value={ind} onChange={(e) => setInd(e.target.value)} placeholder="via, CAP, città" /></Campo>}
           {cons === "spedizione" && <p className="text-xs text-muted-foreground">{gratis ? "Nulla da pagare: al cliente va l'avviso «PRONTO PER LA SPEDIZIONE, nessun importo da pagare, in attesa del ritiro del corriere» — senza consuntivo, IBAN né richiesta di fattura. Poi si fa la spedizione e parte il tracking." : pagEff === "bonifico" ? "Al cliente va il CONSUNTIVO con IBAN e causale: dopo il bonifico si segna «Pagato» e si spedisce." : "Per la spedizione di solito si chiede il bonifico (niente commissioni della carta)."}</p>}
           {!lavorazione && !s.lavorazione && <p className="text-xs text-amber-700">La lavorazione è vuota: si riempie con le righe accettate del preventivo.</p>}
+          <Campo label="📣 Nota per il cliente sull'esito (va nella mail, nel WhatsApp e nel PDF)" aiuto="Es. «Il dispositivo è stato riparato ed è funzionante: funziona tutto ad eccezione dell'eSIM». Vuota = nessuna nota.">
+            <textarea className={`${campo} h-auto min-h-[56px] py-1.5`} value={notaCli} maxLength={1500} onChange={(e) => setNotaCli(e.target.value)}
+              placeholder="facoltativa" /></Campo>
           <Anteprima s={s} corpo={pagEff === "fine_mese" ? { ...corpo, tipo: "pronto" } : corpo} />
           <Canali mail={mail} wa={wa} setMail={setMail} setWa={setWa} />
           <QuandoInvio q={q} titolo="Quando avvisare il cliente:">

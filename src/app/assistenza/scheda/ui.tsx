@@ -10,7 +10,10 @@ export const campo = "h-9 w-full rounded-md border border-input bg-background px
 export const area = "w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-70";
 export const etich = "mb-0.5 block text-xs font-medium text-muted-foreground";
 
-export function Badge({ stato, rip }: { stato: string; rip?: string | null }) {
+export function Badge({ stato, rip, rim }: { stato: string; rip?: string | null; rim?: string | null }) {
+  // 11/11/2026 (Christian): rifiutato non ancora richiuso → «da richiudere», non «da restituire»
+  if (stato === "rifiutato" && rim !== undefined && !["fatto", "non_serve"].includes(rim || ""))
+    return <span className="inline-block whitespace-nowrap rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-200">🔩 Rifiutato · da richiudere</span>;
   const b = <span className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${COLORE_STATO[stato] || ""}`}>{ETICHETTA_STATO[stato] || stato}</span>;
   // 09/11/2026 (Christian, 63350): il dispositivo è dal cliente → accanto allo stato, altrimenti sembra in negozio
   if (rip !== "ritirato_temporaneo" || ["consegnato", "annullata"].includes(stato)) return b;

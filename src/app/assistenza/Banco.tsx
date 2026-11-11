@@ -15,6 +15,7 @@ import { useOperatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
 import { assRichiestaCollega, type Richiesta, STATI_RIPARAZIONE, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, assSetConfig, nomeTecnico, type AvvisoDashboard, type NotificaGestire, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve, type CaricoTecnico } from "@/lib/assistenza";
 import { Cruscotto } from "./Cruscotto";
+import { DatiBadge } from "./scheda/DatiCliente";
 import { AvvisoRichieste } from "./Richieste";
 import { PerCliente } from "./PerCliente";
 import { DaGestire, type Novita } from "./DaGestire";
@@ -26,6 +27,11 @@ import { SchedaView } from "./scheda/SchedaView";
 import { Badge } from "./scheda/ui";
 
 const STILE_RIP: Record<string, string> = {
+  // 11/11/2026: stati nuovi — verde al lavoro, ambra in attesa
+  su_banco: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100", test_in_corso: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100",
+  copia_dati: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100", da_richiudere: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100",
+  test_finale: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100",
+  attesa_cliente: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100", attesa_partner: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100",
   attesa_ricambi: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100",
   ricambio_arrivato: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100",
   finita: "bg-emerald-600 text-white",
@@ -252,9 +258,12 @@ export function Banco() {
                   <b className="tabular-nums">{s.sigla}</b>
                   <span className="truncate">{s.azienda || s.nominativo}</span>
                   {s.passaggio && !s.passaggio.letto_il && <span className="rounded bg-blue-600 px-1.5 text-[10px] font-bold text-white" title={`Messaggio di ${s.passaggio.da} per ${s.passaggio.a}`}>📨 per {s.passaggio.a}</span>}
-                  <span className="ml-auto"><Badge stato={s.stato} rip={s.riparazione_stato} /></span>
+                  <span className="ml-auto flex items-center gap-1"><DatiBadge dati={s.dati_cliente} nota={s.dati_cliente_nota} /><Badge stato={s.stato} rip={s.riparazione_stato} rim={s.rimontaggio ?? null} /></span>
                 </div>
                 <div className="truncate text-xs text-muted-foreground">{s.prodotto}{s.anno ? ` ${s.anno}` : ""}{s.difetto ? ` · ${s.difetto}` : ""}</div>
+                {/* 11/11/2026 (Christian): rifiutato da richiudere → a chi è assegnato, finché non lo richiude */}
+                {s.stato === "rifiutato" && s.rimontaggio === "da_fare" && (
+                  <div className="truncate text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">🔩 Da richiudere — {nomeTecnico(s.tecnico_riparazione, tecniciCr) || "da assegnare"}</div>)}
                 {(s.stato === "da_preventivare" && s.tecnico_verifica) || (s.stato === "accettato" && s.tecnico_riparazione) ? (
                   <div className="truncate text-[11px] font-medium text-sky-800 dark:text-sky-300">
                     {s.stato === "accettato" ? `Riparazione: ${nomeTecnico(s.tecnico_riparazione, tecniciCr)}` : `Verifica: ${nomeTecnico(s.tecnico_verifica, tecniciCr)}${s.verifica_stato === "chiusa" ? " (chiusa)" : ""}`}
