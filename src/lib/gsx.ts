@@ -29,7 +29,18 @@ export type GsxDispositivo = {
 };
 
 export type GsxSostituzione = { data: string | null; stato: string | null; codice_stato?: string; seriale_vecchio: string | null; imei_vecchio: string | null; seriale_nuovo: string | null; imei_nuovo: string | null };
-export type GsxRiparazione = { id: string; tipo: string; stato: string; codice_stato: string; creata: string | null; chiusa: string | null; po: string | null; applecare_consumato: boolean | null; cliente: string; difetti: string[]; ricambi: { codice: string; descrizione: string }[]; aperta?: boolean };
+export type GsxRiparazioneDettaglio = {
+  notifica: string | null; stato: string | null; stato_il: string | null; tipo: string | null; copertura: string | null; applecare: string | null; consumer_law: string | null;
+  riferimento: string | null; po: string | null; tecnico: string | null; creata: string | null; chiusa: string | null; servizio_reso_il: string | null;
+  totale: number | null; imponibile: number | null; fattura_disponibile: boolean | null; seriale_nuovo: string | null; imei_nuovo: string | null;
+  ricambi: { codice: string | null; usato: string | null; descrizione: string | null; tipo: string | null; a_pagamento: boolean | null; prezzo_netto: number | null; copertura: string | null;
+    ordine: string | null; stato_ordine: string | null; consegna_tracking: string | null; consegna_il: string | null; corriere: string | null;
+    reso_stato: string | null; reso_codice: string | null; reso_tracking: string | null; reso_ordine: string | null; reso_ricevuto_il: string | null; seriale_nuovo: string | null; difetto: string }[];
+  messaggi: string[]; note: { tipo: string | null; il: string | null; da: string | null; testo: string | null }[]; errore?: string;
+};
+export type GsxRiparazione = { id: string; tipo: string; stato: string; codice_stato: string; creata: string | null; chiusa: string | null; po: string | null; applecare_consumato: boolean | null; cliente: string; difetti: string[]; ricambi: { codice: string; descrizione: string }[]; aperta?: boolean; dettaglio?: GsxRiparazioneDettaglio | null };
+export type GsxDifetti = { seriale: string; totale_difetti: number; componenti: { codice: string; componente: string; difetti: { codice: string; descrizione: string }[] }[] };
+export const gsxDifetti = (s: string): Promise<GsxDifetti> => fetchAPI(`/api/assistenza/gsx/difetti?s=${encodeURIComponent(s)}`);
 export type GsxDiagnosi = {
   seriale: string; console: string | null; errore_test?: string | null; lanciare_test: string;
   test_disponibili: { id: string; nome: string; minuti: { minimum?: string; maximum?: string } }[];

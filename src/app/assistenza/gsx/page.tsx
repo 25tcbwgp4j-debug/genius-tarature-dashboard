@@ -12,8 +12,8 @@ import { toast } from "sonner";
 import { toastErrore } from "@/lib/errori";
 import {
   gsxAvviaTest, gsxStatoTest, type GsxStatoTest,
-  gsxDiagnosi, gsxDispositivo, gsxReport, gsxRiparazione, gsxRiparazioni,
-  type GsxDiagnosi, type GsxDispositivo, type GsxRiparazione,
+  gsxDiagnosi, gsxDifetti, gsxDispositivo, gsxReport, gsxRiparazione, gsxRiparazioni,
+  type GsxDiagnosi, type GsxDifetti, type GsxDispositivo, type GsxRiparazione,
 } from "@/lib/gsx";
 import { GsxPannello } from "../scheda/GsxPannello";
 import { CatalogoGsx } from "./Catalogo";
@@ -21,7 +21,7 @@ import { CatalogoGsx } from "./Catalogo";
 const SEZIONI = [
   { id: "generale", nome: "Generale e garanzia" }, { id: "ricambi", nome: "Ricambi e preventivo" },
   { id: "riparazioni", nome: "Riparazioni GSX" }, { id: "sostituzioni", nome: "Seriali sostituiti" },
-  { id: "diagnosi", nome: "Diagnosi" }, { id: "grezzi", nome: "Tutti i dati" },
+  { id: "diagnosi", nome: "Diagnosi" }, { id: "difetti", nome: "Codici difetto Apple" }, { id: "grezzi", nome: "Tutti i dati" },
 ] as const;
 type Sez = (typeof SEZIONI)[number]["id"];
 
@@ -46,6 +46,10 @@ function PaginaGsx() {
   const [diag, setDiag] = useState<GsxDiagnosi | null>(null);
   const [avvio, setAvvio] = useState<string | null>(null);
   const [statoTest, setStatoTest] = useState<GsxStatoTest | null>(null);
+  // 12/11/2026: codici componente → difetto che Apple accetta per il dispositivo (si leggono quando si apre la sezione)
+  const [difetti, setDifetti] = useState<GsxDifetti | null>(null);
+  const [filtroDif, setFiltroDif] = useState("");
+  useEffect(() => { if (sez === "difetti" && ser && (!difetti || difetti.seriale !== ser)) gsxDifetti(ser).then(setDifetti).catch(toastErrore); }, [sez, ser, difetti]);
   async function aggiornaStato() {
     try { const st = await gsxStatoTest(ser); setStatoTest(st); return st; } catch (e) { toastErrore(e); return null; }
   }
@@ -68,7 +72,7 @@ function PaginaGsx() {
 
   const carica = useCallback(async (s: string) => {
     if (!s) return;
-    setBusy(true); setErr(null); setG(null); setRip(null); setDiag(null); setAperta(null);
+    setBusy(true); setErr(null); setG(null); setRip(null); setDiag(null); setAperta(null); setDifetti(null);
     try { setG(await gsxDispositivo(s)); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
     gsxRiparazioni(s).then((r) => setRip(r.riparazioni)).catch(() => setRip([]));
     gsxDiagnosi(s).then(setDiag).catch(() => setDiag(null));
@@ -239,7 +243,19 @@ function PaginaGsx() {
             </div>
           )}
 
-          {sez === "grezzi" && <Card className="p-3"><pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify({ dispositivo: g, riparazioni: rip, diagnosi: diag }, null, 2)}</pre></Card>}
+          {sez === "difetti" && (
+            <Card className="p-3 text-sm">
+              <div className="mb-2 flex flex-wrap items-center gap-2"><b>Codici componente → difetto ammessi da Apple per questo dispositivo</b>
+                <span className="text-xs text-muted-foreground">sono quelli che servono per aprire una riparazione GSX e per le sezioni «per difetto» della scheda</span>
+                <input value={filtroDif} onChange={(e) => setFiltroDif(e.target.value)} placeholder="Filtra: display, battery, logic…" className="ml-auto h-8 w-56 rounded-md border px-2 text-xs" /></div>
+              {!difetti ? <Loader2 className="animate-spin" /> : difetti.componenti.length === 0 ? <p className="text-muted-foreground">Apple non restituisce codici per questo dispositivo.</p> : (
+                <div className="grid gap-2 md:grid-cols-2">{difetti.componenti.filter((c) => !filtroDif || `${c.codice} ${c.componente} ${c.difetti.map((d) => d.descrizione).join(" ")}`.toLowerCase().includes(filtroDif.toLowerCase())).map((c) => (
+                  <div key={c.codice} className="rounded-md border p-2 text-xs"><div className="font-semibold"><span className="font-mono">{c.codice}</span> {c.componente}</div>
+                    <ul className="mt-1 pl-3">{c.difetti.map((d) => <li key={d.codice}><span className="font-mono text-muted-foreground">{d.codice}</span> {d.descrizione}</li>)}</ul></div>))}</div>)}
+            </Card>
+          )}
+
+          {sez === "grezzi" && <Card className="p-3"><pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify({ dispositivo: g, riparazioni: rip, diagnosi: diag, difetti }, null, 2)}</pre></Card>}
         </>
       )}
       </>}

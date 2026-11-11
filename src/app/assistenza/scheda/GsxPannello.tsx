@@ -171,7 +171,15 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
                 <td className="py-0.5 pr-2 font-mono font-semibold">{r.id}</td><td className="pr-2">{r.tipo}</td><td className="pr-2">{r.stato}</td>
                 <td className="pr-2">{data(r.creata)}</td><td className="pr-2">{data(r.chiusa)}</td>
                 <td className="pr-2">{r.difetti.join("; ")}{r.applecare_consumato ? " · AppleCare+ usato" : ""}</td>
-                <td>{r.ricambi.map((p) => `${p.codice} ${p.descrizione}`).join("; ")}</td>
+                <td>{r.ricambi.map((p) => `${p.codice} ${p.descrizione}`).join("; ")}
+                  {/* 12/11/2026: dal dettaglio GSX lo stato di ogni ricambio (ordine, consegna, reso) e il seriale nuovo */}
+                  {r.dettaglio && !r.dettaglio.errore && (
+                    <div className="mt-0.5 text-muted-foreground">
+                      {r.dettaglio.notifica && <div>Notifica Apple {r.dettaglio.notifica}{r.dettaglio.copertura ? ` · ${r.dettaglio.copertura}` : ""}{r.dettaglio.totale != null ? ` · totale ${euro(r.dettaglio.totale)}` : ""}</div>}
+                      {r.dettaglio.ricambi.map((p, i) => <div key={i}>{p.codice}: {p.stato_ordine || "—"}{p.consegna_tracking ? ` · consegna ${p.corriere || ""} ${p.consegna_tracking}` : ""}{p.consegna_il ? ` (${data(p.consegna_il)})` : ""}{p.reso_stato ? ` · reso: ${p.reso_stato}` : ""}{p.reso_tracking ? ` ${p.reso_tracking}` : ""}{p.seriale_nuovo ? ` · NUOVO S/N ${p.seriale_nuovo}` : ""}</div>)}
+                      {r.dettaglio.messaggi.length > 0 && <div className="text-amber-700">{r.dettaglio.messaggi.join(" · ")}</div>}
+                    </div>
+                  )}</td>
               </tr>))}</tbody>
           </table>
         </div>
