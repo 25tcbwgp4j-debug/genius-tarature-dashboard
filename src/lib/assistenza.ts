@@ -1,7 +1,7 @@
 // SCHEDE DI ASSISTENZA Apple (ex FileMaker) — client delle API /api/assistenza (02/10/2026).
 import { fetchAPI } from "@/lib/api";
 import type { EstimateLine } from "@/lib/assistenza-preventivo";
-import type { GsxDispositivo } from "@/lib/gsx";
+import type { DifettoApple, GsxDispositivo } from "@/lib/gsx";
 
 export type StatoScheda = "in_arrivo" | "da_preventivare" | "preventivo_inviato" | "accettato" | "rifiutato" | "pronto" | "consegnato" | "annullata";
 export interface Fase { il: string; operatore?: string | null; sede?: string | null }
@@ -48,7 +48,7 @@ export interface Scheda extends SchedaBreve {
   /** 27/10/2026 (63182): calcolati dal backend (stessa regola di pronto, PDF, mail) */
   totale_dovuto?: number; esito_pronto?: string; seriale_nuovo?: string | null; imei_nuovo?: string | null; consegna_effettiva?: "ritiro" | "spedizione";
   /** 12/11/2026: ultima lettura Apple GSX salvata nella scheda (Decodifica): dispositivo, garanzia, ricambi col preventivo pronto, riparazioni GSX */
-  gsx?: GsxDispositivo | null; gsx_letto_il?: string | null;
+  gsx?: GsxDispositivo | null; gsx_letto_il?: string | null; difetto_apple?: DifettoApple[] | null;
   anagrafica_id: string | null; referente: string | null; telefono_referente: string | null; indirizzo_spedizione: string | null; imei: string | null;
   acquistato_il: string | null; anno_garanzia: string | null; password_dispositivo: string | null; apple_id: string | null; password_apple_id: string | null;
   /** 30/10/2026: notifiche da gestire APERTE della scheda */

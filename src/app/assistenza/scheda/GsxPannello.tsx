@@ -6,7 +6,7 @@
 // riparazioni GSX con i numeri G…, seriali sostituiti e il PREVENTIVO PRONTO con «Inserisci nel preventivo» (1ª + 2ª ipotesi,
 // Touch ID abbinato) e il confronto col listino della pagina Prezzi ufficiali.
 import { useEffect, useMemo, useState } from "react";
-import { Apple, ExternalLink, Loader2, Package, RefreshCw } from "lucide-react";
+import { Apple, ExternalLink, Loader2, Package, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
@@ -15,8 +15,9 @@ import { gsxRicambi, gsxRiparazioni, type GsxDispositivo, type GsxPrincipale, ty
 const euro = (n?: number | null) => (n == null ? "—" : Number(n).toLocaleString("it-IT", { style: "currency", currency: "EUR" }));
 const data = (s?: string | null) => (s ? s.slice(0, 10).split("-").reverse().join("/") : "—");
 const ora = (s?: string | null) => (s ? new Date(s).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" }) : "—");
+const RIP_TIPI: Record<string, string> = { CIN: "carry-in", CRBR: "carry-in con ricambi", WUMS: "sostituzione integrale", MINS: "mail-in", SVNR: "assistenza senza riparazione" };
 
-export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, aggiornando, onTrova, trovaAttivo, serialeNuovoScheda, compatto }: {
+export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, aggiornando, onTrova, trovaAttivo, serialeNuovoScheda, compatto, onIdoneita, idoneitaBusy, haDifetto }: {
   g: GsxDispositivo | null; errore?: string | null; autoRicambi?: boolean;
   /** scheda: mette 1ª + 2ª ipotesi (e Touch ID abbinato) nel preventivo */
   onInserisci?: (p: GsxPrincipale) => void;
@@ -26,6 +27,8 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
   onTrova?: () => void; trovaAttivo?: boolean;
   /** scheda: il «nuovo S/N» scritto nella scheda, da confrontare con quello che dice Apple */
   serialeNuovoScheda?: string | null;
+  /** scheda: idoneità e copertura Apple (repair/eligibility) col difetto Apple scelto */
+  onIdoneita?: () => void; idoneitaBusy?: boolean; haDifetto?: boolean;
   compatto?: boolean;
 }) {
   const [ricLetti, setRic] = useState<GsxRicambi | null>(null);
@@ -105,11 +108,13 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
       </div>
 
       {/* avvisi che cambiano il lavoro */}
-      {(g.sostituito || g.trova_il_mio_probabile || g.dep || g.modalita_riparazione || g.prestito || aperte.length > 0) && (
+      {(g.sostituito || g.trova_il_mio_probabile || g.dep || g.modalita_riparazione || g.prestito || aperte.length > 0 || g.idoneita?.bloccata) && (
         <div className="mt-2 space-y-1 text-xs">
           {g.sostituito && <div className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-red-950 dark:bg-red-950/30 dark:text-red-100">
             🔁 <b>DISPOSITIVO SOSTITUITO DA APPLE</b>{g.sostituito.data ? ` il ${data(g.sostituito.data)}` : ""}: il seriale nuovo è <span className="font-mono font-semibold">{g.sostituito.seriale_nuovo}</span>{g.sostituito.imei_nuovo ? ` · IMEI ${g.sostituito.imei_nuovo}` : ""}. Nella scheda va come «nuovo S/N».
             {serialeNuovoScheda && serialeNuovoScheda.replace(/[^A-Z0-9]/gi, "").toUpperCase() !== g.sostituito.seriale_nuovo.toUpperCase() && <div className="mt-0.5 font-semibold">⚠️ Nella scheda il nuovo S/N è <span className="font-mono">{serialeNuovoScheda}</span>, Apple dice <span className="font-mono">{g.sostituito.seriale_nuovo}</span>: controllare sul dispositivo e correggere.</div>}</div>}
+          {g.idoneita?.bloccata && <div className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-red-950 dark:bg-red-950/30 dark:text-red-100">
+            ⛔ <b>Apple BLOCCA la riparazione</b> ({g.idoneita.copertura || "—"}): {g.idoneita.blocchi.join(" · ")}</div>}
           {aperte.length > 0 && <div className="rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
             🛠 <b>Riparazione GSX aperta</b>: {aperte.map((r) => `${r.id} (${r.stato})`).join(" · ")}</div>}
           {g.trova_il_mio_probabile && !trovaAttivo && <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
@@ -120,6 +125,40 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
           {g.modalita_riparazione && <div className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100">
             ✅ <b>Modalità riparazione attiva</b>: il cliente ha abilitato la riparazione da Dov&apos;è, non serve togliere «Trova il mio».</div>}
           {g.prestito && <div className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-950 dark:bg-amber-950/30">Dispositivo in prestito Apple (loaner).</div>}
+        </div>
+      )}
+
+      {/* 12/11/2026: IDONEITÀ E COPERTURA Apple (repair/eligibility) — col difetto Apple scelto nella scheda */}
+      {(onIdoneita || g.idoneita) && (
+        <div className={`mt-2 rounded-md border p-2 text-xs ${g.idoneita ? (g.idoneita.bloccata ? "border-red-200 bg-red-50/40 dark:bg-red-950/20" : g.idoneita.coperto ? "border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/30" : "border-slate-200") : "border-dashed"}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <ShieldCheck className="size-4" /><b>Idoneità e copertura Apple</b>
+            {g.idoneita ? <span>{g.idoneita.copertura || "—"}{g.idoneita.coperto ? " · RICAMBI COPERTI (0 €)" : ""} · {RIP_TIPI[g.idoneita.tipo] || g.idoneita.tipo} · letta il {ora(g.idoneita.letto_il)}</span>
+              : <span className="text-muted-foreground">{haDifetto ? "chiedi ad Apple se la riparazione è ammessa e cosa copre" : "scegli prima il «Difetto Apple (codici GSX)» sotto il difetto del cliente"}</span>}
+            {onIdoneita && <Button type="button" size="xs" variant="outline" className="ml-auto" disabled={idoneitaBusy || !haDifetto} onClick={onIdoneita}>{idoneitaBusy ? <Loader2 className="size-3 animate-spin" /> : <ShieldCheck />}{g.idoneita ? "Rileggi" : "Verifica con Apple"}</Button>}
+          </div>
+          {g.idoneita && (
+            <div className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
+              <div>Difetto: {g.idoneita.difetti.map((d) => `${d.componentCode} → ${d.issueCode}`).join(" · ")}</div>
+              <div>Tecnico certificato obbligatorio: {g.idoneita.tecnico_obbligatorio ? "sì" : "no"}{g.idoneita.trova_il_mio ? <b className="text-red-700"> · «Trova il mio» ATTIVO (lo dice Apple)</b> : ""}{g.idoneita.problema_software ? " · Apple: difetto software, non hardware" : ""}</div>
+              <div className="sm:col-span-2">Ricambi: {g.idoneita.parti.map((p) => <span key={p.codice} className={`mr-2 ${p.coperto ? "font-semibold text-emerald-700" : ""}`}>{p.codice} {p.coperto ? "COPERTO" : "a pagamento"}{p.copertura && !p.coperto ? "" : p.copertura ? ` (${p.copertura})` : ""}</span>)}</div>
+              {g.idoneita.tipi_riparazione.length > 0 && <div className="sm:col-span-2 text-muted-foreground">Tipi di riparazione ammessi: {g.idoneita.tipi_riparazione.map((t) => t.nome).join(" · ")}</div>}
+              {g.idoneita.esiti.filter((e) => !["STOP", "HOLD"].includes(e.azione || "") && e.messaggi.length).map((e, i) => <div key={i} className="sm:col-span-2 text-amber-800">{e.tipo}: {e.messaggi.join(" · ")}</div>)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 12/11/2026: PROGRAMMI DI RIPARAZIONE e problemi noti Apple del modello (articoli GSX per seriale) */}
+      {g.articoli && (g.articoli.programmi.length > 0 || g.articoli.del_modello.length > 0) && (
+        <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/50 p-2 text-xs dark:bg-amber-950/20">
+          <div className="font-semibold">Programmi e problemi noti Apple per questo modello ({g.articoli.programmi.length + g.articoli.del_modello.length})
+            <a className="ml-2 font-normal underline" href={`/assistenza/gsx?s=${encodeURIComponent(g.seriale)}&sez=articoli`} target="_blank" rel="noreferrer">tutti gli articoli ({g.articoli.totale})</a></div>
+          <ul className="mt-0.5 list-disc pl-4">
+            {[...g.articoli.programmi, ...g.articoli.del_modello].slice(0, 12).map((a) => <li key={a.id}>
+              <a className="hover:underline" href={`/assistenza/gsx?s=${encodeURIComponent(g.seriale)}&sez=articoli&art=${a.id}`} target="_blank" rel="noreferrer" title={a.sommario || ""}>{a.titolo}</a>
+              {a.priorita && a.priorita !== "LOW" ? <span className="ml-1 rounded bg-amber-200 px-1 text-[10px]">{a.priorita}</span> : null}</li>)}
+          </ul>
         </div>
       )}
 
@@ -142,7 +181,7 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
                     <td className="pr-2"><span className="font-mono">{p.codice}</span><div className="text-muted-foreground">{p.descrizione}{p.altri_codici > 0 ? ` · +${p.altri_codici} codici (preso il più caro)` : ""}</div>
                       {p.nota && <div className="text-amber-700">{p.nota}</div>}</td>
                     {ric.costi_visibili && <><td className="text-right">{euro(p.prezzi.gsx)}{u?.costo_diverso && <div className="text-amber-700" title="Il listino è stato costruito su un costo Apple diverso">listino: {euro(u.costo_gsx)}</div>}</td><td className="text-right">{euro(p.prezzi.costo)}</td></>}
-                    <td className="text-right font-semibold">{euro(p.prezzi.proposto)}</td>
+                    <td className="text-right font-semibold">{g.idoneita?.parti.find((x) => x.codice === p.codice)?.coperto ? <span className="text-emerald-700" title="Apple copre il ricambio: nel preventivo va a 0 €">0 € <s className="font-normal text-muted-foreground">{euro(p.prezzi.proposto)}</s></span> : euro(p.prezzi.proposto)}</td>
                     <td className="text-right">{euro(p.prezzi.listino)}</td>
                     <td className="text-right">{u?.prezzo != null
                       ? <span className={u.prezzo_diverso ? "font-semibold text-amber-700" : "text-emerald-700"} title={u.prezzo_diverso ? "Il prezzo del listino è diverso da quello calcolato oggi da GSX" : "Uguale al calcolo di oggi"}>

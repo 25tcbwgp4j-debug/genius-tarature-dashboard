@@ -26,6 +26,7 @@ export type GsxDispositivo = {
   schede_gestionale?: { id: string; sigla: string; stato: string | null; prodotto: string | null; modello: string | null; creata: string }[];
   /** presenti solo nella lettura completa (Decodifica della scheda) */
   ricambi?: GsxRicambi | null; riparazioni?: GsxRiparazione[] | null; errori?: Record<string, string> | null;
+  idoneita?: GsxIdoneita | null; articoli?: { programmi: GsxArticolo[]; del_modello: GsxArticolo[]; totale: number; letto_il: string } | null;
 };
 
 export type GsxSostituzione = { data: string | null; stato: string | null; codice_stato?: string; seriale_vecchio: string | null; imei_vecchio: string | null; seriale_nuovo: string | null; imei_nuovo: string | null };
@@ -41,6 +42,26 @@ export type GsxRiparazioneDettaglio = {
 export type GsxRiparazione = { id: string; tipo: string; stato: string; codice_stato: string; creata: string | null; chiusa: string | null; po: string | null; applecare_consumato: boolean | null; cliente: string; difetti: string[]; ricambi: { codice: string; descrizione: string }[]; aperta?: boolean; dettaglio?: GsxRiparazioneDettaglio | null };
 export type GsxDifetti = { seriale: string; totale_difetti: number; componenti: { codice: string; componente: string; difetti: { codice: string; descrizione: string }[] }[] };
 export const gsxDifetti = (s: string): Promise<GsxDifetti> => fetchAPI(`/api/assistenza/gsx/difetti?s=${encodeURIComponent(s)}`);
+/** difetto Apple scelto nella scheda (componentissue), max 3 */
+export type DifettoApple = { componentCode: string; componentDescription?: string | null; issueCode: string; issueDescription?: string | null; reproducibility?: string };
+/** idoneità e copertura Apple (repair/eligibility) */
+export type GsxIdoneita = {
+  seriale: string; tipo: string; difetti: DifettoApple[]; copertura: string | null; codice_copertura: string | null; coperto: boolean;
+  tecnico_obbligatorio: boolean | null; ricalcolo_prezzo: boolean | null; bloccata: boolean; blocchi: string[]; trova_il_mio: boolean; problema_software: boolean;
+  esiti: { azione: string | null; tipo: string | null; sotto: string | null; messaggi: string[]; limiti_copertura: unknown[] }[];
+  tipi_riparazione: { codice: string; nome: string; priorita: number | null; sotto: string | null }[];
+  parti: { codice: string; coperto: boolean; a_pagamento: boolean | null; copertura: string | null; codice_copertura: string | null; tipo: string | null }[];
+  stato_riparazione: string | null; letto_il: string;
+};
+export type GsxArticolo = { id: string; titolo: string; sommario: string | null; priorita: string | null; modificato_il: string | null; da_leggere: boolean | null; del_modello: boolean; programma: boolean };
+export type GsxArticoli = { seriale: string; modello: string | null; programmi: GsxArticolo[]; del_modello: GsxArticolo[]; altri: GsxArticolo[]; totale: number; letto_il: string };
+export const gsxIdoneita = (b: { s: string; difetti: DifettoApple[]; parti?: string[]; tipo?: string }): Promise<GsxIdoneita> =>
+  fetchAPI(`/api/assistenza/gsx/idoneita`, { method: "POST", body: JSON.stringify(b) });
+export const gsxSchedaIdoneita = <T,>(sid: string, b: { difetti?: DifettoApple[]; parti?: string[]; tipo?: string; operatore?: string | null }): Promise<T> =>
+  fetchAPI(`/api/assistenza/gsx/scheda/${sid}/idoneita`, { method: "POST", body: JSON.stringify(b) });
+export const gsxArticoli = (s: string, modello = ""): Promise<GsxArticoli> => fetchAPI(`/api/assistenza/gsx/articoli?s=${encodeURIComponent(s)}&modello=${encodeURIComponent(modello)}`);
+export const gsxArticolo = (id: string): Promise<{ id: string; html: string }> => fetchAPI(`/api/assistenza/gsx/articolo?id=${encodeURIComponent(id)}`);
+export const gsxKnownIssues = (): Promise<{ known_issues: { id: string; titolo: string; sommario: string; stato: string; risoluzione: string | null }[] }> => fetchAPI(`/api/assistenza/gsx/known-issues`);
 export type GsxDiagnosi = {
   seriale: string; console: string | null; errore_test?: string | null; lanciare_test: string;
   test_disponibili: { id: string; nome: string; minuti: { minimum?: string; maximum?: string } }[];

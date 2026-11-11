@@ -262,7 +262,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     seriale: v("seriale"), imei: v("imei"), difetto: v("difetto"), accessori: v("accessori"), con_alimentatore: v("con_alimentatore"),
     password_dispositivo: v("password_dispositivo"), apple_id: v("apple_id"), password_apple_id: v("password_apple_id"),
     numero_interno: v("numero_interno"),
-    gsx: v("gsx"), gsx_letto_il: v("gsx_letto_il"), seriale_nuovo: v("seriale_nuovo"),   // 12/11/2026: i dati GSX salvati nella scheda si rivedono riaprendola
+    gsx: v("gsx"), gsx_letto_il: v("gsx_letto_il"), seriale_nuovo: v("seriale_nuovo"), difetto_apple: v("difetto_apple"),   // 12/11/2026: i dati GSX salvati nella scheda si rivedono riaprendola
   };
   const bz = bozzaPreventivo({ ...s, ...b });
   const st = s.stato;
@@ -274,14 +274,19 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     const bl = Math.max(...blocchi(bz.righe));
     const esistenti = bz.righe.filter((x) => blocco(x) === bl && x.opt != null);
     if (esistenti.length && !confirm(`Sostituire le ${esistenti.length} voci di ipotesi già scritte con «${pr.etichetta}» (prezzi GSX)? Le voci fisse restano.`)) return;
-    const riga = (r: GsxRigaPreventivo, opt: number, on: boolean): EstimateLine =>
-      ({ t: r.t, p: r.p, listino: r.listino ?? null, nota: null, opt, on, agg: false, b: bl, voce_id: `gsx:${p.codice}:${opt}` });
+    // 12/11/2026: COPERTURA — se l'idoneità Apple dice che il ricambio è coperto (garanzia, programma, AppleCare+ senza franchigia)
+    // la 2ª ipotesi (ufficiale) va a 0 € ed è quella proposta; il listino non si tocca, è la copertura che decide
+    const idon = (v("gsx") as Scheda["gsx"])?.idoneita;
+    const copertoP = (codice: string) => !!idon?.parti?.find((x) => x.codice === codice)?.coperto;
+    const coperto = copertoP(p.codice);
+    const riga = (r: GsxRigaPreventivo, opt: number, on: boolean, zero = false): EstimateLine =>
+      ({ t: zero ? `${r.t} — COPERTO DA APPLE (${idon?.copertura || "in garanzia"}): € 0` : r.t, p: zero ? 0 : r.p, listino: zero ? null : (r.listino ?? null), nota: null, opt, on, agg: false, b: bl, voce_id: `gsx:${p.codice}:${opt}` });
     const nuove: EstimateLine[] = [];
-    if (pr.uno) nuove.push(riga(pr.uno, 0, true));
-    nuove.push(riga(pr.due, pr.uno ? 1 : 0, !pr.uno));
-    if (pr.due_touch_id) nuove.push(riga(pr.due_touch_id, pr.uno ? 1 : 0, !pr.uno));
+    if (pr.uno) nuove.push(riga(pr.uno, 0, !coperto));
+    nuove.push(riga(pr.due, pr.uno ? 1 : 0, !pr.uno || coperto, coperto));
+    if (pr.due_touch_id) nuove.push(riga(pr.due_touch_id, pr.uno ? 1 : 0, !pr.uno || coperto, coperto && copertoP("661-15683") ? true : coperto));
     setBz((cur) => ({ ...cur, righe: [...cur.righe.filter((x) => !(blocco(x) === bl && x.opt != null)), ...nuove] }));
-    toast.success(`${pr.etichetta}: ${pr.uno ? "1ª + 2ª ipotesi" : "ipotesi"} inserite dal GSX${pr.due_touch_id ? " (Touch ID nella 2ª)" : ""}: controlla e salva`);
+    toast.success(`${pr.etichetta}: ${pr.uno ? "1ª + 2ª ipotesi" : "ipotesi"} inserite dal GSX${pr.due_touch_id ? " (Touch ID nella 2ª)" : ""}${coperto ? " · COPERTO DA APPLE: 2ª a € 0" : ""}: controlla e salva`);
     setTimeout(() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
 

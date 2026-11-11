@@ -12,8 +12,8 @@ import { toast } from "sonner";
 import { toastErrore } from "@/lib/errori";
 import {
   gsxAvviaTest, gsxStatoTest, type GsxStatoTest,
-  gsxDiagnosi, gsxDifetti, gsxDispositivo, gsxReport, gsxRiparazione, gsxRiparazioni,
-  type GsxDiagnosi, type GsxDifetti, type GsxDispositivo, type GsxRiparazione,
+  gsxArticoli, gsxArticolo, gsxDiagnosi, gsxDifetti, gsxDispositivo, gsxIdoneita, gsxReport, gsxRiparazione, gsxRiparazioni,
+  type GsxArticoli, type GsxDiagnosi, type GsxDifetti, type GsxDispositivo, type GsxIdoneita, type GsxRiparazione,
 } from "@/lib/gsx";
 import { GsxPannello } from "../scheda/GsxPannello";
 import { CatalogoGsx } from "./Catalogo";
@@ -21,7 +21,7 @@ import { CatalogoGsx } from "./Catalogo";
 const SEZIONI = [
   { id: "generale", nome: "Generale e garanzia" }, { id: "ricambi", nome: "Ricambi e preventivo" },
   { id: "riparazioni", nome: "Riparazioni GSX" }, { id: "sostituzioni", nome: "Seriali sostituiti" },
-  { id: "diagnosi", nome: "Diagnosi" }, { id: "difetti", nome: "Codici difetto Apple" }, { id: "grezzi", nome: "Tutti i dati" },
+  { id: "diagnosi", nome: "Diagnosi" }, { id: "difetti", nome: "Difetti e idoneità" }, { id: "articoli", nome: "Articoli e programmi" }, { id: "grezzi", nome: "Tutti i dati" },
 ] as const;
 type Sez = (typeof SEZIONI)[number]["id"];
 
@@ -37,7 +37,7 @@ function PaginaGsx() {
   const router = useRouter();
   const [input, setInput] = useState(sp.get("s") || "");
   const [ser, setSer] = useState(sp.get("s") || "");
-  const [sez, setSez] = useState<Sez>("generale");
+  const [sez, setSez] = useState<Sez>((SEZIONI.some((x) => x.id === sp.get("sez")) ? sp.get("sez") : "generale") as Sez);
   const [modo, setModo] = useState<"seriale" | "catalogo">(sp.get("catalogo") ? "catalogo" : "seriale");
   const [g, setG] = useState<GsxDispositivo | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -50,6 +50,23 @@ function PaginaGsx() {
   const [difetti, setDifetti] = useState<GsxDifetti | null>(null);
   const [filtroDif, setFiltroDif] = useState("");
   useEffect(() => { if (sez === "difetti" && ser && (!difetti || difetti.seriale !== ser)) gsxDifetti(ser).then(setDifetti).catch(toastErrore); }, [sez, ser, difetti]);
+  // 12/11/2026: idoneità e copertura con un difetto scelto qui (repair/eligibility) · articoli e programmi Apple del modello
+  const [idon, setIdon] = useState<GsxIdoneita | null>(null);
+  const [idonBusy, setIdonBusy] = useState<string | null>(null);
+  async function verificaIdoneita(componentCode: string, issueCode: string) {
+    setIdonBusy(`${componentCode}:${issueCode}`);
+    try { setIdon(await gsxIdoneita({ s: ser, difetti: [{ componentCode, issueCode, reproducibility: "A" }] })); } catch (e) { toastErrore(e); } finally { setIdonBusy(null); }
+  }
+  const [arts, setArts] = useState<GsxArticoli | null>(null);
+  const [art, setArt] = useState<{ id: string; html: string } | null>(null);
+  const [artBusy, setArtBusy] = useState(false);
+  useEffect(() => { if (sez === "articoli" && ser && (!arts || arts.seriale !== ser)) gsxArticoli(ser, g?.modello || "").then(setArts).catch(toastErrore); }, [sez, ser, arts, g]);
+  const artLink = sp.get("art");
+  useEffect(() => { if (sez === "articoli" && artLink && art?.id !== artLink) apriArticolo(artLink); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [sez, artLink]);
+  async function apriArticolo(id: string) {
+    setArtBusy(true);
+    try { setArt(await gsxArticolo(id)); } catch (e) { toastErrore(e); } finally { setArtBusy(false); }
+  }
   async function aggiornaStato() {
     try { const st = await gsxStatoTest(ser); setStatoTest(st); return st; } catch (e) { toastErrore(e); return null; }
   }
@@ -72,7 +89,7 @@ function PaginaGsx() {
 
   const carica = useCallback(async (s: string) => {
     if (!s) return;
-    setBusy(true); setErr(null); setG(null); setRip(null); setDiag(null); setAperta(null); setDifetti(null);
+    setBusy(true); setErr(null); setG(null); setRip(null); setDiag(null); setAperta(null); setDifetti(null); setIdon(null); setArts(null); setArt(null);
     try { setG(await gsxDispositivo(s)); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
     gsxRiparazioni(s).then((r) => setRip(r.riparazioni)).catch(() => setRip([]));
     gsxDiagnosi(s).then(setDiag).catch(() => setDiag(null));
@@ -245,17 +262,47 @@ function PaginaGsx() {
 
           {sez === "difetti" && (
             <Card className="p-3 text-sm">
+              {idon && (
+                <div className={`mb-3 rounded-md border p-2 text-xs ${idon.bloccata ? "border-red-300 bg-red-50 dark:bg-red-950/30" : idon.coperto ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30" : "border-slate-200"}`}>
+                  <div className="font-semibold">Idoneità Apple con il difetto {idon.difetti.map((d) => `${d.componentCode} → ${d.issueCode}`).join(", ")}: {idon.copertura || "—"}{idon.bloccata ? " · BLOCCATA" : ""}</div>
+                  {idon.blocchi.length > 0 && <ul className="list-disc pl-4 text-red-800">{idon.blocchi.map((b, i) => <li key={i}>{b}</li>)}</ul>}
+                  <div>Ricambi: {idon.parti.map((p) => <span key={p.codice} className={`mr-2 ${p.coperto ? "font-semibold text-emerald-700" : ""}`}>{p.codice} {p.coperto ? "COPERTO" : "a pagamento"}</span>)}</div>
+                  {idon.tipi_riparazione.length > 0 && <div className="text-muted-foreground">Tipi ammessi: {idon.tipi_riparazione.map((t) => t.nome).join(" · ")}</div>}
+                  <div className="text-muted-foreground">Tecnico certificato obbligatorio: {idon.tecnico_obbligatorio ? "sì" : "no"}{idon.trova_il_mio ? " · «Trova il mio» ATTIVO (lo dice Apple)" : ""}</div>
+                </div>
+              )}
               <div className="mb-2 flex flex-wrap items-center gap-2"><b>Codici componente → difetto ammessi da Apple per questo dispositivo</b>
-                <span className="text-xs text-muted-foreground">sono quelli che servono per aprire una riparazione GSX e per le sezioni «per difetto» della scheda</span>
+                <span className="text-xs text-muted-foreground">servono per aprire una riparazione GSX e per le sezioni «per difetto» della scheda · con «idoneità» Apple dice copertura e blocchi per quel difetto</span>
                 <input value={filtroDif} onChange={(e) => setFiltroDif(e.target.value)} placeholder="Filtra: display, battery, logic…" className="ml-auto h-8 w-56 rounded-md border px-2 text-xs" /></div>
               {!difetti ? <Loader2 className="animate-spin" /> : difetti.componenti.length === 0 ? <p className="text-muted-foreground">Apple non restituisce codici per questo dispositivo.</p> : (
                 <div className="grid gap-2 md:grid-cols-2">{difetti.componenti.filter((c) => !filtroDif || `${c.codice} ${c.componente} ${c.difetti.map((d) => d.descrizione).join(" ")}`.toLowerCase().includes(filtroDif.toLowerCase())).map((c) => (
                   <div key={c.codice} className="rounded-md border p-2 text-xs"><div className="font-semibold"><span className="font-mono">{c.codice}</span> {c.componente}</div>
-                    <ul className="mt-1 pl-3">{c.difetti.map((d) => <li key={d.codice}><span className="font-mono text-muted-foreground">{d.codice}</span> {d.descrizione}</li>)}</ul></div>))}</div>)}
+                    <ul className="mt-1 pl-3">{c.difetti.map((d) => <li key={d.codice} className="flex items-center gap-1"><span className="font-mono text-muted-foreground">{d.codice}</span> {d.descrizione}
+                      <button type="button" disabled={!!idonBusy} className="ml-auto rounded border px-1 text-[10px] hover:bg-muted disabled:opacity-50" title="Idoneità e copertura Apple con questo difetto (sui componenti principali)" onClick={() => verificaIdoneita(c.codice, d.codice)}>{idonBusy === `${c.codice}:${d.codice}` ? "…" : "idoneità"}</button></li>)}</ul></div>))}</div>)}
             </Card>
           )}
 
-          {sez === "grezzi" && <Card className="p-3"><pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify({ dispositivo: g, riparazioni: rip, diagnosi: diag, difetti }, null, 2)}</pre></Card>}
+          {sez === "articoli" && (
+            <div className="grid gap-3 lg:grid-cols-[380px_1fr]">
+              <Card className="max-h-[75vh] overflow-y-auto p-3 text-sm">
+                {!arts ? <Loader2 className="animate-spin" /> : (
+                  <>
+                    <div className="mb-1 font-semibold text-amber-800">Programmi e problemi noti del modello ({arts.programmi.length + arts.del_modello.length})</div>
+                    {[...arts.programmi, ...arts.del_modello].length === 0 && <p className="text-xs text-muted-foreground">Nessun articolo che citi questo modello.</p>}
+                    <ul className="space-y-1 text-xs">{[...arts.programmi, ...arts.del_modello].map((a) => <li key={a.id}><button type="button" className={`text-left hover:underline ${art?.id === a.id ? "font-semibold" : ""}`} onClick={() => apriArticolo(a.id)}>{a.titolo}</button></li>)}</ul>
+                    <div className="mb-1 mt-3 font-semibold">Altri articoli Apple per questo dispositivo ({arts.altri.length})</div>
+                    <ul className="space-y-1 text-xs">{arts.altri.map((a) => <li key={a.id}><button type="button" className={`text-left hover:underline ${art?.id === a.id ? "font-semibold" : ""}`} onClick={() => apriArticolo(a.id)}>{a.titolo}</button></li>)}</ul>
+                  </>)}
+              </Card>
+              <Card className="min-h-[300px] p-3">
+                {artBusy ? <Loader2 className="animate-spin" /> : art ? (
+                  <iframe title={`Articolo Apple ${art.id}`} sandbox="" className="h-[75vh] w-full rounded border bg-white" srcDoc={art.html} />
+                ) : <p className="text-sm text-muted-foreground">Scegli un articolo a sinistra: si legge qui, com&apos;è su GSX.</p>}
+              </Card>
+            </div>
+          )}
+
+          {sez === "grezzi" && <Card className="p-3"><pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify({ dispositivo: g, riparazioni: rip, diagnosi: diag, difetti, idoneita: idon, articoli: arts }, null, 2)}</pre></Card>}
         </>
       )}
       </>}
