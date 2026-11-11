@@ -125,6 +125,14 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
     <Sezione titolo="Preventivo" icona={<Sparkles />} sottotitolo={statoPrev}
       azioni={<span className="text-sm">Totale proposto <b className="text-base">{eur(tot)}</b> <span className="text-xs text-muted-foreground">IVA compresa</span></span>}>
       <div className="space-y-4">
+        {/* 12/11/2026 (Christian, 63395): la VERIFICA del tecnico si legge SUBITO qui, senza scendere a fondo pagina */}
+        {!!(s.note_verifica || "").trim() && (
+          <div className="rounded-lg border-2 border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-950 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-100" data-testid="verifica-in-preventivo">
+            <div className="text-xs font-semibold uppercase tracking-wide text-sky-800 dark:text-sky-300">
+              🔎 Verifica del tecnico{s.verifica_chiusa_da || s.tecnico_verifica ? ` · ${s.verifica_chiusa_da || s.tecnico_verifica}` : ""}{s.verifica_chiusa_il ? ` · ${dataOra(s.verifica_chiusa_il)}` : ""}</div>
+            <div className="whitespace-pre-wrap font-medium">{s.note_verifica}</div>
+          </div>
+        )}
         <Campo label="Test in ingresso (diagnosi)">
           {/* 09/11/2026 (Christian, 63352): il test in ingresso lungo si legge tutto: il campo cresce con il testo */}
           <textarea className={`${area} min-h-9 resize-y [field-sizing:content]`} rows={Math.max(1, Math.ceil((bz.diagnosi || "").length / 90))} disabled={ro}
@@ -200,12 +208,20 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
         )}
 
         {/* 26/10/2026 (Christian): «Trova il mio» attivo → si scrive nel preventivo, così chi accetta sa già che dovrà disattivarlo */}
-        {!ro && (s.trova_il_mio === "attivo" || s.riparazione_stato === "disabilitare_trova") && !/TROVA IL MIO/i.test(bz.note || "") && (
+        {/* 12/11/2026 (Christian, 63395): vale anche quando lo scrive il tecnico nella verifica («FMM da disabilitare»), e
+            l'avviso si può sempre aggiungere: serve per QUALSIASI riparazione, non solo per l'assistenza ufficiale */}
+        {!ro && !/TROVA IL MIO/i.test(bz.note || "") && (
+          (s.trova_il_mio === "attivo" || s.riparazione_stato === "disabilitare_trova" || /\bFMM\b|TROVA IL MIO|DOV'?È|FIND MY/i.test(s.note_verifica || "")) ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-            <span>🔒 «Trova il mio» è attivo: scrivilo nel preventivo, così accettando il cliente sa già che dovrà disattivarlo.</span>
+            <span>🔒 «Trova il mio» è attivo: scrivilo nel preventivo, così accettando il cliente sa già che dovrà disattivarlo (per qualsiasi riparazione).</span>
             <Button size="xs" className="ml-auto" onClick={() => { setBz((b) => ({ ...b, note: (b.note ? b.note.trimEnd() + "\n" : "") + AVVISO_TROVA })); toast.success("Avviso «Trova il mio» inserito nelle note del preventivo: salva la scheda"); }}>
               Inserisci nel preventivo l&apos;avviso «Trova il mio»</Button>
           </div>
+          ) : (
+            <Button size="xs" variant="outline" className="border-amber-300 text-amber-800"
+              onClick={() => { setBz((b) => ({ ...b, note: (b.note ? b.note.trimEnd() + "\n" : "") + AVVISO_TROVA })); toast.success("Avviso «Trova il mio» inserito nelle note del preventivo: salva la scheda"); }}>
+              🔒 Aggiungi l&apos;avviso «Trova il mio» da disattivare</Button>
+          )
         )}
         <Campo label="Note per il cliente (testi standard)">
           <textarea className={area} rows={bz.note ? Math.min(10, bz.note.split("\n").length + 1) : 2} disabled={ro} value={bz.note} onChange={(e) => setBz((b) => ({ ...b, note: e.target.value }))}
