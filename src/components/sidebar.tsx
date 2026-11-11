@@ -10,6 +10,7 @@ import {
   Users,
   UserPlus,
   Wrench,
+  Apple,
   Tags,
   FileText,
   CalendarClock,
@@ -107,6 +108,7 @@ export const MENU_APPLE: Voce[] = [
   { href: "/assistenza", label: "Schede assistenza", icon: Smartphone },
   { href: "/assistenza/ricambi-da-ordinare", label: "Ricambi da ordinare", icon: ShoppingCart },
   { href: "/assistenza/voci", label: "Voci di preventivo", icon: ListChecks },
+  { href: "/assistenza/gsx", label: "GSX Apple (seriale)", icon: Apple },
   { href: "/assistenza/ricambi-gsx", label: "Ricambi GSX (costi)", icon: Wrench },
   { href: "/assistenza/prezzi-ufficiali", label: "Prezzi assistenza ufficiale", icon: Tags },
   { href: "/assistenza/magazzino-ricambi", label: "Magazzino ricambi (display, schede)", icon: Boxes },
@@ -122,7 +124,7 @@ export const MENU_APPLE: Voce[] = [
 
 // voci che si vedono solo a chi vede le schede di assistenza (titolare + operatori abilitati: dal 23/10/2026 anche GSX, voci e prezzi ufficiali)
 // 28/10/2026 (Christian): la Chat WhatsApp Apple la vedono tutti (come quella Tarature)
-const DELLE_SCHEDE = new Set(["/assistenza", "/assistenza/voci", "/assistenza/ricambi-gsx", "/assistenza/prezzi-ufficiali", "/rubrica-apple"]);
+const DELLE_SCHEDE = new Set(["/assistenza", "/assistenza/voci", "/assistenza/gsx", "/assistenza/ricambi-gsx", "/assistenza/prezzi-ufficiali", "/rubrica-apple"]);
 // il Magazzino ricambi (23/10/2026, Christian) lo vedono e lo modificano tutti: non è in DELLE_SCHEDE
 
 /** La pagina appartiene solo all'altra divisione? (serve per tornare alla home quando si cambia divisione) */

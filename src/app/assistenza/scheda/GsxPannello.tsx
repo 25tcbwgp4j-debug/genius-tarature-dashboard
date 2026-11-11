@@ -1,7 +1,7 @@
 "use client";
 // 11/11/2026 (Christian): con «Decodifica» la scheda legge da Apple GSX (via ponte sul server) modello, configurazione,
 // garanzia e acquisto, e con «Ricambi Apple» i pezzi del dispositivo con la scheda logica esatta e il suo costo.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Apple, Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { gsxRicambi, type GsxDispositivo, type GsxRicambi } from "@/lib/gsx";
 const euro = (n?: number | null) => (n == null ? "—" : n.toLocaleString("it-IT", { style: "currency", currency: "EUR" }));
 const data = (s?: string | null) => (s ? s.split("-").reverse().join("/") : "—");
 
-export function GsxPannello({ g, errore }: { g: GsxDispositivo | null; errore?: string | null }) {
+export function GsxPannello({ g, errore, autoRicambi }: { g: GsxDispositivo | null; errore?: string | null; autoRicambi?: boolean }) {
   const [ric, setRic] = useState<GsxRicambi | null>(null);
   const [busy, setBusy] = useState(false);
   const [filtro, setFiltro] = useState("");
@@ -22,6 +22,15 @@ export function GsxPannello({ g, errore }: { g: GsxDispositivo | null; errore?: 
     setBusy(true);
     try { setRic(await gsxRicambi(g.seriale)); } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
+
+  // pagina GSX: i ricambi si caricano da soli
+  useEffect(() => {
+    if (!autoRicambi || !g) return;
+    let vivo = true;
+    setBusy(true);
+    gsxRicambi(g.seriale).then((r) => { if (vivo) setRic(r); }).catch(toastErrore).finally(() => { if (vivo) setBusy(false); });
+    return () => { vivo = false; };
+  }, [autoRicambi, g]);
 
   const righe = useMemo(() => {
     if (!ric) return [];

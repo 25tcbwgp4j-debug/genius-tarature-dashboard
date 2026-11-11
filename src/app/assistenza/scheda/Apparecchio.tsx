@@ -155,7 +155,7 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
           <input className={campo} disabled={ro} value={v.modello || ""} placeholder="es. MacBook Air (Retina, 13-inch, 2020)"
             onChange={(e) => { set("modello", e.target.value); set("modello_fonte", e.target.value ? "manuale" : null); set("modello_da_scheda", null); }} />
           {v.seriale && <a className="inline-flex h-9 items-center gap-1 rounded-md border px-2 text-xs hover:bg-muted" target="_blank" rel="noreferrer"
-            href={`https://gsx2.apple.com/product-details/${encodeURIComponent(String(v.seriale).trim())}`} title="Apri il seriale su GSX (serve essere loggati)"><ExternalLink className="size-3.5" />GSX</a>}
+            href={`/assistenza/gsx?s=${encodeURIComponent(String(v.seriale).trim())}`} title="Apri la pagina GSX del gestionale con questo seriale (ricambi, riparazioni, diagnosi…)"><ExternalLink className="size-3.5" />GSX</a>}
         </div>
       </Campo>
 
