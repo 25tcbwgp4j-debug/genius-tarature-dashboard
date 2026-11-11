@@ -271,7 +271,7 @@ export const STATI_RIPARAZIONE: [string, string][] = [["in_corso", "In riparazio
   ["ritirato_temporaneo", "📦 Ritirato dal cliente, lo riporterà"],  // 09/11/2026 (Christian, 63349/63351)
   // 11/11/2026 (Christian): stati visti davvero in questi giorni (registro + gruppo staff)
   ["su_banco", "🔧 In lavorazione sul banco"], ["test_in_corso", "🧪 Test in corso (AST2 / MRI)"], ["copia_dati", "💾 Copia dati in corso"],
-  ["attesa_cliente", "💬 In attesa del cliente (password, codice, conferma)"], ["attesa_partner", "🏢 In attesa del partner (Bagnetti / Apple)"],
+  ["attesa_cliente", "💬 In attesa di risposta dal cliente"], ["attesa_partner", "🏢 In attesa del partner (Bagnetti / Apple)"],
   ["da_richiudere", "🔩 Da richiudere"], ["test_finale", "✅ Richiuso: test finale"]];
 /** 11/11/2026: testo e colori dei DATI DEL CLIENTE (banner della scheda, badge dell'elenco) */
 export const DATI_CLIENTE: Record<DatiCliente, { breve: string; lungo: string }> = {
