@@ -10,6 +10,7 @@ import { STATUS_CONFIG, getStatusConfig } from "@/lib/constants";
 import { usePermessi } from "@/components/permessi";
 import { useAttivita } from "@/components/attivita";
 import { HomeApple } from "./HomeApple";
+import { DaGestireTarature } from "@/components/DaGestireTarature";
 
 interface ReconciliationSnapshot {
   total_groups?: number;
@@ -81,6 +82,9 @@ function HomeTarature() {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900">Registro giornaliero</h2>
+
+      {/* 12/11/2026: notifiche e avvisi delle Tarature qui, come sul banco Apple (non più pulsante fisso) */}
+      <DaGestireTarature />
 
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="p-4">

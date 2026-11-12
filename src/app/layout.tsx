@@ -14,7 +14,6 @@ import { DaRichiamare } from "@/components/DaRichiamare";
 import { ChiamataInArrivo } from "@/components/ChiamataInArrivo";
 import { DopoBonifico } from "@/components/DopoBonifico";
 import { StripeAvviso } from "@/components/StripeAvviso";
-import { DaGestireTarature } from "@/components/DaGestireTarature";
 import { AttivitaProvider } from "@/components/attivita";
 
 const geist = Geist({
@@ -85,8 +84,7 @@ export default function RootLayout({
             <BonificiAvviso />
             {/* pagamenti Stripe ricevuti (riconciliati da soli o NON abbinati): stesso stile, sopra i bonifici (07/10/2026) */}
             <StripeAvviso />
-            {/* 02/11/2026: le cose da gestire delle Tarature, su ogni pagina come bonifici e Stripe */}
-            <DaGestireTarature />
+            {/* 12/11/2026: le cose da gestire delle Tarature non sono più qui ma nella home Tarature (DaGestireTarature) */}
             {/* 04/11/2026: telefonate col flag «da richiamare», su ogni pagina finché qualcuno non le segna fatte */}
             <DaRichiamare />
             {/* 05/11/2026: chi sta chiamando mentre il telefono squilla, con le sue ultime schede (collegamento CTI del centralino) */}
