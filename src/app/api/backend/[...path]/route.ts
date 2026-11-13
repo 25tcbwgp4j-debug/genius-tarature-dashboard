@@ -7,8 +7,7 @@ import { AUTH_COOKIE_NAME } from "@/lib/auth";
  * Auth a 2 livelli:
  *   1) Bearer JWT — letto dal cookie httpOnly "gt-auth" (utente loggato).
  *      Il backend identifica l'utente e applica il ruolo (admin/operator).
- *   2) Fallback X-API-Key (env API_KEY senza prefisso NEXT_PUBLIC_) SOLO se
- *      manca il JWT (dal 08/10/2026 non si mandano più insieme).
+ *   2) Nessun ripiego con la chiave di servizio: senza JWT nessuna credenziale (13/11/2026).
  *
  * Cosi' la dashboard fa azioni come l'utente loggato (con audit log corretto)
  * e i DELETE admin-only fallano per gli operatori, non per la chiave globale.
@@ -19,7 +18,6 @@ const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   "https://tarature-api-production.up.railway.app";
 
-const API_KEY = process.env.API_KEY || "";
 
 // Headers della richiesta originale che inoltriamo al backend
 const FORWARDED_REQ_HEADERS = new Set([
@@ -79,10 +77,10 @@ async function forward(
   // Prima partiva sempre insieme al JWT: un JWT scaduto o di un utente disattivato passava grazie alla chiave.
   // Il backend accetta il JWT dello staff anche sugli endpoint «a chiave» (auth.chiave_o_staff).
   const userJwt = request.cookies.get(AUTH_COOKIE_NAME)?.value;
+  // 13/11/2026 (revisione sicurezza): senza cookie NON si aggiunge più la chiave di servizio (ramo mai usato: il proxy
+  // Next risponde già 401 a /api/* senza sessione). Senza JWT la richiesta parte senza credenziali e il backend la rifiuta.
   if (userJwt) {
     safeSet("Authorization", `Bearer ${userJwt}`);
-  } else if (API_KEY) {
-    safeSet("X-API-Key", API_KEY);
   }
 
   // Corpo richiesta (solo per POST/PUT/PATCH/DELETE con body)
