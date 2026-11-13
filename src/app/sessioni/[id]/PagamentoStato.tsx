@@ -7,6 +7,7 @@
 
 import { AlertTriangle } from "lucide-react";
 import type { StatoPagamentoSessione } from "@/lib/api";
+import { accreditoPrevisto, contabileArrivata } from "@/lib/constants";
 
 export const dataIt = (d?: string | null) => (d ? new Date(`${String(d).slice(0, 10)}T12:00:00`).toLocaleDateString("it-IT") : "—");
 
@@ -16,6 +17,16 @@ export function testoPagamento(st: StatoPagamentoSessione | null): { breve: stri
   const p = st.pagamento;
   const f = st.fattura;
   const doc = f ? (f.numero ? `fattura ${f.numero}` : "bozza di fattura") : null;
+  // 13/11/2026 (Christian): contabile del bonifico arrivata, accredito non ancora visto su SumUp → si consegna lo stesso
+  const note = (st.sessione as { payment_notes?: string | null } | undefined)?.payment_notes;
+  if (p.pagata && contabileArrivata("pagato", note)) {
+    const prev = accreditoPrevisto(note);
+    return {
+      breve: `Contabile bonifico arrivata${prev ? ` · accredito ${prev}` : ""} · si può consegnare`,
+      lungo: `Contabile del bonifico arrivata: gli strumenti si possono consegnare. Accredito su SumUp ${prev ? `previsto il ${prev}` : "da riscontrare"}: quando arriva si abbina da solo${doc ? ` (${doc})` : ""}`,
+      colore: "bg-sky-100 text-sky-900 border-sky-300",
+    };
+  }
   if (p.pagata) {
     const come = p.modalita_label ? ` con ${p.modalita_label}` : "";
     const rif = p.riferimento ? ` · rif. ${p.riferimento}` : "";

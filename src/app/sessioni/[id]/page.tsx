@@ -812,7 +812,7 @@ export default function SessionDetail() {
                 </Badge>
               );
             }
-            const pcfg = getPaymentConfig(session.payment_status, session.payment_method);
+            const pcfg = getPaymentConfig(session.payment_status, session.payment_method, (session as { payment_notes?: string | null }).payment_notes);
             return (
               <Badge className={`${pcfg.color} border`}>
                 {pcfg.label}

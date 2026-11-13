@@ -715,7 +715,7 @@ export default function SessionsPage() {
                       })()}
                       {/* Badge pagamento — nascosto per completata (pagamento implicito) */}
                       {s.status !== "completata" && (() => {
-                        const pcfg = getPaymentConfig(s.payment_status, s.payment_method);
+                        const pcfg = getPaymentConfig(s.payment_status, s.payment_method, (s as { payment_notes?: string | null }).payment_notes);
                         return <Badge className={`${pcfg.color} text-xs`}>{pcfg.label}</Badge>;
                       })()}
                     </div>

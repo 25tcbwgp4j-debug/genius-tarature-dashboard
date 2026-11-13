@@ -19,12 +19,30 @@ export const PAYMENT_CONFIG: Record<string, { label: string; color: string }> = 
   pagato:        { label: "Pagato",              color: "bg-emerald-100 text-emerald-800" },
 };
 
+/** 13/11/2026 (Christian, caso AU.TE.CO.): bonifico «dichiarato» = è arrivata la CONTABILE, l'accredito su SumUp arriva
+ *  tra qualche giorno, ma gli strumenti si possono restituire al banco. Si riconosce dalla nota di pagamento. */
+export function contabileArrivata(paymentStatus?: string | null, paymentNotes?: string | null): boolean {
+  return paymentStatus === "pagato" && typeof paymentNotes === "string" && paymentNotes.includes("DICHIARATO");
+}
+
+/** «accredito previsto il 16/11/2026» letto dalla nota, se c'è. */
+export function accreditoPrevisto(paymentNotes?: string | null): string | null {
+  const m = typeof paymentNotes === "string" ? paymentNotes.match(/accredito previsto il (\d{2}\/\d{2})/) : null;
+  return m ? m[1] : null;
+}
+
 export function getPaymentConfig(
   paymentStatus: string | null | undefined,
   paymentMethod?: string | null,
+  paymentNotes?: string | null,
 ): { label: string; color: string } {
   const key = paymentStatus || "in_attesa";
   const base = PAYMENT_CONFIG[key] || PAYMENT_CONFIG.in_attesa;
+  if (contabileArrivata(key, paymentNotes)) {
+    const prev = accreditoPrevisto(paymentNotes);
+    return { label: `Contabile bonifico arrivata${prev ? ` (accredito ${prev})` : ""} · si può consegnare`,
+             color: "bg-sky-100 text-sky-900 border border-sky-300" };
+  }
   if (key === "pagato" && paymentMethod) {
     return { ...base, label: `Pagato (${paymentMethod})` };
   }

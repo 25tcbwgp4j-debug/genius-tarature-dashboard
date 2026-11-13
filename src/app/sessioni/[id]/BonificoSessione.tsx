@@ -59,7 +59,7 @@ export function BonificoSessione({ sessionId, operatore, disabled, className = "
   const [ric, setRic] = useState<BonRichiesta | null>(null);
   const [notaLettura, setNotaLettura] = useState("");
   const [dichiara, setDichiara] = useState(false);
-  const [dich, setDich] = useState({ data: oggiIso(), ordinante: "", causale: "" });
+  const [dich, setDich] = useState({ data: oggiIso(), ordinante: "", causale: "", accredito_previsto: "" });
   const richiestaFatta = useRef(false);
 
   const carica = useCallback(async () => {
@@ -143,7 +143,7 @@ export function BonificoSessione({ sessionId, operatore, disabled, className = "
       const x = await fetchAPI(`/api/bonifici/sessione/${sessionId}/dichiara`, { method: "POST", body: JSON.stringify({ operatore, ...dich }) });
       if (x.gia_presente) toast.info("Il bonifico era già stato dichiarato per questa sessione");
       else if (x.verificato) toast.success("Bonifico trovato sul conto e abbinato: sessione pagata");
-      else toast.success("Sessione segnata pagata con bonifico DICHIARATO: si abbina da solo quando arriva sul conto SumUp", { duration: 8000 });
+      else toast.success("Contabile del bonifico registrata: si può consegnare. Si abbina da solo quando l'accredito arriva sul conto SumUp", { duration: 8000 });
       window.dispatchEvent(new Event("bonifici:aggiorna"));
       setAperto(false);
       onFatto?.();
@@ -234,27 +234,31 @@ export function BonificoSessione({ sessionId, operatore, disabled, className = "
                     {inLettura || cerca ? <Loader2 className="animate-spin" /> : <Clock />} Aspetta e ricontrolla
                   </Button>
                   <Button className="h-11 bg-amber-600 font-semibold text-white hover:bg-amber-700" disabled={busy}
-                    onClick={() => { setDich({ data: oggiIso(), ordinante: doc?.cliente || "", causale: "" }); setDichiara(true); }}>
-                    <PenLine /> Segna comunque pagato
+                    onClick={() => { setDich({ data: oggiIso(), ordinante: doc?.cliente || "", causale: "", accredito_previsto: "" }); setDichiara(true); }}>
+                    <PenLine /> Contabile arrivata: si può consegnare
                   </Button>
                 </div>
               ) : (
                 <div className="space-y-2 rounded-md border border-amber-300 p-2">
-                  <p className="text-sm font-medium">Segna pagato con bonifico <b>dichiarato</b> ({eur(doc?.importo)})</p>
+                  <p className="text-sm font-medium">È arrivata la <b>contabile</b> del bonifico ({eur(doc?.importo)}): si può consegnare</p>
                   <label className="block text-xs">Data del bonifico *
                     <input type="date" className="mt-0.5 block h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={dich.data} max={oggiIso()}
                       onChange={(e) => setDich((d) => ({ ...d, data: e.target.value }))} /></label>
                   <label className="block text-xs">Chi l&apos;ha fatto (ordinante)
                     <Input className="mt-0.5 h-10" value={dich.ordinante} onChange={(e) => setDich((d) => ({ ...d, ordinante: e.target.value }))} /></label>
+                  {/* 13/11/2026 (Christian, caso AU.TE.CO.): data di regolamento scritta sulla contabile */}
+                  <label className="block text-xs">Accredito previsto (data di regolamento sulla contabile)
+                    <input type="date" className="mt-0.5 block h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={dich.accredito_previsto} min={dich.data || undefined}
+                      onChange={(e) => setDich((d) => ({ ...d, accredito_previsto: e.target.value }))} /></label>
                   <label className="block text-xs">Causale o CRO (se lo sai)
                     <Input className="mt-0.5 h-10" value={dich.causale} onChange={(e) => setDich((d) => ({ ...d, causale: e.target.value }))} /></label>
                   <p className="text-[11px] text-amber-800 dark:text-amber-200">
-                    La sessione risulta pagata con la nota «bonifico dichiarato, da riscontrare». Quando il bonifico arriva sul conto SumUp si abbina da solo.
+                    In lista e nella sessione comparirà «Contabile bonifico arrivata · si può consegnare»: i ragazzi al banco possono restituire gli strumenti. Quando l&apos;accredito arriva sul conto SumUp si abbina da solo e diventa «Pagato».
                   </p>
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" className="h-11" disabled={busy} onClick={() => setDichiara(false)}>Indietro</Button>
                     <Button className="h-11 bg-amber-600 font-bold text-white hover:bg-amber-700" disabled={busy || !dich.data} onClick={segnaDichiarato}>
-                      {busy ? <Loader2 className="animate-spin" /> : null} Conferma: pagato (dichiarato)
+                      {busy ? <Loader2 className="animate-spin" /> : null} Conferma: contabile arrivata
                     </Button>
                   </div>
                 </div>
