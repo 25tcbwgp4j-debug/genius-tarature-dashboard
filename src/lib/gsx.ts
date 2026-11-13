@@ -3,6 +3,11 @@
 // scheda (campo gsx) così resta parte della scheda; confronto col listino (Prezzi ufficiali); schede del gestionale col seriale.
 import { fetchAPI } from "@/lib/api";
 
+export type GsxTrovaVerifica = {
+  stato: "attivo" | "non_attivo" | "non_determinabile"; verificato_il: string; fonte?: string | null;
+  messaggio?: string | null; ricambio?: string | null; difetto?: { componentCode: string; issueCode: string } | null;
+};
+
 export type GsxDispositivo = {
   seriale: string; modello: string | null; configurazione: string | null; configurazione_completa: string | null;
   famiglia_apple: string | null; immagine: string | null; imei: string | null; imei2: string | null;
@@ -23,6 +28,8 @@ export type GsxDispositivo = {
   /** il dispositivo è stato SOSTITUITO da Apple: il seriale nuovo */
   sostituito?: { seriale_nuovo: string; imei_nuovo: string | null; data: string | null; stato: string | null } | null;
   trova_il_mio_probabile?: boolean;
+  /** 13/11/2026: «Trova il mio» VERIFICATO da Apple (repair/eligibility) a ogni Decodifica — l'unica prova valida */
+  trova_verifica?: GsxTrovaVerifica | null;
   schede_gestionale?: { id: string; sigla: string; stato: string | null; prodotto: string | null; modello: string | null; creata: string }[];
   /** presenti solo nella lettura completa (Decodifica della scheda) */
   ricambi?: GsxRicambi | null; riparazioni?: GsxRiparazione[] | null; errori?: Record<string, string> | null;

@@ -76,6 +76,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const refPrev = useRef<HTMLDivElement>(null);
   const refLav = useRef<HTMLDivElement>(null);
   const trovaDopoInvio = useRef(false);
+  const trovaForza = useRef(false);
   const refRic = useRef<HTMLDivElement>(null);
   const refDoc = useRef<HTMLDivElement>(null);
   const refTec = useRef<HTMLDivElement>(null);
@@ -225,7 +226,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "stato_riparazione") refTec.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (a === "ricambi") refRic.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (a === "aggiornamento") setDlg({ k: "invio", tipo: "aggiornamento_riparazione" });
-    else if (a === "trova") setDlg({ k: "invio", tipo: "trova" });
+    else if (a === "trova") { if (confermaTrova()) setDlg({ k: "invio", tipo: "trova" }); }   // 13/11: solo se Apple lo conferma
     // 02/11/2026 (Christian, 63270): rifiutato → da richiudere (tecnico) → richiuso → solo allora pronto negativo
     // 26/10/2026 (63118): preventivo negativo → RIFIUTATO subito, senza mandarlo da accettare
     else if (a === "rifiutato_diretto") { if (confirm("Preventivo NEGATIVO: segnare la scheda come RIFIUTATA senza inviare il preventivo al cliente?\nPoi lo si richiude, se è stato smontato, e si manda il PRONTO (restituzione).")) azione("esito-preventivo", { esito: "rifiutato", canale: "negozio" }, "Preventivo RIFIUTATO (negativo, non inviato)"); }
@@ -243,6 +244,17 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "rimontato") azione("rimontaggio", { azione: "fatto" }, "Richiuso: ora invia il PRONTO (negativo)");
   }
   // 26/10/2026: «Trova il mio» attivo / risolto (la riparazione resta bloccata finché il cliente non abilita la riparazione)
+  // 13/11/2026 (Christian, 63418): le istruzioni al cliente solo se Apple ha verificato «Trova il mio» ATTIVO.
+  // «non attivo» → non si mandano; «non determinabile»/mai verificato → solo dopo il controllo sul dispositivo (forza).
+  function confermaTrova(): boolean {
+    const st = s?.gsx?.trova_verifica?.stato;
+    trovaForza.current = false;
+    if (st === "attivo") return true;
+    if (st === "non_attivo") { toast.error("Apple dice che «Trova il mio» NON è attivo: le istruzioni non si mandano (rifai la Decodifica se è cambiato qualcosa)."); return false; }
+    if (!confirm(`Apple non ha verificato «Trova il mio»${s?.gsx?.trova_verifica?.messaggio ? ` (${s.gsx.trova_verifica.messaggio})` : " (fai la Decodifica)"}.\nL'hai controllato sul dispositivo ed è ATTIVO? Solo così si mandano le istruzioni.`)) return false;
+    trovaForza.current = true;
+    return true;
+  }
   async function trova(az: "attivo" | "risolto") {
     await azione("trova", { azione: az }, az === "attivo" ? "«Trova il mio» attivo: riparazione bloccata" : "«Trova il mio» risolto: si procede");
   }
@@ -375,7 +387,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         catch (e) { toastErrore(e); return false; }
       }} />
       <ExSchede ex={s.collegamenti?.ex_schede} />
-      <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={() => setDlg({ k: "invio", tipo: "trova" })}
+      <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={() => { if (confermaTrova()) setDlg({ k: "invio", tipo: "trova" }); }}
         onPreventivo={() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
       <Avanzamento av={s.avanzamento} prontoProgrammato={s.pronto_prog_stato === "programmato" ? s.pronto_prog_il || null : null} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)} nome={(c) => nomeTecnico(c, tecnici)}
         rinvii={<>
@@ -613,16 +625,16 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         trovaDopoInvio.current = false;
       }} onInvia={async (body) => {
         const nome = dlg.tipo === "ricevuta" ? "ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "aggiornamento-riparazione" : dlg.tipo === "trova" ? "trova" : "preventivo";
-        const corpo = dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento" ? { ...body, tipo: dlg.tipo } : dlg.tipo === "trova" ? { ...body, azione: "invia" } : body;
+        const corpo = dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento" ? { ...body, tipo: dlg.tipo } : dlg.tipo === "trova" ? { ...body, azione: "invia", forza: trovaForza.current } : body;
         const r = await azione(nome, corpo, dlg.tipo === "ricevuta" ? "Ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "Aggiornamento riparazione" : dlg.tipo === "trova" ? "Istruzioni «Trova il mio» inviate" : body.programma_il ? "Preventivo PROGRAMMATO" : "Preventivo inviato");
-        if (r && (dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento") && !body.programma_il && s.trova_il_mio === "attivo") trovaDopoInvio.current = true;
+        if (r && (dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento") && !body.programma_il && s.trova_il_mio === "attivo" && s.gsx?.trova_verifica?.stato === "attivo") trovaDopoInvio.current = true;   // 13/11: solo se lo conferma Apple
         return r ? (r.esito as Esito) : null;
       }} />}
       {dlg?.k === "trova_dopo_preventivo" && (
         <Modale titolo="«Trova il mio» è attivo" onClose={() => setDlg(null)} piedi={<>
           <Button variant="outline" onClick={() => setDlg(null)}>Non ora</Button>
           <Button disabled={!!busy} onClick={async () => {
-            if (await azione("trova", { azione: "invia" }, "Istruzioni «Trova il mio» inviate")) setDlg(null);
+            if (await azione("trova", { azione: "invia" }, "Istruzioni «Trova il mio» inviate")) setDlg(null);   // qui Apple l'ha già verificato attivo
           }}>{busy && <Loader2 className="animate-spin" />}Invia le istruzioni al cliente</Button>
         </>}>
           <p className="text-sm">Il preventivo è partito. Su questa scheda hai segnato «Trova il mio» attivo: inviare anche al cliente, con un messaggio a parte (mail e WhatsApp), le istruzioni per disabilitarlo?</p>

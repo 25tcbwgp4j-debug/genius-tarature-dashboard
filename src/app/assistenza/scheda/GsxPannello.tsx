@@ -119,7 +119,7 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
       </div>
 
       {/* avvisi che cambiano il lavoro */}
-      {(g.sostituito || g.trova_il_mio_probabile || g.dep || g.modalita_riparazione || g.prestito || aperte.length > 0 || g.idoneita?.bloccata) && (
+      {(g.sostituito || g.trova_verifica || g.dep || g.modalita_riparazione || g.prestito || aperte.length > 0 || g.idoneita?.bloccata) && (
         <div className="mt-2 space-y-1 text-xs">
           {g.sostituito && <div className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-red-950 dark:bg-red-950/30 dark:text-red-100">
             🔁 <b>DISPOSITIVO SOSTITUITO DA APPLE</b>{g.sostituito.data ? ` il ${data(g.sostituito.data)}` : ""}: il seriale nuovo è <span className="font-mono font-semibold">{g.sostituito.seriale_nuovo}</span>{g.sostituito.imei_nuovo ? ` · IMEI ${g.sostituito.imei_nuovo}` : ""}. Nella scheda va come «nuovo S/N».
@@ -128,9 +128,16 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
             ⛔ <b>Apple BLOCCA la riparazione</b> ({g.idoneita.copertura || "—"}): {senzaHtml(apertoDettagli ? g.idoneita.blocchi.join(" · ") : `${g.idoneita.blocchi[0] || ""}${g.idoneita.blocchi.length > 1 ? ` (+${g.idoneita.blocchi.length - 1} avvisi: vedi «Intervento»)` : ""}`)}</div>}
           {aperte.length > 0 && <div className="rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-sky-950 dark:bg-sky-950/30 dark:text-sky-100">
             🛠 <b>Riparazione GSX aperta</b>: {aperte.map((r) => `${r.id} (${r.stato})`).join(" · ")}</div>}
-          {g.trova_il_mio_probabile && !trovaAttivo && <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-            🔒 Apple oscura i dati: <b>«Trova il mio» quasi certamente attivo</b> (si verifica sul dispositivo).
-            {onTrova && <Button type="button" size="xs" variant="outline" className="ml-auto" onClick={onTrova}>Segna «Trova il mio» attivo</Button>}</div>}
+          {/* 13/11/2026: «Trova il mio» lo dice Apple (idoneità), non gli asterischi né il blocco operatore */}
+          {g.trova_verifica && (() => {
+            const v = g.trova_verifica;
+            const st = v.stato === "attivo" ? { c: "border-red-300 bg-red-50 text-red-950 dark:bg-red-950/30 dark:text-red-100", t: "🔒 «TROVA IL MIO» ATTIVO" }
+              : v.stato === "non_attivo" ? { c: "border-emerald-300 bg-emerald-50 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100", t: "🔓 «Trova il mio» NON attivo" }
+              : { c: "border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100", t: "❔ «Trova il mio» NON DETERMINABILE" };
+            return <div className={`flex flex-wrap items-center gap-2 rounded-md border px-2 py-1 ${st.c}`}>
+              <b>{st.t}</b><span>{v.stato === "non_determinabile" ? `${v.messaggio || ""} — si controlla sul dispositivo.` : `verificato da Apple il ${ora(v.verificato_il)}`}</span>
+              {v.stato === "attivo" && !trovaAttivo && onTrova && <Button type="button" size="xs" variant="outline" className="ml-auto" onClick={onTrova}>Segna «Trova il mio» attivo</Button>}</div>;
+          })()}
           {g.dep && <div className="rounded-md border border-violet-300 bg-violet-50 px-2 py-1 text-violet-950 dark:bg-violet-950/30 dark:text-violet-100">
             🏢 <b>Iscritto a DEP / Apple Business Manager</b> (gestione aziendale MDM): alla formattazione si riattiva il profilo dell&apos;azienda. Attenzione a vendite e permute.</div>}
           {g.modalita_riparazione && <div className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100">
