@@ -222,7 +222,8 @@ export function Sidebar() {
   }, [pathname, admin]);
 
   // Non mostrare la sidebar sulla pagina login
-  if (pathname === "/login" || pathname.startsWith("/login/")) {
+  // 13/11/2026: niente menu (né contatori) su nessuna pagina senza accesso: login, password dimenticata, reimpostazione
+  if (["/login", "/forgot-password", "/reset-password"].some((p) => pathname === p || pathname.startsWith(p + "/"))) {
     return null;
   }
 

@@ -11,6 +11,7 @@ import { AutorizzazioneDialog } from "@/components/AutorizzazioneDialog";
 import { GuardiaTitolare } from "@/components/RiservatoTitolare";
 import { BonificiAvviso } from "@/components/BonificiAvviso";
 import { DaRichiamare } from "@/components/DaRichiamare";
+import { SoloConAccesso } from "@/components/SoloConAccesso";
 import { ChiamataInArrivo } from "@/components/ChiamataInArrivo";
 import { DopoBonifico } from "@/components/DopoBonifico";
 import { StripeAvviso } from "@/components/StripeAvviso";
@@ -80,6 +81,8 @@ export default function RootLayout({
             </main>
             {/* operazioni protette dell'operatore: password dell'admin sul posto o richiesta in attesa */}
             <AutorizzazioneDialog />
+            {/* 13/11/2026: avvisi fissi solo a sessione confermata dal backend (mai prima dell'accesso) */}
+            <SoloConAccesso>
             {/* bonifici arrivati sul conto SumUp: pulsante rosso su ogni pagina (02/10/2026) */}
             <BonificiAvviso />
             {/* pagamenti Stripe ricevuti (riconciliati da soli o NON abbinati): stesso stile, sopra i bonifici (07/10/2026) */}
@@ -91,6 +94,7 @@ export default function RootLayout({
             <ChiamataInArrivo />
             {/* dopo l'abbinamento di un bonifico: avviso ritiro / etichetta / spedizione della scheda (29/10/2026) */}
             <DopoBonifico />
+            </SoloConAccesso>
            </AttivitaProvider>
           </PermessiProvider>
           <Toaster richColors position="top-right" />
