@@ -99,7 +99,7 @@ function Avviso() {
       {(n > 0 || problema || dich > 0) && !aperto && (
         // 13/11/2026: nella pila unica degli avvisi (non copre più i contenuti); su iPhone solo icona e numero.
         // Testi al singolare/plurale corretti («1 bonifico dichiarato», non «1 bonifici dichiarati»).
-        <NellaPila>
+        <NellaPila ordine={1}>
           <button type="button" onClick={() => setAperto(true)}
             className={`${CLASSI_PULSANTE_PILA} ${n > 0 ? "bg-red-600 hover:bg-red-700" : problema ? "bg-amber-500 hover:bg-amber-600" : "bg-slate-500 hover:bg-slate-600"}`}
             title={n > 0 ? "Bonifici arrivati sul conto SumUp da gestire" : problema ? `Ultimo controllo bonifici: ${testoControllo(st?.ultimo_controllo || null)}` : `${dich} ${dich === 1 ? "bonifico dichiarato" : "bonifici dichiarati"} da riscontrare`}

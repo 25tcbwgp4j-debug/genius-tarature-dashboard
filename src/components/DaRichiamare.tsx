@@ -61,7 +61,7 @@ export function DaRichiamare() {
     <>
       {n > 0 && !aperto && (
         // 13/11/2026: nella pila unica degli avvisi (non copre più i contenuti); su iPhone solo icona e numero
-        <NellaPila>
+        <NellaPila ordine={3}>
           <button type="button" onClick={() => setAperto(true)} title={`${n} ${n === 1 ? "telefonata" : "telefonate"} da richiamare`}
             aria-label={`${n} ${n === 1 ? "telefonata" : "telefonate"} da richiamare`}
             className={`${CLASSI_PULSANTE_PILA} bg-amber-600 hover:bg-amber-700`}>

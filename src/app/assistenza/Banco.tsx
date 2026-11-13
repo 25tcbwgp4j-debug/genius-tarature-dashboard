@@ -42,7 +42,7 @@ const STILE_RIP: Record<string, string> = {
 };
 
 // Tutte le schede che rispondono a ricerca/filtro, a blocchi da 500 (il massimo del backend), 4 richieste per volta.
-async function tutteLeSchede(q: string, stato: string): Promise<{ schede: SchedaBreve[]; totale: number }> {
+async function tutteLeSchede(q: string, stato: string): Promise<{ schede: SchedaBreve[]; totale: number; ricerca?: string }> {
   const primo = await assElenco(q, stato, "", 500, 0);
   const pagine: number[] = [];
   for (let off = 500; off < primo.totale; off += 500) pagine.push(off);
@@ -53,7 +53,7 @@ async function tutteLeSchede(q: string, stato: string): Promise<{ schede: Scheda
   }
   const visti = new Set<string>();
   const schede = [primo.schede, ...resto].flat().filter((x) => (visti.has(x.id) ? false : (visti.add(x.id), true)));
-  return { schede, totale: primo.totale };
+  return { schede, totale: primo.totale, ricerca: primo.ricerca };
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +70,7 @@ export function Banco() {
   const [filtro, setFiltro] = useState(statoLink && FILTRI_VALIDI.includes(statoLink) ? statoLink : "aperte");
   const [elenco, setElenco] = useState<SchedaBreve[] | null>(null);
   const [totale, setTotale] = useState(0);
+  const [esatta, setEsatta] = useState(false);   // 13/11/2026: risultati a parola intera
   // 05/10/2026 (§10.6): cruscotto per fase (e tecnico) al posto dei chip filtro
   const [cruscotto, setCruscotto] = useState<FaseCruscotto[] | null>(null);
   // 13/11/2026 (revisione Mac): cruscotto RIPIEGABILE. Con una ricerca in corso o una scheda aperta parte ridotto a una
@@ -131,7 +132,7 @@ export function Banco() {
     // Una fase del cruscotto scelta (senza ricerca) mostra solo quelle schede (e del tecnico, se scelto).
     const p = !q.trim() && fase ? assElencoFase(fase.fase, fase.tecnico)
       : q.trim().length >= 3 ? tutteLeSchede(q, st) : assElenco(q, st, "", q.trim() ? 500 : 150);
-    p.then((r) => { if (mia !== ultimaRicerca.current) return; setElenco(r.schede); setTotale(r.totale); })
+    p.then((r) => { if (mia !== ultimaRicerca.current) return; setElenco(r.schede); setTotale(r.totale); setEsatta((r as { ricerca?: string }).ricerca === "esatta"); })
       .catch((e) => { if (mia !== ultimaRicerca.current) return; toastErrore(e); setElenco([]); });
     assCruscotto().then((r) => { setCruscotto(r.fasi); setTecniciCr(r.tecnici); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); setNotifiche(r.notifiche || []); }).catch(() => undefined);
   }, [q, filtro, fase]);
@@ -270,10 +271,10 @@ export function Banco() {
         <div className={`flex max-h-[calc(100vh-7rem)] flex-col gap-2 rounded-xl border bg-card p-2 shadow-sm lg:sticky lg:top-2 ${nascondiElenco ? "hidden" : aperta ? "hidden lg:flex" : ""}`}>
           <div className="flex gap-1">
             <div className="relative flex-1">
-              <Search className="absolute left-2 top-2 size-4 text-muted-foreground" />
-              <Input ref={cerca} className="h-8 pl-7" placeholder="Cerca: cliente, seriale, «air 2020 logica»…  ( / )" value={q} onChange={(e) => setQ(e.target.value)} />
+              <Search className="absolute left-2 top-2 size-4 text-muted-foreground max-sm:top-3" />
+              <Input ref={cerca} className="h-8 pl-7 max-sm:h-10" placeholder="Cerca: cliente, seriale, «air 2020 logica»…  ( / )" value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
-            <Input className="h-8 w-24" placeholder="N. scheda" value={salto} onChange={(e) => setSalto(e.target.value)}
+            <Input className="h-8 w-24 max-sm:h-10" placeholder="N. scheda" value={salto} onChange={(e) => setSalto(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") salta(); }} inputMode="numeric" />
           </div>
           <div className="flex flex-wrap items-center gap-1 text-xs">
@@ -286,12 +287,12 @@ export function Banco() {
             )}
             {([["aperte", "Aperte"], ["consegnato", "Consegnate"], ["tutte", "Tutte"]] as const).map(([k, l]) => (
               <button key={k} onClick={() => { setFiltro(k); setFase(null); setElenco(null); }}
-                className={`rounded-full border px-2 py-0.5 ${!fase && filtro === k ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{l}</button>
+                className={`rounded-full border px-2 py-0.5 max-sm:min-h-10 max-sm:px-3 ${!fase && filtro === k ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{l}</button>
             ))}
           </div>
           {/* 13/11/2026: «1 scheda trovata» (non «1 schede trovate»); con un tetto: «prime N di M» + come vedere le altre */}
           <div className="text-xs text-muted-foreground" aria-live="polite">{elenco ? <>
-            {totale.toLocaleString("it-IT")} {totale === 1 ? (inRicerca ? "scheda trovata" : "scheda") : (inRicerca ? "schede trovate" : "schede")}{inRicerca ? " su tutte le schede" : ""}
+            {totale.toLocaleString("it-IT")} {totale === 1 ? (inRicerca ? "scheda trovata" : "scheda") : (inRicerca ? "schede trovate" : "schede")}{inRicerca ? " su tutte le schede" : ""}{inRicerca && esatta ? " (parola intera: scrivi meno lettere per trovare anche le parole che iniziano così)" : ""}
             {totale > elenco.length && <span className="block font-medium text-amber-800 dark:text-amber-300">
               Mostrate le prime {elenco.length.toLocaleString("it-IT")} di {totale.toLocaleString("it-IT")} (le più recenti): affina la ricerca o premi «Mostra tutte» in fondo</span>}
           </> : "…"}</div>

@@ -45,7 +45,7 @@ export function StripeAvviso() {
     <>
       {n > 0 && !aperto && (
         // 13/11/2026: nella pila unica degli avvisi (non copre più i contenuti); su iPhone solo icona e numero
-        <NellaPila>
+        <NellaPila ordine={2}>
           <button type="button" onClick={() => setAperto(true)}
             className={`${CLASSI_PULSANTE_PILA} ${rossi ? "bg-red-600 hover:bg-red-700" : "bg-indigo-600 hover:bg-indigo-700"}`}
             title="Pagamenti Stripe arrivati: controlla a cosa sono stati abbinati e il prossimo passo"

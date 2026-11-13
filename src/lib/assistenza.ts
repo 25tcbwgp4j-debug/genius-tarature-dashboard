@@ -200,7 +200,8 @@ export const assRichiestaScarta = (id: string, b: { motivo: string; operatore: s
 export const assRichiestaCollega = (id: string, b: { scheda_id: string; operatore: string }) => fetchAPI(`/api/assistenza/richieste/${id}/collega`, j(b));
 export const assElencoFase = (fase: string, tecnico = ""): Promise<{ schede: SchedaBreve[]; totale: number }> =>
   fetchAPI(`/api/assistenza/schede?${new URLSearchParams({ fase, tecnico, limit: "500" })}`);
-export const assElenco = (q: string, stato: string, origine = "", limit = 150, offset = 0): Promise<{ schede: SchedaBreve[]; totale: number }> =>
+// 13/11/2026: «ricerca: "esatta"» = il backend ha cercato la PAROLA INTERA (es. «Ferrara» non trova «Ferraresi»)
+export const assElenco = (q: string, stato: string, origine = "", limit = 150, offset = 0): Promise<{ schede: SchedaBreve[]; totale: number; ricerca?: string }> =>
   fetchAPI(`/api/assistenza/schede?q=${encodeURIComponent(q)}&stato=${stato}&origine=${origine}&limit=${limit}&offset=${offset}`);
 export const assContatori = (): Promise<{ contatori: Record<string, number> }> => fetchAPI("/api/assistenza/contatori");
 export const assPerNumero = (n: string): Promise<{ id: string; sigla: string; esatta: boolean }> => fetchAPI(`/api/assistenza/schede/numero/${encodeURIComponent(n.trim().replace(/^(\d{5,})\/\d+$/, "$1"))}`); // 03/11/2026: 63300/2 (dispositivo aggiuntivo) → scheda 63300

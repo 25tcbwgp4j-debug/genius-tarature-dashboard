@@ -366,7 +366,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             {SEZ.filter((x) => x.id !== "ricambi" || !["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0).map((x) => (
               <button key={x.id} type="button" onClick={() => (chiuse[x.id] ? vaiA(x.id) : toggleSez(x.id))} onDoubleClick={() => vaiA(x.id)}
                 title={chiuse[x.id] ? `Apri «${x.nome}»` : `Chiudi «${x.nome}» (doppio clic: vai alla sezione)`}
-                className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${chiuse[x.id] ? "bg-background text-muted-foreground hover:bg-muted" : "border-primary/40 bg-primary/10 text-primary"}`}>
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-medium max-sm:min-h-10 max-sm:px-3 max-sm:text-xs ${chiuse[x.id] ? "bg-background text-muted-foreground hover:bg-muted" : "border-primary/40 bg-primary/10 text-primary"}`}>
                 {x.nome}{x.id === "preventivo" && bz.righe.length ? ` · ${eur(totaleConSpedizione(bz.righe, Number(bz.spedizione_tipo && bz.spedizione_tipo !== "nessuna" ? bz.spedizione_importo : 0) || 0))}` : ""}{x.id === "ricambi" && (s.ricambi_attesi || []).length ? ` · ${(s.ricambi_attesi || []).length}` : ""}</button>))}
           </div>
         </div>

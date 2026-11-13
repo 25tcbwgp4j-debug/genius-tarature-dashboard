@@ -49,11 +49,12 @@ export function PilaAvvisi() {
 const nessuno = () => () => undefined;
 const trovaPila = () => document.getElementById(ID_PILA);
 
-/** Mette un pulsante di avviso nella pila unica (se la pila non c'è, non mostra nulla). */
-export function NellaPila({ children }: { children: ReactNode }) {
+/** Mette un pulsante di avviso nella pila unica (se la pila non c'è, non mostra nulla).
+ *  `ordine`: posizione fissa da destra (1 = bonifici, 2 = Stripe, 3 = da richiamare), uguale su tutte le pagine. */
+export function NellaPila({ children, ordine = 0 }: { children: ReactNode; ordine?: number }) {
   const pila = useSyncExternalStore(nessuno, trovaPila, () => null);
   if (!pila) return null;
-  return createPortal(<div className="pointer-events-auto">{children}</div>, pila);
+  return createPortal(<div className="pointer-events-auto" style={{ order: ordine }}>{children}</div>, pila);
 }
 
 /** Classi comuni dei pulsanti della pila: tondo con icona e numero su iPhone, pillola con testo da 640px in su. */

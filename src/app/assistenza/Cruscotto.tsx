@@ -28,7 +28,7 @@ export function Cruscotto({ fasi, tecnici, scelta, onScegli, carichi = [] }: {
           return (
             <button key={c.tecnico} type="button" data-tecnico={c.tecnico}
               onClick={() => onScegli(sel ? null : { fase: "tec_tutto", tecnico: c.tecnico })}
-              className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold", sel ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+              className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold max-sm:min-h-10", sel ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
               {nomeTecnico(c.tecnico, tecnici) || c.tecnico} <span className="tabular-nums">{c.n}</span></button>
           );
         })}
