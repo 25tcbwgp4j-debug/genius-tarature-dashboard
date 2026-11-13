@@ -706,7 +706,7 @@ export default function SessionsPage() {
                     </p>
                     <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
                       <span className="text-sm font-semibold text-gray-700">
-                        EUR {parseFloat(s.total_amount || 0).toFixed(2)}
+                        {parseFloat(s.total_amount || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
                       </span>
                       {/* Badge stato sessione */}
                       {(() => {
@@ -723,7 +723,7 @@ export default function SessionsPage() {
 
                   {/* Riga 2: meta-info */}
                   <p className="text-xs text-gray-500">
-                    {s.session_date} · {s.total_instruments || 0} strum. · {s.operator || "—"}
+                    {s.session_date ? String(s.session_date).slice(0, 10).split("-").reverse().join("/") : "—"} · {s.total_instruments || 0} strum. · {s.operator || "—"}
                   </p>
 
                   {/* Riga 3: notifiche inviate + RDT */}

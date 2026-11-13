@@ -198,7 +198,7 @@ export default function RapportiPage() {
   const renderReportRow = (r: ReportRow) => (
     <div
       key={r.id}
-      className="flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors"
+      className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 p-4 hover:bg-gray-50 transition-colors"
     >
       <div className="flex-shrink-0">
         <div className="w-10 h-10 rounded bg-blue-50 flex items-center justify-center">
@@ -237,11 +237,12 @@ export default function RapportiPage() {
         </div>
         <div className="text-xs text-gray-400 mt-0.5">
           Emesso: {r.issue_date ? new Date(r.issue_date).toLocaleDateString("it-IT") : "—"}
-          {r.file_name && <span className="ml-2">• {r.file_name}</span>}
+          {r.file_name && <span className="ml-2 hidden sm:inline break-all">• {r.file_name}</span>}
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      {/* 13/11/2026: su iPhone i pulsanti stringevano il testo a una parola per riga → vanno a capo sotto */}
+      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
         {r.storage_url ? (
           <>
             <Button

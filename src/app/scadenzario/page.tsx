@@ -78,6 +78,9 @@ export default function ScadenzarioPage() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [maxDays, setMaxDays] = useState(365);
+  // 13/11/2026: 712 clienti in una sola pagina (377.000 caratteri) e su iPhone non si caricava bene → blocchi da 50
+  const [visibili, setVisibili] = useState(50);
+  useEffect(() => { setVisibili(50); }, [filter, searchQuery, customFrom, customTo, maxDays]);
 
   // Carica dati con range ampio (12 mesi) per avere tutto
   useEffect(() => {
@@ -467,7 +470,7 @@ export default function ScadenzarioPage() {
               Nessuna taratura trovata per questi filtri
             </p>
           ) : (
-            filtered.map((customer) => (
+            filtered.slice(0, visibili).map((customer) => (
               <div key={customer.name} className="p-4">
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -590,6 +593,13 @@ export default function ScadenzarioPage() {
                 </div>
               </div>
             ))
+          )}
+          {!loading && !error && filtered.length > visibili && (
+            <div className="p-4 text-center">
+              <Button variant="outline" onClick={() => setVisibili((v) => v + 50)}>
+                Mostra altri 50 ({filtered.length - visibili} rimasti)
+              </Button>
+            </div>
           )}
         </div>
       </Card>
