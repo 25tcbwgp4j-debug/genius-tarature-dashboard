@@ -11,6 +11,8 @@ import { usePermessi } from "@/components/permessi";
 import { useAttivita } from "@/components/attivita";
 import { HomeApple } from "./HomeApple";
 import { DaGestireTarature } from "@/components/DaGestireTarature";
+// 13/11/2026: formato all'italiana (12/11/2026 · 200,08 €) invece di 2026-11-12 · EUR 200.08
+import { data as dataIt, euro } from "@/lib/formato";
 
 interface ReconciliationSnapshot {
   total_groups?: number;
@@ -167,7 +169,7 @@ function HomeTarature() {
                 </p>
                 <p className="text-sm text-amber-800">
                   {reconciliation.total_records_to_merge} record da mergere
-                  {reconciliation.snapshot_date && ` · snapshot del ${reconciliation.snapshot_date}`}
+                  {reconciliation.snapshot_date && ` · snapshot del ${dataIt(reconciliation.snapshot_date)}`}
                   · clicca per aprire
                 </p>
               </div>
@@ -203,12 +205,12 @@ function HomeTarature() {
                     {session.customers?.company_name || "Cliente N/D"}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {session.session_date} - {session.total_instruments || 0} strumenti
+                    {dataIt(session.session_date)} · {session.total_instruments || 0} {(session.total_instruments || 0) === 1 ? "strumento" : "strumenti"}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-medium">
-                    EUR {parseFloat(session.total_amount || 0).toFixed(2)}
+                    {euro(parseFloat(session.total_amount || 0))}
                   </span>
                   {(() => {
                     const cfg = getStatusConfig(session.status, session);

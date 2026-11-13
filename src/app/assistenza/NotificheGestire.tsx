@@ -11,6 +11,7 @@ import { OPERATORI, type Operatore } from "@/components/Operatore";
 import {
   assNotificaChiudi, assNotificaCrea, assNotificaLetta, assNotificaRiapri, assNotifiche, type NotificaGestire,
 } from "@/lib/assistenza";
+import { senzaIdWhatsApp } from "@/lib/formato";   // 13/11/2026: niente «…@c.us» / «@lid» nei testi
 import { toastErrore } from "@/lib/errori";
 
 const ora = (s: string) => new Date(s).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -67,7 +68,7 @@ export function NotificaCard({ n, operatore, onScheda, onCambiata, compatta = fa
       <div className="flex flex-wrap items-start gap-2">
         <button type="button" className="flex min-w-0 flex-1 items-start gap-2 text-left" onClick={() => setAperta((x) => !x)}>
           {compatta && (aperta ? <ChevronDown className="mt-1 h-4 w-4 shrink-0" /> : <ChevronRight className="mt-1 h-4 w-4 shrink-0" />)}
-          <span className="text-base font-bold leading-snug">{ICONA[n.livello]} {n.titolo}</span>
+          <span className="text-base font-bold leading-snug">{ICONA[n.livello]} {senzaIdWhatsApp(n.titolo)}</span>
         </button>
         <span className="text-xs opacity-80">{eta(n.created_at)} · {n.letta_il ? `letta da ${n.letta_da}` : <b>NON LETTA</b>}</span>
       </div>
@@ -79,10 +80,10 @@ export function NotificaCard({ n, operatore, onScheda, onCambiata, compatta = fa
           {(n.cliente || n.prodotto) && <span> · {[n.cliente, n.prodotto].filter(Boolean).join(" · ")}</span>}
         </div>
       )}
-      {n.da_fare && <div className="mt-1.5 rounded-md bg-background/70 px-2 py-1 text-sm"><b>👉 Da fare:</b> <span className="whitespace-pre-line">{n.da_fare}</span></div>}
+      {n.da_fare && <div className="mt-1.5 rounded-md bg-background/70 px-2 py-1 text-sm"><b>👉 Da fare:</b> <span className="whitespace-pre-line">{senzaIdWhatsApp(n.da_fare)}</span></div>}
       {aperta && (
         <>
-          {n.storia && <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{n.storia}</p>}
+          {n.storia && <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{senzaIdWhatsApp(n.storia)}</p>}
           <p className="mt-1.5 text-xs opacity-75">Creata {n.creata_da ? `da ${n.creata_da} ` : ""}il {ora(n.created_at)}{n.letta_il ? ` · letta il ${ora(n.letta_il)}` : ""}</p>
         </>
       )}
@@ -119,14 +120,14 @@ function Chiuse({ lista, operatore, onCambiata }: { lista: NotificaGestire[]; op
       {lista.map((n) => (
         <div key={n.id} className="rounded-lg border p-2 text-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <b>{ICONA[n.livello]} {n.titolo}</b>
+            <b>{ICONA[n.livello]} {senzaIdWhatsApp(n.titolo)}</b>
             {n.sigla && <span className="text-muted-foreground">· scheda {n.sigla}</span>}
             <Button size="xs" variant="ghost" className="ml-auto" onClick={() => riapri(n.id)}><RotateCcw />Riapri</Button>
           </div>
-          {n.storia && <p className="mt-1 whitespace-pre-line text-muted-foreground">{n.storia}</p>}
-          {n.da_fare && <p className="mt-1"><b>Da fare:</b> {n.da_fare}</p>}
+          {n.storia && <p className="mt-1 whitespace-pre-line text-muted-foreground">{senzaIdWhatsApp(n.storia)}</p>}
+          {n.da_fare && <p className="mt-1"><b>Da fare:</b> {senzaIdWhatsApp(n.da_fare)}</p>}
           <p className="mt-1 rounded bg-green-50 px-2 py-1 text-green-950 dark:bg-green-950/40 dark:text-green-50">
-            ✅ <b>Esito:</b> <span className="whitespace-pre-line">{n.esito}</span>
+            ✅ <b>Esito:</b> <span className="whitespace-pre-line">{senzaIdWhatsApp(n.esito)}</span>
             <span className="block text-xs opacity-75">chiusa da {n.chiusa_da} il {n.chiusa_il ? ora(n.chiusa_il) : ""} · creata il {ora(n.created_at)}{n.creata_da ? ` da ${n.creata_da}` : ""}</span>
           </p>
         </div>

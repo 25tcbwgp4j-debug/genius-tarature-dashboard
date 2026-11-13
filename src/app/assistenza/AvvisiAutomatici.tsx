@@ -9,6 +9,7 @@ import { Bot, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OPERATORI, type Operatore } from "@/components/Operatore";
 import { assAvvisi, assAvvisoVisto, assSpedisciFatturaDaIncassare, type AvvisoDashboard, type EsitoSpedisciFattura } from "@/lib/assistenza";
+import { senzaIdWhatsApp } from "@/lib/formato";   // 13/11/2026: niente «…@c.us» / «@lid» nei testi
 import { toastErrore } from "@/lib/errori";
 
 const ora = (s: string) => new Date(s).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -20,7 +21,7 @@ function Voci({ a, onScheda }: { a: AvvisoDashboard; onScheda?: (id: string) => 
         <li key={i} className="flex gap-2 text-base leading-snug">
           <span className="w-6 shrink-0 text-center">{v.icona}</span>
           <span className="min-w-0 flex-1 break-words">
-            {v.testo}
+            {senzaIdWhatsApp(v.testo)}
             {v.link && <> · <a className="underline" href={v.link} target="_blank" rel="noreferrer">apri</a></>}
           </span>
         </li>
@@ -89,7 +90,7 @@ export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto, attivit
             : "border-indigo-600 bg-indigo-50 text-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-50"}`}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="flex items-center gap-2 text-lg font-bold">
-                <Bot className="h-6 w-6 shrink-0" /> {a.titolo}
+                <Bot className="h-6 w-6 shrink-0" /> {senzaIdWhatsApp(a.titolo)}
               </div>
               <span className="text-sm opacity-80">{ora(a.created_at)}{a.updated_at && a.updated_at !== a.created_at ? ` → ${ora(a.updated_at)}` : ""}</span>
             </div>
@@ -129,7 +130,7 @@ export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto, attivit
           {!storico.length && <p className="text-muted-foreground">Nessun avviso già visto.</p>}
           {storico.map((a) => (
             <div key={a.id} className="border-b pb-2 last:border-0">
-              <div className="font-semibold">{a.titolo} <span className="font-normal text-muted-foreground">· {ora(a.created_at)} · visto da {a.visto_da} il {a.visto_il ? ora(a.visto_il) : ""}</span></div>
+              <div className="font-semibold">{senzaIdWhatsApp(a.titolo)} <span className="font-normal text-muted-foreground">· {ora(a.created_at)} · visto da {a.visto_da} il {a.visto_il ? ora(a.visto_il) : ""}</span></div>
               <Voci a={a} onScheda={onScheda} />
             </div>
           ))}

@@ -4,6 +4,7 @@
 // Il dispositivo può tornare per lo stesso problema (garanzia 90 giorni) o per un altro lavoro: al banco servono subito
 // numero (cliccabile), data, difetto, test in ingresso, lavorazione effettuata ed esito.
 
+import { euro } from "@/lib/formato";   // 13/11/2026: formato unico «1.868,84 €»
 import type { ExScheda } from "@/lib/assistenza";
 
 export function ExSchede({ ex }: { ex?: ExScheda[] | null }) {
@@ -37,7 +38,7 @@ export function ExSchede({ ex }: { ex?: ExScheda[] | null }) {
             </div>
             {e.difetto && <div className="text-xs"><b>Difetto:</b> {e.difetto}</div>}
             {e.test_ingresso && <div className="text-xs"><b>Test in ingresso:</b> {e.test_ingresso}</div>}
-            {e.lavorazione && <div className="text-xs"><b>Lavorazione effettuata:</b> {e.lavorazione}{e.totale ? ` (€ ${e.totale.toFixed(2)})` : ""}</div>}
+            {e.lavorazione && <div className="text-xs"><b>Lavorazione effettuata:</b> {e.lavorazione}{e.totale ? ` (${euro(e.totale)})` : ""}</div>}
           </li>
         ))}
       </ul>

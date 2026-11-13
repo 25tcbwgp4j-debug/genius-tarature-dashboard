@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { X, Plus, Trash2, Calculator } from "lucide-react";
+import { euro } from "@/lib/formato";   // 13/11/2026: formato unico «1.868,84 €»
 import { sendQuote } from "@/lib/chat-api";
 
 const COMMON_INSTRUMENTS = [
@@ -169,7 +170,7 @@ export function SendQuoteModal({
               <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans">{preview}</pre>
               {total !== null && (
                 <div className="text-sm font-semibold text-emerald-700 mt-1">
-                  Totale: €{total.toFixed(2)}
+                  Totale: {euro(total)}
                 </div>
               )}
             </div>

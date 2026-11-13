@@ -17,6 +17,7 @@ import {
 import { Settings, Loader2, Pencil, Save, X, Plus, Trash2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { PosImpostazioni } from "@/components/PosImpostazioni";
+import { euro } from "@/lib/formato";   // 13/11/2026: «200,08 €» invece di «EUR 200.08»
 
 interface SettingField {
   key: string;
@@ -480,7 +481,7 @@ export default function ImpostazioniPage() {
                 <>
                   <span className={`text-gray-500 w-32 font-mono text-xs ${t.active === false ? "opacity-40" : ""}`}>{t.code}</span>
                   <span className={`flex-1 ${t.active === false ? "line-through text-gray-400" : ""}`}>{t.name}</span>
-                  <span className="w-24 text-right font-medium">EUR {parseFloat(String(t.price)).toFixed(2)}</span>
+                  <span className="w-24 text-right font-medium">{euro(t.price)}</span>
                   <Button
                     size="sm" variant="ghost"
                     title={t.active === false ? "Attiva" : "Disattiva"}

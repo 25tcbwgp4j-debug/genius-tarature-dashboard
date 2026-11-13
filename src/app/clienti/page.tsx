@@ -169,9 +169,10 @@ export default function ClientiPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Clienti</h2>
-        <div className="flex gap-2">
+      {/* 13/11/2026 (revisione iPhone): i pulsanti dell'intestazione vanno a capo invece di uscire dallo schermo */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Clienti</h2>
+        <div className="flex flex-wrap gap-2">
           {admin && <Button
             onClick={() => setReconcileOpen(true)}
             className="bg-amber-600 hover:bg-amber-700 text-white"

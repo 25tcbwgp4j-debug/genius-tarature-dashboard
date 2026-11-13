@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { usePermessi } from "@/components/permessi";
 import { TabStatistiche } from "@/components/TabStatistiche";
 import { oggiRoma } from "@/lib/date";
+import { percentuale } from "@/lib/formato";   // 13/11/2026: «−58,7%» all'italiana
 import { CATEGORIE, fatturatoStatistiche, METODI, NOMI_CATEGORIE, NOMI_METODI, type Categoria, type FattStatistiche, type ImportiCategoria, type Metodo } from "@/lib/fatturato";
 
 const C = {
@@ -30,8 +31,8 @@ const C_METODI: Record<Metodo, string> = {
   contanti: "#059669", pos: "#2563eb", bonifico: "#f59e0b", paypal: "#4f46e5", stripe: "#9333ea",
 };
 
-const fmtEur = (n: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n || 0);
-const fmtEur0 = (n: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n || 0);
+const fmtEur = (n: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(n || 0);
+const fmtEur0 = (n: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always", maximumFractionDigits: 0 }).format(n || 0);
 const MONTH_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
 const meseLabel = (mk: string) => { const [y, m] = mk.split("-"); return `${MONTH_IT[parseInt(m, 10) - 1] || m} ${y.slice(2)}`; };
 const giornoLabel = (g: string) => { const [, m, d] = g.split("-"); return `${parseInt(d, 10)}/${parseInt(m, 10)}`; };
@@ -222,8 +223,8 @@ function Kpi({ icon, label, value, sub, tone = "gray" }: { icon: ReactNode; labe
 function Variazione({ pct }: { pct: number | null | undefined }) {
   if (pct === null || pct === undefined) return null;
   return pct >= 0
-    ? <span className="text-emerald-600 inline-flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />+{pct}% a/a</span>
-    : <span className="text-red-500 inline-flex items-center gap-0.5"><TrendingDown className="w-3 h-3" />{pct}% a/a</span>;
+    ? <span className="text-emerald-600 inline-flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{percentuale(pct, 1, true)} a/a</span>
+    : <span className="text-red-500 inline-flex items-center gap-0.5"><TrendingDown className="w-3 h-3" />{percentuale(pct)} a/a</span>;
 }
 
 /* ---------- Tarature / Apple / Da classificare ---------- */

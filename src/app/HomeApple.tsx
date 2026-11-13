@@ -66,7 +66,11 @@ export function HomeApple() {
   const router = useRouter();
   // 05/10/2026 (§10.6): stessi contatori per fase del cruscotto delle schede assistenza
   const [cruscotto, setCruscotto] = useState<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[] } | null>(null);
-  const [pronte, setPronte] = useState<SchedaBreve[] | null>(null);
+  // 13/11/2026 (revisione): le due liste usano le STESSE regole del cruscotto (fasi «da_pagare» e «pagati» del backend).
+  // Prima la lista prendeva tutte le schede in stato «pronto» (52, comprese quelle a 0 € in garanzia e quelle da ritirare
+  // o spedire) mentre il riquadro diceva «21 Pronti da pagare»: due numeri diversi per la stessa cosa.
+  const [daPagare, setDaPagare] = useState<SchedaBreve[] | null>(null);
+  const [pagate, setPagate] = useState<SchedaBreve[] | null>(null);
   const [daPrev, setDaPrev] = useState<SchedaBreve[] | null>(null);
   const [ultime, setUltime] = useState<SchedaBreve[] | null>(null);
   const [cassa, setCassa] = useState<{ n: number; totale: number } | null>(null);
@@ -81,7 +85,8 @@ export function HomeApple() {
       setCfg(c);
       if (!c?.visibile) return;
       leggi<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[] }>("/api/assistenza/cruscotto").then(set((r) => setCruscotto(r)));
-      leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=pronto&limit=500").then(set((r) => setPronte(r?.schede || [])));
+      leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?fase=da_pagare&limit=500").then(set((r) => setDaPagare(r?.schede || [])));
+      leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?fase=pagati&limit=500").then(set((r) => setPagate(r?.schede || [])));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=da_preventivare&limit=10").then(set((r) => setDaPrev(r?.schede || [])));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=tutte&limit=10").then(set((r) => setUltime(r?.schede || [])));
     }));
@@ -95,9 +100,6 @@ export function HomeApple() {
   }, [admin, caricato]);
 
   const visibili = cfg?.visibile;
-  // pronte: chi ha già pagato aspetta solo la consegna/spedizione, gli altri aspettano il pagamento
-  const daPagare = pronte?.filter((s) => !s.fasi?.pagamento) ?? null;
-  const pagate = pronte?.filter((s) => !!s.fasi?.pagamento) ?? null;
 
   return (
     <div className="space-y-6">
@@ -166,10 +168,11 @@ export function HomeApple() {
       {visibili && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <Elenco titolo={<span className="flex items-center gap-2"><Euro className="w-4 h-4" /> Pronte, in attesa di pagamento{daPagare ? ` (${daPagare.length})` : ""}</span>}
-            schede={daPagare} href="/assistenza?stato=pronto" vuoto="Nessuna scheda pronta da incassare."
-            extra={(s) => <span className="text-sm font-medium">{eur(s.totale_lavorazione ?? s.preventivo_totale)}</span>} />
+            schede={daPagare} href="/assistenza?fase=da_pagare" vuoto="Nessuna scheda pronta da incassare."
+            extra={(s) => { const imp = s.totale_lavorazione ?? s.preventivo_totale;
+              return imp == null ? <span className="text-xs text-amber-700 dark:text-amber-300">importo da indicare</span> : <span className="text-sm font-medium tabular-nums">{eur(imp)}</span>; }} />
           <Elenco titolo={<span className="flex items-center gap-2"><PackageCheck className="w-4 h-4" /> Pagate, da consegnare o spedire{pagate ? ` (${pagate.length})` : ""}</span>}
-            schede={pagate} href="/assistenza?stato=pronto" vuoto="Nessuna scheda pagata in attesa di consegna." />
+            schede={pagate} href="/assistenza?fase=pagati" vuoto="Nessuna scheda pagata in attesa di consegna." />
           <Elenco titolo={<span className="flex items-center gap-2"><FileQuestion className="w-4 h-4" /> In attesa di preventivo</span>}
             schede={daPrev} href="/assistenza?stato=da_preventivare" vuoto="Nessuna scheda da preventivare." />
           <Elenco titolo={<span className="flex items-center gap-2"><Clock className="w-4 h-4" /> Ultime schede</span>}

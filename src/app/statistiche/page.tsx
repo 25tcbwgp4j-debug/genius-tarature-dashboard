@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { euro, euroTondo, percentuale } from "@/lib/formato";
 import { Card } from "@/components/ui/card";
 import {
   BarChart3, Euro, Users, FileText, CalendarClock,
@@ -73,10 +74,9 @@ const C = {
   axis: "#9ca3af",
 };
 
-const fmtEur = (n: number) =>
-  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n || 0);
-const fmtEur0 = (n: number) =>
-  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n || 0);
+// 13/11/2026: formato unico all'italiana (lib/formato.ts): «1.868,84 €», «4.144 €» anche sotto i 10.000
+const fmtEur = (n: number) => euro(n || 0);
+const fmtEur0 = (n: number) => euroTondo(n || 0);
 const MONTH_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
 const meseLabel = (mk: string) => {
   const [y, m] = mk.split("-");
@@ -310,17 +310,21 @@ export default function StatistichePage() {
       </div>
 
       {/* KPI principali */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-7 gap-4">
         <Kpi icon={<Euro className="w-4 h-4" />} label="Fatturato totale" value={fmtEur(f.totale)}
           sub={<span className="flex items-center gap-1">
             {mom !== null && (mom >= 0
-              ? <span className="text-emerald-600 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{mom}% m/m</span>
-              : <span className="text-red-500 flex items-center gap-0.5"><TrendingDown className="w-3 h-3" />{mom}% m/m</span>)}
+              ? <span className="text-emerald-600 flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{percentuale(mom, 1, true)} m/m</span>
+              : <span className="text-red-500 flex items-center gap-0.5"><TrendingDown className="w-3 h-3" />{percentuale(mom)} m/m</span>)}
           </span>} />
         <Kpi icon={<CheckCircle2 className="w-4 h-4" />} label="Incassato" tone="emerald"
-          value={fmtEur(f.pagato)} sub={`${stats.sessioni.by_payment.pagato || 0} sessioni pagate`} />
+          value={fmtEur(f.pagato)} sub={`${stats.sessioni.by_payment.pagato || 0} ${(stats.sessioni.by_payment.pagato || 0) === 1 ? "sessione pagata" : "sessioni pagate"}`} />
         <Kpi icon={<AlertCircle className="w-4 h-4" />} label="In attesa" tone="orange"
-          value={fmtEur(f.in_attesa)} sub={`${stats.sessioni.by_payment.in_attesa || 0} da incassare`} />
+          value={fmtEur(f.in_attesa)} sub={`${stats.sessioni.by_payment.in_attesa || 0} da incassare · totale = incassato + in attesa + non richiesto`} />
+        {/* 13/11/2026 (revisione): Fatturato = Incassato + In attesa + NON RICHIESTO. Prima mancava questa voce e i conti
+            non tornavano (47.227,27 ≠ 45.250,93 + 485,50: la differenza di 1.490,84 sono le sessioni col pagamento «non richiesto»). */}
+        <Kpi icon={<AlertCircle className="w-4 h-4" />} label="Non richiesto"
+          value={fmtEur(nonRichiesto)} sub={`${stats.sessioni.by_payment.non_richiesto || 0} ${(stats.sessioni.by_payment.non_richiesto || 0) === 1 ? "sessione" : "sessioni"} senza richiesta di pagamento`} />
         <Kpi icon={<Truck className="w-4 h-4" />} label="Spedizioni" tone="amber"
           value={fmtEur(f.spedizioni)} sub="incluse nel totale" />
         <Kpi icon={<Percent className="w-4 h-4" />} label="Scontrino medio" tone="indigo"
