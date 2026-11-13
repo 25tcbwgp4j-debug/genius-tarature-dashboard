@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Cruscotto } from "./assistenza/Cruscotto";
+import { PerseDaRichiamare } from "@/components/PerseDaRichiamare";
 import { Card } from "@/components/ui/card";
 import { Smartphone, PackageCheck, Euro, Landmark, Mail, Calculator, Clock, Plus, FileQuestion } from "lucide-react";
 import { fetchAPI } from "@/lib/api";
@@ -125,6 +126,8 @@ export function HomeApple() {
         <Cruscotto fasi={cruscotto?.fasi || null} tecnici={cruscotto?.tecnici || []} scelta={null}
           onScegli={(x) => { if (x) router.push(`/assistenza?${new URLSearchParams({ fase: x.fase, ...(x.tecnico ? { tecnico: x.tecnico } : {}) })}`); }} />
       )}
+
+      <PerseDaRichiamare />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Link href="/cassa/giornata">

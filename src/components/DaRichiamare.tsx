@@ -2,6 +2,7 @@
 
 // DA RICHIAMARE (04/11/2026, Christian): le telefonate col flag compaiono su qualsiasi pagina, come bonifici e Stripe,
 // finché qualcuno non preme «Richiamato». Il flag si mette dalla pagina Telefonate.
+// 13/11/2026: ci sono anche le chiamate PERSE non ancora richiamate (calcolate dal registro, si chiudono da sole alla richiamata).
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
@@ -12,11 +13,9 @@ import { Button } from "@/components/ui/button";
 import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 import { PulsanteChiama } from "@/components/PulsanteChiama";
-
-type Riga = { id: string; data_ora: string; direzione: string; numero: string | null; nome: string | null; contatto?: string | null; internazionale?: string | null; paese?: string | null; nota: string | null };
+import { DettaglioDaRichiamare, type RigaDaRichiamare as Riga } from "@/components/PerseDaRichiamare";
 
 const SENZA = ["/login", "/forgot-password", "/reset-password"];
-const dataOra = (d: string) => new Date(d).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export function DaRichiamare() {
   const pathname = usePathname();
@@ -78,7 +77,7 @@ export function DaRichiamare() {
                 <li key={r.id} className="flex items-start gap-3 p-4">
                   <div className="min-w-0 flex-1">
                     <p className="text-base font-semibold tabular-nums">{r.contatto ? `${r.contatto} · ` : ""}{r.internazionale || r.numero || "Numero nascosto"}{r.paese && r.paese !== "Italia" ? ` (${r.paese})` : ""}</p>
-                    <p className="text-xs text-muted-foreground">{r.direzione === "uscente" ? "Chiamata fatta" : "Ha chiamato"} il {dataOra(r.data_ora)}{r.nome ? ` · ${r.nome}` : ""}</p>
+                    <p className="text-xs text-muted-foreground"><DettaglioDaRichiamare r={r} />{r.nome ? ` · ${r.nome}` : ""}</p>
                     {r.nota ? <p className="mt-1 whitespace-pre-wrap break-words text-sm">{r.nota}</p> : null}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1.5">
