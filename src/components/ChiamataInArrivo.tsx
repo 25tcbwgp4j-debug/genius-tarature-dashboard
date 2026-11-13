@@ -2,6 +2,7 @@
 
 // CHIAMATA IN ARRIVO (05/11/2026, Christian): mentre il telefono squilla, su ogni pagina compare chi chiama
 // (nome in rubrica) e le sue ultime schede assistenza. Arriva dal collegamento CTI del centralino (agente sul PC HP).
+// 13/11/2026: le schede APERTE vengono prima, evidenziate «IN CORSO», anche se sulla scheda c'è un altro telefono (stesso nome).
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
@@ -10,7 +11,7 @@ import { PhoneCall, PhoneIncoming, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchAPI } from "@/lib/api";
 
-type Scheda = { id: string; numero: number; nominativo?: string | null; azienda?: string | null; prodotto?: string | null; modello?: string | null; stato?: string | null; created_at: string };
+type Scheda = { id: string; numero: number; nominativo?: string | null; azienda?: string | null; prodotto?: string | null; modello?: string | null; stato?: string | null; created_at: string; telefono?: string | null; aperta?: boolean; altro_numero?: boolean };
 type Chiamata = { call_id: string; stato: "squilla" | "risposta"; numero: string; interno?: string | null; contatto?: string | null; internazionale?: string | null; paese?: string | null; schede: Scheda[] };
 
 const SENZA = ["/login", "/forgot-password", "/reset-password"];
@@ -58,9 +59,15 @@ export function ChiamataInArrivo() {
             <ul className="mt-2 divide-y rounded-md border text-sm">
               {c.schede.map((s) => (
                 <li key={s.id}>
-                  <Link href={`/assistenza?id=${s.id}`} className="flex items-center justify-between gap-2 px-2.5 py-1.5 hover:bg-muted">
-                    <span className="min-w-0 truncate"><span className="font-medium tabular-nums">{s.numero}</span> · {s.modello || s.prodotto || "Dispositivo"}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{STATI[s.stato || ""] || s.stato} · {giorno(s.created_at)}</span>
+                  <Link href={`/assistenza?id=${s.id}`} className={`flex items-center justify-between gap-2 px-2.5 py-1.5 hover:bg-muted ${s.aperta ? "bg-amber-50 dark:bg-amber-950/40" : ""}`}>
+                    <span className="min-w-0">
+                      <span className="block truncate">
+                        {s.aperta ? <span className="mr-1.5 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">In corso</span> : null}
+                        <span className="font-medium tabular-nums">{s.numero}</span> · {s.modello || s.prodotto || "Dispositivo"}
+                      </span>
+                      {s.altro_numero ? <span className="block truncate text-xs text-amber-800 dark:text-amber-300">Stesso cliente, sulla scheda c&apos;è un altro telefono: {s.telefono || "—"}</span> : null}
+                    </span>
+                    <span className={`shrink-0 text-xs ${s.aperta ? "font-semibold text-amber-800 dark:text-amber-300" : "text-muted-foreground"}`}>{STATI[s.stato || ""] || s.stato} · {giorno(s.created_at)}</span>
                   </Link>
                 </li>
               ))}
