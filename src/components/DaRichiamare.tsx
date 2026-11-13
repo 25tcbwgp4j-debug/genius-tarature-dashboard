@@ -14,6 +14,7 @@ import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 import { PulsanteChiama } from "@/components/PulsanteChiama";
 import { DettaglioDaRichiamare, type RigaDaRichiamare as Riga } from "@/components/PerseDaRichiamare";
+import { CLASSI_PULSANTE_PILA, NellaPila } from "@/components/PilaAvvisi";
 
 const SENZA = ["/login", "/forgot-password", "/reset-password"];
 
@@ -59,11 +60,15 @@ export function DaRichiamare() {
   return (
     <>
       {n > 0 && !aperto && (
-        <button type="button" onClick={() => setAperto(true)} title="Telefonate da richiamare"
-          className="fixed bottom-40 right-4 z-40 flex items-center gap-2 rounded-full bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg hover:bg-amber-700 print:hidden">
-          <span className="absolute -left-1 -top-1 size-3 animate-ping rounded-full bg-amber-400" />
-          <PhoneCall className="size-4" /> {n} da richiamare
-        </button>
+        // 13/11/2026: nella pila unica degli avvisi (non copre più i contenuti); su iPhone solo icona e numero
+        <NellaPila>
+          <button type="button" onClick={() => setAperto(true)} title={`${n} ${n === 1 ? "telefonata" : "telefonate"} da richiamare`}
+            aria-label={`${n} ${n === 1 ? "telefonata" : "telefonate"} da richiamare`}
+            className={`${CLASSI_PULSANTE_PILA} bg-amber-600 hover:bg-amber-700`}>
+            <span className="absolute -left-1 -top-1 size-3 animate-ping rounded-full bg-amber-400" />
+            <PhoneCall className="size-4" /> {n}<span className="hidden sm:inline"> da richiamare</span>
+          </button>
+        </NellaPila>
       )}
       {aperto && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/40 print:hidden" onClick={() => setAperto(false)}>

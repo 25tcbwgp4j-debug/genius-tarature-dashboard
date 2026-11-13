@@ -85,18 +85,18 @@ function Riga({ t, conData, onCambiata }: { t: Telefonata; conData?: boolean; on
   return (
     <>
       <tr className={segnata ? "bg-amber-50 dark:bg-amber-950/30" : undefined}>
-        <td className="whitespace-nowrap p-2.5 tabular-nums">{conData ? dataOra(t.inizio) : ora(t.inizio)}</td>
-        <td className="p-2.5"><Tipo t={t} /></td>
+        <td data-label={conData ? "Quando" : "Ora"} className="whitespace-nowrap p-2.5 tabular-nums">{conData ? dataOra(t.inizio) : ora(t.inizio)}</td>
+        <td data-label="Tipo" className="p-2.5"><Tipo t={t} /></td>
         <td className="p-2.5 font-medium tabular-nums">
           {t.contatto ? <span className="block font-semibold">{t.contatto}</span> : null}
           {t.numero ? <span className="block whitespace-nowrap">{t.internazionale || t.numero}{t.paese && t.paese !== "Italia" ? <span className="ml-1.5 text-xs font-normal text-muted-foreground">{t.paese}</span> : null}</span> : <span className="font-normal text-muted-foreground">Numero nascosto</span>}
           {t.nome ? <span className="block text-xs font-normal text-muted-foreground">{t.nome}</span> : null}
           {t.richiamato_il && !segnata ? <span className="block text-xs font-normal text-emerald-700 dark:text-emerald-400">Richiamato il {dataOra(t.richiamato_il)}</span> : null}
         </td>
-        <td className="p-2.5 text-right tabular-nums">{durata(t.durata_sec)}</td>
-        <td className="p-2.5">{t.interno || "—"}</td>
-        <td className="p-2.5">{t.linee.filter(Boolean).join(", ") || "—"}</td>
-        <td className="whitespace-nowrap p-2.5 text-right">
+        <td data-label="Durata" className="p-2.5 text-right tabular-nums">{durata(t.durata_sec)}</td>
+        <td data-label="Interno" className="p-2.5">{t.interno || "—"}</td>
+        <td data-label="Linea" className="p-2.5">{t.linee.filter(Boolean).join(", ") || "—"}</td>
+        <td className="azioni whitespace-nowrap p-2.5 text-right">
           <Button size="sm" variant={segnata ? "default" : "outline"} disabled={busy} aria-pressed={segnata} className={segnata ? "bg-amber-600 text-white hover:bg-amber-700" : undefined}
             onClick={() => salva({ da_richiamare: !segnata })}>
             <Flag className="mr-1.5 h-4 w-4" /> Da richiamare
@@ -134,7 +134,8 @@ function Riga({ t, conData, onCambiata }: { t: Telefonata; conData?: boolean; on
 function Elenco({ righe, conData, onCambiata }: { righe: Telefonata[]; conData?: boolean; onCambiata: (nuova: Telefonata) => void }) {
   return (
     <div className="overflow-x-auto rounded-xl border bg-card">
-      <table className="w-full min-w-[820px] text-sm">
+      {/* 13/11/2026: su iPhone ogni telefonata è una scheda (classe tabella-schede in globals.css): niente più «Chiama» fuori schermo */}
+      <table className="tabella-schede w-full min-w-[820px] text-sm">
         <thead className="border-b text-left text-xs text-muted-foreground">
           <tr><th className="p-2.5">{conData ? "Quando" : "Ora"}</th><th className="p-2.5">Tipo</th><th className="p-2.5">Numero</th><th className="p-2.5 text-right">Durata</th><th className="p-2.5">Interno</th><th className="p-2.5">Linea</th><th className="p-2.5"><span className="sr-only">Azioni</span></th></tr>
         </thead>
@@ -187,9 +188,9 @@ export default function TelefonatePage() {
     <div className="mx-auto max-w-7xl space-y-3 p-3 md:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-auto text-xl font-semibold tracking-tight">Telefonate</h1>
-        <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); setRighe(null); setCerca(testo.trim()); }}>
+        <form className="flex w-full items-center gap-2 sm:w-auto" onSubmit={(e) => { e.preventDefault(); setRighe(null); setCerca(testo.trim()); }}>
           <input value={testo} onChange={(e) => setTesto(e.target.value)} placeholder="Cerca numero o nome"
-            className="h-9 w-44 rounded-md border bg-background px-3 text-sm" aria-label="Cerca un numero o un nome in tutte le telefonate" />
+            className="h-9 w-44 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm sm:flex-none" aria-label="Cerca un numero o un nome in tutte le telefonate" />
           <Button type="submit" size="sm" variant="outline"><Search className="mr-1.5 h-4 w-4" /> Cerca</Button>
         </form>
       </div>
@@ -202,8 +203,8 @@ export default function TelefonatePage() {
       ) : null}
 
       {/* col menu laterale la tabella accanto al calendario ci sta solo sugli schermi larghi: altrimenti i pulsanti finiscono fuori vista */}
-      <div className="grid gap-3 2xl:grid-cols-[22rem_minmax(0,1fr)]">
-        <section className="w-full max-w-md self-start rounded-xl border bg-card p-3">
+      <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[22rem_minmax(0,1fr)]">
+        <section className="w-full min-w-0 max-w-md self-start rounded-xl border bg-card p-3">
           <div className="mb-2 flex items-center justify-between">
             <Button size="icon" variant="ghost" aria-label="Mese precedente" onClick={() => setMese(spostaMese(mese, -1))}><ChevronLeft className="h-4 w-4" /></Button>
             <span className="text-sm font-semibold capitalize">{titoloMese(mese)}</span>

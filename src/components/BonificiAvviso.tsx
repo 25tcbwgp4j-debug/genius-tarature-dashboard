@@ -6,7 +6,7 @@
 // metodo bonifico, importo, data di accredito, ordinante, rif. SumUp — un clic su «Conferma» (fattura → quietanza ·
 // pro forma → fattura o scontrino già pagati · sessione → incasso · ordine → acconto/saldo). Poi il bonifico sparisce.
 
-import { Suspense, useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ import { dopoBonifico } from "@/components/DopoBonifico";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { usePermessi } from "@/components/permessi";
 import { fetchAPI } from "@/lib/api";
+import { CLASSI_PULSANTE_PILA, NellaPila } from "@/components/PilaAvvisi";
 import { toastErrore } from "@/lib/errori";
 import {
   NOME_TIPO, avvisoEccedenza, bonAccetta, bonAccettaFatture, bonAnnullaAccettazione, bonConferma, bonDettaglio, bonElenco, bonIgnora, bonPrecompilato, bonStato,
@@ -96,14 +97,20 @@ function Avviso() {
   return (
     <>
       {(n > 0 || problema || dich > 0) && !aperto && (
-        <button type="button" onClick={() => setAperto(true)}
-          className={`fixed right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-lg print:hidden ${inVerifica ? "bottom-36 sm:bottom-24" : "bottom-4"} ${n > 0 ? "bg-red-600 hover:bg-red-700" : problema ? "bg-amber-500 hover:bg-amber-600" : "bg-slate-500 hover:bg-slate-600"}`}
-          title={n > 0 ? "Bonifici arrivati sul conto SumUp da gestire" : `Ultimo controllo bonifici: ${testoControllo(st?.ultimo_controllo || null)}`}>
-          {n > 0 && <span className="absolute -left-1 -top-1 size-3 animate-ping rounded-full bg-red-400" />}
-          <Banknote className="size-4" />
-          {n > 0 ? <>{n} {n === 1 ? "bonifico nuovo" : "bonifici nuovi"} da gestire</> : problema ? <>Controllo bonifici non riuscito</>
-            : <>{dich} bonifici dichiarati da riscontrare</>}
-        </button>
+        // 13/11/2026: nella pila unica degli avvisi (non copre più i contenuti); su iPhone solo icona e numero.
+        // Testi al singolare/plurale corretti («1 bonifico dichiarato», non «1 bonifici dichiarati»).
+        <NellaPila>
+          <button type="button" onClick={() => setAperto(true)}
+            className={`${CLASSI_PULSANTE_PILA} ${n > 0 ? "bg-red-600 hover:bg-red-700" : problema ? "bg-amber-500 hover:bg-amber-600" : "bg-slate-500 hover:bg-slate-600"}`}
+            title={n > 0 ? "Bonifici arrivati sul conto SumUp da gestire" : problema ? `Ultimo controllo bonifici: ${testoControllo(st?.ultimo_controllo || null)}` : `${dich} ${dich === 1 ? "bonifico dichiarato" : "bonifici dichiarati"} da riscontrare`}
+            aria-label={n > 0 ? `${n} ${n === 1 ? "bonifico nuovo" : "bonifici nuovi"} da gestire` : problema ? "Controllo bonifici non riuscito" : `${dich} ${dich === 1 ? "bonifico dichiarato" : "bonifici dichiarati"} da riscontrare`}>
+            {n > 0 && <span className="absolute -left-1 -top-1 size-3 animate-ping rounded-full bg-red-400" />}
+            <Banknote className="size-4" />
+            {n > 0 ? <>{n}<span className="hidden sm:inline"> {n === 1 ? "bonifico nuovo" : "bonifici nuovi"} da gestire</span></>
+              : problema ? <>!<span className="hidden sm:inline"> Controllo bonifici non riuscito</span></>
+              : <>{dich}<span className="hidden sm:inline"> {dich === 1 ? "bonifico dichiarato" : "bonifici dichiarati"} da riscontrare</span></>}
+          </button>
+        </NellaPila>
       )}
       {aperto && <Pannello onClose={() => { setAperto(false); carica(); }} />}
       {inVerifica && <ConfermaBonifico key={inVerifica} id={inVerifica} onFine={fineVerifica} />}
@@ -467,6 +474,28 @@ export function useBonificoDelDocumento(...ids: (string | null | undefined)[]): 
 
 const AZIONI_FATTURA = new Set(["bozza", "pf", "proforma", "ordine", "preventivo", "sessione", "scheda"]);
 
+/** Barra verde in fondo allo schermo (13/11/2026): scrive la sua altezza in --barra-bonifico-h, così la pila degli
+ *  avvisi sale sopra di lei e il fondo della pagina resta raggiungibile (padding del <main>). */
+function BarraInBasso({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const scrivi = () => root.style.setProperty("--barra-bonifico-h", `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    scrivi();
+    const ro = new ResizeObserver(scrivi);
+    ro.observe(el);
+    return () => { ro.disconnect(); root.style.setProperty("--barra-bonifico-h", "0px"); };
+  }, []);
+  return (
+    <div ref={ref} className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-emerald-500 bg-emerald-50 px-3 py-2 shadow-2xl dark:bg-emerald-950/90 print:hidden lg:left-64"
+      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
+      {children}
+    </div>
+  );
+}
+
 function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
   const router = useRouter();
   const [pre, setPre] = useState<BonPrecompilato | null>(null);
@@ -528,7 +557,7 @@ function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
 
   const riga = `${NOME_TIPO[p.tipo]} ${doc.numero || p.numero || ""}${doc.nome || p.nome ? ` (${doc.nome || p.nome})` : ""}`;
   if (!grande) return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-emerald-500 bg-emerald-50 px-3 py-2 shadow-2xl dark:bg-emerald-950/90 print:hidden lg:left-64">
+    <BarraInBasso>
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 text-sm">
         <div className="min-w-0 flex-1"><b>Bonifico {eur(pg.importo)}</b> da {pg.ordinante || "—"} → {riga}
           <span className="text-xs text-muted-foreground"> · accredito {giorno(pg.data)} · rif. SumUp {pg.transaction_code}</span></div>
@@ -536,7 +565,7 @@ function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
         <Button size="sm" variant="ghost" disabled={!!busy} onClick={nonCorrisponde}>Non corrisponde</Button>
         <Link href="#" onClick={(e) => { e.preventDefault(); salvaCorreggi(null); onFine(); }} className="self-center text-xs underline">Nascondi</Link>
       </div>
-    </div>
+    </BarraInBasso>
   );
 
   const colore = cf.esito === "uguale" ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"

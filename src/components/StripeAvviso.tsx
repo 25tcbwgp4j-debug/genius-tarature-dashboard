@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { AlertTriangle, ArrowRight, Check, CheckCircle2, CreditCard, ExternalLink, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
+import { CLASSI_PULSANTE_PILA, NellaPila } from "@/components/PilaAvvisi";
 import { stripeAvvisi, stripeVisto, type StripeAvviso as Avviso } from "@/lib/stripeAvvisi";
 
 const SENZA = ["/login", "/forgot-password", "/reset-password"];
@@ -43,14 +44,18 @@ export function StripeAvviso() {
   return (
     <>
       {n > 0 && !aperto && (
-        <button type="button" onClick={() => setAperto(true)}
-          className={`fixed bottom-16 right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-lg print:hidden ${rossi ? "bg-red-600 hover:bg-red-700" : "bg-indigo-600 hover:bg-indigo-700"}`}
-          title="Pagamenti Stripe arrivati: controlla a cosa sono stati abbinati e il prossimo passo">
-          <span className={`absolute -left-1 -top-1 size-3 animate-ping rounded-full ${rossi ? "bg-red-400" : "bg-indigo-400"}`} />
-          <CreditCard className="size-4" />
-          {rossi ? <>{rossi} {rossi === 1 ? "pagamento Stripe NON abbinato" : "pagamenti Stripe NON abbinati"}</>
-            : <>{n} {n === 1 ? "pagamento Stripe ricevuto" : "pagamenti Stripe ricevuti"}</>}
-        </button>
+        // 13/11/2026: nella pila unica degli avvisi (non copre più i contenuti); su iPhone solo icona e numero
+        <NellaPila>
+          <button type="button" onClick={() => setAperto(true)}
+            className={`${CLASSI_PULSANTE_PILA} ${rossi ? "bg-red-600 hover:bg-red-700" : "bg-indigo-600 hover:bg-indigo-700"}`}
+            title="Pagamenti Stripe arrivati: controlla a cosa sono stati abbinati e il prossimo passo"
+            aria-label={rossi ? `${rossi} ${rossi === 1 ? "pagamento Stripe NON abbinato" : "pagamenti Stripe NON abbinati"}` : `${n} ${n === 1 ? "pagamento Stripe ricevuto" : "pagamenti Stripe ricevuti"}`}>
+            <span className={`absolute -left-1 -top-1 size-3 animate-ping rounded-full ${rossi ? "bg-red-400" : "bg-indigo-400"}`} />
+            <CreditCard className="size-4" />
+            {rossi ? <>{rossi}<span className="hidden sm:inline"> {rossi === 1 ? "pagamento Stripe NON abbinato" : "pagamenti Stripe NON abbinati"}</span></>
+              : <>{n}<span className="hidden sm:inline"> {n === 1 ? "pagamento Stripe ricevuto" : "pagamenti Stripe ricevuti"}</span></>}
+          </button>
+        </NellaPila>
       )}
       {aperto && <Pannello avvisi={avvisi} onClose={() => { setAperto(false); carica(); }} onVisto={(id) => {
         setAvvisi((x) => x.filter((a) => a.id !== id));

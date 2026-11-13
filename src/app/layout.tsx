@@ -15,6 +15,7 @@ import { SoloConAccesso } from "@/components/SoloConAccesso";
 import { ChiamataInArrivo } from "@/components/ChiamataInArrivo";
 import { DopoBonifico } from "@/components/DopoBonifico";
 import { StripeAvviso } from "@/components/StripeAvviso";
+import { PilaAvvisi } from "@/components/PilaAvvisi";
 import { AttivitaProvider } from "@/components/attivita";
 
 const geist = Geist({
@@ -75,7 +76,9 @@ export default function RootLayout({
           <PermessiProvider>
            <AttivitaProvider>
             <Sidebar />
-            <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 p-3 sm:p-6 pt-14 sm:pt-14 lg:pt-6 print:p-0">
+            {/* 13/11/2026: spazio di sicurezza in fondo pari all'altezza della pila degli avvisi (e della barra verde del bonifico),
+                così nessun pulsante fisso copre l'ultimo contenuto della pagina. min-w-0: la pagina non scorre mai di lato */}
+            <main className="min-w-0 flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 p-3 sm:p-6 pt-14 sm:pt-14 lg:pt-6 pb-[calc(var(--pila-avvisi-h,0px)+var(--barra-bonifico-h,0px)+0.75rem)] sm:pb-[calc(var(--pila-avvisi-h,0px)+var(--barra-bonifico-h,0px)+1.5rem)] print:p-0">
               <GuardiaTitolare>{children}</GuardiaTitolare>
               <AggiornaVersione />
             </main>
@@ -83,6 +86,8 @@ export default function RootLayout({
             <AutorizzazioneDialog />
             {/* 13/11/2026: avvisi fissi solo a sessione confermata dal backend (mai prima dell'accesso) */}
             <SoloConAccesso>
+            {/* 13/11/2026: fila unica in basso a destra per bonifici, Stripe e da richiamare (prima si coprivano coi contenuti) */}
+            <PilaAvvisi />
             {/* bonifici arrivati sul conto SumUp: pulsante rosso su ogni pagina (02/10/2026) */}
             <BonificiAvviso />
             {/* pagamenti Stripe ricevuti (riconciliati da soli o NON abbinati): stesso stile, sopra i bonifici (07/10/2026) */}

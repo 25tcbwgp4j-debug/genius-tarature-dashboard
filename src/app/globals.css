@@ -150,3 +150,60 @@
 @media (min-width: 64rem) {
   html[data-menu="nascosto"] main { padding-top: 3.5rem; }
 }
+
+/* 13/11/2026 (revisione grafica iPhone): caselle di testo e menu a tendina alti almeno 40px su iPhone
+   (prima molti erano 28-36px, difficili da toccare). Solo sotto i 640px: il computer resta com'è. */
+@layer base {
+  @media (max-width: 639.98px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"]),
+    select {
+      min-height: 2.5rem;
+    }
+  }
+}
+
+/* 13/11/2026: TABELLE A SCHEDE su iPhone. Basta mettere la classe «tabella-schede» sulla <table> e un data-label sulle
+   celle: sotto i 640px ogni riga diventa una scheda (intestazione nascosta, «etichetta: valore» riga per riga),
+   come già fanno Sessioni ed elenco schede. Una cella senza data-label occupa tutta la riga.
+   Fuori dai layer di Tailwind apposta: deve vincere su p-2.5 / text-right / min-w-[…] delle celle.
+   Classi d'aiuto: «solo-desktop» = cella nascosta su iPhone · «azioni» = pulsanti a capo uno accanto all'altro. */
+@media (max-width: 639.98px) {
+  table.tabella-schede { min-width: 0; width: 100%; }
+  table.tabella-schede > thead { display: none; }
+  table.tabella-schede > tbody,
+  table.tabella-schede > tfoot { display: block; }
+  table.tabella-schede > tbody > tr,
+  table.tabella-schede > tfoot > tr {
+    display: block;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  table.tabella-schede > tbody > tr > td,
+  table.tabella-schede > tfoot > tr > td {
+    display: block;
+    padding: 0.15rem 0;
+    border: 0;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  table.tabella-schede td[data-label]::before {
+    content: attr(data-label);
+    display: inline-block;
+    min-width: 6.5rem;
+    margin-right: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--muted-foreground);
+    vertical-align: top;
+  }
+  table.tabella-schede > tbody > tr > td.azioni {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    padding-top: 0.5rem;
+  }
+  table.tabella-schede > tbody > tr > td.azioni > * { margin-left: 0; }
+  table.tabella-schede > tbody > tr > td.solo-desktop,
+  table.tabella-schede > thead .solo-desktop { display: none; }
+}

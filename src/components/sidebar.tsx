@@ -174,6 +174,15 @@ export function Sidebar() {
     && (v.href !== "/buste-paga" || !!permessi?.puo?.buste_paga));
   // cambiando divisione da una pagina che nell'altra non c'è (es. Sessioni → Apple) si va alla sua home
   const router = useRouter();
+  // 13/11/2026 (revisione): il selettore Tarature/Apple SEGUE LA PAGINA APERTA. Se la pagina c'è solo nel menu dell'altra
+  // divisione (es. /assistenza con il selettore su Tarature, /sessioni su Apple) si passa a quella divisione, così il menu
+  // laterale mostra la voce della pagina. Le pagine comuni (fatture, cassa…) e la home non cambiano nulla.
+  const { setAttivita } = useAttivita();
+  useEffect(() => {
+    const miaVoce = (m: Voce[]) => m.some((v) => v.href !== "/" && (pathname === v.href || pathname.startsWith(v.href + "/")));
+    if (attivita === "tarature" && !miaVoce(MENU_TARATURE) && miaVoce(MENU_APPLE)) setAttivita("apple");
+    else if (attivita === "apple" && !miaVoce(MENU_APPLE) && miaVoce(MENU_TARATURE)) setAttivita("tarature");
+  }, [pathname, attivita, setAttivita]);
   const cambiaDivisione = (a: "tarature" | "apple") => {
     if (soloDellAltra(pathname, a === "apple" ? MENU_APPLE : MENU_TARATURE)) router.push(a === "apple" ? "/assistenza" : "/");
   };
@@ -291,7 +300,10 @@ export function Sidebar() {
             </p>
           ))}
         </div>
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        {/* 13/11/2026 (revisione iPhone): su iPhone Tema / Notifiche / Esci / indirizzo non sono più un fondo fisso che
+            occupava un quarto dello schermo: stanno in fondo all'elenco e scorrono con le voci. Sul computer resta come prima. */}
+        <div className="flex-1 min-h-0 overflow-y-auto lg:flex lg:flex-col lg:overflow-hidden">
+        <nav className="p-4 space-y-1 lg:flex-1 lg:overflow-y-auto">
           {voci.map((item) => {
             const isActive =
               pathname === item.href ||
@@ -377,6 +389,7 @@ export function Sidebar() {
             <p className="text-xs text-gray-400 dark:text-gray-500">Genius Lab s.r.l.s.</p>
             <p className="text-xs text-gray-400 dark:text-gray-500">Viale Somalia, 244/246/248 — Roma</p>
           </div>
+        </div>
         </div>
       </aside>
     </>
