@@ -19,7 +19,7 @@ import { parseDec } from "@/components/DecInput";
 import { toastErrore } from "@/lib/errori";
 import { docIncassa, type DocumentoCliente, type EsitoIncassoOrdine } from "@/lib/api";
 
-const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 
 export function IncassoOrdine({ d, operatore, modo: modoIniziale = "intero", titolo, poiRitira, onFatto, onChiudi }: {
   d: DocumentoCliente; operatore: string | null;

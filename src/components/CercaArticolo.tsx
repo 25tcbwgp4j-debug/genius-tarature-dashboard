@@ -17,7 +17,7 @@ export interface VoceListino { codice?: string | null; descrizione: string; prez
 // es. «spedizione» → in Apple esce prima «Spese di spedizione A/R» a 28 €, in Tarature quella a 36,60 € (02/10/2026)
 const peso = (a: string | null | undefined, att: Attivita) => (a === att ? 0 : a ? 2 : 1);
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 export function CercaArticolo({ onScelto, listino = [], placeholder = "Cerca articolo: nome, codice o spara il codice a barre…", className = "", attivita, evidenziato = false }: {

@@ -19,7 +19,7 @@ import { stripeAvvisi, stripeVisto, type StripeAvviso as Avviso } from "@/lib/st
 const SENZA = ["/login", "/forgot-password", "/reset-password"];
 
 const eur = (v: number | string | null | undefined) =>
-  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(v || 0));
+  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(Number(v || 0));
 const dataOra = (d: string | null | undefined) =>
   d ? new Date(d).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
 

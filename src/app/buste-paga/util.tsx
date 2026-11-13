@@ -4,7 +4,7 @@ import type { StatoBusta } from "@/lib/buste-paga";
 
 export const MESI = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
-const FMT_EUR = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" });
+const FMT_EUR = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" });
 const FMT_NUM = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 2 });
 
 export const eur = (v: number | string | null | undefined) => FMT_EUR.format(Number(v || 0));

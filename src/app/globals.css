@@ -166,7 +166,8 @@
    celle: sotto i 640px ogni riga diventa una scheda (intestazione nascosta, «etichetta: valore» riga per riga),
    come già fanno Sessioni ed elenco schede. Una cella senza data-label occupa tutta la riga.
    Fuori dai layer di Tailwind apposta: deve vincere su p-2.5 / text-right / min-w-[…] delle celle.
-   Classi d'aiuto: «solo-desktop» = cella nascosta su iPhone · «azioni» = pulsanti a capo uno accanto all'altro. */
+   Classi d'aiuto: «solo-desktop» = cella nascosta su iPhone · «azioni» = pulsanti a capo uno accanto all'altro ·
+   «in-riga» = celle brevi affiancate in testa alla scheda. */
 @media (max-width: 639.98px) {
   table.tabella-schede { min-width: 0; width: 100%; }
   table.tabella-schede > thead { display: none; }
@@ -204,6 +205,13 @@
     padding-top: 0.5rem;
   }
   table.tabella-schede > tbody > tr > td.azioni > * { margin-left: 0; }
+  /* «in-riga»: celle brevi una accanto all'altra (es. data + importo in testa alla scheda), senza etichetta */
+  table.tabella-schede > tbody > tr > td.in-riga {
+    display: inline-block;
+    margin-right: 0.75rem;
+    font-size: 0.95rem;
+  }
+  table.tabella-schede > tbody > tr > td.in-riga::before { display: none; }
   table.tabella-schede > tbody > tr > td.solo-desktop,
   table.tabella-schede > thead .solo-desktop { display: none; }
 }

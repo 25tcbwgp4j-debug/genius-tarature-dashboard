@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { gsxRicambi, gsxRiparazioni, type GsxDispositivo, type GsxPrincipale, type GsxRicambi, type GsxRiparazione } from "@/lib/gsx";
 
-const euro = (n?: number | null) => (n == null ? "—" : Number(n).toLocaleString("it-IT", { style: "currency", currency: "EUR" }));
+const euro = (n?: number | null) => (n == null ? "—" : Number(n).toLocaleString("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }));
 const data = (s?: string | null) => (s ? s.slice(0, 10).split("-").reverse().join("/") : "—");
 const ora = (s?: string | null) => (s ? new Date(s).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" }) : "—");
 /** «MacBook Pro (13 pollici, 2018…), MacBook Pro (16 pollici, 2019): assenza di alimentazione» → «Assenza di alimentazione» */

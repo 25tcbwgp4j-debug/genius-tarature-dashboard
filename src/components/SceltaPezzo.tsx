@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { magPezzi, type Pezzo, type Prodotto, type RigaCassa } from "@/lib/api";
 
-const eur = (v: number | null | undefined) => (v === null || v === undefined ? "—" : new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v));
+const eur = (v: number | null | undefined) => (v === null || v === undefined ? "—" : new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v));
 
 /** Riga di carrello per un pezzo: una riga per pezzo (quantità 1), mai accorpata. */
 export function rigaDaPezzo(p: Prodotto, pz: Pezzo): RigaCassa & { giacenza?: number } {

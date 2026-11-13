@@ -21,7 +21,7 @@ import { fetchAPI } from "@/lib/api";
 import type { BonRichiesta } from "@/lib/bonifici";
 import { toastErrore } from "@/lib/errori";
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 const oggiIso = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" });
 const giorniFa = (n: number) => new Date(Date.now() - n * 86400_000).toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" });
 function quando(s: string) {

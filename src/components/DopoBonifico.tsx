@@ -29,7 +29,7 @@ type Documento = { scheda_id: string; sigla: string; cliente: string; stato: str
 
 const RIMANDA = "dopo_bonifico_rimandato";
 const SENZA = ["/login", "/forgot-password", "/reset-password"];
-const eur = (v: number | string | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(v || 0));
+const eur = (v: number | string | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(Number(v || 0));
 const giorno = (d: string) => new Date(d).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 const PULSANTE: Record<string, string> = {

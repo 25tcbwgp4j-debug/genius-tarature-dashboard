@@ -24,7 +24,7 @@ import { eInAttesa, toastErrore } from "@/lib/errori";
 import { oggiRoma } from "@/lib/date";
 import { cassaGiornataStorno, cassaStornoScontrino, type RigaCassa, type RigaGiornata, type Scontrino } from "@/lib/api";
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 // modalità di rimborso: scontrini della dashboard (come la cassa) e colonne della cassa del giorno
 const MOD_SCONTRINO: [string, string][] = [["contanti", "Contanti"], ["pos_sumup", "POS (carta)"], ["bonifico", "Bonifico"], ["paypal", "PayPal"]];
 const COLONNE: [string, string][] = [["contanti", "Contanti"], ["pos", "POS"], ["stripe", "Stripe"], ["bonifico", "Bonifico"], ["paypal", "PayPal"]];

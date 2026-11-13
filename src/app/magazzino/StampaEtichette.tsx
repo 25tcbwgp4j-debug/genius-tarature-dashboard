@@ -16,7 +16,7 @@ import { magStampaEtichette, magUrlEtichettePdf, type Prodotto } from "@/lib/api
 
 export type VoceEtichetta = { p: Pick<Prodotto, "id" | "descrizione" | "barcode" | "prezzo">; copie: number };
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 const MAX = 500;
 
 export function StampaEtichette({ voci, titolo, onClose, onStampato }: {

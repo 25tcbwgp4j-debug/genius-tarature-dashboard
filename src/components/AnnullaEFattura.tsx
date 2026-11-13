@@ -22,7 +22,7 @@ import {
   type FattAnagrafica, type FattControparte, type Scontrino, type StatoAnnullaEFattura,
 } from "@/lib/api";
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 const quando = (s: Pick<Scontrino, "created_at" | "data_rt">) =>
   new Date(s.data_rt || s.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 

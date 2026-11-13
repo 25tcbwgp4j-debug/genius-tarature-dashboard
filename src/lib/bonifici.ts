@@ -92,7 +92,7 @@ export function avvisoEccedenza(b: Pick<Bonifico, "importo">, p: Pick<BonPropost
   if (!["fattura", "bozza", "fatture"].includes(p.tipo)) return null;
   const imp = Number(b.importo), doc = Number(p.importo);
   if (!(imp > doc + 0.005)) return null;
-  const e = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v);
+  const e = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v);
   const cosa = p.tipo === "fatture" ? `le fatture ${p.numero ?? ""} sono` : `la fattura ${p.numero ?? ""} è`;
   return `Il bonifico è ${e(imp)} ma ${cosa} ${e(doc)}: restano ${e(Math.round((imp - doc) * 100) / 100)} — scegli anche altre fatture o gestisci l'eccedenza`;
 }

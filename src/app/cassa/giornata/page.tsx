@@ -36,7 +36,7 @@ import {
 } from "@/lib/api";
 
 // formattatori creati UNA volta: prima se ne creava uno per ogni cifra della tabella (lento sugli iMac vecchi, 04/10/2026)
-const FMT_EUR = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" });
+const FMT_EUR = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" });
 const eur = (v: number | null | undefined) => FMT_EUR.format(v || 0);
 const COL = [["contanti", "Contanti"], ["pos", "POS"], ["stripe", "Stripe"], ["bonifico", "Bonifico"], ["paypal", "PayPal"]] as const;
 const FONTE: Record<string, string> = { fattura: "auto", fattura_prec: "auto", scontrino: "dashboard", manuale: "a mano" };
@@ -764,7 +764,9 @@ export default function CassaGiornataPage() {
             <FiltroAttivita className="h-8 text-xs" value={filtroAtt} onChange={setFiltroAtt} />
             {filtroAtt && <span>Mostro solo le righe {filtroAtt === "apple" ? "Apple" : "Tarature"}: totali e quadratura restano quelli della giornata intera.</span>}
           </div>
-          <table className="w-full min-w-[960px] text-sm">
+          {/* 13/11/2026 (revisione iPhone): sotto i 640px ogni movimento è una scheda (classe tabella-schede, globals.css);
+              i metodi di pagamento a zero si nascondono su iPhone per non riempire la scheda di «0» */}
+          <table className="tabella-schede w-full min-w-[960px] text-sm">
             <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
               <tr><th className="px-2 py-2 text-left">Orario</th><th className="px-2 text-left">Documento</th><th className="px-2 text-left">Num.</th>
                 <th className="px-2 text-left" title="Operatore">Op.</th>
@@ -773,25 +775,25 @@ export default function CassaGiornataPage() {
                 <th className="min-w-[140px] px-2 text-left">Intestato a</th><th className="px-2" /></tr>
             </thead>
             <tbody>
-              <tr className="border-t bg-muted/20"><td /><td className="px-2 py-1 font-medium">APERTURA</td><td>cassa</td><td /><td className="px-2 text-right tabular-nums">{eur(rp.apertura)}</td><td colSpan={8} /></tr>
+              <tr className="border-t bg-muted/20"><td className="solo-desktop" /><td className="px-2 py-1 font-medium">APERTURA</td><td className="solo-desktop">cassa</td><td className="solo-desktop" /><td data-label="Contanti" className="px-2 text-right tabular-nums">{eur(rp.apertura)}</td><td colSpan={8} className="solo-desktop" /></tr>
               {f.righe.filter((r) => !filtroAtt || r.attivita === filtroAtt).map((r) => {
                 const negativo = ["STORNO", "ANNULLO"].includes(r.tipo);
                 const stornabile = r.tipo === "SCONTRINO" && (r.fonte === "manuale" || r.fonte === "scontrino") && r.totale > 0;
                 return (
                 <tr key={`${r.fonte}-${r.id}`} title="Apri il documento" onClick={() => apriDocumento(r)}
                   className={`cursor-pointer border-t align-top hover:bg-sky-50 dark:hover:bg-sky-950/30 ${negativo ? "bg-red-50/70 dark:bg-red-950/20" : ""}`}>
-                  <td className="px-2 py-1 tabular-nums text-muted-foreground" title={r.orario ? undefined : "senza orario: in coda alla giornata"}>{r.orario || "—"}</td>
-                  <td className="px-2 py-1">{negativo
+                  <td data-label="Orario" className="px-2 py-1 tabular-nums text-muted-foreground" title={r.orario ? undefined : "senza orario: in coda alla giornata"}>{r.orario || "—"}</td>
+                  <td data-label="Documento" className="px-2 py-1">{negativo
                     ? <span className="rounded bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">{r.tipo}</span>
                     : r.tipo}<span className="ml-1 text-[10px] text-muted-foreground">{FONTE[r.fonte]}</span> <BadgeAttivita a={r.attivita} /></td>
-                  <td className="px-2">{r.numero}</td>
-                  <td className="px-2"><BadgeOperatore op={r.operatore} /></td>
-                  {COL.map(([k]) => <td key={k} className={`px-2 text-right tabular-nums ${r[k] ? (r[k] < 0 ? "text-red-600" : "") : "text-muted-foreground/40"}`}>{r[k] ? eur(r[k]) : "0"}</td>)}
+                  <td data-label="Numero" className="px-2">{r.numero}</td>
+                  <td data-label="Operatore" className="px-2"><BadgeOperatore op={r.operatore} /></td>
+                  {COL.map(([k, l]) => <td key={k} data-label={l} className={`${r[k] ? "" : "solo-desktop "}px-2 text-right tabular-nums ${r[k] ? (r[k] < 0 ? "text-red-600" : "") : "text-muted-foreground/40"}`}>{r[k] ? eur(r[k]) : "0"}</td>)}
                   {/* cosa paga: TUTTE le righe del documento, a capo, mai troncate (05/10/2026) */}
-                  <td className="whitespace-normal break-words px-2 py-1 font-medium">{r.descrizione}</td>
-                  <td className="px-2 py-1">{r.modello}</td>
-                  <td className="whitespace-normal break-words px-2 py-1 text-muted-foreground">{r.intestato || ""}</td>
-                  <td className="whitespace-nowrap px-2 py-1 text-right" onClick={(e) => e.stopPropagation()}>
+                  <td data-label="Cosa paga" className="whitespace-normal break-words px-2 py-1 font-medium">{r.descrizione}</td>
+                  <td data-label="Modello" className={`${r.modello ? "" : "solo-desktop "}px-2 py-1`}>{r.modello}</td>
+                  <td data-label="Intestato a" className={`${r.intestato ? "" : "solo-desktop "}whitespace-normal break-words px-2 py-1 text-muted-foreground`}>{r.intestato || ""}</td>
+                  <td className="azioni whitespace-nowrap px-2 py-1 text-right" onClick={(e) => e.stopPropagation()}>
                     {stornabile && (
                       <button className="mr-2 text-muted-foreground hover:text-red-600" title="Storno / reso o annullo (va nella cassa di oggi)" disabled={!!busy}
                         onClick={() => apriStorno(r)}>{busy === "storno" ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}</button>)}
@@ -805,7 +807,7 @@ export default function CassaGiornataPage() {
               })}
               {!f.righe.length && <tr><td colSpan={13} className="px-2 py-4 text-center text-muted-foreground">Nessun movimento</td></tr>}
               <tr className="border-t-2 font-semibold"><td className="px-2 py-1" colSpan={4}>TOTALI</td>
-                {COL.map(([k]) => <td key={k} className="px-2 text-right tabular-nums">{eur(f.totali[k] + (k === "contanti" ? rp.apertura : 0))}</td>)}<td colSpan={4} /></tr>
+                {COL.map(([k, l]) => <td key={k} data-label={l} className="px-2 text-right tabular-nums">{eur(f.totali[k] + (k === "contanti" ? rp.apertura : 0))}</td>)}<td colSpan={4} className="solo-desktop" /></tr>
             </tbody>
           </table>
         </Card>

@@ -21,7 +21,7 @@ import { usePermessi } from "@/components/permessi";
 import { posAnnulla, posConfermaManuale, posIncassa, posLettori, posStato, type IncassoPos, type LettorePos } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 // 01/10/2026 (Christian): due soli pulsanti chiari.
 // - «Paga con POS piccolo»: l'importo parte DIRETTO sul SumUp Solo abbinato via Cloud API (il cliente avvicina la carta);
 // - «Incassato con POS P8»: il P8 non supporta la Cloud API → l'importo si batte a mano sul P8 e la dashboard

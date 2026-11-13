@@ -31,7 +31,7 @@ type Riga = {
 const ID_SCANNER = "scanner-carico";
 const idSeriale = (barcode: string, i: number) => `seriale-${barcode}-${i}`;
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 
 function daRiconoscimento(r: Riconoscimento, q: number): Riga {
   if (r.trovato === "magazzino" && r.prodotto) {

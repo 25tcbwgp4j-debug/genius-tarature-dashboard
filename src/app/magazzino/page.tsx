@@ -28,7 +28,7 @@ import { PezziArticolo } from "./PezziArticolo";
 import { CampoSeriale } from "@/components/CampoSeriale";
 import { StampaEtichette, type VoceEtichetta } from "./StampaEtichette";
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 
 function Barcode({ value }: { value: string }) {
   const ref = useRef<SVGSVGElement>(null);

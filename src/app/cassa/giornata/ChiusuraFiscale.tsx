@@ -10,7 +10,7 @@ import { cassaChiusuraFiscale, cassaChiusureFiscali, type ChiusuraRt, type Richi
 import { toastErrore } from "@/lib/errori";
 
 // formattatori creati una volta sola (04/10/2026: toLocaleString ne crea uno nuovo a ogni chiamata)
-const FMT_EUR = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" });
+const FMT_EUR = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" });
 const FMT_ORA = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
 const eur = (v: number) => FMT_EUR.format(v);
 const ora = (iso: string) => FMT_ORA.format(new Date(iso));

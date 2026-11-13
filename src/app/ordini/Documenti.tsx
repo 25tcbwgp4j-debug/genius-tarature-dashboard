@@ -37,7 +37,7 @@ import { AzioniProforma } from "./AzioniProforma";
 import { useSocietaFatturazione } from "../fatturazione/societa";
 import { SOCIETA_LABEL } from "../fatturazione/util";
 
-const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number | null | undefined) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 const MOD: [string, string][] = [["contanti", "Contanti"], ["pos_sumup", "POS SumUp"], ["bonifico", "Bonifico"], ["paypal", "PayPal"], ["carta_stripe", "Carta online (Stripe)"]];
 const MOD_L = Object.fromEntries(MOD);
 const STATO: Record<string, string> = {

@@ -14,7 +14,7 @@ import { dec0 } from "@/components/DecInput";
 import { toastErrore } from "@/lib/errori";
 import { magCaricaPezzo, magModificaPezzo, magPezzi, STATI_PEZZO, type Pezzo, type Prodotto, type StatoPezzo } from "@/lib/api";
 
-const eur = (v: number | null | undefined) => (v === null || v === undefined ? "—" : new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v));
+const eur = (v: number | null | undefined) => (v === null || v === undefined ? "—" : new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v));
 const VUOTO = { seriale: "", imei: "", condizione: "", costo: "", note: "" };
 
 export function PezziArticolo({ prodotto, solaLettura, onCambiato }: { prodotto: Prodotto; solaLettura: boolean; onCambiato: () => void }) {

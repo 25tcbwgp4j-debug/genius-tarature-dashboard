@@ -40,7 +40,7 @@ import {
   type PagamentoScontrino, type Prodotto, type RigaCassa, type Scontrino, PLU_RT_NOMI,
 } from "@/lib/api";
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 const MOD: Record<string, string> = { ...NOMI_MODALITA, pos_sumup: "POS SumUp" };
 const STATO: Record<string, string> = {
   da_stampare: "in coda", in_stampa: "in stampa", emesso: "emesso", errore: "ERRORE", simulato: "simulato (non fiscale)", annullato: "annullato",

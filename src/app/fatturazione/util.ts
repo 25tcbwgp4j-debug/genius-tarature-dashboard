@@ -64,7 +64,7 @@ export const TIPI_LABEL: Record<string, string> = {
 };
 
 export function eur(v: number | string | null | undefined) {
-  return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(v || 0));
+  return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(Number(v || 0));
 }
 
 export function dataIt(d: string | null | undefined) {

@@ -18,7 +18,7 @@ import { toastErrore } from "@/lib/errori";
 import { oggiRoma } from "@/lib/date";
 import { pagMovimentiFattura, type ModalitaIncasso, type MovimentoProposto } from "@/lib/api";
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 const r2 = (v: number) => Math.round((Number(v) || 0) * 100) / 100;
 
 type Tipo = "piccolo" | "p8" | "paypal" | "assegno";

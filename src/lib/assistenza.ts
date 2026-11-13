@@ -258,7 +258,7 @@ export function dataOra(iso?: string | null): string {
   return d.toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 export const eur = (v: number | string | null | undefined) =>
-  v === null || v === undefined || v === "" ? "—" : new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(v) || 0);
+  v === null || v === undefined || v === "" ? "—" : new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(Number(v) || 0);
 
 export const DOCUMENTI_PDF: [DocPdf, string][] = [["ricevuta", "Ricevuta d'ingresso"], ["preventivo", "Preventivo"], ["pronto", "Pronto per il ritiro"],
   ["consuntivo", "Consuntivo con bonifico"], ["rifiutato", "Preventivo rifiutato (restituzione)"], ["interna", "Scheda interna (solo per noi)"]];

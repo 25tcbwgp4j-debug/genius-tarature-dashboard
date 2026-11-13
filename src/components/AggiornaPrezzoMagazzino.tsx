@@ -14,7 +14,7 @@ import { usePermessi } from "@/components/permessi";
 import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 
 /** true se il prezzo della riga (IVA inclusa) è diverso da quello di magazzino, al centesimo */
 export function prezzoDiversoDaMagazzino(prezzoRiga: number | null | undefined, prezzoMagazzino: number | null | undefined) {

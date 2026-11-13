@@ -12,7 +12,7 @@ import { COPERTURE, RIPRODUCIBILITA, type CoperturaScheda, type DifettoApple, ty
 import { DifettoAppleScelta } from "./DifettoApple";
 import { Pill, Sezione, campo } from "./ui";
 
-const euro = (n?: number | null) => (n == null ? "—" : Number(n).toLocaleString("it-IT", { style: "currency", currency: "EUR" }));
+const euro = (n?: number | null) => (n == null ? "—" : Number(n).toLocaleString("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }));
 const ora = (s?: string | null) => (s ? new Date(s).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" }) : "—");
 
 export function Intervento({ seriale, gsx, difetto, copertura, ro, operatore, onDifetto, onCopertura, onIdoneita, idoneitaBusy, onInserisci, onDecodifica }: {

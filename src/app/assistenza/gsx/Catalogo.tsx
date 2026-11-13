@@ -14,7 +14,7 @@ type Riga = {
   stock: number | null; sostituzione: number | null; sostituito_da: string | null; serializzato: boolean | null; intero: boolean | null;
   prezzi: { gsx: number; costo: number; proposto: number; listino: number } | null;
 };
-const euro = (n?: number | null) => (n == null ? "—" : Number(n).toLocaleString("it-IT", { style: "currency", currency: "EUR" }));
+const euro = (n?: number | null) => (n == null ? "—" : Number(n).toLocaleString("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }));
 
 export function CatalogoGsx() {
   const [prodotti, setProdotti] = useState<Prodotto[]>([]);

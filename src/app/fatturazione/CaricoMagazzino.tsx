@@ -14,7 +14,7 @@ import { CATEGORIE_MERCE, magCaricoFattura, magPropostaCaricoFattura, type Categ
 type PezzoUI = { seriale: string; imei: string; condizione: string };
 type RigaUI = RigaCaricoFattura & { scelta: boolean; descr: string; cat: CategoriaMerce; prezzo: string; pezziUI: PezzoUI[]; usaEsistente: boolean };
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 
 export function CaricoMagazzino({ fatturaId, onClose }: { fatturaId: string; onClose: () => void }) {
   const [righe, setRighe] = useState<RigaUI[] | null>(null);

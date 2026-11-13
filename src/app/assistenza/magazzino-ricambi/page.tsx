@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { fetchAPI } from "@/lib/api";
 import { StampaEtichetteRicambi } from "./StampaEtichetteRicambi";
+import { euro } from "@/lib/formato";   // 13/11/2026: «1.868,84 €» (formato unico)
 
 type Tipo = "ricambio" | "display" | "scheda_logica" | "top_case" | "garanzia" | "rotto";
 interface Riga {
@@ -557,7 +558,8 @@ export default function MagazzinoRicambi() {
             {pezzi && !q && !eliminati ? "Ancora vuoto: si caricherà dal file Excel, oppure aggiungili con «Aggiungi»." : "Nessuna riga."}
           </p>
         ) : (
-          <table className="w-full text-sm">
+          // 13/11/2026 (revisione iPhone): sotto i 640px ogni ricambio è una scheda (tabella-schede, globals.css)
+          <table className="tabella-schede w-full text-sm">
             <thead className="text-left text-xs text-gray-500">
               <tr>
                 <th className="p-2 w-6">{!eliminati && <input type="checkbox" aria-label="Spunta tutte le righe visibili" title="Spunta tutte le righe visibili"
@@ -582,8 +584,8 @@ export default function MagazzinoRicambi() {
                   </tr>
                 )}
                 <tr id={`riga-${r.id}`} className={`border-t align-top ${pezzi ? BORDO_STATO[r.stato || ""] || "" : ""} ${evid === r.id ? "bg-yellow-100 dark:bg-yellow-900/40" : ""}`}>
-                  <td className="p-2">{r.attivo && <input type="checkbox" aria-label="Spunta per le etichette" checked={sel.has(r.id)} onChange={() => spunta(r.id)} />}</td>
-                  <td className="p-2 font-mono whitespace-nowrap">{r.etichetta ? <div className="font-bold">{r.etichetta}</div> : null}{r.codice}{r.codice_ricambio ? <div className="text-xs">ricambio {r.codice_ricambio}</div> : null}{r.codici_alt ? <div className="text-xs text-gray-500">= {r.codici_alt}</div> : null}
+                  <td className="in-riga p-2">{r.attivo && <input type="checkbox" aria-label="Spunta per le etichette" checked={sel.has(r.id)} onChange={() => spunta(r.id)} />}</td>
+                  <td className="in-riga p-2 font-mono whitespace-nowrap">{r.etichetta ? <div className="font-bold">{r.etichetta}</div> : null}{r.codice}{r.codice_ricambio ? <div className="text-xs">ricambio {r.codice_ricambio}</div> : null}{r.codici_alt ? <div className="text-xs text-gray-500">= {r.codici_alt}</div> : null}
                     {r.mpn ? <div className="text-xs text-gray-500">{r.mpn}</div> : null}
                     {r.gsx_stato && <div className={`text-[10px] mt-0.5 ${r.gsx_stato === "in_vendita" ? "text-green-700" : "text-gray-400"}`}
                       title={r.gsx_verificato_il ? `verificato sul GSX il ${data(r.gsx_verificato_il)}` : ""}>{r.gsx_stato === "in_vendita" ? "GSX: in vendita" : "GSX: fuori vendita"}</div>}
@@ -597,33 +599,33 @@ export default function MagazzinoRicambi() {
                     {r.condizioni && <div className="text-xs text-amber-700">{r.condizioni}</div>}
                     {r.note && <div className="text-xs text-gray-500 italic">{r.note}</div>}
                   </td>
-                  {pezzi && <td className="p-2">{r.stato ? <span className={`text-xs px-2 py-0.5 rounded-full ${COLORE_STATO[r.stato] || "bg-gray-100"}`}>{STATI_TESTO[r.stato] || r.stato}</span> : "—"}</td>}
+                  {pezzi && <td data-label="Stato" className="p-2">{r.stato ? <span className={`text-xs px-2 py-0.5 rounded-full ${COLORE_STATO[r.stato] || "bg-gray-100"}`}>{STATI_TESTO[r.stato] || r.stato}</span> : "—"}</td>}
                   {gar ? <>
-                    <td className="p-2 whitespace-nowrap">{giorno(r.data_riparazione)}</td>
-                    <td className={`p-2 whitespace-nowrap ${r.scadenza && r.scadenza < new Date().toISOString().slice(0, 10) ? "text-gray-400 line-through" : "font-semibold"}`}>{giorno(r.scadenza)}</td>
+                    <td data-label="Riparato il" className="p-2 whitespace-nowrap">{giorno(r.data_riparazione)}</td>
+                    <td data-label="Scadenza" className={`p-2 whitespace-nowrap ${r.scadenza && r.scadenza < new Date().toISOString().slice(0, 10) ? "text-gray-400 line-through" : "font-semibold"}`}>{giorno(r.scadenza)}</td>
                   </> : <>
-                    <td className={`p-2 text-right text-base font-semibold ${r.qta_nuovo === 0 ? "text-gray-400" : ""}`}>{r.qta_nuovo}</td>
-                    <td className={`p-2 text-right ${r.qta_usato === 0 ? "text-gray-400" : ""}`}>{r.qta_usato}</td>
+                    <td data-label="Nuovi" className={`p-2 text-right text-base font-semibold ${r.qta_nuovo === 0 ? "text-gray-400" : ""}`}>{r.qta_nuovo}</td>
+                    <td data-label="Usati" className={`p-2 text-right ${r.qta_usato === 0 ? "text-gray-400" : ""}`}>{r.qta_usato}</td>
                   </>}
-                  <td className="p-2 whitespace-nowrap">{r.posizione ? <span className="font-semibold">{r.posizione}</span> : null}
+                  <td data-label="Dove" className="p-2 whitespace-nowrap">{r.posizione ? <span className="font-semibold">{r.posizione}</span> : null}
                     {r.scaffale ? <div className="text-xs">{r.scaffale}</div> : null}{r.confezione ? <div className="text-xs text-gray-500">{r.confezione.toLowerCase()}</div> : null}</td>
-                  {titolare && <td className="p-2 text-right">{r.costo != null ? `€ ${Number(r.costo).toFixed(2).replace(".", ",")}` : ""}</td>}
-                  <td className="p-2 text-xs text-gray-500 whitespace-nowrap">{data(r.inventario_il)}</td>
+                  {titolare && <td data-label="Costo" className="p-2 text-right">{r.costo != null ? euro(r.costo) : ""}</td>}
+                  <td data-label="Ultima conta" className="p-2 text-xs text-gray-500 whitespace-nowrap">{data(r.inventario_il)}</td>
                   <td className="p-2 whitespace-nowrap">
                     {r.attivo ? (
-                      <div className="flex gap-1">
+                      <div className="flex flex-wrap gap-1">
                         {!gar && (<>
-                        <button type="button" title="Conta i pezzi e conferma la quantità" onClick={() => { setEvid(r.id); setConta(r); }} className="px-2 py-1 rounded border text-xs">Conta</button>
-                        <button type="button" title="Carica: arrivano pezzi" onClick={() => setMov({ r, t: "carico" })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5 text-green-700"><Plus className="h-3 w-3" />Carica</button>
-                        <button type="button" title="Togli: pezzi usati o venduti" onClick={() => setMov({ r, t: "scarico" })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5 text-amber-700"><Minus className="h-3 w-3" />Togli</button>
+                        <button type="button" title="Conta i pezzi e conferma la quantità" onClick={() => { setEvid(r.id); setConta(r); }} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs">Conta</button>
+                        <button type="button" title="Carica: arrivano pezzi" onClick={() => setMov({ r, t: "carico" })} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5 text-green-700"><Plus className="h-3 w-3" />Carica</button>
+                        <button type="button" title="Togli: pezzi usati o venduti" onClick={() => setMov({ r, t: "scarico" })} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5 text-amber-700"><Minus className="h-3 w-3" />Togli</button>
                         </>)}
-                        <button type="button" title="Stampa l'etichetta (copie = giacenza)" onClick={() => setEti({ righe: [r] })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5 text-blue-700"><Printer className="h-3 w-3" />Etichetta</button>
-                        <button type="button" title="Modifica i dati" onClick={() => setMod({ r })} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5"><Pencil className="h-3 w-3" />Modifica</button>
-                        <button type="button" title="Storico: chi ha cambiato cosa e quando" onClick={() => setSto(r)} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-0.5"><History className="h-3 w-3" />Storico</button>
-                        <button type="button" title="Elimina (si può ripristinare)" onClick={() => elimina(r)} className="px-2 py-1 rounded border text-xs text-red-600 inline-flex items-center gap-0.5"><Trash2 className="h-3 w-3" />Elimina</button>
+                        <button type="button" title="Stampa l'etichetta (copie = giacenza)" onClick={() => setEti({ righe: [r] })} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5 text-blue-700"><Printer className="h-3 w-3" />Etichetta</button>
+                        <button type="button" title="Modifica i dati" onClick={() => setMod({ r })} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5"><Pencil className="h-3 w-3" />Modifica</button>
+                        <button type="button" title="Storico: chi ha cambiato cosa e quando" onClick={() => setSto(r)} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5"><History className="h-3 w-3" />Storico</button>
+                        <button type="button" title="Elimina (si può ripristinare)" onClick={() => elimina(r)} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs text-red-600 inline-flex items-center gap-0.5"><Trash2 className="h-3 w-3" />Elimina</button>
                       </div>
                     ) : (
-                      <button type="button" onClick={() => ripristina(r)} className="px-2 py-1 rounded border text-xs inline-flex items-center gap-1"><RotateCcw className="h-3 w-3" /> Ripristina</button>
+                      <button type="button" onClick={() => ripristina(r)} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-1"><RotateCcw className="h-3 w-3" /> Ripristina</button>
                     )}
                   </td>
                 </tr>
@@ -633,7 +635,7 @@ export default function MagazzinoRicambi() {
             <tfoot>
               <tr className="border-t text-xs text-gray-500">
                 <td className="p-2" colSpan={pezzi ? 4 : 3}>{visibili.length} righe{sel.size ? ` · ${sel.size} spuntate` : ""}</td>
-                <td className="p-2 text-right font-medium">{totNuovi}</td><td className="p-2 text-right">{totUsati}</td><td colSpan={4} />
+                <td data-label="Nuovi" className="p-2 text-right font-medium">{totNuovi}</td><td data-label="Usati" className="p-2 text-right">{totUsati}</td><td colSpan={4} className="solo-desktop" />
               </tr>
             </tfoot>
           </table>

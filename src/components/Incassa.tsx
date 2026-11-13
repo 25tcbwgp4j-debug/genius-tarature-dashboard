@@ -22,7 +22,7 @@ import { parseDec } from "@/components/DecInput";
 import { toastErrore } from "@/lib/errori";
 import type { IncassoPos, PagamentoScontrino } from "@/lib/api";
 
-const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
+const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" }).format(v || 0);
 const r2 = (v: number) => Math.round((Number(v) || 0) * 100) / 100;
 export const NOMI_MODALITA: Record<string, string> = {
   contanti: "Contanti", pos_sumup: "Carta (POS)", carta_stripe: "Carta online (Stripe)", paypal: "PayPal", bonifico: "Bonifico",
