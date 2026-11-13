@@ -47,6 +47,7 @@ type Dialogo = null | { k: "acconto"; inizio: "invia" | "incassa" } | { k: "invi
 
 function bozzaPreventivo(m: Partial<Scheda>): BozzaPreventivo {
   return { righe: (m.preventivo_righe as EstimateLine[]) || [], diagnosi: m.preventivo?.diagnosi || "", note: m.preventivo?.note || "",
+    imponibile: m.preventivo?.imponibile ?? null,
     spedizione_tipo: m.spedizione_tipo || "nessuna", spedizione_importo: m.spedizione_importo ?? "" };
 }
 
@@ -122,7 +123,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     const nw = f(cur);
     const out: Bozza = { ...x };
     if (nw.righe !== cur.righe) out.preventivo_righe = nw.righe;
-    if (nw.diagnosi !== cur.diagnosi || nw.note !== cur.note) out.preventivo = { ...(s.preventivo || {}), ...(x.preventivo || {}), diagnosi: nw.diagnosi, note: nw.note };
+    if (nw.diagnosi !== cur.diagnosi || nw.note !== cur.note || nw.imponibile !== cur.imponibile)
+      out.preventivo = { ...(s.preventivo || {}), ...(x.preventivo || {}), diagnosi: nw.diagnosi, note: nw.note, imponibile: nw.imponibile };
     if (nw.spedizione_tipo !== cur.spedizione_tipo) out.spedizione_tipo = nw.spedizione_tipo;
     if (nw.spedizione_importo !== cur.spedizione_importo) out.spedizione_importo = (nw.spedizione_importo === "" ? null : nw.spedizione_importo) as number | null;
     return out;

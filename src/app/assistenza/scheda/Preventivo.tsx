@@ -20,7 +20,7 @@ import {
 import { Campo, Pill, Scelta, Sezione, area, campo } from "./ui";
 import { VociPreventivo } from "./VociPreventivo";
 
-export type BozzaPreventivo = { righe: EstimateLine[]; diagnosi: string; note: string; spedizione_tipo: string; spedizione_importo: number | string };
+export type BozzaPreventivo = { righe: EstimateLine[]; diagnosi: string; note: string; spedizione_tipo: string; spedizione_importo: number | string; imponibile?: boolean | null };
 
 export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, onStessoModello, spedDefault, onConcordato }: {
   s: Scheda; attuale: ApparecchioAttuale; bz: BozzaPreventivo; setBz: (f: (b: BozzaPreventivo) => BozzaPreventivo) => void; ro: boolean;
@@ -138,6 +138,16 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
           <textarea className={`${area} min-h-9 resize-y [field-sizing:content]`} rows={Math.max(1, Math.ceil((bz.diagnosi || "").length / 90))} disabled={ro}
             placeholder="es. SCHEDA LOGICA IN CORTO" value={bz.diagnosi} onChange={(e) => setBz((b) => ({ ...b, diagnosi: e.target.value }))} />
         </Campo>
+
+        {/* 13/11/2026 (Christian, Bagnetti): «lavorano con gli imponibili» → accanto all'importo IVA inclusa anche
+            «(€ X + IVA)» in mail, WhatsApp, PDF e pagina del cliente. Default dall'anagrafica (impostazione perenne). */}
+        <label className="flex items-center gap-2 text-sm" data-testid="preventivo-imponibile">
+          <input type="checkbox" disabled={ro}
+            checked={bz.imponibile ?? s.collegamenti?.preventivo_imponibile_cliente ?? false}
+            onChange={(e) => setBz((b) => ({ ...b, imponibile: e.target.checked }))} />
+          Mostra anche l'importo imponibile + IVA (es. € 368 → € 301,64 + IVA)
+          {s.collegamenti?.preventivo_imponibile_cliente && <span className="rounded bg-amber-100 px-1.5 text-xs text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">sempre attivo per questo cliente</span>}
+        </label>
 
         {bb.map((b) => (
           <Blocco key={b} b={b} righe={righe} ro={ro} attivo={b === bloccoAttivo} onAttiva={() => setBloccoAttivo(b)}

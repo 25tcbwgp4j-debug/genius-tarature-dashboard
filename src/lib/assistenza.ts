@@ -68,13 +68,13 @@ export interface Scheda extends SchedaBreve {
     scontrino?: { id: string; stato: string; totale: number; numero_rt?: string | null; data_rt?: string | null; pagamenti?: { importo: number; modalita: string }[] } | null;
     fattura?: FatturaCollegata | null; documento?: { id: string; sigla: string; stato: string; totale: number } | null;
     /** 24/10/2026: altre fatture che citano la scheda, bonifici arrivati con la scheda in causale, come risulta pagata */
-    altre_fatture?: FatturaCollegata[]; combinata?: { id: string; sigla: string; stato: string; prodotto: string | null; rif_cliente: string | null }[]; ex_schede?: ExScheda[]; bonifici?: { id: string; data: string; importo: number; ordinante: string | null; causale: string | null; stato: string }[];
+    altre_fatture?: FatturaCollegata[]; combinata?: { id: string; sigla: string; stato: string; prodotto: string | null; rif_cliente: string | null }[]; ex_schede?: ExScheda[]; /** 13/11/2026: doppio importo attivo per questa scheda (scheda o anagrafica) */ preventivo_imponibile?: boolean; preventivo_imponibile_cliente?: boolean; bonifici?: { id: string; data: string; importo: number; ordinante: string | null; causale: string | null; stato: string }[];
     pagamento?: { il: string | null; modo: string | null; fonte: string; rimborso?: { importo: number; note_credito: string } } | null;
     note_credito?: { id: string; numero: string; data: string; totale: number }[] };
   anagrafica: Anagrafica | null; etichetta_stato: string; prova: boolean;
   // v2 (04-05/10/2026)
   famiglia: string | null; modello_fonte: string | null; modello_da_scheda: string | null; con_alimentatore: boolean | null;
-  preventivo: { diagnosi?: string; note?: string } | null; preventivo_stato: string | null; preventivo_operatore: string | null;
+  preventivo: { diagnosi?: string; note?: string; imponibile?: boolean | null } | null; preventivo_stato: string | null; preventivo_operatore: string | null;
   preventivo_inviato_il: string | null; preventivo_inviato_da: string | null; ricambi_stato: string | null; ricambi_arrivo_previsto: string | null;
   ricambi_fornitore: string | null; ricambi_nota: string | null; esito_motivo: string | null;
   /** 24/10/2026 (migr. 128) */ conto_vendita?: boolean; conto_vendita_prezzo?: number | null; conto_vendita_carico?: number | string | null; conto_vendita_margine?: number | null; spedizione_combinata?: string | null; rif_cliente?: string | null; ddt_cliente?: string | null; schede_precedenti?: string | null; arrivo_modo?: string | null; conto_vendita_valutazione?: number | null; conto_vendita_sito?: { codice: string | null; descrizione: string; prezzo: number; aggiornato: string; url: string } | null; tecnico_verifica: string | null; note_verifica: string | null;
