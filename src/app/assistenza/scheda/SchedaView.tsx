@@ -114,7 +114,11 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const v = <K extends keyof Scheda>(k: K): Scheda[K] | undefined => (k in b ? (b as Scheda)[k] : s?.[k]);
   const set = useCallback((k: keyof Scheda, val: unknown) => setB((x) => ({ ...x, [k]: val })), []);
   // 24/10/2026 (Christian): le storiche si correggono; le CHIUSE (consegnate, annullate) solo il titolare, dopo «Cambia stato»
-  const ro = s?.stato === "annullata" || (s?.stato === "consegnato" && !admin);
+  // 13/11/2026 (revisione): anche per il titolare una scheda CONSEGNATA si apre in sola consultazione (prima era tutta
+  // modificabile, «Annulla» compreso). Un clic su «Riapri per modificare» riabilita campi, «Cambia stato» e «Annulla».
+  // Restano sempre disponibili fattura/pagamento/PDF/stampa/duplica (sono fuori da `ro`, come per gli operatori).
+  const [riaperta, setRiaperta] = useState(false);
+  const ro = s?.stato === "annullata" || (s?.stato === "consegnato" && (!admin || !riaperta));
 
   // bozza del preventivo dentro la bozza della scheda (aggiornamenti funzionali: più modifiche nello stesso clic)
   const setBz = useCallback((f: (bz: BozzaPreventivo) => BozzaPreventivo) => setB((x) => {
@@ -349,7 +353,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           {s.prova && s.origine === "prova" && <Pill tono="ambra">PROVA</Pill>}
           {s.sola_lettura && <Pill>storica FileMaker</Pill>}
           <span className="hidden min-w-0 truncate text-sm text-muted-foreground md:inline">{s.azienda || s.nominativo} · {s.modello || s.prodotto}</span>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex flex-wrap items-center gap-1">
             <Button size="sm" variant="ghost" onClick={ricarica} title="Ricarica"><RefreshCw /></Button>
             {!ro && <Button size="sm" disabled={!sporca} onClick={() => salva()} title="Ctrl/Cmd+S"><Save />Salva{sporca ? " *" : ""}</Button>}
           </div>
@@ -368,6 +372,16 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         </div>
       </div>
 
+      {/* 13/11/2026: scheda consegnata = sola consultazione finché il titolare non la riapre esplicitamente */}
+      {st === "consegnato" && (
+        <div className={`flex flex-wrap items-center gap-2 rounded-xl border-2 px-3 py-2 text-sm ${riaperta
+          ? "border-amber-400 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"
+          : "border-slate-300 bg-slate-50 text-slate-900 dark:bg-slate-900/40 dark:text-slate-100"}`} data-testid="banner-consegnata">
+          <b>{riaperta ? "✏️ Scheda consegnata riaperta per modifiche" : "📦 Scheda consegnata"}</b>
+          <span className="text-xs opacity-80">{riaperta ? "Campi, «Cambia stato» e «Annulla» sono attivi: attenzione." : "Sola consultazione: fattura, pagamento, PDF e stampe restano disponibili."}</span>
+          {admin && <Button size="sm" variant="outline" className="ml-auto" onClick={() => setRiaperta(!riaperta)}>{riaperta ? "Blocca di nuovo" : "Riapri per modificare"}</Button>}
+          {!admin && <span className="ml-auto text-xs opacity-70">Solo il titolare può riaprirla.</span>}
+        </div>)}
       {/* 30/10/2026 (Christian): notifiche da gestire della scheda, in alto finché non sono chiuse con l'esito */}
       <NotificheScheda key={`ng-${s.id}`} schedaId={s.id} aperte={s.notifiche_gestire || []} operatore={operatore}
         onCambiata={async () => { window.dispatchEvent(new Event("gl-notifiche")); await ricarica(); onCambiata(); }} />
@@ -391,7 +405,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       <ExSchede ex={s.collegamenti?.ex_schede} />
       <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={() => { if (confermaTrova()) setDlg({ k: "invio", tipo: "trova" }); }}
         onPreventivo={() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
-      <Avanzamento av={s.avanzamento} prontoProgrammato={s.pronto_prog_stato === "programmato" ? s.pronto_prog_il || null : null} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)} nome={(c) => nomeTecnico(c, tecnici)}
+      <Avanzamento av={s.avanzamento} trovaDopoFinita={trovaDopoFinita(s)} prontoProgrammato={s.pronto_prog_stato === "programmato" ? s.pronto_prog_il || null : null} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)} nome={(c) => nomeTecnico(c, tecnici)}
         rinvii={<>
           {!ro && st !== "in_arrivo" && st !== "annullata" && <>
             <span className="text-xs font-medium text-muted-foreground">📨 Rinvia al cliente:</span>
@@ -406,7 +420,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
                 title="Rimanda il pronto / consuntivo da pagare (mail + WhatsApp, con IBAN e PDF)">Pronto da pagare</Button>)}</>}
           {/* 28/10/2026 (Christian): preventivi e modifiche dettate anche da iPhone */}
           {!ro && <Assistente s={s} operatore={operatore} sporca={sporca} onEseguito={(n) => { setS(n); setB({}); onCambiata(); }} />}
-          {(admin || !["consegnato", "annullata"].includes(st)) && (
+          {(admin ? st !== "consegnato" || riaperta : !["consegnato", "annullata"].includes(st)) && (
             <Button size="xs" className="ml-auto bg-amber-500 text-white hover:bg-amber-600" onClick={() => setDlg({ k: "cambia_stato" })}
               title="Riporta la scheda a qualsiasi stato (anche indietro) o la chiude"><RotateCcw />Cambia stato</Button>)}
         </>}
@@ -830,12 +844,19 @@ function BannerRecensione({ s, ro, onScelta }: { s: Scheda; ro: boolean; onScelt
 }
 
 
+/** 13/11/2026: riparazione già finita (o scheda pronta) con «Trova il mio» ancora attivo → solo avviso, non blocco */
+function trovaDopoFinita(s: Scheda): boolean {
+  const trovaAttivo = s.trova_il_mio === "attivo" || s.riparazione_stato === "disabilitare_trova";
+  return trovaAttivo && (s.riparazione_stato === "finita" || s.stato === "pronto");
+}
+
 /** 26/10/2026 (Christian): in cima alla scheda, in chiaro: «Trova il mio» attivo (riparazione bloccata) e come è arrivato /
  *  come torna il dispositivo (corriere del cliente, nostro corriere, pony: NON si ritira a mano in negozio). */
 function BannerScheda({ s, ro, onTrova, onIstruzioni, onPreventivo }: { s: Scheda; ro: boolean; onTrova: (a: "attivo" | "risolto") => void; onIstruzioni: () => void; onPreventivo: () => void }) {
   const chiusa = ["consegnato", "annullata"].includes(s.stato);
   const trovaAttivo = s.trova_il_mio === "attivo" || s.riparazione_stato === "disabilitare_trova";
   const bloccata = trovaAttivo && s.preventivo_stato === "accettato";   // prima si accetta il preventivo (63144)
+  const finita = trovaDopoFinita(s);
   const arrivo = s.arrivo_modo || "";
   const sped = s.consegna_modo === "spedizione" || ["corriere_cliente", "pony", "corriere_nostro", "ritiro_nostro"].includes(arrivo);
   const delCliente = arrivo === "corriere_cliente" || (s.consegna_modo === "spedizione" && s.consegna_corriere === "cliente");
@@ -844,12 +865,23 @@ function BannerScheda({ s, ro, onTrova, onIstruzioni, onPreventivo }: { s: Sched
   const ritiro = (s.spedizioni || []).find((x) => x.direction === "ritiro" && x.status !== "annullata" && !x.test_mode);
   return (
     <>
-      {trovaAttivo && !chiusa && (
+      {/* 13/11/2026 (revisione, 63395): riparazione finita → avviso informativo coerente, non «RIPARAZIONE BLOCCATA» */}
+      {trovaAttivo && !chiusa && finita && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" data-testid="trova-dopo-finita">
+          <b>ℹ️ Riparazione finita · «Trova il mio» ancora attivo:</b>
+          <span>il ripristino del software lo fa il cliente, oppure lo facciamo noi se lo disattiva.</span>
+          {!ro && <span className="flex flex-wrap gap-1 sm:ml-auto">
+            <Button size="xs" variant="outline" onClick={onIstruzioni}>Invia istruzioni (mail + WhatsApp)</Button>
+            <Button size="xs" variant="outline" onClick={() => onTrova("risolto")}>Il cliente l&apos;ha fatto</Button>
+          </span>}
+        </div>
+      )}
+      {trovaAttivo && !chiusa && !finita && (
         <div className={`flex flex-wrap items-center gap-2 rounded-xl border-2 px-3 py-2 text-sm ${bloccata
           ? "border-red-400 bg-red-50 text-red-950 dark:bg-red-950/30 dark:text-red-100" : "border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"}`}>
           <b>{bloccata ? "🔒 «TROVA IL MIO» ATTIVO — RIPARAZIONE BLOCCATA." : "🔒 «TROVA IL MIO» ATTIVO — da disattivare DOPO l'accettazione del preventivo."}</b>
           <span>Il cliente deve abilitare la riparazione (Dov&apos;è → Riparazione o permuta) oppure rimuovere il dispositivo dall&apos;account.</span>
-          {!ro && <span className="ml-auto flex gap-1">
+          {!ro && <span className="flex flex-wrap gap-1 sm:ml-auto">
             {!bloccata && <Button size="xs" variant="outline" onClick={onPreventivo} title="Scrive l'avviso nelle note del preventivo (va nel PDF)">Inserisci nel preventivo</Button>}
             <Button size="xs" variant="destructive" onClick={onIstruzioni}>Invia istruzioni (mail + WhatsApp)</Button>
             <Button size="xs" variant="outline" onClick={() => onTrova("risolto")}>Il cliente l&apos;ha fatto: si procede</Button>

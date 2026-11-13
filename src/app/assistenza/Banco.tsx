@@ -72,7 +72,19 @@ export function Banco() {
   const [totale, setTotale] = useState(0);
   // 05/10/2026 (§10.6): cruscotto per fase (e tecnico) al posto dei chip filtro
   const [cruscotto, setCruscotto] = useState<FaseCruscotto[] | null>(null);
+  // 13/11/2026 (revisione Mac): cruscotto RIPIEGABILE. Con una ricerca in corso o una scheda aperta parte ridotto a una
+  // riga (prima i suoi ~840px spingevano i risultati sotto la piega); senza ricerca vale la scelta ricordata su questo
+  // dispositivo (localStorage «gl_cruscotto_ridotto»).
   const [mostraCr, setMostraCr] = useState(false);
+  const [crRidottoPref, setCrRidottoPref] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- preferenza del dispositivo letta dopo l'idratazione
+    try { setCrRidottoPref(localStorage.getItem("gl_cruscotto_ridotto") === "1"); } catch { /* storage non disponibile */ }
+  }, []);
+  const cambiaCrPref = (ridotto: boolean) => {
+    setCrRidottoPref(ridotto);
+    try { localStorage.setItem("gl_cruscotto_ridotto", ridotto ? "1" : "0"); } catch { /* storage non disponibile */ }
+  };
   const [tecniciCr, setTecniciCr] = useState<{ codice: string; nome: string }[]>([]);
   const [carichi, setCarichi] = useState<CaricoTecnico[]>([]);
   const faseLink = sp.get("fase");
@@ -107,6 +119,8 @@ export function Banco() {
   // 04/10/2026 (Christian): come in FileMaker la ricerca vale su TUTTE le schede (non solo sul filtro scelto)
   // e porta TUTTI i risultati: così si vedono tutte le schede di un cliente, anche le storiche.
   const inRicerca = q.trim().length > 0;
+  // finita la ricerca, la prossima ricerca riparte col cruscotto ridotto
+  useEffect(() => { if (!inRicerca && !aperta) setMostraCr(false); }, [inRicerca, aperta]);
   // 24/10/2026: ogni ricerca ha un numero; arriva in elenco SOLO la risposta dell'ultima. Prima una ricerca lenta
   // fatta a metà parola («B», «Bal»: migliaia di schede) arrivava dopo quella giusta («Baldi») e la sovrascriveva.
   const ultimaRicerca = useRef(0);
@@ -127,6 +141,11 @@ export function Banco() {
     const t = setInterval(() => assCruscotto().then((r) => { setCruscotto(r.fasi); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); setNotifiche(r.notifiche || []); }).catch(() => undefined), 60000);
     return () => clearInterval(t);
   }, []);
+  // 13/11/2026: l'indirizzo comanda. Su /assistenza senza ?id (clic su «Schede assistenza» nel menu, oppure «Indietro»
+  // dalla scheda) si vede l'elenco: prima restava aperta l'ultima scheda vista, perché lo stato locale non si azzerava.
+  useEffect(() => {
+    if (!sp.get("id") && !sp.get("n")) setAperta(null);
+  }, [sp]);
   useEffect(() => {
     const n = sp.get("n");
     if (n) assPerNumero(n).then((r) => setAperta(r.id)).catch(toastErrore);
@@ -150,7 +169,17 @@ export function Banco() {
     } catch (e) { toastErrore(e); } finally { setAltreInCarico(false); }
   }
 
-  const apri = useCallback((id: string) => { setAperta(id); router.replace(`/assistenza?id=${id}`); window.scrollTo({ top: 0 }); }, [router]);
+  // 13/11/2026 (revisione navigazione): aprire una scheda DALL'ELENCO aggiunge un passo alla cronologia, così «Indietro»
+  // torna all'elenco con la stessa ricerca (lo stato della pagina resta: il componente non si smonta). Passare da una
+  // scheda all'altra (precedente/successiva, schede collegate) invece SOSTITUISCE il passo: niente catena di schede
+  // vecchie da ripercorrere con «Indietro».
+  const apertaRef = useRef<string | null>(null);
+  apertaRef.current = aperta;
+  const apri = useCallback((id: string) => {
+    const url = `/assistenza?id=${id}`;
+    if (apertaRef.current) router.replace(url); else router.push(url);
+    setAperta(id); window.scrollTo({ top: 0 });
+  }, [router]);
   const chiudi = useCallback(() => { setAperta(null); router.replace("/assistenza"); }, [router]);
 
   useEffect(() => {
@@ -216,15 +245,16 @@ export function Banco() {
       <AvvisoRichieste n={nRichieste} operatore={operatore} onCambiate={carica}
         onApriScheda={(r) => { setDaRichiesta(r); setNuova(true); }} />
       {/* 24/10/2026 (Christian): con una scheda aperta il cruscotto si riduce a una riga (prima occupava mezzo schermo) */}
-      {aperta && !mostraCr ? (
-        <button type="button" onClick={() => setMostraCr(true)} className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm hover:bg-muted/50">
+      {(aperta || inRicerca ? !mostraCr : crRidottoPref) ? (
+        <button type="button" onClick={() => { if (aperta || inRicerca) setMostraCr(true); else cambiaCrPref(false); }} aria-expanded={false} className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm hover:bg-muted/50">
           <span className="font-semibold text-foreground">Cruscotto</span>
           {(cruscotto || []).filter((f) => f.n > 0).slice(0, 8).map((f) => <span key={f.codice}>{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
           <span className="ml-auto underline">mostra</span>
         </button>
       ) : (
       <>
-      {aperta && <div className="flex justify-end"><button type="button" className="text-xs text-muted-foreground underline" onClick={() => setMostraCr(false)}>riduci il cruscotto</button></div>}
+      <div className="flex justify-end"><button type="button" aria-expanded className="min-h-8 text-xs text-muted-foreground underline"
+        onClick={() => { if (aperta || inRicerca) setMostraCr(false); else cambiaCrPref(true); }}>riduci il cruscotto</button></div>
       <Cruscotto fasi={cruscotto} tecnici={tecniciCr} scelta={fase} carichi={carichi}
         onScegli={(x) => {
           setFase(x); setElenco(null); setQ("");
@@ -259,7 +289,12 @@ export function Banco() {
                 className={`rounded-full border px-2 py-0.5 ${!fase && filtro === k ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{l}</button>
             ))}
           </div>
-          <div className="text-xs text-muted-foreground">{elenco ? `${totale.toLocaleString("it-IT")} schede${inRicerca ? " trovate su tutte le schede" : ""}${totale > elenco.length ? ` (mostrate le ${elenco.length.toLocaleString("it-IT")} più recenti: in fondo «Mostra tutte»)` : ""}` : "…"}</div>
+          {/* 13/11/2026: «1 scheda trovata» (non «1 schede trovate»); con un tetto: «prime N di M» + come vedere le altre */}
+          <div className="text-xs text-muted-foreground" aria-live="polite">{elenco ? <>
+            {totale.toLocaleString("it-IT")} {totale === 1 ? (inRicerca ? "scheda trovata" : "scheda") : (inRicerca ? "schede trovate" : "schede")}{inRicerca ? " su tutte le schede" : ""}
+            {totale > elenco.length && <span className="block font-medium text-amber-800 dark:text-amber-300">
+              Mostrate le prime {elenco.length.toLocaleString("it-IT")} di {totale.toLocaleString("it-IT")} (le più recenti): affina la ricerca o premi «Mostra tutte» in fondo</span>}
+          </> : "…"}</div>
           <div className="-mx-2 flex-1 overflow-y-auto">
             {elenco === null && <div className="p-4 text-center"><Loader2 className="inline size-4 animate-spin" /></div>}
             {elenco?.map((s) => (

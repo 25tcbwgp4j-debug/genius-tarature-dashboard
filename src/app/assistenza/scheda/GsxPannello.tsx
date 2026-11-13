@@ -81,12 +81,15 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-2.5 text-sm dark:bg-slate-950">
       {errore && <div className="mb-2 rounded border border-amber-200 bg-amber-50/70 px-2 py-1 text-xs dark:bg-amber-950/30">GSX Apple: {errore}</div>}
-      <div className="flex items-start gap-3">
+      {/* 13/11/2026 (revisione iPhone): su telefono i pulsanti vanno SOTTO i dati (prima, a destra, schiacciavano il testo
+          a una parola per riga e Garanzia/Acquisto si sovrapponevano); da 640px in su tornano a destra */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
         {g.immagine ? <img src={g.immagine} alt="" className="size-14 shrink-0 object-contain" /> : <Apple className="size-6 shrink-0" />}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 break-words">
           <div className="font-semibold">{g.modello || "Modello non indicato da Apple"}</div>
           <div className="text-xs text-muted-foreground">{g.configurazione}{g.imei ? ` · IMEI ${g.imei}` : ""} · letto su GSX il {ora(g.letto_il)}</div>
-          <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs sm:grid-cols-3">
+          <div className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 text-xs min-[420px]:grid-cols-2 lg:grid-cols-3">
             {g.dati_nascosti
               ? <span className="col-span-full text-amber-700">Apple nasconde garanzia e acquisto: quasi sempre «Trova il mio» è attivo</span>
               : <>
@@ -106,7 +109,8 @@ export function GsxPannello({ g, errore, autoRicambi, onInserisci, onAggiorna, a
             <div className="mt-1 text-xs">Pratiche Apple: {g.pratiche_apple.map((c) => `${c.caseId} (${data(c.createdDateTime?.slice(0, 10))}${c.summary ? ` · ${c.summary}` : ""})`).join(" · ")}</div>
           )}
         </div>
-        <div className="flex shrink-0 flex-col gap-1">
+        </div>
+        <div className="flex flex-wrap gap-1 sm:shrink-0 sm:flex-col">
           {onAggiorna && <Button type="button" variant="outline" className="h-8" disabled={aggiornando} onClick={onAggiorna} title="Rilegge tutto da Apple GSX e lo salva nella scheda">
             {aggiornando ? <Loader2 className="animate-spin" /> : <RefreshCw />}Aggiorna da GSX</Button>}
           {!ric && <Button type="button" variant="outline" className="h-8" disabled={busy} onClick={caricaRicambi} title="Pezzi del dispositivo secondo Apple GSX">

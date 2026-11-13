@@ -37,8 +37,16 @@ const AZIONI: Record<string, string> = {
   ricevuta: "INVIA RICEVUTA", in_vendita: "🏷️ Metti IN VENDITA", richiedi_etichetta: "📨 Pagamento arrivato: chiedi l'etichetta di ritorno",
 };
 
-export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, onRiconsegna, rinvii, nome, prontoProgrammato }: {
+/** la situazione attuale calcolata dal backend parla del blocco «Trova il mio»? */
+function sit0IsTrova(av: Av): boolean {
+  return /trova il mio/i.test(av.situazione?.titolo || "") && av.situazione?.tono === "rosso";
+}
+
+export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, onRiconsegna, rinvii, nome, prontoProgrammato, trovaDopoFinita }: {
   av: Av;
+  /** 13/11/2026 (revisione, 63395): riparazione FINITA ma «Trova il mio» ancora attivo → non è un blocco della riparazione
+   *  (già fatta): si mostra come AVVISO ambra, non come «BLOCCATA» rossa in contrasto con il resto della scheda. */
+  trovaDopoFinita?: boolean;
   /** 11/11/2026 (Christian, 63354): PRONTO PROGRAMMATO → scritta grande in rosso con il «per quando» nella situazione attuale */
   prontoProgrammato?: string | null; onAzione: (azione: string) => void; disabilitato?: boolean;
   /** 11/11/2026: nome leggibile del tecnico (ALEX → Alex) nella situazione attuale */
@@ -50,10 +58,12 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
   chiusa?: boolean; onGiaFatto?: () => void; onRiconsegna?: () => void;
 }) {
   const az = av.prossimo?.azione || "";
-  const bloccata = av.prossimo?.blocco === "trova";
+  const soloAvviso = !!trovaDopoFinita && (av.prossimo?.blocco === "trova" || sit0IsTrova(av));
+  const bloccata = av.prossimo?.blocco === "trova" && !soloAvviso;
   const sit = av.situazione;
-  const tono = TONI[sit?.tono || (bloccata ? "rosso" : "blu")];
-  const titolo = sit ? (sit.chi && nome ? sit.titolo.split(sit.chi).join(nome(sit.chi) || sit.chi) : sit.titolo) : "";
+  const tono = soloAvviso ? { ...TONI.ambra, etichetta: "AVVISO" } : TONI[sit?.tono || (bloccata ? "rosso" : "blu")];
+  const titolo = soloAvviso ? "Riparazione finita · «Trova il mio» ancora attivo"
+    : sit ? (sit.chi && nome ? sit.titolo.split(sit.chi).join(nome(sit.chi) || sit.chi) : sit.titolo) : "";
   return (
     <div className="min-w-0 rounded-xl border bg-card p-3 shadow-sm">
       {/* 11/11/2026 (Christian): SITUAZIONE ATTUALE grande e colorata — chi ce l'ha, cosa si aspetta, da quando — col prossimo passo */}
@@ -65,14 +75,15 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
                 <span className={cn("size-2.5 rounded-full", tono.pallino, sit.tono === "verde" && "animate-pulse")} />{tono.etichetta}</span>
               <span className="text-lg font-bold leading-tight sm:text-xl">{titolo}</span>
               {sit.da && <span className="text-sm font-medium tabular-nums opacity-80" title={dataOra(sit.da)}>{daQuanto(sit.da)} · {dataOra(sit.da)}</span>}
-              {sit.dettaglio && <span className="w-full text-sm opacity-90">{sit.dettaglio}</span>}
+              {soloAvviso ? <span className="w-full text-sm opacity-90">Il ripristino del software lo fa il cliente, oppure lo facciamo noi se disattiva «Trova il mio».</span>
+                : sit.dettaglio && <span className="w-full text-sm opacity-90">{sit.dettaglio}</span>}
               {prontoProgrammato && <span className="w-full rounded-lg border-2 border-red-500 bg-red-100 px-2 py-1 text-base font-extrabold uppercase tracking-wide text-red-700 dark:bg-red-950/60 dark:text-red-200" data-testid="pronto-programmato">⏰ Pronto programmato per {quandoLungo(prontoProgrammato)}</span>}
             </div>
           )}
           {av.prossimo?.testo && (
             <div className={cn("flex flex-wrap items-center gap-2 text-sm", sit && "mt-2 border-t border-current/15 pt-2")}>
               <span className="font-semibold">{bloccata ? "🔒 Prossimo passo:" : "Prossimo passo:"}</span>
-              <span className="font-medium">{av.prossimo.testo}</span>
+              <span className="font-medium">{soloAvviso ? av.prossimo.testo.replace(/^BLOCCATA:\s*/i, "") : av.prossimo.testo}</span>
               {av.prossimo.poi && <span className="text-xs opacity-80">· poi: {av.prossimo.poi}</span>}
               {az === "spedisci" && (
                 <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("consegna")}

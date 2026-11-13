@@ -39,7 +39,7 @@ export function BannerDati({ s, ro, onSalva }: {
   }
   const pulsanti = !ro && !chiusa && (
     <span className="flex flex-wrap items-center gap-1.5">
-      <input className="h-8 w-56 rounded-md border border-current/30 bg-white/70 px-2 text-sm text-foreground dark:bg-black/30"
+      <input className="h-8 w-full rounded-md sm:w-56 border border-current/30 bg-white/70 px-2 text-sm text-foreground dark:bg-black/30"
         placeholder="nota breve (es. dati su iCloud)" value={nota} onChange={(e) => setNota(e.target.value)} maxLength={300} />
       <Button size="sm" disabled={busy} variant={v === "importanti" ? "default" : "outline"}
         className={v === "importanti" ? "bg-red-600 text-white hover:bg-red-700" : "border-red-400 bg-white text-red-700 hover:bg-red-50 dark:bg-transparent"}
@@ -77,6 +77,9 @@ export function BannerDati({ s, ro, onSalva }: {
         <span className="text-xs opacity-80">{s.dati_cliente_da ? `scelto da ${s.dati_cliente_da}` : ""}{s.dati_cliente_il ? ` · ${dataOra(s.dati_cliente_il)}` : ""}</span>
         {!ro && !chiusa && !modifica && <Button size="xs" variant="outline" className={cn("ml-auto", rosso && "border-white/70 bg-transparent text-white hover:bg-white/15")} onClick={() => setModifica(true)}>Cambia</Button>}
       </div>
+      {/* 13/11/2026 (revisione, 63395): «si può formattare» con «Trova il mio» attivo non è in contrasto: si chiarisce l'ordine */}
+      {!rosso && !chiusa && (s.trova_il_mio === "attivo" || s.riparazione_stato === "disabilitare_trova") && (
+        <p className="mt-1 text-xs font-medium">🔒 «Trova il mio» è ancora attivo: il ripristino si fa solo dopo che il cliente l&apos;ha disattivato (oppure lo fa lui).</p>)}
       {modifica && <div className="mt-2">{pulsanti}</div>}
     </div>
   );
