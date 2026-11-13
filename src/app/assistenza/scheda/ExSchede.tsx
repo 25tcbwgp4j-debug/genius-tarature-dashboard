@@ -8,22 +8,30 @@ import type { ExScheda } from "@/lib/assistenza";
 
 export function ExSchede({ ex }: { ex?: ExScheda[] | null }) {
   if (!ex || !ex.length) return null;
-  const inGaranzia = ex.some((e) => e.garanzia?.attiva);
+  // 13/11/2026 (Christian, 63008 → 63320): le schede con numero più alto sono SUCCESSIVE, non «ex» schede
+  const prec = ex.filter((e) => !e.successiva);
+  const succ = ex.filter((e) => e.successiva);
+  const inGaranzia = prec.some((e) => e.garanzia?.attiva);
+  const conta = (n: number, uno: string, piu: string) => (n === 1 ? `1 ${uno}` : `${n} ${piu}`);
+  const titolo = [
+    prec.length ? conta(prec.length, "ex scheda", "ex schede") + " di assistenza precedent" + (prec.length === 1 ? "e" : "i") : "",
+    succ.length ? conta(succ.length, "scheda", "schede") + " di assistenza successiv" + (succ.length === 1 ? "a" : "e") : "",
+  ].filter(Boolean).join(" · ");
   return (
     <div className={`rounded-xl border-2 px-3 py-2 text-sm shadow-sm ${inGaranzia ? "border-red-400 bg-red-50 dark:bg-red-950/30" : "border-sky-300 bg-sky-50 dark:bg-sky-950/30"}`}>
       <div className="mb-1 font-semibold">
-        🔁 Dispositivo già passato da noi: {ex.length === 1 ? "1 ex scheda" : `${ex.length} ex schede`} di assistenza
+        🔁 {succ.length && !prec.length ? "Dispositivo tornato da noi dopo questa scheda" : "Dispositivo già passato da noi"}: {titolo}
         {inGaranzia && <span className="ml-2 rounded bg-red-600 px-1.5 py-0.5 text-xs text-white">ATTENZIONE: possibile GARANZIA</span>}
       </div>
       <ul className="space-y-1.5">
         {ex.map((e) => (
           <li key={e.id} className="rounded-md border bg-background/70 px-2 py-1.5">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <a href={`/assistenza?id=${e.id}`} target="_blank" rel="noreferrer" className="font-bold text-blue-700 underline">EX SCHEDA {e.sigla}</a>
+              <a href={`/assistenza?id=${e.id}`} target="_blank" rel="noreferrer" className="font-bold text-blue-700 underline">{e.successiva ? "SCHEDA SUCCESSIVA" : "EX SCHEDA"} {e.sigla}</a>
               <span className="text-muted-foreground">del {e.data}</span>
               {e.prodotto && <span className="text-muted-foreground">· {e.prodotto}</span>}
               <span className="text-xs text-muted-foreground">· {e.stato}{e.esito ? `, esito ${e.esito}` : ""}{e.consegnata_il ? `, riconsegnata il ${e.consegnata_il}` : ""}</span>
-              {e.garanzia && (e.garanzia.attiva
+              {!e.successiva && e.garanzia && (e.garanzia.attiva
                 ? <span className="rounded bg-red-600 px-1.5 text-xs font-semibold text-white">in garanzia fino al {e.garanzia.fino_al}</span>
                 : <span className="text-xs text-muted-foreground">garanzia scaduta il {e.garanzia.fino_al}</span>)}
             </div>

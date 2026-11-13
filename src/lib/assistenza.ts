@@ -325,4 +325,5 @@ export type ExScheda = {
   id: string; sigla: string; stato: string | null; esito: string | null; data: string; consegnata_il: string | null;
   prodotto: string | null; difetto: string; test_ingresso: string; lavorazione: string; totale: number | null;
   garanzia: { attiva: boolean; fino_al: string } | null;
+  /** 13/11/2026: true = scheda con numero più alto (SUCCESSIVA), non una ex scheda */ successiva?: boolean;
 };
