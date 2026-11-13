@@ -365,7 +365,7 @@ export default function CassaGiornataPage() {
 
   /** modForzata = «pos» quando il cliente ha appena pagato sul POS SumUp. */
   function aggiungi(modForzata?: string) {
-    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     const imp = parseDec(nuova.importo);
     if (imp === null || Number.isNaN(imp) || imp === 0) { toast.error("Inserisci l'importo (es. 25 o 12,50)"); return; }
     const mod = modForzata || nuova.modalita;

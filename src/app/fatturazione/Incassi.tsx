@@ -74,7 +74,7 @@ export function Incassi({ onClose, onApriFattura, onCambiato }: {
   async function esegui(inc: Incasso, body: Parameters<typeof incAzione>[1], conferma: string): Promise<void> {
     // quando nasce una fattura serve sapere chi la fa
     if (["proforma_in_fattura", "sessione_in_fattura"].includes(body.azione) && !operatore) {
-      toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO) prima di creare la fattura"); return;
+      toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO) prima di creare la fattura"); return;
     }
     if (!confirm(conferma)) return;
     body = { ...body, operatore: operatore || undefined };

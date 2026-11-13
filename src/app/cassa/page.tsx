@@ -262,7 +262,7 @@ export default function CassaPage() {
    *  non è partito): il componente Incassa lo usa per abbinare il bonifico. */
   async function scontrino(pagamenti: PagamentoScontrino[]): Promise<{ id: string; descrizione: string } | null> {
     if (!carrello.length || busy) return null;
-    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return null; }
+    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return null; }
     if (carrello.some((r) => !(r.prezzo >= 0) || Number.isNaN(r.prezzo))) { toast.error("C'è un prezzo non valido nel carrello"); return null; }
     if (ordine && tot > ordine.max + 0.001) { toast.error(`Lo scontrino supera quanto resta da pagare sull'ordine (${eur(ordine.max)})`); return null; }
     if (riemissione && statoAnnullo?.stato !== "emesso") {
@@ -302,7 +302,7 @@ export default function CassaPage() {
   }
   async function fattura() {
     if (!carrello.length || busy) return;
-    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     setBusy("fattura");
     try {
       const f = await cassaFattura({ righe: carrello, operatore, ...(attScelta ? { attivita: attScelta } : {}) });

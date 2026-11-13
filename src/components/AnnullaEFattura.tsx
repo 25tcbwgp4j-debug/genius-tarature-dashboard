@@ -113,7 +113,7 @@ export function AnnullaEFattura({ scontrino, cliente: clienteIniziale, onClose, 
 
   async function conferma() {
     if (!scontrino) return;
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     const cp: FattControparte = { ...c, paese: "IT" };
     if (tipo === "privato") { cp.piva = ""; if (cp.nome && cp.cognome) cp.denominazione = `${cp.nome} ${cp.cognome}`; }
     if (!confirm(`Annullare lo scontrino ${numeroOrig || ""} da ${eur(Number(scontrino.totale))} sul registratore e fare la fattura a ${cp.denominazione || "—"}?\n\n`

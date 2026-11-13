@@ -320,7 +320,7 @@ export function Editor({
   /** Salva SEMPRE come bozza (mai allo SdI da qui). `passo` = cosa si apre dopo: pannello Pagamento o «Da pagare». */
   async function salva(passo?: "pagamento" | "da_pagare") {
     if (salvando) return;
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     const b = corpo();
     if (!b.righe.length) { toast.error("Aggiungi almeno una riga"); return; }
     setSalvando(passo || "bozza");

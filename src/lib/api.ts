@@ -1562,7 +1562,7 @@ export interface Scontrino {
   codice_lotteria: string | null; numero_rt: string | null; errore: string | null; risposta_rt: string | null; created_at: string;
   /** vendita (default) · reso · annullo: i documenti di reso/annullo hanno importi da leggere in NEGATIVO */
   tipo_documento?: 'vendita' | 'reso' | 'annullo' | 'recupero_credito' | null; rif_scontrino_id?: string | null; motivo?: string | null; creato_da?: string | null;
-  /** CHR · VALE · DUMY · ALTRO: chi l'ha battuto */
+  /** CHR · VALE · DUMY · MARTINA · ALTRO: chi l'ha battuto */
   operatore?: string | null; data_rt?: string | null;
   /** Genius Lab Gestionale: tarature | apple */
   attivita?: 'tarature' | 'apple' | null;
@@ -1798,7 +1798,7 @@ export interface DocumentoCliente {
   societa?: FattSocieta;
   rif: string | null; note: string | null; convertito_in: { tipo: string; id?: string; sigla?: string; numero?: string } | null;
   pagamenti?: PagamentoDoc[]; pagato: number; residuo: number; created_at: string; session_id?: string | null;
-  /** CHR · VALE · DUMY · ALTRO */
+  /** CHR · VALE · DUMY · MARTINA · ALTRO */
   operatore?: string | null;
   // percorso dell'ordine a cliente (01/10/2026)
   fase?: FaseOrdine; ordinato_il?: string | null; arrivato_il?: string | null; ritirato_il?: string | null;

@@ -111,7 +111,7 @@ function FinestraInvio({ d, a, onChiudi, onInviato }: { d: DocumentoCliente; a: 
   const waLink = cel.length >= 10 ? `https://wa.me/${cel}?text=${encodeURIComponent(testo)}` : null;
 
   async function invia() {
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     if (email) {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(dest.trim())) { toast.error("Email del destinatario non valida"); return; }
       if (!confirm(`Inviare ${d.sigla} a ${dest.trim()} da ${a.mittente}?`)) return;

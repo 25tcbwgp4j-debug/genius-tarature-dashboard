@@ -122,7 +122,7 @@ function Editor({ iniziale, listino, onChiudi, onSalvato }: {
 
   async function salva() {
     if (busy) return;
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     if (b.soloContatti && b.id) {
       setBusy(true);
       try { onSalvato(await docModifica(b.id, { email: b.email.trim(), telefono: b.telefono.trim(), operatore })); }
@@ -298,7 +298,7 @@ function SceltaFornitore({ iniziale, titolo, busy, onConferma, onChiudi }: {
 
 /** Avviso «ordine arrivato» al cliente: email (parte dal gestionale) o WhatsApp (si apre col messaggio già scritto). */
 async function avvisaCliente(d: DocumentoCliente, canale: "email" | "whatsapp", operatore: string | null): Promise<DocumentoCliente | null> {
-  if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return null; }
+  if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return null; }
   if (canale === "email") {
     if (!d.email) { toast.error("Manca l'email del cliente: aggiungila con «Modifica»"); return null; }
     if (!confirm(`Inviare l'email di avviso a ${d.email}?`)) return null;
@@ -402,7 +402,7 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
   /** azione semplice sull'ordine (fase, avviso, ritiro) con operatore obbligatorio */
   async function sullOrdine(fn: (op: string) => Promise<DocumentoCliente>, ok: string) {
     if (busy) return;
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     setBusy(true);
     try { setD(await fn(operatore)); toast.success(ok); onCambiato(); } catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
@@ -439,7 +439,7 @@ function Dettaglio({ id, proponiIncasso = false, onChiudi, onCambiato, onModific
   /** modForzata = «pos_sumup» quando il cliente ha appena pagato sul POS SumUp (la fattura nasce già pagata). */
   function conferma(modForzata?: string) {
     if (!d) return;
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     const mod = modForzata || f.modalita;
     if (azione === "fattura" && d.pagamento_sessione?.pagata && !modForzata) {
       // sessione già pagata: nessun incasso di oggi, la fattura prende il pagamento della sessione (metodo eventualmente corretto)

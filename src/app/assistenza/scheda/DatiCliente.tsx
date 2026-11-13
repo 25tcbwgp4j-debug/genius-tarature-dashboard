@@ -13,7 +13,7 @@ export function DatiBadge({ dati, nota }: { dati?: DatiCliente | null; nota?: st
   if (!dati) return null;
   return (
     <span title={`${DATI_CLIENTE[dati].lungo}${nota ? ` — ${nota}` : ""}`}
-      className={cn("inline-block whitespace-nowrap rounded px-1.5 py-px text-[10px] font-bold",
+      className={cn("inline-block shrink-0 whitespace-nowrap rounded px-1.5 py-px text-[10px] font-bold",
         dati === "importanti" ? "bg-red-600 text-white" : "bg-emerald-600 text-white")}>
       {dati === "importanti" ? "⚠️ DATI" : "✅ FORMATTABILE"}
     </span>

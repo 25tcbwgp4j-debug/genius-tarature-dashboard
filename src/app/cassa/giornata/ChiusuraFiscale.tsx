@@ -80,7 +80,7 @@ export function ChiusuraFiscale({ giorno, oggi, operatore, onFatta }: { giorno: 
   }, [inAttesa, scaduta, carica]);
 
   async function avvia() {
-    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli prima l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     if (!confirm("Fare ADESSO la chiusura fiscale del registratore?\n\nDopo la chiusura gli scontrini di oggi non si possono più annullare dal registratore. Falla solo a fine giornata, dopo l'ultimo scontrino.")) return;
     setInvio(true);
     try { await cassaChiusuraFiscale(operatore); toast.info("Chiusura richiesta: il registratore la sta facendo…"); await carica(); }

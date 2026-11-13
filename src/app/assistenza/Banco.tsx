@@ -264,13 +264,19 @@ export function Banco() {
             {elenco === null && <div className="p-4 text-center"><Loader2 className="inline size-4 animate-spin" /></div>}
             {elenco?.map((s) => (
               <button key={s.id} onClick={() => apri(s.id)}
-                style={{ contentVisibility: "auto", containIntrinsicSize: "auto 46px" }}
+                style={{ contentVisibility: "auto", containIntrinsicSize: "auto 68px" }}
                 className={`block w-full border-t px-3 py-1.5 text-left text-sm hover:bg-muted/60 ${aperta === s.id ? "bg-primary/10" : ""}`}>
-                <div className="flex items-center gap-2">
-                  <b className="tabular-nums">{s.sigla}</b>
-                  <span className="truncate">{s.azienda || s.nominativo}</span>
-                  {s.passaggio && !s.passaggio.letto_il && <span className="rounded bg-blue-600 px-1.5 text-[10px] font-bold text-white" title={`Messaggio di ${s.passaggio.da} per ${s.passaggio.a}`}>📨 per {s.passaggio.a}</span>}
-                  <span className="ml-auto flex items-center gap-1"><DatiBadge dati={s.dati_cliente} nota={s.dati_cliente_nota} /><Badge stato={s.stato} rip={s.riparazione_stato} rim={s.rimontaggio ?? null} /></span>
+                {/* 12/11/2026 (Christian): badge lunghi (RIFIUTATO · DA RICHIUDERE, preventivo inviato, 📨 per…, FORMATTABILE)
+                    coprivano il nome del cliente → riga 1 solo numero + nome (sempre leggibile), riga 2 i badge (vanno a capo),
+                    riga 3 dispositivo e difetto */}
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <b className="shrink-0 tabular-nums">{s.sigla}</b>
+                  <span className="min-w-0 flex-1 truncate font-medium" title={s.azienda || s.nominativo || ""}>{s.azienda || s.nominativo}</span>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                  <Badge stato={s.stato} rip={s.riparazione_stato} rim={s.rimontaggio ?? null} />
+                  {s.passaggio && !s.passaggio.letto_il && <span className="shrink-0 rounded bg-blue-600 px-1.5 text-[10px] font-bold text-white" title={`Messaggio di ${s.passaggio.da} per ${s.passaggio.a}`}>📨 per {s.passaggio.a}</span>}
+                  <DatiBadge dati={s.dati_cliente} nota={s.dati_cliente_nota} />
                 </div>
                 <div className="truncate text-xs text-muted-foreground">{s.prodotto}{s.anno ? ` ${s.anno}` : ""}{s.difetto ? ` · ${s.difetto}` : ""}</div>
                 {/* 11/11/2026 (Christian): rifiutato da richiudere → a chi è assegnato, finché non lo richiude */}

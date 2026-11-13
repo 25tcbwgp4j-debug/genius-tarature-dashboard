@@ -49,13 +49,13 @@ export function NotificaCard({ n, operatore, onScheda, onCambiata, compatta = fa
   const op = chi || operatore;
 
   async function letta() {
-    if (!op) { toast.error("Scegli chi sei (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!op) { toast.error("Scegli chi sei (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     setBusy(true);
     try { await assNotificaLetta(n.id, op); toast.success("Segnata come letta: resta aperta finché non la chiudi"); onCambiata(); }
     catch (e) { toastErrore(e); } finally { setBusy(false); }
   }
   async function chiudi() {
-    if (!op) { toast.error("Scegli chi sei (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!op) { toast.error("Scegli chi sei (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     if (!esito.trim()) { toast.error("Scrivi l'esito: cosa è stato fatto"); return; }
     setBusy(true);
     try { await assNotificaChiudi(n.id, esito.trim(), op); toast.success("Notifica chiusa: gestita"); setChiudendo(false); setEsito(""); onCambiata(); }

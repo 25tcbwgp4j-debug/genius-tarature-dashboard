@@ -101,7 +101,7 @@ function CorpoScontrino({ sc, onClose, onFatto, onRiemetti }: { sc: Scontrino; o
 
   async function conferma() {
     if (busy) return;
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     if (motivo.trim().length < 3) { toast.error("Scrivi il motivo"); return; }
     if (tipo !== "annullo" && !qualcosa) { toast.error("Scegli cosa rende il cliente (quantità maggiore di 0)"); return; }
     if (!sc.numero_rt && !numero.trim() && !/^\d{4}-\d{4}$/.test(originale.trim())) {
@@ -247,7 +247,7 @@ function CorpoManuale({ rg, onClose, onFatto }: { rg: RigaGiornata; onClose: () 
 
   async function conferma() {
     if (busy) return;
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     if (motivo.trim().length < 3) { toast.error("Scrivi il motivo"); return; }
     if (tipo === "parziale" && !(daRendere > 0)) { toast.error("Scrivi l'importo da stornare (es. 25 o 12,50)"); return; }
     if (daRendere > totOrig + 0.01) { toast.error(`Non si può stornare più dello scontrino (${eur(totOrig)})`); return; }

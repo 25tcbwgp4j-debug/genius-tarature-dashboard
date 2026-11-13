@@ -72,7 +72,7 @@ export function Dettaglio({
   /** Bozza → ordine / preventivo / scontrino (la bozza viene eliminata dal backend). */
   async function converti(body: { a: "ordine" | "preventivo" | "scontrino"; scontrino_numero?: string; modalita?: string }) {
     if (busy) return;
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     setBusy("conv");
     try {
       const r = await docDaFattura(id, { ...body, operatore });
@@ -294,7 +294,7 @@ export function Dettaglio({
               <Button size="sm" variant="secondary" disabled={!!busy}
                 title="Crea una nuova bozza identica (stesso cliente e righe, data di oggi, senza numero né pagamenti)"
                 onClick={() => {
-                  if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO) per duplicare"); return; }
+                  if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO) per duplicare"); return; }
                   azione("dup", () => fattDuplica(f.id, operatore), (r) => { toast.success("Duplicata: nuova bozza pronta, controllala e inviala"); onEdit(r); });
                 }}>
                 {busy === "dup" ? <Loader2 className="animate-spin" /> : <Copy />} Duplica fattura
@@ -782,7 +782,7 @@ function RegolazioneNC({ f, operatore, busy, onCambiato }: { f: Fattura; operato
   const fatto = f.pagamento_stato === "pagata";
   async function registra() {
     if (!modo) { toast.error("Scegli come si chiude la nota di credito"); return; }
-    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · ALTRO)"); return; }
+    if (!operatore) { toast.error("Scegli l'operatore (CHR · VALE · DUMY · MARTINA · ALTRO)"); return; }
     setSalva(true);
     try {
       const r = await fattRegolazione(f.id, { modo, data: data || undefined, riferimento: rif || undefined, operatore });

@@ -45,7 +45,7 @@ export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto, attivit
 
   // 27/10/2026 (Gianni Gallo): spedizione + fattura da incassare in un clic; il risultato (tracking, fattura) resta a video
   async function spedisciFattura(a: AvvisoDashboard) {
-    if (!op) { toast.error("Scegli chi sei (CHR · VALE · DUMY · ALTRO) prima di spedire"); return; }
+    if (!op) { toast.error("Scegli chi sei (CHR · VALE · DUMY · MARTINA · ALTRO) prima di spedire"); return; }
     if (!a.scheda_id || !confirm(`Spedire ora la scheda ${a.sigla} ed emettere la fattura DA INCASSARE?`)) return;
     setBusy(a.id);
     try {
@@ -57,7 +57,7 @@ export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto, attivit
   }
 
   async function visto(id: string) {
-    if (!op) { toast.error("Scegli chi sei (CHR · VALE · DUMY · ALTRO) prima di «Ho visto»"); return; }
+    if (!op) { toast.error("Scegli chi sei (CHR · VALE · DUMY · MARTINA · ALTRO) prima di «Ho visto»"); return; }
     setBusy(id);
     try { await assAvvisoVisto(id, op); toast.success("Segnato come visto"); onVisto(); }
     catch (e) { toastErrore(e); }
