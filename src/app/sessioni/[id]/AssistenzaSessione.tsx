@@ -9,6 +9,8 @@
 // - stato (da verificare · preventivo inviato · approvato · eseguita) e note interne (esito verifica, non vanno al cliente);
 // - entra nel totale, nel pro forma, nello scontrino e nella fattura SENZA «Taratura» davanti; con importo 0 pro forma
 //   e fattura si fermano; importo e descrizione si cambiano finché la sessione non è fatturata.
+// 13/11/2026 (Christian, sess. 266 HBT): stato «preventivo rifiutato» — l'importo proposto resta scritto (barrato)
+//   ma non entra nel totale, nel pro forma, nello scontrino e nella fattura, e non blocca il pro forma.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -23,7 +25,7 @@ export interface Assistenza {
   instrument_id: string | null;
   descrizione: string;
   importo: number | null;
-  stato: "da_verificare" | "preventivo_inviato" | "approvato" | "eseguita";
+  stato: "da_verificare" | "preventivo_inviato" | "approvato" | "eseguita" | "rifiutato";
   note_interne: string | null;
 }
 
@@ -34,6 +36,7 @@ const STATI: { v: Assistenza["stato"]; l: string; cls: string }[] = [
   { v: "preventivo_inviato", l: "preventivo inviato", cls: "bg-amber-50 text-amber-800 border-amber-300" },
   { v: "approvato", l: "approvato", cls: "bg-blue-50 text-blue-800 border-blue-300" },
   { v: "eseguita", l: "eseguita", cls: "bg-emerald-50 text-emerald-800 border-emerald-300" },
+  { v: "rifiutato", l: "preventivo rifiutato", cls: "bg-red-50 text-red-800 border-red-300" },
 ];
 const eur = (v: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(v || 0);
 const nomeStrumento = (s?: StrumentoBreve) =>
@@ -126,7 +129,7 @@ export function AssistenzaSessione({ sessionId, instruments, richiestaNuova, onT
 
   if (!righe.length && busy !== "nuova") return null;
   const perId = Object.fromEntries(instruments.map((s) => [s.id, s]));
-  const totale = righe.reduce((t, a) => t + Number(a.importo || 0), 0);
+  const totale = righe.reduce((t, a) => t + (a.stato === "rifiutato" ? 0 : Number(a.importo || 0)), 0);
 
   return (
     <div id="assistenza" className="mt-3 rounded-lg border border-violet-200 bg-violet-50/40 p-2.5 sm:p-3">
@@ -139,7 +142,8 @@ export function AssistenzaSessione({ sessionId, instruments, richiestaNuova, onT
       {busy === "nuova" && !righe.length && <Loader2 className="size-4 animate-spin text-violet-700" />}
       <div className="divide-y divide-violet-100">
         {righe.map((a) => {
-          const daPrev = !(Number(a.importo) > 0);
+          const rifiutato = a.stato === "rifiutato";
+          const daPrev = !rifiutato && !(Number(a.importo) > 0);
           const st = STATI.find((x) => x.v === a.stato) || STATI[0];
           if (modifica === a.id) {
             return (
@@ -190,8 +194,11 @@ export function AssistenzaSessione({ sessionId, instruments, richiestaNuova, onT
                   value={a.stato} onChange={(e) => cambiaStato(a, e.target.value as Assistenza["stato"])}>
                   {STATI.map((x) => <option key={x.v} value={x.v}>{x.l}</option>)}
                 </select>
-                <span className={`min-w-24 text-right text-sm font-semibold ${daPrev ? "text-red-600" : "text-gray-900"}`}>
-                  {daPrev ? "da preventivare" : eur(Number(a.importo))}
+                <span className={`min-w-24 text-right text-sm font-semibold ${daPrev ? "text-red-600" : "text-gray-900"}`}
+                  title={rifiutato ? "Preventivo rifiutato: non si paga, non va in pro forma né in fattura" : undefined}>
+                  {rifiutato
+                    ? (Number(a.importo) > 0 ? <><s className="text-gray-400">{eur(Number(a.importo))}</s> <span className="text-red-700">0,00 €</span></> : <span className="text-red-700">rifiutato</span>)
+                    : daPrev ? "da preventivare" : eur(Number(a.importo))}
                 </span>
                 <Button variant="ghost" size="sm" title={bloccata ? "Note interne (importo e descrizione bloccati)" : "Modifica importo, descrizione, strumento, note"} onClick={() => apri(a)}>
                   <Pencil className="size-4" />
