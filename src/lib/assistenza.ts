@@ -219,7 +219,7 @@ export const assStessoModello = (id: string): Promise<{ criterio: string; schede
 export const assPreventivi = (q: string): Promise<{ preventivi: (SchedaBreve & { preventivo_testo: string | null })[]; sintesi: { n: number; min: number; max: number; mediana: number } | null }> =>
   fetchAPI(`/api/assistenza/preventivi?q=${encodeURIComponent(q)}`);
 export const assPdfUrl = (id: string, tipo: "cliente" | "interna" = "cliente") => `/api/backend/api/assistenza/schede/${id}/pdf?tipo=${tipo}`;
-export type DocPdf = "auto" | "ricevuta" | "preventivo" | "pronto" | "consuntivo" | "rifiutato" | "interna";
+export type DocPdf = "auto" | "ricevuta" | "preventivo" | "pronto" | "consuntivo" | "rifiutato" | "interna" | "riconsegna";
 export const assDocUrl = (id: string, doc: DocPdf, scarica = false) => `/api/backend/api/assistenza/schede/${id}/pdf?doc=${doc}${scarica ? "&scarica=1" : ""}`;
 export const assSchedaCliente = (id: string): Promise<SchedaCliente> => fetchAPI(`/api/assistenza/clienti/${id}`);
 export const assSalvaCliente = (id: string | null, b: Partial<Anagrafica>): Promise<SchedaCliente> =>

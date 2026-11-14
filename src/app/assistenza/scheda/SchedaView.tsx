@@ -194,7 +194,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       if (!r.agente_attivo) window.open(assEtichettaUrl(s.id).replace("/etichetta.pdf", `/etichetta-aggiuntivo.pdf${n ? `?n=${n}` : ""}`), "_blank");
     } catch (e) { toastErrore(e); }
   }
-  async function stampa(tipo: "accettazione" | "etichetta" | "etichetta_accessori") {
+  async function stampa(tipo: "accettazione" | "etichetta" | "etichetta_accessori" | "riconsegna") {
     if (!s) return;
     // 26/10/2026 (63228): prima si salva, altrimenti l'etichetta esce coi dati vecchi (es. «DA COMPILARE»)
     if (sporca && !ro && !(await salva(true))) return;
@@ -204,8 +204,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     try {
       const r = await assAzione(s.id, "stampa", { tipo, copie: 1, conferma_no_etichette: etich && !!s.cliente_no_etichette });
       toast.success(r.simulata ? "Scheda di PROVA: stampa simulata (niente stampanti del negozio), apro il PDF"
-        : r.agente_attivo ? `In stampa al banco (${tipo === "etichetta" ? "etichetta Brother" : tipo === "etichetta_accessori" ? "etichette degli accessori" : "A4"})` : "Messa in coda, ma l'agente di stampa non risponde: apro il PDF");
-      if (!r.agente_attivo) window.open(tipo === "etichetta" ? assEtichettaUrl(s.id) : tipo === "etichetta_accessori" ? assEtichettaUrl(s.id).replace("/etichetta.pdf", "/etichetta-accessori.pdf") : assDocUrl(s.id, "auto"), "_blank");
+        : r.agente_attivo ? `In stampa al banco (${tipo === "etichetta" ? "etichetta Brother" : tipo === "etichetta_accessori" ? "etichette degli accessori" : tipo === "riconsegna" ? "foglio di riconsegna da far firmare" : "A4"})` : "Messa in coda, ma l'agente di stampa non risponde: apro il PDF");
+      if (!r.agente_attivo) window.open(tipo === "etichetta" ? assEtichettaUrl(s.id) : tipo === "etichetta_accessori" ? assEtichettaUrl(s.id).replace("/etichetta.pdf", "/etichetta-accessori.pdf") : assDocUrl(s.id, tipo === "riconsegna" ? "riconsegna" : "auto"), "_blank");
     } catch (e) { toastErrore(e); }
   }
   async function vendi(tipo: "fattura" | "proforma") {
@@ -497,6 +497,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {(v("con_alimentatore") || v("accessori")) && <Button size="sm" variant="outline" onClick={() => stampa("etichetta_accessori")}
           title="Un'etichetta per ogni accessorio consegnato"><Tag />Etichetta {v("con_alimentatore") && !v("accessori") ? "alimentatore" : "accessori"}</Button>}
         <Button size="sm" variant="outline" onClick={() => stampa("accettazione")} title="Stampa A4 al banco"><Printer />A4</Button>
+        {/* 14/11/2026 (Christian, 63414): foglio di riconsegna da far firmare (sui Mac con OpenCore: divieto di aggiornare) */}
+        {s.opencore_avviso && <Button size="sm" variant="outline" onClick={() => stampa("riconsegna")} title="Foglio che il cliente firma al ritiro, con l'avvertenza di NON installare aggiornamenti"><Printer />Foglio riconsegna</Button>}
         <span className="ml-auto" />
         <a className="text-xs text-muted-foreground underline" href={assTrackUrl(s.token_pubblico)} target="_blank" rel="noreferrer" title="Pagina pubblica per il cliente (senza dati personali)">pagina cliente</a>
         {/* 26/10/2026 (62245): DUPLICA anche dalle schede chiuse e storiche (la scheda originale non cambia) */}
@@ -662,7 +664,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         serveRicambio={!(s.ricambi_attesi || []).some((r) => r.stato !== "arrivato")} onClose={() => setDlg(null)}
         notaClienteIniziale={s.nota_cliente_esito || ""}
         onConferma={(nota, importo, notaCliente) => salvaStatoRiparazione(dlg.stato, nota, importo, notaCliente)} />}
-      {dlg?.k === "pronto" && <DialogoPronto paypalFee={cfg?.paypal_fee} s={s} lavorazione={String(v("lavorazione") || "")} totale={(v("totale_lavorazione") as number | null) ?? null} onClose={() => setDlg(null)}
+      {dlg?.k === "pronto" && <DialogoPronto paypalFee={cfg?.paypal_fee} s={s} onStampaRiconsegna={s.opencore_avviso ? () => stampa("riconsegna") : undefined} lavorazione={String(v("lavorazione") || "")} totale={(v("totale_lavorazione") as number | null) ?? null} onClose={() => setDlg(null)}
         onInvia={async (body) => { const r = await azione("pronto", body, body.programma_il ? "PRONTO programmato" : "PRONTO"); return r ? (r.esito as Esito) : null; }} />}
       {dlg?.k === "cambia_stato" && <DialogoCambiaStato s={s} onClose={() => setDlg(null)} onConferma={async (b) => !!(await azione("riapri", b, "Stato della scheda cambiato"))} />}
       {dlg?.k === "acconto" && <DialogoAcconto s={s} operatore={operatore} inizio={dlg.inizio} onClose={() => setDlg(null)}

@@ -4,7 +4,7 @@
 // cliente, PRONTO (ritiro in negozio / per corriere), pagato, consegna, corriere, stesso modello.
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, Copy, Loader2, Mail, MessageCircle, Send, Truck } from "lucide-react";
+import { CheckCircle2, Copy, Loader2, Mail, MessageCircle, Printer, Send, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
 import { assAnteprimaMail, assAzione, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, lordoPaypal, pagaFineMese, type DocPdf, type PaypalFee, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
@@ -189,8 +189,10 @@ export function DialogoEsito({ s, righe, onClose, onEsito }: { s: Scheda; righe:
 
 // ---------------------------------------------------------------------------
 /** PRONTO: ritiro in negozio o per corriere (nostro o del cliente), pagamento, totale, esito; poi mail + WhatsApp. */
-export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypalFee }: {
+export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypalFee, onStampaRiconsegna }: {
   s: Scheda; lavorazione: string; totale: number | string | null; onClose: () => void; onInvia: (b: Record<string, unknown>) => Promise<Esito | null>;
+  /** 14/11/2026 (Christian, 63414): Mac con OpenCore → dopo il PRONTO si propone il foglio di riconsegna da far firmare */
+  onStampaRiconsegna?: () => void | Promise<void>;
   /** 01/11/2026: commissione PayPal vera (da /config) al posto del +3% */
   paypalFee?: PaypalFee;
 }) {
@@ -235,7 +237,11 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
     <Modale titolo={`PRONTO — scheda ${s.sigla}`} onClose={onClose} largo
       piedi={fatto ? <Button onClick={onClose}>Chiudi</Button> : <><Button variant="outline" onClick={onClose}>Annulla</Button>
         <Button disabled={busy || (quando !== "adesso" && (!programma || passato))} onClick={invia}>{busy && <Loader2 className="animate-spin" />}{programma ? `PROGRAMMA il pronto (${new Date(programma).toLocaleString("it-IT", { timeZone: "Europe/Rome", weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })})` : `PRONTO${mail || wa ? " e avvisa il cliente" : ""}`}</Button></>}>
-      {fatto ? <EsitoInvio e={fatto} /> : (
+      {fatto ? <div className="space-y-3"><EsitoInvio e={fatto} />
+        {onStampaRiconsegna && <div className="flex flex-wrap items-center gap-3 rounded-lg border-2 border-amber-400 bg-amber-50 p-3 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+          <span className="text-sm font-semibold">🖨 Mac con OpenCore: stampa il FOGLIO DI RICONSEGNA (avvertenza di NON installare aggiornamenti) e fallo firmare al cliente al ritiro.</span>
+          <Button size="sm" onClick={() => void onStampaRiconsegna()}><Printer />Stampa il foglio di riconsegna</Button>
+        </div>}</div> : (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <Scelta valore={cons} opzioni={[["ritiro", "Ritiro in negozio"], ["spedizione", "Per corriere"]]} onChange={setCons} />
