@@ -22,7 +22,7 @@ const SOTTO_IN_RIGA_DEFAULT: Record<string, string[]> = {
 const CHIAVE_TUTTE = "gl_cruscotto_tutte";
 // nomi brevi sui chip (il nome intero resta nel suggerimento e nella riga «Filtro:»), così «Lavoro» sta in una riga sul Mac
 const BREVI: Record<string, string> = {
-  in_arrivo: "In arrivo", ricambi_arrivati: "Ricambio arrivato", trova_attivo: "🔒 Trova il mio", rifiutati_da_rimontare: "Rifiutati da richiudere", attesa_ricambi: "Attesa ricambi",
+  in_arrivo: "In arrivo", ricambi_arrivati: "Ricambio arrivato", trova_attivo: "🔒 Trova il mio", rifiutati_da_rimontare: "Da richiudere", attesa_ricambi: "Attesa ricambi",
   rifiutati: "Rifiutati: invia pronto", presso_cliente: "Fuori negozio", attesa_cliente: "Attesa risposta cliente",
   riparazione_finita: "Finite: avvisa", aggiornamenti: "Aggiornamenti", bagnetti: "Bagnetti", conto_vendita: "Conto vendita",
   invii_programmati: "Invii programmati",
@@ -144,10 +144,10 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
       {visibili.map(({ g, voci }, i) => (
         <div key={g.codice} data-gruppo={g.codice}
           className={cn("flex items-start gap-2", g.codice === "da_gestire" && "rounded-lg bg-red-50 px-1 py-0.5 dark:bg-red-950/30")}>
-          <span className={cn("w-[4.5rem] shrink-0 pt-1 text-[10px] font-bold uppercase leading-tight tracking-wide sm:w-16",
+          <span className={cn("w-[4.5rem] shrink-0 pt-1 text-[10px] font-bold uppercase leading-tight tracking-wide sm:w-14",
             g.codice === "da_gestire" ? "text-red-700 dark:text-red-300" : "text-muted-foreground")}>{g.titolo}</span>
           {/* su iPhone la riga scorre in orizzontale dentro il riquadro (la pagina no) */}
-          <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible">
+          <div className="flex min-w-0 flex-1 gap-x-0.5 gap-y-1 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible">
             {voci.map((f) => chip(f, g.codice))}
             {/* «mostra tutte» in coda all'ultima riga: nessuna riga in più */}
             {i === visibili.length - 1 && nZero > 0 && (
