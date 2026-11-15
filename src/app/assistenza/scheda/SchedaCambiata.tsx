@@ -23,7 +23,7 @@ const NOMI: Record<string, string> = {
 // valori «di scelta» del corpo delle azioni: non sono testo scritto dall'operatore
 const NON_TESTO = new Set(["operatore", "tipo", "modo", "azione", "canale", "passo", "stato", "esito", "consegna_modo", "consegna_corriere",
   "pagamento_modo", "programma_il", "data", "ok_cliente", "hw_model", "hw_model_annunciato_il", "tecnico", "riparazione_stato",
-  "updated_at_letto", "chiave_idempotenza", "spedizione_tipo", "famiglia", "prodotto", "anno", "copertura"]);
+  "updated_at_letto", "chiave_idempotenza", "documento", "spedizione_tipo", "famiglia", "prodotto", "anno", "copertura"]);
 const nome = (k: string) => NOMI[k] || k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 
 function righe(o: Record<string, unknown> | null | undefined, gia: Set<string>, tutto: boolean): string[] {
