@@ -55,8 +55,9 @@ export function Lavorazione({ s, v, set, ro, tecnici, busy, onNonFatta, onPresso
             <Campo label="Totale lavorazione € (IVA compresa)">
               <input className={`${campo} text-right font-semibold`} inputMode="decimal" disabled={ro} value={v("totale_lavorazione") ?? ""} onChange={(e) => set("totale_lavorazione", e.target.value.replace(",", "."))} />
             </Campo>
+            {/* 15/11/2026 (piano 5.3, backend 16f64e1): l'acconto non si cambia più dal salvataggio della scheda (400): si registra con «Acconto» */}
             <Campo label="Acconto €">
-              <input className={`${campo} text-right`} inputMode="decimal" disabled={ro} value={v("acconto") ?? ""} onChange={(e) => set("acconto", e.target.value.replace(",", "."))} />
+              <input className={`${campo} text-right`} inputMode="decimal" disabled readOnly value={v("acconto") ?? ""} title="L'acconto si registra con il pulsante «Acconto» (resta nel registro)" />
             </Campo>
             <Campo label="Esito">
               <select className={campo} disabled={ro} value={(v("esito") as string) || ""} onChange={(e) => set("esito", e.target.value)}>

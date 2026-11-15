@@ -6,6 +6,8 @@
 // (route handler Next.js) che inoltra al backend Railway con il JWT
 // dell'utente (cookie httpOnly). L'API_KEY non e' mai esposta al client.
 import { attivitaSalvata } from '@/lib/attivita';
+import { headerIdempotenza } from '@/lib/idempotenza';
+import { dopoRispostaScheda, eMessaggioSchedaCambiata, intestazioniScheda, segnalaSchedaCambiata } from '@/lib/versioneScheda';
 
 const API_PROXY = '/api/backend';
 
@@ -49,6 +51,8 @@ export async function fetchAPI(path: string, opzioni: OpzioniAPI = {}, conDialog
     'Content-Type': 'application/json',
     // attività del selettore in alto (Tarature / Apple): i nuovi documenti nascono con questa (02/10/2026)
     'X-Attivita': attivitaSalvata(),
+    // 15/11/2026 (piano 5.2): versione della scheda aperta sulle scritture /api/assistenza/schede/{id}… (lib/versioneScheda)
+    ...intestazioniScheda(path, options.method || 'GET'),
     ...(options.headers as Record<string, string> | undefined),
   };
   // timeout: un AbortController nostro, collegato a quello del chiamante (AbortSignal.timeout/any non ci sono su Safari 15)
@@ -102,9 +106,13 @@ export async function fetchAPI(path: string, opzioni: OpzioniAPI = {}, conDialog
       : (detail && typeof detail === 'object' && 'messaggio' in detail ? String(detail.messaggio) : `API Error: ${res.status}`))) as ApiError;
     err.status = res.status;
     err.detail = detail;
+    // 15/11/2026 (piano 5.2): scheda salvata nel frattempo da un altro operatore → dialogo «ricarica» della scheda aperta
+    if (res.status === 409 && eMessaggioSchedaCambiata(err.message)) segnalaSchedaCambiata(path, options.body, err.message);
     throw err;
   }
-  return res.json();
+  const dati = await res.json();
+  dopoRispostaScheda(path, options.method || 'GET', dati);   // 15/11/2026: versione della scheda aggiornata dalla risposta
+  return dati;
 }
 
 export interface Permessi {
@@ -1215,8 +1223,11 @@ export async function pagRiepilogo(tipo: 'fattura' | 'sessione' | 'scontrino' | 
   return fetchAPI(`/api/pagamenti/riepilogo/${tipo}/${id}`, { cache: 'no-store' });
 }
 export async function pagIncassaFattura(fid: string, body: { importo: number; modalita: ModalitaIncasso; data?: string; riferimento?: string;
-  pos_incasso_id?: string; incasso_id?: string; transaction_code?: string; tipo?: string; operatore: string }): Promise<RiepilogoPagamenti & { pagamento: RigaPagamento }> {
-  return fetchAPI(`/api/pagamenti/fattura/${fid}`, { method: 'POST', body: JSON.stringify(body) });
+  pos_incasso_id?: string; incasso_id?: string; transaction_code?: string; tipo?: string; operatore: string },
+  /** 15/11/2026 (piano 5.5): chiave di idempotenza del dialogo (lib/idempotenza): la stessa richiesta ripetuta non incassa due volte */
+  chiave?: string): Promise<RiepilogoPagamenti & { pagamento: RigaPagamento }> {
+  const variante = `${body.modalita}-${Math.round(Number(body.importo || 0) * 100)}${body.pos_incasso_id ? `-${body.pos_incasso_id}` : ''}`;
+  return fetchAPI(`/api/pagamenti/fattura/${fid}`, { method: 'POST', body: JSON.stringify(body), headers: headerIdempotenza(chiave, variante) });
 }
 /** Movimento PayPal/POS già arrivato, proposto per «Già pagato» (05/10/2026) */
 export interface MovimentoProposto { id: string; fonte: string; codice: string; data: string; importo: number; ordinante?: string | null;

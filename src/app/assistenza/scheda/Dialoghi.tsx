@@ -6,7 +6,9 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, Copy, Loader2, Mail, MessageCircle, Printer, Send, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { codiceErrore, dettaglioErrore, toastErrore } from "@/lib/errori";
+import { codiceErrore, dettaglioErrore, eServeTitolare, toastErrore } from "@/lib/errori";
+import { useChiaveIncasso } from "@/lib/useChiaveIncasso";
+import { headerIdempotenza } from "@/lib/idempotenza";
 import { assAnteprimaMail, assAzione, assProntoControlli, type ProntoControlli, assDocUrl, assStessoModello, CANALI_OK_SCRITTO, dataOra, eur, lordoPaypal, pagaFineMese, type DocPdf, type PaypalFee, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
 import { blocchi, ipotesiDelBlocco, isActive, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
@@ -52,8 +54,16 @@ function Anteprima({ s, corpo }: { s: Scheda; corpo: Record<string, unknown> }) 
   );
 }
 
+/** 15/11/2026 (piano 5.4): esito.pronto_non_comunicato — la scheda è PRONTO ma il cliente non ha ricevuto nulla */
+export const MSG_PRONTO_NON_COMUNICATO = "Il PRONTO non è arrivato al cliente (né mail né WhatsApp): avvisalo per iscritto";
 function EsitoInvio({ e }: { e: Esito }) {
   return (
+    <div className="space-y-2">
+    {e.pronto_non_comunicato && (
+      <div role="alert" data-testid="pronto-non-comunicato" className="rounded-lg border-2 border-red-600 bg-red-50 p-3 text-sm font-semibold text-red-950 dark:bg-red-950/40 dark:text-red-50">
+        ⛔ {MSG_PRONTO_NON_COMUNICATO}.
+        <span className="mt-1 block text-xs font-normal">La scheda è già PRONTO. Correggi email o cellulare e rimanda, oppure scrivigli tu (mail o WhatsApp).</span>
+      </div>)}
     <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm dark:bg-emerald-950/20">
       <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="size-4 text-emerald-600" />{e.programmato ? `Programmato: parte da solo il ${e.programmato}` : "Fatto"}</div>
       {e.mail && <div><Mail className="mr-1 inline size-3.5" />Mail: {e.mail}</div>}
@@ -64,6 +74,26 @@ function EsitoInvio({ e }: { e: Esito }) {
           {e.whatsapp_link && <a className="inline-flex h-7 items-center gap-1 rounded-md border bg-background px-2.5 text-xs hover:bg-muted" href={e.whatsapp_link} target="_blank" rel="noreferrer"><MessageCircle className="size-3.5" />Apri chat</a>}
         </div>
       )}
+    </div>
+    </div>
+  );
+}
+
+/** 15/11/2026 (piano 5.3/5.4): FORZATURA DEL TITOLARE — al titolare il motivo (almeno 5 caratteri, resta nel registro) e
+ *  «Procedi comunque»; all'operatore il messaggio chiaro che serve il titolare. */
+export const MOTIVO_MIN = 5;
+export function ForzaturaTitolare({ admin, perche, motivo, setMotivo, onProcedi, busy, segnaposto }: {
+  admin: boolean; perche: string; motivo: string; setMotivo: (m: string) => void; onProcedi?: () => void; busy?: boolean; segnaposto?: string;
+}) {
+  return (
+    <div role="alert" data-testid="forzatura-titolare" className="space-y-2 rounded-lg border-2 border-red-500 bg-red-50 p-3 text-sm text-red-950 dark:bg-red-950/30 dark:text-red-100">
+      <div className="font-semibold">⛔ {perche}</div>
+      {admin ? <>
+        <Campo label={`Sei il titolare: scrivi il motivo (almeno ${MOTIVO_MIN} caratteri, resta nel registro della scheda) *`}>
+          <textarea className={area} rows={2} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={segnaposto || "es. cliente abituale, paga a fine mese con bonifico"} /></Campo>
+        {onProcedi && <Button variant="outline" className="border-red-400 text-red-800 dark:text-red-200" disabled={busy || motivo.trim().length < MOTIVO_MIN} onClick={onProcedi} data-testid="procedi-comunque">
+          {busy && <Loader2 className="animate-spin" />}Procedi comunque</Button>}
+      </> : <p className="font-medium">Serve il titolare: solo lui può procedere, scrivendo il motivo. Chiedigli di farlo dal suo accesso.</p>}
     </div>
   );
 }
@@ -413,7 +443,9 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
 }
 
 // ---------------------------------------------------------------------------
-export function DialogoPagato({ s, onClose, onPagato }: { s: Scheda; onClose: () => void; onPagato: (b: Record<string, unknown>) => Promise<boolean> }) {
+export function DialogoPagato({ s, onClose, onPagato }: { s: Scheda; onClose: () => void; onPagato: (b: Record<string, unknown>, headers?: Record<string, string>) => Promise<boolean> }) {
+  // 15/11/2026 (piano 5.5): Idempotency-Key generata all'apertura del dialogo e riusata se si ripreme PAGATO
+  const { chiave } = useChiaveIncasso();
   const [modo, setModo] = useState(s.pagamento_modo || "contanti");
   const [imp, setImp] = useState(String(s.saldo || ""));
   const [data, setData] = useState(new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" }));
@@ -422,7 +454,7 @@ export function DialogoPagato({ s, onClose, onPagato }: { s: Scheda; onClose: ()
   return (
     <Modale titolo={`Pagamento ricevuto — scheda ${s.sigla}`} onClose={onClose}
       piedi={<><Button variant="outline" onClick={onClose}>Annulla</Button>
-        <Button disabled={busy} onClick={async () => { setBusy(true); try { if (await onPagato({ pagamento_modo: modo, importo: imp, data, nota })) onClose(); } finally { setBusy(false); } }}>
+        <Button disabled={busy} onClick={async () => { setBusy(true); try { if (await onPagato({ pagamento_modo: modo, importo: imp, data, nota }, headerIdempotenza(chiave, `${modo}-${Math.round(Number(imp || 0) * 100)}`))) onClose(); } finally { setBusy(false); } }}>
           {busy && <Loader2 className="animate-spin" />}PAGATO</Button></>}>
       <div className="space-y-3">
         <Scelta valore={modo} opzioni={[["contanti", "Contanti"], ["pos", "POS"], ["bonifico", "Bonifico"], ["paypal", "PayPal"]]} onChange={setModo} />
@@ -448,17 +480,24 @@ export function DialogoChiudiTutto({ s, onClose, onChiudi, admin = false }: { s:
   const [esito, setEsito] = useState<"riparato" | "non_riparato" | "nessun_intervento">("riparato");
   const [modo, setModo] = useState<"ritiro" | "spedizione" | "corriere_cliente">(s.consegna_modo === "spedizione" ? (s.consegna_corriere === "cliente" ? "corriere_cliente" : "spedizione") : "ritiro");
   const [fuori, setFuori] = useState(false);
+  // 15/11/2026 (piano 5.3): «già pagato / non dovuto» solo dal titolare, con il motivo (pagamento_fuori_motivo)
+  const [fuoriMotivo, setFuoriMotivo] = useState("");
+  const [serveTitolare, setServeTitolare] = useState<string | null>(null);
   const [nota, setNota] = useState("");
   const [busy, setBusy] = useState(false);
   const saldo = Number(s.saldo || 0);
   const daPagare = !s.pagata && saldo > 0.009;
+  const fuoriPronto = !fuori || (admin && fuoriMotivo.trim().length >= MOTIVO_MIN);
   async function vai(forza = false) {
     if (daPagare && !fuori) { toast.error("Risulta da pagare: incassa prima, oppure spunta «già pagato / non dovuto»"); return; }
+    if (fuori && !fuoriPronto) { setServeTitolare(admin ? "Scrivi il motivo del pagamento fuori dal gestionale" : "Pagamento fuori dal gestionale: lo può confermare solo il titolare"); return; }
     if (forza && forzaMotivo.trim().length < 5) { toast.error("Scrivi il motivo per cui chiudi nonostante i blocchi"); return; }
     setBusy(true);
-    try { if (await onChiudi({ esito, modo, nota, pagamento_fuori: fuori, ...(forza ? { forza: true, forza_motivo: forzaMotivo.trim() } : {}) })) onClose(); }
+    try { if (await onChiudi({ esito, modo, nota, pagamento_fuori: fuori, ...(fuori ? { pagamento_fuori_motivo: fuoriMotivo.trim() } : {}),
+      ...(forza ? { forza: true, forza_motivo: forzaMotivo.trim() } : {}) })) onClose(); }
     catch (e) {
-      if (codiceErrore(e) === "chiusura_bloccata") {
+      if (eServeTitolare(e)) { setServeTitolare((e as Error).message); if (daPagare) setFuori(true); }
+      else if (codiceErrore(e) === "chiusura_bloccata") {
         const bl = dettaglioErrore(e).blocchi;
         setBlocchiCh(Array.isArray(bl) && bl.length ? bl.map((x) => String((x as { testo?: string })?.testo || x)) : [(e as Error).message]);
       } else toastErrore(e);
@@ -466,8 +505,11 @@ export function DialogoChiudiTutto({ s, onClose, onChiudi, admin = false }: { s:
   }
   return (
     <Modale titolo={`Già fatto tutto — chiudi la scheda ${s.sigla}`} onClose={onClose}
-      piedi={<><Button variant="outline" onClick={onClose}>Annulla</Button><Button disabled={busy} onClick={() => vai()}>{busy && <Loader2 className="animate-spin" />}Chiudi la scheda</Button></>}>
+      piedi={<><Button variant="outline" onClick={onClose}>Annulla</Button><Button disabled={busy || !fuoriPronto} onClick={() => vai()}>{busy && <Loader2 className="animate-spin" />}Chiudi la scheda</Button></>}>
       <div className="space-y-3 text-sm">
+        {(fuori || serveTitolare) && (
+          <ForzaturaTitolare admin={admin} perche={serveTitolare || `Risulta da pagare ${eur(saldo)}: «già pagato / non dovuto» lo conferma solo il titolare, con il motivo`}
+            motivo={fuoriMotivo} setMotivo={setFuoriMotivo} busy={busy} onProcedi={() => vai()} segnaposto="es. pagato con bonifico il 10/11 registrato a parte · riparazione di cortesia" />)}
         {blocchiCh && (
           <div role="alert" className="space-y-2 rounded-lg border-2 border-red-500 bg-red-50 p-3 text-red-950 dark:bg-red-950/30 dark:text-red-100">
             <div className="font-semibold">⛔ La scheda non si chiude: prima va risolto</div>
@@ -522,11 +564,15 @@ export function DialogoSaltaPreventivo({ s, admin, onClose, onSalta }: { s: Sche
  *  arrivato) · 2) come esce il dispositivo · 3) foglio di riconsegna se il Mac ha OpenCore · 4) «Conferma consegna».
  *  Prima un clic su «Rottamato» o «Venduto» chiudeva subito la scheda e il saldo aperto era solo un avviso: ora la scelta
  *  si conferma, Rottamato/Venduto stanno a parte con una seconda conferma e senza incasso serve la spunta esplicita. */
-export function DialogoConsegna({ s, onClose, onConsegna, onScontrino, onFattura, onPagato, onStampaRiconsegna }: {
-  s: Scheda; onClose: () => void; onConsegna: (modo: string, senzaIncasso: boolean) => Promise<boolean>;
+export function DialogoConsegna({ s, admin = false, onClose, onConsegna, onScontrino, onFattura, onPagato, onStampaRiconsegna }: {
+  s: Scheda; admin?: boolean; onClose: () => void;
+  /** 15/11/2026 (piano 5.3): `motivo` = consegna senza pagamento confermata dal titolare (forza + forza_motivo) */
+  onConsegna: (modo: string, senzaIncasso: boolean, motivo?: string) => Promise<boolean>;
   onScontrino?: () => void; onFattura?: () => void; onPagato?: () => void; onStampaRiconsegna?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [serveTitolare, setServeTitolare] = useState<string | null>(null);
   const daPagare = !s.pagata && s.saldo > 0 && !pagaFineMese(s);
   const opz: [string, string, string][] = [
     ["ritiro", "Ritirato in negozio", "il cliente è passato a prenderlo"], ["spedizione", "Spedito con il nostro corriere", "etichetta UPS/DHL fatta da noi"],
@@ -537,10 +583,15 @@ export function DialogoConsegna({ s, onClose, onConsegna, onScontrino, onFattura
   const [foglio, setFoglio] = useState(false);
   const [altri, setAltri] = useState(false);
   const serveIncasso = daPagare && ["ritiro", "spedizione", "corriere_cliente"].includes(modo);
-  const pronta = !!modo && (!serveIncasso || senzaIncasso) && (!onStampaRiconsegna || foglio || modo !== "ritiro");
+  // 15/11/2026 (piano 5.3): senza incasso consegna solo il titolare, con il motivo
+  const forzatura = (serveIncasso && senzaIncasso) || !!serveTitolare;
+  const motivoOk = admin && motivo.trim().length >= MOTIVO_MIN;
+  const pronta = !!modo && (!serveIncasso || senzaIncasso) && (!forzatura || motivoOk) && (!onStampaRiconsegna || foglio || modo !== "ritiro");
   async function vai(m: string) {
     setBusy(true);
-    try { if (await onConsegna(m, serveIncasso && senzaIncasso)) onClose(); } finally { setBusy(false); }
+    try { if (await onConsegna(m, forzatura, forzatura && motivoOk ? motivo.trim() : undefined)) onClose(); }
+    catch (e) { if (eServeTitolare(e)) { setServeTitolare((e as Error).message); setSenzaIncasso(true); } else toastErrore(e); }
+    finally { setBusy(false); }
   }
   const passo = (n: number, titolo: string, fatto: boolean) => (
     <div className="flex items-center gap-2 text-sm font-semibold">
@@ -566,6 +617,10 @@ export function DialogoConsegna({ s, onClose, onConsegna, onScontrino, onFattura
               <span>Consegno <b>senza incasso</b>: restano da pagare {eur(s.saldo)}</span>
             </label>
           </>}
+          {forzatura && <div className="pl-8">
+            <ForzaturaTitolare admin={admin} perche={serveTitolare || `Consegna senza pagamento (${eur(s.saldo)} da pagare): la conferma solo il titolare, con il motivo`}
+              motivo={motivo} setMotivo={setMotivo} busy={busy} onProcedi={pronta ? () => vai(modo) : undefined} />
+          </div>}
         </div>
         <div className="space-y-2">
           {passo(2, "Come esce il dispositivo", !!modo)}

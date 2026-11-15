@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Incassa } from "@/components/Incassa";
 import { assAzione, eur, type Scheda } from "@/lib/assistenza";
 import { Campo, Modale, Scelta, campo } from "./ui";
+import { headerIdempotenza } from "@/lib/idempotenza";
+import { useChiaveIncasso } from "@/lib/useChiaveIncasso";
 
 type Esito = { id: string; numero: string | null; emessa: boolean; errore: string | null; descrizione: string };
 
@@ -26,6 +28,8 @@ export function DialogoAcconto({ s, operatore, inizio, onClose, onRichiedi, onSc
   const [busy, setBusy] = useState(false);
   const [bozza, setBozza] = useState<Esito | null>(null);
   const inBozza = useRef(false);
+  // 15/11/2026 (piano 5.5): Idempotency-Key nata all'apertura del dialogo, riusata se si ripreme lo stesso incasso
+  const idem = useChiaveIncasso();
   const imp = Math.round((Number(txt.replace(",", ".")) || 0) * 100) / 100;
   const oltre = s.saldo > 0 && imp > s.saldo + 0.005;
   const valido = imp > 0 && !oltre;
@@ -78,7 +82,9 @@ export function DialogoAcconto({ s, operatore, inizio, onClose, onRichiedi, onSc
                 disabled={!operatore} motivo={!operatore ? "scegli l'operatore" : ""}
                 onPagamento={async (p) => {
                   const r = await assAzione(s.id, "acconto-fattura", { operatore, importo: p.importo, modalita: p.modalita, data: p.data,
-                    riferimento: p.riferimento, pos_incasso_id: p.pos_incasso_id }) as Esito;
+                    riferimento: p.riferimento, pos_incasso_id: p.pos_incasso_id },
+                    headerIdempotenza(idem.chiave, `${p.modalita}-${Math.round(p.importo * 100)}${p.pos_incasso_id ? `-${p.pos_incasso_id}` : ""}`)) as Esito;
+                  idem.rinnova();
                   if (r.emessa) toast.success(`Fattura d'acconto n. ${r.numero} emessa e inviata allo SdI`);
                   else { inBozza.current = true; setBozza(r); }
                   return { id: r.id, descrizione: r.descrizione };

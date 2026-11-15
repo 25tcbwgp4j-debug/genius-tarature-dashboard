@@ -14,7 +14,7 @@ import {
 import { chiediTesto, conferma } from "@/components/Conferma";
 import { Button } from "@/components/ui/button";
 import { SceltaOperatore, type Operatore } from "@/components/Operatore";
-import { codiceErrore, toastErrore } from "@/lib/errori";
+import { codiceErrore, eServeTitolare, toastErrore } from "@/lib/errori";
 import type { RicambioAtteso } from "@/lib/assistenza";
 import { fetchAPI } from "@/lib/api";
 import {
@@ -30,7 +30,8 @@ import { Avanzamento } from "./Avanzamento";
 import { ExSchede } from "./ExSchede";
 import { CercaCliente, RiepilogoCliente, SchedaClienteModal } from "./Cliente";
 import { Comunicazioni, Registro } from "./Comunicazioni";
-import { DialogoCambiaStato, DialogoChiudiTutto, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoSaltaPreventivo, DialogoStessoModello, type TipoInvio } from "./Dialoghi";
+import { DialogoCambiaStato, DialogoChiudiTutto, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoSaltaPreventivo, DialogoStessoModello, MSG_PRONTO_NON_COMUNICATO, type TipoInvio } from "./Dialoghi";
+import { RiquadroNonSalvato, useSchedaCambiata } from "./SchedaCambiata";
 import { DialogoAcconto } from "./Acconto";
 import { Aggiuntivi } from "./Aggiuntivi";
 import { Documenti } from "./Documenti";
@@ -186,6 +187,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const admin = !!cfg?.admin;
 
   const ricarica = useCallback(() => assScheda(id).then((x) => { setS(x); setB({}); }).catch(toastErrore), [id]);
+  // 15/11/2026 (piano 5.2): scheda aperta → le scritture mandano X-Scheda-Versione; sul 409 dialogo «ricarica» con il testo da copiare
+  const { nonSalvato, chiudiNonSalvato } = useSchedaCambiata(id, b as Record<string, unknown>, ricarica);
   useEffect(() => { ricarica(); }, [ricarica]);
   // linguetta della fase: all'apertura e quando la scheda cambia fase (es. dopo «ACCETTATO» si passa a Lavorazione)
   useEffect(() => {
@@ -269,20 +272,25 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   }
   // 15/11/2026: `rilancia` = codici d'errore del server (detail.codice) che il dialogo gestisce da sé (elenco dei problemi,
   // blocchi, canale dell'ok): l'errore torna al dialogo invece del messaggio generico
-  async function azione(nome: string, body: Record<string, unknown>, msg: string, rilancia: string[] = []) {
+  // 15/11/2026: `rilancia` può essere anche una funzione (es. eServeTitolare: il dialogo mostra il motivo del titolare);
+  // `headers` per l'Idempotency-Key degli incassi
+  async function azione(nome: string, body: Record<string, unknown>, msg: string, rilancia: string[] | ((e: unknown) => boolean) = [], headers?: Record<string, string>) {
     if (!s) return null;
     if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return null; }
     if (sporca && !(await salva(true))) return null;
     setBusy(nome);
     try {
-      const r = await assAzione(s.id, nome, { operatore, ...body });
+      const r = await assAzione(s.id, nome, { operatore, ...body }, headers);
       const esito = (r && (r.esito || r.esiti)) as Esito | undefined;
-      toast.success(msg + (esito?.mail ? ` · mail ${esito.mail}` : "") + (esito?.whatsapp ? ` · WhatsApp ${esito.whatsapp}` : ""), { duration: 7000 });
+      // 15/11/2026 (piano 5.4): PRONTO salvato ma non arrivato al cliente → avviso rosso che resta finché non lo si chiude
+      if (esito?.pronto_non_comunicato) toast.error(`${MSG_PRONTO_NON_COMUNICATO} · scheda ${s.sigla}` + (esito.mail ? ` · mail: ${esito.mail}` : "") + (esito.whatsapp ? ` · WhatsApp: ${esito.whatsapp}` : ""),
+        { duration: Infinity, closeButton: true, id: `pronto-non-comunicato-${s.id}` });
+      else toast.success(msg + (esito?.mail ? ` · mail ${esito.mail}` : "") + (esito?.whatsapp ? ` · WhatsApp ${esito.whatsapp}` : ""), { duration: 7000 });
       await ricarica(); onCambiata();
       return r;
     } catch (e) {
       const c = codiceErrore(e);
-      if (c && rilancia.includes(c)) throw e;
+      if (typeof rilancia === "function" ? rilancia(e) : (c && rilancia.includes(c))) throw e;
       toastErrore(e); return null;
     } finally { setBusy(""); }
   }
@@ -508,6 +516,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <Button size="icon-xs" variant="outline" disabled={!s.successiva} onClick={() => s.successiva && onApri(s.successiva.id)} aria-label="Scheda successiva"><ArrowRight /></Button>
       </div>
 
+      {/* 15/11/2026 (piano 5.2): dopo «Ricarica» per il 409 di concorrenza, il testo che non era stato salvato */}
+      <RiquadroNonSalvato testo={nonSalvato} onChiudi={chiudiNonSalvato} />
       {/* 13/11/2026: scheda consegnata = sola consultazione finché il titolare non la riapre esplicitamente */}
       {st === "consegnato" && (
         <div className={`flex flex-wrap items-center gap-2 rounded-xl border-2 px-3 py-2 text-sm ${riaperta
@@ -806,7 +816,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           </aside>
       </div>
 
-      {dlg?.k === "chiudi_tutto" && <DialogoChiudiTutto s={s} admin={admin} onClose={() => setDlg(null)} onChiudi={async (b) => !!(await azione("chiudi-tutto", b, "Scheda chiusa: già fatto tutto", ["chiusura_bloccata"]))} />}
+      {dlg?.k === "chiudi_tutto" && <DialogoChiudiTutto s={s} admin={admin} onClose={() => setDlg(null)} onChiudi={async (b) => !!(await azione("chiudi-tutto", b, "Scheda chiusa: già fatto tutto", (e) => codiceErrore(e) === "chiusura_bloccata" || eServeTitolare(e)))} />}
       {dlg?.k === "salta_preventivo" && <DialogoSaltaPreventivo s={s} admin={admin} onClose={() => setDlg(null)}
         onSalta={async (b) => !!(await azione("salta-passo", { passo: "preventivo", ...b }, "Preventivo saltato: si passa alla riparazione", ["ok_cliente_mancante"]))} />}
       {dlg?.k === "invio" && <DialogoInvio s={s} admin={admin} tipo={dlg.tipo} onClose={() => {
@@ -843,17 +853,18 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         onRichiedi={async (body) => !!(await azione("richiesta-acconto", body, `Richiesta di acconto di ${eur(body.importo)} inviata`))}
         onScontrino={async (imp) => { if (sporca && !(await salva(true))) return; router.push(`/cassa?${new URLSearchParams({ scheda: s.id, acconto: imp.toFixed(2) })}`); }}
         onIncassato={async () => { setDlg(null); await ricarica(); onCambiata(); }} />}
-      {dlg?.k === "pagato" && <DialogoPagato s={s} onClose={() => setDlg(null)} onPagato={async (body) => !!(await azione("pagamento", body, "Pagamento registrato"))} />}
+      {dlg?.k === "pagato" && <DialogoPagato s={s} onClose={() => setDlg(null)} onPagato={async (body, h) => !!(await azione("pagamento", body, "Pagamento registrato", [], h))} />}
       {/* 15/11/2026 (piano 2.4): INCASSA E CONSEGNA in un flusso — con un saldo aperto si consegna solo con la spunta «senza incasso» */}
-      {dlg?.k === "consegna" && <DialogoConsegna s={s} onClose={() => setDlg(null)}
+      {dlg?.k === "consegna" && <DialogoConsegna s={s} admin={admin} onClose={() => setDlg(null)}
         onScontrino={async () => { if (sporca && !(await salva(true))) return; router.push(`/cassa?scheda=${s.id}`); }}
         onFattura={() => { setDlg(null); vendi("fattura"); }}
         onPagato={() => setDlg({ k: "pagato" })}
         onStampaRiconsegna={s.opencore_avviso ? () => stampa("riconsegna") : undefined}
-        onConsegna={async (modo, senzaIncasso) => {
+        onConsegna={async (modo, senzaIncasso, motivo) => {
           const daPagare = ["ritiro", "spedizione", "corriere_cliente"].includes(modo) && !s.pagata && s.saldo > 0 && !pagaFineMese(s);
           if (daPagare && !senzaIncasso) { toast.error(`Risulta ancora da pagare ${eur(s.saldo)}: incassa oppure spunta «Consegno senza incasso»`); return false; }
-          return !!(await azione("consegna", { modo, forza: daPagare || undefined }, "Consegnata: scheda chiusa"));
+          // 15/11/2026 (piano 5.3): la consegna senza pagamento («forza») la conferma solo il titolare, con il motivo nel registro
+          return !!(await azione("consegna", { modo, ...(motivo ? { forza: true, forza_motivo: motivo } : {}) }, "Consegnata: scheda chiusa", eServeTitolare));
         }} />}
       {dlg?.k === "richiesta" && <DialogoRichiesta sigla={s.sigla} onClose={() => setDlg(null)}
         onSalva={async (b) => !!(await azione("richiesta-cliente", b, "Richiesta del cliente registrata: arriva al tecnico"))} />}

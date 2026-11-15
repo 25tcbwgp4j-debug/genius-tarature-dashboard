@@ -31,6 +31,11 @@ const FORWARDED_REQ_HEADERS = new Set([
   "x-motivo",
   // Genius Lab Gestionale: attività scelta nel selettore (tarature | apple)
   "x-attivita",
+  // 15/11/2026 (piano Genius 5.2 e 5.5): versione della scheda letta (409 se un altro operatore l'ha salvata nel frattempo)
+  // e chiave di idempotenza degli incassi (stessa richiesta ripetuta = stesso esito, mai un secondo incasso)
+  "x-scheda-versione",
+  "idempotency-key",
+  "x-chiave-idempotenza",
 ]);
 
 // Headers della risposta backend che restituiamo al client

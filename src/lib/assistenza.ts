@@ -168,7 +168,9 @@ export interface Seriale { seriale: string; codice: string | null; modello: stri
   /** da dove viene il modello proposto: «scheda_precedente» (stesso seriale già passato) o «seriale» (decodifica) */
   fonte: "scheda_precedente" | "seriale" | null; fonte_testo: string; da_scheda: string | null; decodificato: string | null; famiglia_menu: string | null;
   prodotto_menu?: string | null; anno?: number | null }
-export interface Esito { programmato?: string; prova?: boolean; mail?: string; whatsapp?: string; whatsapp_testo?: string; whatsapp_link?: string | null }
+export interface Esito { programmato?: string; prova?: boolean; mail?: string; whatsapp?: string; whatsapp_testo?: string; whatsapp_link?: string | null;
+  /** 15/11/2026 (piano 5.4): scheda salvata PRONTO ma né mail né WhatsApp sono partiti */
+  pronto_non_comunicato?: boolean }
 
 const j = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
 
@@ -237,7 +239,9 @@ export const assConfermaModello = (id: string, b: { operatore: string; hw_model:
 export const assMacInLavorazione = (): Promise<{ schede: MacInLavorazione[] }> => fetchAPI("/api/assistenza/mac-in-lavorazione", { timeoutMs: 20_000 }, false);
 export const assCrea = (b: Record<string, unknown>): Promise<Scheda & { esiti: Record<string, unknown> }> => fetchAPI("/api/assistenza/schede", j(b));
 export const assModifica = (id: string, b: Record<string, unknown>): Promise<Scheda> => fetchAPI(`/api/assistenza/schede/${id}`, { method: "PATCH", body: JSON.stringify(b) });
-export const assAzione = (id: string, azione: string, b: Record<string, unknown>) => fetchAPI(`/api/assistenza/schede/${id}/${azione}`, j(b));
+// 15/11/2026: `headers` per le azioni che ne hanno bisogno (Idempotency-Key degli incassi); X-Scheda-Versione la mette fetchAPI
+export const assAzione = (id: string, azione: string, b: Record<string, unknown>, headers?: Record<string, string>) =>
+  fetchAPI(`/api/assistenza/schede/${id}/${azione}`, { ...j(b), ...(headers ? { headers } : {}) });
 /** 15/11/2026 (piano 0.2, caso 63407): cosa blocca o va controllato prima del PRONTO (dialogo). */
 export interface ProntoControlli {
   blocchi: { codice: "richiudere" | "riparazione" | "conferma" | "stato" | "attesa_cliente" | "notifica_blocco" | "divergenza"; testo: string }[];

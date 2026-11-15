@@ -8,6 +8,7 @@
 // Il contenitore <DialoghiApp /> è montato una volta nel layout.
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Modale } from "@/app/assistenza/scheda/ui";
 
@@ -22,6 +23,8 @@ type Richiesta = {
   campo?: { etichetta?: string; iniziale?: string; obbligatorio?: boolean; righe?: number; segnaposto?: string };
   /** spunta da mettere per poter confermare (es. «consegno senza incasso») */
   spunta?: string;
+  /** 15/11/2026 (piano 5.2): testo in sola lettura da copiare (es. quello che l'operatore stava scrivendo prima del 409) */
+  daCopiare?: string;
   risolvi: (v: string | boolean | null) => void;
 };
 
@@ -38,7 +41,7 @@ function apri(r: Omit<Richiesta, "id" | "risolvi">): Promise<string | boolean | 
 }
 
 /** Conferma con i pulsanti dell'app. Restituisce true solo se si preme il pulsante di conferma. */
-export async function conferma(o: { titolo: string; testo?: string; ok?: string; annulla?: string; pericolo?: boolean; spunta?: string }): Promise<boolean> {
+export async function conferma(o: { titolo: string; testo?: string; ok?: string; annulla?: string; pericolo?: boolean; spunta?: string; daCopiare?: string }): Promise<boolean> {
   return (await apri(o)) === true;
 }
 
@@ -83,6 +86,17 @@ function Dialogo({ r }: { r: Richiesta }) {
             onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) conferma(); }}
             className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40" />
         </label>
+      )}
+      {r.daCopiare && (
+        <div className="mt-3 space-y-1.5" data-testid="testo-da-copiare">
+          <span className="block text-xs font-medium text-muted-foreground">Quello che stavi scrivendo (non è stato salvato): copialo prima di ricaricare</span>
+          <textarea readOnly rows={Math.min(10, Math.max(3, r.daCopiare.split("\n").length + 1))} value={r.daCopiare}
+            onFocus={(e) => e.currentTarget.select()}
+            className="w-full rounded-md border border-input bg-muted/40 px-2.5 py-1.5 font-mono text-xs outline-none" />
+          <Button size="sm" variant="outline" onClick={() => {
+            navigator.clipboard?.writeText(r.daCopiare || "").then(() => toast.success("Testo copiato")).catch(() => toast.error("Copia non riuscita: selezionalo e copialo a mano"));
+          }}>Copia il testo</Button>
+        </div>
       )}
       {r.spunta && (
         <label className="mt-3 flex min-h-10 items-start gap-2 rounded-lg border-2 border-amber-400 bg-amber-50 p-2 text-sm font-medium text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">

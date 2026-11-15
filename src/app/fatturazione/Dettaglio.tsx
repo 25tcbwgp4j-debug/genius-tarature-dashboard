@@ -30,6 +30,7 @@ import { fattAnagrafica, fattAnagrafiche, type FattAnagrafica } from "@/lib/api"
 import { Scheda } from "./Anagrafiche";
 import { MODALITA_LABEL, MODALITA_SOCIETA, SOCIETA_LABEL, STATI, TIPI_LABEL, dataIt, eur } from "./util";
 import { oggiRoma } from "@/lib/date";
+import { useChiaveIncasso } from "@/lib/useChiaveIncasso";
 import type { NcRegolazione } from "@/lib/api";
 
 const MODALITA_SCONTRINO: Record<string, string> = { contanti: "Contanti", pos_sumup: "POS SumUp", bonifico: "Bonifico", paypal: "PayPal", carta_stripe: "Carta (Stripe)" };
@@ -557,6 +558,8 @@ function IncassoFattura({ f, operatore, busy, onCambiato, intento, passaDalPagam
   f: Fattura; operatore: Operatore | ""; busy: string; onCambiato: () => void;
   intento?: "pagamento" | "da_pagare" | null; passaDalPagamento: boolean; manuale?: boolean;
 }) {
+  // 15/11/2026 (piano 5.5): Idempotency-Key dell'incasso, nata all'apertura e riusata se si ripreme; nuova dopo un incasso riuscito
+  const idem = useChiaveIncasso();
   // Gingy / Avantifiori (15/10/2026): incasso registrato a mano (bonifico BPM, SumUp Gingy, Stripe, Booking, Airbnb…);
   // la verifica automatica dei pagamenti (SumUp, PayPal, bonifici) è solo dei conti Genius
   const genius = f.societa === "genius";
@@ -640,7 +643,8 @@ function IncassoFattura({ f, operatore, busy, onCambiato, intento, passaDalPagam
             stripeLink={async (imp) => (await fattLinkStripe(f.id, imp))?.url}
             onPagamento={async (p) => {
               await pagIncassaFattura(f.id, { importo: p.importo, modalita: p.modalita as ModalitaIncasso, data: p.data, riferimento: p.riferimento,
-                pos_incasso_id: p.pos_incasso_id, operatore: operatore! });
+                pos_incasso_id: p.pos_incasso_id, operatore: operatore! }, idem.chiave);
+              idem.rinnova();
               return { id: f.id, descrizione: desc };
             }}
             onFatto={onCambiato} />
@@ -648,7 +652,8 @@ function IncassoFattura({ f, operatore, busy, onCambiato, intento, passaDalPagam
           <GiaPagato fatturaId={f.id} residuo={residuo} disabled={!!busy || !operatore} motivo={!operatore ? "scegli l'operatore" : ""}
             onRegistra={async (d) => {
               try {
-                await pagIncassaFattura(f.id, { ...d, operatore: operatore! });
+                await pagIncassaFattura(f.id, { ...d, operatore: operatore! }, idem.chiave);
+                idem.rinnova();
                 toast.success(`Registrato: ${NOMI_MODALITA[d.modalita] || d.modalita} ${eur(d.importo)}`);
                 onCambiato();
                 return true;
@@ -843,13 +848,15 @@ function IncassoManuale({ f, residuo, operatore, busy, onCambiato }: {
   const [data, setData] = useState(oggiRoma());
   const [rif, setRif] = useState("");
   const [salva, setSalva] = useState(false);
+  const idem = useChiaveIncasso();   // 15/11/2026 (piano 5.5)
   async function registra() {
     const imp = Number(importo.replace(/\./g, "").replace(",", "."));
     if (!(imp > 0)) { toast.error("Importo non valido"); return; }
     if (!operatore) { toast.error("Scegli l'operatore"); return; }
     setSalva(true);
     try {
-      await pagIncassaFattura(f.id, { importo: imp, modalita: mod as ModalitaIncasso, data, riferimento: rif.trim(), operatore });
+      await pagIncassaFattura(f.id, { importo: imp, modalita: mod as ModalitaIncasso, data, riferimento: rif.trim(), operatore }, idem.chiave);
+      idem.rinnova();
       toast.success(`Incasso registrato: ${MODALITA_LABEL[mod] || mod} ${eur(imp)}`);
       onCambiato();
     } catch (e) { toastErrore(e); } finally { setSalva(false); }
