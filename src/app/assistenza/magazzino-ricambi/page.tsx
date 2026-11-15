@@ -614,7 +614,7 @@ export default function MagazzinoRicambi() {
                   <td data-label="Ultima conta" className="p-2 text-xs text-gray-500 whitespace-nowrap">{data(r.inventario_il)}</td>
                   <td className="p-2 whitespace-nowrap">
                     {r.attivo ? (
-                      <div className="flex flex-nowrap items-center gap-1 max-sm:flex-wrap">
+                      <div className="flex flex-wrap items-center gap-1 sm:grid sm:w-[150px] sm:grid-cols-2 [&>button]:justify-center [&>details>summary]:flex [&>details>summary]:justify-center">
                         {!gar && (<>
                         <button type="button" title="Conta i pezzi e conferma la quantità" onClick={() => { setEvid(r.id); setConta(r); }} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs">Conta</button>
                         <button type="button" title="Carica: arrivano pezzi" onClick={() => setMov({ r, t: "carico" })} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5 text-green-700 dark:text-green-300"><Plus className="h-3 w-3" />Carica</button>

@@ -670,7 +670,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
 
       {/* 12/11/2026 (Christian): INTERVENTO — difetto nei codici Apple, idoneità e copertura, riparazione tipo, chi paga */}
       {v("famiglia") !== "non_apple" && (
-        <div ref={refInt} className="scroll-mt-28">
+        <div ref={refInt} className="scroll-mt-24 sm:scroll-mt-44">
           <Piega id="intervento" nome="Intervento" chiusa={!!chiuse.intervento} onApri={() => toggleSez("intervento")}
             riassunto={`${((v("difetto_apple") as DifettoApple[] | null) || []).map((d) => d.issueDescription || d.issueCode).join(", ") || "difetto Apple da scegliere"}${(v("gsx") as Scheda["gsx"])?.idoneita ? ` · ${(v("gsx") as Scheda["gsx"])!.idoneita!.copertura || "idoneità letta"}` : ""}`}>
             <Intervento seriale={v("seriale")} gsx={v("gsx")} difetto={v("difetto_apple")} copertura={v("copertura")} ro={ro} operatore={operatore}
@@ -683,7 +683,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
 
           </div>
           <div hidden={tab !== "preventivo"} className="space-y-3" role="tabpanel" id="pannello-preventivo" aria-labelledby="linguetta-preventivo">
-      <div ref={refPrev} className="scroll-mt-28">
+      <div ref={refPrev} className="scroll-mt-24 sm:scroll-mt-44">
         <Piega id="preventivo" nome="Preventivo" chiusa={!!chiuse.preventivo} onApri={() => toggleSez("preventivo")} riassunto={`${bz.righe.length} voci · ${eur(totaleConSpedizione(bz.righe, Number(bz.spedizione_tipo && bz.spedizione_tipo !== "nessuna" ? bz.spedizione_importo : 0) || 0))} · ${s.preventivo_stato || "da fare"}`}>
         {!ro && bz.righe.length > 0 && ["da_preventivare", "preventivo_inviato", "accettato"].includes(st) && (
           <VerificaPreventivo s={s} admin={admin} busy={!!busy}
@@ -713,7 +713,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
 
           </div>
           <div hidden={tab !== "lavorazione"} className="space-y-3" role="tabpanel" id="pannello-lavorazione" aria-labelledby="linguetta-lavorazione">
-      <div ref={refTec} className="scroll-mt-28">
+      <div ref={refTec} className="scroll-mt-24 sm:scroll-mt-44">
         <Piega id="tecnici" nome="Verifica e riparazione (tecnici)" chiusa={!!chiuse.tecnici} onApri={() => toggleSez("tecnici")} riassunto={`${s.tecnico_verifica ? `verifica ${nomeTecnico(s.tecnico_verifica)}` : "verifica da assegnare"}${s.tecnico_riparazione ? ` · riparazione ${nomeTecnico(s.tecnico_riparazione)}` : ""}`}>
         <PannelloTecnici s={s} tecnici={tecnici} ro={ro} busy={!!busy}
           onAssegnaVerifica={() => setDlg({ k: "assegna_verifica" })} onChiudiVerifica={() => setDlg({ k: "chiudi_verifica" })}
@@ -724,10 +724,10 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       </div>
 
       {/* 28/10/2026 (Christian): la sezione RICAMBI c'è in qualunque stato (anche prima dell'accettazione o dopo il pronto) */}
-      {(!["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0) && <div ref={refRic} className="scroll-mt-28"><Piega id="ricambi" nome="Ricambi" chiusa={!!chiuse.ricambi} onApri={() => toggleSez("ricambi")} riassunto={`${(s.ricambi_attesi || []).length} ricambi`}><RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
+      {(!["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0) && <div ref={refRic} className="scroll-mt-24 sm:scroll-mt-44"><Piega id="ricambi" nome="Ricambi" chiusa={!!chiuse.ricambi} onApri={() => toggleSez("ricambi")} riassunto={`${(s.ricambi_attesi || []).length} ricambi`}><RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
         onSalvata={async () => { await ricarica(); onCambiata(); }} /></Piega></div>}
       {/* 04/11/2026 (Christian): la lavorazione a tutta larghezza, come il preventivo */}
-      <div ref={refLav} className="scroll-mt-28"><Piega id="lavorazione" nome="Lavorazione" chiusa={!!chiuse.lavorazione} onApri={() => toggleSez("lavorazione")} riassunto={(s.lavorazione || "").split("\n")[0] || "—"}><Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} busy={!!busy}
+      <div ref={refLav} className="scroll-mt-24 sm:scroll-mt-44"><Piega id="lavorazione" nome="Lavorazione" chiusa={!!chiuse.lavorazione} onApri={() => toggleSez("lavorazione")} riassunto={(s.lavorazione || "").split("\n")[0] || "—"}><Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} busy={!!busy}
         onNonFatta={(chiave, non_fatta) => azione("voce-non-fatta", { chiave, non_fatta }, non_fatta ? "Voce segnata NON FATTA: tolta da lavorazione e totale" : "Voce di nuovo da fare: rimessa in lavorazione e totale")}
         onPressoCliente={(a) => azione("presso-cliente", { azione: a }, { riconsegnato: "Segnato: riconsegnato al cliente in attesa del ricambio", annulla: "Riconsegna tolta", richiedi: "Chiesto al cliente di riportarlo", riportato: "Dispositivo riportato: torna in lavorazione" }[a])} /></Piega></div>
         <Sezione titolo="Nota interna" sottotitolo="mai al cliente">
@@ -735,7 +735,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         </Sezione>
           </div>
           <div hidden={tab !== "chiusura"} className="space-y-3" role="tabpanel" id="pannello-chiusura" aria-labelledby="linguetta-chiusura">
-        <div ref={refDoc} className="scroll-mt-28">
+        <div ref={refDoc} className="scroll-mt-24 sm:scroll-mt-44">
           <Piega id="documenti" nome="Documenti e pagamento" chiusa={!!chiuse.documenti} onApri={() => toggleSez("documenti")} riassunto={`${s.pagamento_modo || "pagamento da definire"}${s.fattura_id ? " · fattura" : s.scontrino_id ? " · scontrino" : ""}`}>
           <Documenti s={s} ro={ro} busy={!!busy} onFatturaEliminata={async () => { await ricarica(); onCambiata(); }}
             onScontrino={async () => { if (sporca && !(await salva(true))) return; router.push(`/cassa?scheda=${s.id}`); }}
@@ -866,7 +866,7 @@ function MenuPdf({ id, prima }: { id: string; prima: () => Promise<boolean> }) {
 function Piega({ id, nome, chiusa, onApri, riassunto, children }: { id: string; nome: string; chiusa: boolean; onApri: () => void; riassunto?: string; children: React.ReactNode }) {
   // 15/11/2026 (piano 2.7): aperta, si richiude dalla freccia sul suo titolo (i pulsanti in alto ora PORTANO alla sezione)
   if (!chiusa) return (
-    <div id={`sez-${id}`} className="min-w-0 scroll-mt-28">
+    <div id={`sez-${id}`} className="min-w-0 scroll-mt-24 sm:scroll-mt-44">
       <button type="button" onClick={onApri} className="mb-1 flex min-h-8 items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground max-sm:min-h-10" aria-expanded>
         <ChevronDown className="size-3.5" />{nome} · chiudi</button>
       {children}

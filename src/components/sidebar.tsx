@@ -251,7 +251,14 @@ export function Sidebar() {
   // 15/11/2026 (piano 2.13): titolo della scheda del browser = la pagina aperta («Cassa del giorno · Genius Lab»)
   const titoloPagina = voceAttiva ? (voceAttiva.href === "/" ? (attivita === "apple" ? "Panoramica Apple" : "Registro tarature") : voceAttiva.label) : "";
   useEffect(() => {
-    if (titoloPagina) document.title = `${titoloPagina} · Genius Lab`;
+    if (!titoloPagina) return;
+    const voluto = `${titoloPagina} · Genius Lab`;
+    const metti = () => { if (document.title !== voluto) document.title = voluto; };
+    metti();
+    // Next riscrive il <title> dei metadati dopo l'idratazione: se lo cambia, si rimette quello della pagina
+    const mo = new MutationObserver(metti);
+    mo.observe(document.head, { childList: true, subtree: true, characterData: true });
+    return () => mo.disconnect();
   }, [titoloPagina]);
   // 15/11/2026 (piano 2.14): iPhone/iPad in Safari NON installato: le notifiche push esistono solo dalla schermata Home
   const [iosNonInstallato, setIosNonInstallato] = useState(false);
