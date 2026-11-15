@@ -4,7 +4,7 @@
 // incassi (contanti, POS SumUp, carta Stripe, bonifico). Trasmissione tramite Openapi.
 
 import { BadgeOperatore } from "@/components/Operatore";
-import { Fragment, Suspense, useCallback, useEffect, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -159,10 +159,23 @@ function Pagina() {
     }
   }, [tab, societa, genius, daVatican, stato, pagamento, q, qRighe, attivitaF, anno, prove, mese, periodo, per.dal, per.al, soloScadute, caricaRicStato]);
 
+  // 15/11/2026 (piano 2.8): la lista era chiesta DUE volte all'apertura (la funzione si ricrea quando arrivano società e
+  // permessi): ora l'effetto aspetta che i filtri si assestino (150 ms) e non ripete la stessa richiesta entro 3 secondi.
+  // Le chiamate esplicite (dopo un salvataggio, «Sincronizza») ricaricano sempre.
+  const ultimaAuto = useRef<{ k: string; t: number }>({ k: "", t: 0 });
   useEffect(() => {
-    const t = setTimeout(carica, q || qRighe ? 300 : 0);
+    const k = JSON.stringify([tab, societa, genius, daVatican, stato, pagamento, q, qRighe, attivitaF, anno, prove, mese, periodo, per.dal, per.al, soloScadute]);
+    const t = setTimeout(() => {
+      if (ultimaAuto.current.k === k && Date.now() - ultimaAuto.current.t < 3000) return;
+      ultimaAuto.current = { k, t: Date.now() };
+      carica();
+    }, q || qRighe ? 300 : 150);
     return () => clearTimeout(t);
-  }, [carica, q, qRighe]);
+  }, [carica, q, qRighe, tab, societa, genius, daVatican, stato, pagamento, attivitaF, anno, prove, mese, periodo, per.dal, per.al, soloScadute]);
+  // 15/11/2026 (piano 2.8): elenco a BLOCCHI DA 100 (prima 988 righe in una sola tabella, 62.000 px): «Mostra altre»
+  const [mostrate, setMostrate] = useState(100);
+  useEffect(() => { setMostrate(100); }, [righe]);
+  const visibili = righe.slice(0, mostrate);
 
   async function sincronizza() {
     setSync(true);
@@ -362,11 +375,14 @@ function Pagina() {
 
       {/* 15/10/2026: il controllo passive Effatta riguarda solo le società con un account Effatta (oggi Genius) */}
       {ricStato?.ultimo && !info?.manuale && (
-        <div className={`text-xs ${ricStato.ultimo.ok ? "text-muted-foreground" : "font-medium text-red-600"}`}
-          title={ricStato.ultimo.messaggio}>
+        <div className={`text-xs ${ricStato.ultimo.ok ? "text-muted-foreground" : "font-medium text-red-700 dark:text-red-300"}`}>
           Fatture ricevute — ultimo controllo SdI: {new Date(ricStato.ultimo.quando).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
           {" "}({ricStato.ultimo.trigger === "manuale" ? "manuale" : ricStato.ultimo.trigger === "giornaliero" ? "giro delle 8/14" : "automatico ogni 15'"}, {ricStato.ultimo.fonte === "effatta" ? "Effatta" : ricStato.ultimo.fonte})
-          {" · "}{ricStato.ultimo.ok ? `${ricStato.ultimo.controllate} in Effatta negli ultimi 3 mesi, ${ricStato.ultimo.nuove} nuove` : ricStato.ultimo.messaggio}
+          {" · "}{ricStato.ultimo.ok ? `${ricStato.ultimo.controllate} in Effatta negli ultimi 3 mesi, ${ricStato.ultimo.nuove} nuove` : erroreRicevute(ricStato.ultimo.messaggio)}
+          {/* 15/11/2026 (piano 2.8): il testo tecnico (in inglese, dal server di Effatta) solo al titolare, ripiegato */}
+          {!ricStato.ultimo.ok && admin && ricStato.ultimo.messaggio && (
+            <details className="mt-0.5 font-normal text-muted-foreground"><summary className="cursor-pointer">dettaglio tecnico</summary>
+              <span className="block max-h-24 overflow-auto whitespace-pre-wrap break-words">{ricStato.ultimo.messaggio}</span></details>)}
           {ricStato.ultimo_con_novita && <> · ultimo arrivo: {new Date(ricStato.ultimo_con_novita.quando).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} ({ricStato.ultimo_con_novita.nuove})</>}
         </div>
       )}
@@ -496,8 +512,33 @@ function Pagina() {
             periodo === "tutto" && anno ? `solo ${anno}${mese ? ` mese ${mese}` : ""} — scegli «Tutti gli anni» per lo storico completo` : ""].filter(Boolean).join(" · ") || undefined} />
       )}
 
-      {!loading && (tab === "emessa" || tab === "ricevuta") && (
-        <Card className="overflow-x-auto p-0">
+      {!loading && (tab === "emessa" || tab === "ricevuta") && (<>
+        {/* 15/11/2026 (piano 2.9): su iPhone una scheda per documento (numero, data, intestatario, totale, stato), niente tabella di lato */}
+        <div className="space-y-2 sm:hidden">
+          {visibili.map((f) => {
+            const st = STATI[f.stato] || { label: f.stato, cls: "bg-muted" };
+            const nc = f.tipo_documento === "TD04";
+            const scaduta = f.pagamento_stato !== "pagata" && f.scadenza && f.scadenza < oggiRoma();
+            return (
+              <button key={f.id} type="button" disabled={!!f.scontrino_archivio} onClick={() => setAperta(f.id)}
+                className="block w-full rounded-xl border bg-card p-3 text-left text-sm shadow-sm disabled:opacity-90">
+                <div className="flex items-baseline gap-2">
+                  <b>{f.numero || "bozza"}</b><span className="text-xs text-muted-foreground">{dataIt(f.data)}</span>
+                  {f.tipo_documento !== "TD01" && <span className="text-xs text-muted-foreground">{TIPI_LABEL[f.tipo_documento] || f.tipo_documento}</span>}
+                  <b className="ml-auto tabular-nums">{nc ? "−" : ""}{eur(f.totale)}</b>
+                </div>
+                <div className="truncate">{f.controparte_nome}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className={`rounded px-1.5 py-0.5 ${st.cls}`}>{st.label}</span>
+                  {!nc && (f.pagamento_stato === "pagata" ? <span className="text-emerald-700 dark:text-emerald-300">{MODALITA_LABEL[f.pagamento_modalita || ""] || "pagata"} · {dataIt(f.pagato_il)}</span>
+                    : <span className={scaduta ? "font-medium text-red-700 dark:text-red-300" : "text-amber-800 dark:text-amber-300"}>{f.pagamento_stato === "parziale" ? `resta ${eur(Number(f.totale) - Number(f.pagato || 0))}` : tab === "emessa" ? "da incassare" : "da pagare"}{f.scadenza ? ` · ${dataIt(f.scadenza)}` : ""}</span>)}
+                  {tab === "ricevuta" && !f.vista_il && <span className="rounded bg-red-600 px-1 text-[10px] font-semibold text-white">NUOVA</span>}
+                </div>
+              </button>);
+          })}
+          {!righe.length && <div className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground">Nessun documento con questi filtri</div>}
+        </div>
+        <Card className="overflow-x-auto p-0 max-sm:hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-xs text-muted-foreground">
@@ -512,7 +553,7 @@ function Pagina() {
               </tr>
             </thead>
             <tbody>
-              {righe.map((f) => {
+              {visibili.map((f) => {
                 const st = STATI[f.stato] || { label: f.stato, cls: "bg-muted" };
                 const nc = f.tipo_documento === "TD04";
                 const scaduta = f.pagamento_stato !== "pagata" && f.scadenza && f.scadenza < oggiRoma();
@@ -578,7 +619,13 @@ function Pagina() {
             </tbody>
           </table>
         </Card>
-      )}
+        {righe.length > mostrate && (
+          <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+            <span className="text-muted-foreground">Mostrate {mostrate.toLocaleString("it-IT")} di {righe.length.toLocaleString("it-IT")}</span>
+            <Button variant="outline" size="sm" onClick={() => setMostrate((m) => m + 100)}>Mostra altre 100</Button>
+            <Button variant="ghost" size="sm" onClick={() => setMostrate(righe.length)}>Mostra tutte</Button>
+          </div>)}
+      </>)}
 
       {!loading && tab === "esiti" && (
         <Card className="divide-y p-0">
@@ -634,6 +681,14 @@ function PacchettoSocieta({ societa }: { societa: string }) {
 
 // 16/10/2026: primo anno con documenti, per società (storico importato da SimplyFatt)
 const PRIMO_ANNO: Record<string, number> = { genius: 2025, gingy: 2024, avantifiori: 2013 };
+
+/** 15/11/2026 (piano 2.8): errore del controllo delle fatture ricevute in una frase italiana (il testo tecnico di Effatta
+ *  era in inglese e ripetuto per ogni mese: «ERRORI: 11/2026: The page cannot be displayed…»). */
+function erroreRicevute(msg: string | null | undefined): string {
+  const mesi = Array.from(new Set((msg || "").match(/\b\d{2}\/\d{4}\b/g) || []));
+  const quali = mesi.length ? ` per ${mesi.length > 1 ? `${mesi[0]}–${mesi[mesi.length - 1]}` : mesi[0]}` : "";
+  return `controllo delle fatture ricevute non riuscito${quali}: il servizio di Effatta non ha risposto, si riprova da solo ogni 15 minuti`;
+}
 
 export default function FatturazionePage() {
   return (

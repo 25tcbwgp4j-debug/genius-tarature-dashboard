@@ -36,7 +36,7 @@ export default async function UtentiPage() {
           Gestione utenti
         </h1>
         <p className="text-sm text-gray-500 mt-1">
-          Crea, modifica e disattiva gli account staff. Solo admin puo' accedere a questa pagina.
+          Crea, modifica e disattiva gli account staff. Solo il titolare può accedere a questa pagina.
         </p>
       </div>
 

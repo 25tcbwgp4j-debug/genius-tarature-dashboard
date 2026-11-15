@@ -18,6 +18,7 @@ import { StripeAvviso } from "@/components/StripeAvviso";
 import { PilaAvvisi } from "@/components/PilaAvvisi";
 import { AttivitaProvider } from "@/components/attivita";
 import { DialoghiApp } from "@/components/Conferma";
+import { TabelleSchede } from "@/components/TabelleSchede";
 
 const geist = Geist({
   variable: "--font-geist",
@@ -123,6 +124,8 @@ export default function RootLayout({
           <Toaster richColors position="top-right" />
           {/* 15/11/2026 (piano 2.5): conferme e motivi con i dialoghi dell'app, non quelli del browser */}
           <DialoghiApp />
+          {/* 15/11/2026 (piano 2.9): le tabelle con classe «tabella-schede» diventano schede su iPhone */}
+          <TabelleSchede />
         </ThemeProvider>
         <Script id="sw-register" strategy="afterInteractive">
           {SW_REGISTER}

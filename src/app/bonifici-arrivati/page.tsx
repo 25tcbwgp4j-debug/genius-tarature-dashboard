@@ -2,6 +2,7 @@
 
 // BONIFICI ARRIVATI (03/11/2026, Christian): il pulsante rosso mostra solo quelli da gestire e, una volta gestiti, spariscono.
 // Qui ci sono tutti: quando sono arrivati, da chi, a che cosa sono abbinati e chi li ha gestiti.
+import { testoItaliano } from "@/lib/formato";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -63,7 +64,7 @@ export default function BonificiArrivatiPage() {
                     <td data-label="Da" className="p-2.5 font-medium">{r.ordinante}</td>
                     <td data-label="Causale" className="p-2.5 text-xs">{r.causale}</td>
                     <td data-label="Stato" className="p-2.5"><span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${tono}`}>{etichetta}</span></td>
-                    <td data-label="Abbinato a" className="p-2.5 text-xs">{r.documento_numero && r.documento_numero !== "bozza" ? `${r.documento_tipo || ""} ${r.documento_numero}` : r.esito}</td>
+                    <td data-label="Abbinato a" className="p-2.5 text-xs">{r.documento_numero && r.documento_numero !== "bozza" ? `${r.documento_tipo || ""} ${r.documento_numero}` : testoItaliano(r.esito)}</td>
                     <td data-label="Gestito da" className="whitespace-nowrap p-2.5 text-xs">{chi(r.gestito_da)}{r.gestito_il ? <span className="block text-muted-foreground">{quando(r.gestito_il)}</span> : null}</td>
                   </tr>
                 );

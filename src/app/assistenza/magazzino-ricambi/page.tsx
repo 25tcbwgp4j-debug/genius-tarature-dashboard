@@ -20,7 +20,8 @@ import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { fetchAPI } from "@/lib/api";
 import { StampaEtichetteRicambi } from "./StampaEtichetteRicambi";
-import { euro } from "@/lib/formato";   // 13/11/2026: «1.868,84 €» (formato unico)
+import { euro } from "@/lib/formato";
+import { chiediTesto } from "@/components/Conferma";   // 13/11/2026: «1.868,84 €» (formato unico)
 
 type Tipo = "ricambio" | "display" | "scheda_logica" | "top_case" | "garanzia" | "rotto";
 interface Riga {
@@ -242,7 +243,7 @@ function Scheda({ r, tipo, titolare, stati, onFatto, onChiudi }: {
         {v.gsx_descrizione && norm(v.gsx_descrizione) !== norm(v.descrizione) && (
           <div className="col-span-2 text-xs -mt-2 flex items-center gap-2">
             <span className="text-gray-500">GSX: {v.gsx_descrizione}</span>
-            <button type="button" className="underline text-blue-600" onClick={() => setV({ ...v, descrizione: v.gsx_descrizione })}>usa questa</button>
+            <button type="button" className="underline text-blue-600 dark:text-blue-300" onClick={() => setV({ ...v, descrizione: v.gsx_descrizione })}>usa questa</button>
           </div>
         )}
         <label className="text-sm col-span-2">Modelli interessati<br />
@@ -417,7 +418,7 @@ export default function MagazzinoRicambi() {
 
   const fatto = () => { setConta(null); setMov(null); setMod(null); carica(); };
   const elimina = async (r: Riga) => {
-    const nota = window.prompt(`Eliminare ${r.codice || ""} ${r.descrizione}? Motivo (facoltativo):`, "");
+    const nota = await chiediTesto({ titolo: `Eliminare ${r.codice || ""} ${r.descrizione}?`, testo: "Si può ripristinare dai «Eliminati».", etichetta: "Motivo (facoltativo)", ok: "Elimina", pericolo: true });
     if (nota === null) return;
     try { await fetchAPI(`/api/ricambi-apple/${r.id}?${new URLSearchParams({ nota })}`, { method: "DELETE" }); toast.success("Eliminato (si può ripristinare)"); carica(); }
     catch (e) { toast.error(String((e as Error)?.message || e)); }
@@ -447,7 +448,7 @@ export default function MagazzinoRicambi() {
       </div>
 
       <Card className="p-3 flex flex-wrap gap-3 items-center border-2 border-blue-200">
-        <ScanLine className="h-5 w-5 text-blue-600" />
+        <ScanLine className="h-5 w-5 text-blue-600 dark:text-blue-300" />
         <input ref={scanRef} value={scan} onChange={(e) => setScan(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") spara(); }}
           placeholder="Spara il codice (APN, MPN, seriale) o scrivi cosa cerchi: dissipatore, heatsink, 820-2850…" className="flex-1 min-w-[220px] border rounded-md px-3 py-2 text-base font-mono bg-white dark:bg-gray-900" />
         <div className="inline-flex rounded-md border overflow-hidden text-sm">
@@ -592,11 +593,11 @@ export default function MagazzinoRicambi() {
                     {r.seriale ? <div className="text-xs text-gray-500">SN {r.seriale}</div> : null}</td>
                   <td className="p-2">
                     <div className="font-medium">{r.descrizione}</div>
-                    {r.gsx_descrizione && norm(r.gsx_descrizione) !== norm(r.descrizione) && <div className="text-xs text-blue-700">GSX: {r.gsx_descrizione}</div>}
-                    {r.gsx_sostituito_da && <div className="text-xs text-amber-700">sostituito da {r.gsx_sostituito_da}</div>}
+                    {r.gsx_descrizione && norm(r.gsx_descrizione) !== norm(r.descrizione) && <div className="text-xs text-blue-700 dark:text-blue-300">GSX: {r.gsx_descrizione}</div>}
+                    {r.gsx_sostituito_da && <div className="text-xs text-amber-700 dark:text-amber-300">sostituito da {r.gsx_sostituito_da}</div>}
                     {r.modelli && <div className="text-xs text-gray-500 whitespace-pre-line line-clamp-2" title={r.modelli}>{r.modelli}</div>}
                     {(r.colore || r.grado || r.anno) && <div className="text-xs text-gray-600">{[r.colore, r.grado && `grado ${r.grado}`, r.anno].filter(Boolean).join(" · ")}</div>}
-                    {r.condizioni && <div className="text-xs text-amber-700">{r.condizioni}</div>}
+                    {r.condizioni && <div className="text-xs text-amber-700 dark:text-amber-300">{r.condizioni}</div>}
                     {r.note && <div className="text-xs text-gray-500 italic">{r.note}</div>}
                   </td>
                   {pezzi && <td data-label="Stato" className="p-2">{r.stato ? <span className={`text-xs px-2 py-0.5 rounded-full ${COLORE_STATO[r.stato] || "bg-gray-100"}`}>{STATI_TESTO[r.stato] || r.stato}</span> : "—"}</td>}
@@ -613,16 +614,22 @@ export default function MagazzinoRicambi() {
                   <td data-label="Ultima conta" className="p-2 text-xs text-gray-500 whitespace-nowrap">{data(r.inventario_il)}</td>
                   <td className="p-2 whitespace-nowrap">
                     {r.attivo ? (
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-nowrap items-center gap-1 max-sm:flex-wrap">
                         {!gar && (<>
                         <button type="button" title="Conta i pezzi e conferma la quantità" onClick={() => { setEvid(r.id); setConta(r); }} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs">Conta</button>
-                        <button type="button" title="Carica: arrivano pezzi" onClick={() => setMov({ r, t: "carico" })} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5 text-green-700"><Plus className="h-3 w-3" />Carica</button>
-                        <button type="button" title="Togli: pezzi usati o venduti" onClick={() => setMov({ r, t: "scarico" })} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5 text-amber-700"><Minus className="h-3 w-3" />Togli</button>
+                        <button type="button" title="Carica: arrivano pezzi" onClick={() => setMov({ r, t: "carico" })} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5 text-green-700 dark:text-green-300"><Plus className="h-3 w-3" />Carica</button>
+                        <button type="button" title="Togli: pezzi usati o venduti" onClick={() => setMov({ r, t: "scarico" })} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5 text-amber-700 dark:text-amber-300"><Minus className="h-3 w-3" />Togli</button>
                         </>)}
-                        <button type="button" title="Stampa l'etichetta (copie = giacenza)" onClick={() => setEti({ righe: [r] })} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5 text-blue-700"><Printer className="h-3 w-3" />Etichetta</button>
-                        <button type="button" title="Modifica i dati" onClick={() => setMod({ r })} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5"><Pencil className="h-3 w-3" />Modifica</button>
-                        <button type="button" title="Storico: chi ha cambiato cosa e quando" onClick={() => setSto(r)} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-0.5"><History className="h-3 w-3" />Storico</button>
-                        <button type="button" title="Elimina (si può ripristinare)" onClick={() => elimina(r)} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs text-red-600 inline-flex items-center gap-0.5"><Trash2 className="h-3 w-3" />Elimina</button>
+                        {/* 15/11/2026 (piano 2.10): Conta / Carica / Togli in riga, il resto nel menu «⋯» (prima 7 pulsanti impilati, righe alte 220px) */}
+                        <details className="relative">
+                          <summary className="list-none cursor-pointer px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center [&::-webkit-details-marker]:hidden" title="Altre azioni: etichetta, modifica, storico, elimina" aria-label="Altre azioni">⋯</summary>
+                          <div className="absolute right-0 z-20 mt-1 w-44 rounded-lg border bg-white p-1 shadow-lg dark:bg-gray-900" onClick={(e) => { const d = (e.currentTarget.parentElement as HTMLDetailsElement); d.open = false; }}>
+                            <button type="button" title="Stampa l'etichetta (copie = giacenza)" onClick={() => setEti({ righe: [r] })} className="flex min-h-9 w-full items-center gap-2 rounded px-2 text-left text-sm text-blue-700 hover:bg-gray-100 dark:text-blue-300 dark:hover:bg-gray-800"><Printer className="h-4 w-4" />Etichetta</button>
+                            <button type="button" title="Modifica i dati" onClick={() => setMod({ r })} className="flex min-h-9 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-800"><Pencil className="h-4 w-4" />Modifica</button>
+                            <button type="button" title="Storico: chi ha cambiato cosa e quando" onClick={() => setSto(r)} className="flex min-h-9 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-800"><History className="h-4 w-4" />Storico</button>
+                            <button type="button" title="Elimina (si può ripristinare)" onClick={() => elimina(r)} className="flex min-h-9 w-full items-center gap-2 rounded px-2 text-left text-sm text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"><Trash2 className="h-4 w-4" />Elimina…</button>
+                          </div>
+                        </details>
                       </div>
                     ) : (
                       <button type="button" onClick={() => ripristina(r)} className="px-2 py-1 max-sm:min-h-10 rounded border text-xs inline-flex items-center gap-1"><RotateCcw className="h-3 w-3" /> Ripristina</button>

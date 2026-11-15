@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Cruscotto } from "./assistenza/Cruscotto";
 import { PerseDaRichiamare } from "@/components/PerseDaRichiamare";
+import { AspettanoRisposta, SchedeFerme } from "./assistenza/Attese";
 import { Card } from "@/components/ui/card";
 import { Smartphone, PackageCheck, Euro, Landmark, Mail, Calculator, Clock, Plus, FileQuestion } from "lucide-react";
 import { fetchAPI } from "@/lib/api";
@@ -130,6 +131,13 @@ export function HomeApple() {
       )}
 
       <PerseDaRichiamare />
+      {/* 15/11/2026 (piano 2.16): chi aspetta una risposta su WhatsApp da più di 2 ore e le schede ferme */}
+      {visibili && (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <AspettanoRisposta />
+          <SchedeFerme />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Link href="/cassa/giornata">
@@ -155,7 +163,7 @@ export function HomeApple() {
         {admin && (
           <Card className="p-4 h-full">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-indigo-100 text-indigo-800"><Mail className="w-5 h-5" /></div>
+              <div className="p-2 rounded-lg bg-indigo-100 text-indigo-800 dark:text-indigo-300"><Mail className="w-5 h-5" /></div>
               <div>
                 <p className="text-2xl font-bold">{bozze ?? "—"}</p>
                 <p className="text-sm text-gray-500">Bozze mail Apple da vedere (info@apple-assistenza.it)</p>

@@ -86,7 +86,8 @@ export default function RubricaApple() {
           </Card>
         </div>
       )}
-      {rie && <p className="text-xs text-gray-500">{rie.whatsapp.nota}</p>}
+      {/* 15/11/2026 (piano 2.13): niente gergo tecnico («OpenWA»: la linea ora è su WAHA) */}
+      {rie && <p className="text-xs text-gray-500">I messaggi della linea del negozio si leggono in «Chat WhatsApp Apple»; da questa pagina non parte nessun messaggio.</p>}
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[220px]">
@@ -122,7 +123,7 @@ export default function RubricaApple() {
               </div>
               {c.anagrafica_id && (
                 <button type="button" onClick={() => apriScheda(c.anagrafica_id!)}
-                  className="self-start sm:self-center inline-flex items-center gap-1 px-2 py-1 rounded border text-xs">
+                  className="self-start sm:self-center inline-flex items-center gap-1 px-2 py-1 rounded border text-xs max-sm:min-h-10 max-sm:px-3">
                   <Pencil className="w-3 h-3" /> Scheda
                 </button>
               )}

@@ -1,10 +1,11 @@
-// AvaTech Tarature — Service Worker (PWA)
+// Genius Lab Gestionale — Service Worker (PWA)
+// 15/11/2026 (piano 2.14): titolo predefinito «Genius Lab» e destinazione giusta (chat Apple per i messaggi del negozio)
 // 04/10/2026 (v2): il service worker NON intercetta più pagine, script e chiamate. Prima ogni GET passava di qui e
 // finiva in una cache che cresceva a ogni rilascio (mai svuotata): sugli iMac vecchi rallentava la dashboard e, con
 // la rete incerta, poteva servire un bundle vecchio. Ora: solo icone/manifest in cache, pagina offline di ripiego,
 // e all'attivazione si cancellano le cache vecchie (tarature-v1).
 
-const CACHE_NAME = 'tarature-v3'; // v3 (10/11/2026): icone nuove Genius Lab
+const CACHE_NAME = 'tarature-v4'; // v4 (15/11/2026): manifest con le scorciatoie Apple
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icon-192.png',
@@ -45,16 +46,18 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data.json();
   } catch {
-    data = { title: 'AvaTech Tarature', body: event.data.text() };
+    data = { title: 'Genius Lab', body: event.data.text() };
   }
-  const title = data.title || 'AvaTech Tarature';
+  const title = data.title || 'Genius Lab';
+  // destinazione: l'url mandato dal server; altrimenti la chat della divisione del messaggio
+  const destinazione = data.url || (data.attivita === 'apple' || data.linea === 'genius' ? '/chat-apple' : '/chat');
   const options = {
     body: data.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     image: data.image,
-    data: data.url || '/chat',
-    tag: data.tag || 'tarature-msg',
+    data: destinazione,
+    tag: data.tag || 'genius-lab-msg',
     renotify: true,
     vibrate: [200, 100, 200, 100, 200],
     requireInteraction: false,
@@ -75,6 +78,9 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clients) {
         if (client.url.includes(url) && 'focus' in client) return client.focus();
       }
+      // una finestra del gestionale è già aperta su un'altra pagina: la si porta sulla destinazione
+      const aperta = clients.find((c) => 'navigate' in c && 'focus' in c);
+      if (aperta) return aperta.focus().then(() => aperta.navigate(url));
       return self.clients.openWindow(url);
     })
   );

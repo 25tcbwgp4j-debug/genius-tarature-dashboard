@@ -204,7 +204,7 @@ export default function PrezziUfficiali() {
             {m.top_case_con_batteria && <span className="text-xs text-amber-600">top case con batteria</span>}
             {m.touch_bar && <span className="text-xs text-gray-500">Touch Bar</span>}
           </div>
-          <table className="w-full text-sm mt-2">
+          <table className="tabella-schede w-full text-sm mt-2">
             <thead className="text-left text-xs text-gray-500">
               <tr>
                 <th className="p-2">Pezzo</th><th className="p-2 text-right">GSX col reso</th><th className="p-2 text-right">Lo paghi</th>

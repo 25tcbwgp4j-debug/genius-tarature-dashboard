@@ -91,6 +91,8 @@ export function Banco() {
   const faseLink = sp.get("fase");
   const [fase, setFase] = useState<{ fase: string; tecnico: string } | null>(faseLink ? { fase: faseLink, tecnico: sp.get("tecnico") || "" } : null);
   const [salto, setSalto] = useState("");
+  // 15/11/2026 (piano 2.1): con una scheda aperta i riquadri generali sono una riga di contatori (si riaprono con «mostra»)
+  const [mostraGenerali, setMostraGenerali] = useState(false);
   const [nuova, setNuova] = useState(false);
   const [perCliente, setPerCliente] = useState(false);
   const [novita, setNovita] = useState<Novita[]>([]);
@@ -230,17 +232,20 @@ export function Banco() {
       </div>
 
       {/* 15/11/2026 (piano 2.1): con una SCHEDA APERTA su iPhone/iPad la pagina inizia dalla scheda: i riquadri generali
-          (notifiche, avvisi, da gestire, richieste, cruscotto) diventano una riga di contatori che riporta all'elenco */}
-      {aperta && (
-        <button type="button" onClick={chiudi} className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 rounded-xl border bg-card px-3 py-2 text-left text-xs text-muted-foreground shadow-sm lg:hidden">
+          (notifiche, avvisi, da gestire, richieste, cruscotto) diventano una riga di contatori; anche sul computer, così la
+          scheda parte in cima alla pagina e non a metà */}
+      {aperta && !mostraGenerali && (
+        <button type="button" onClick={() => setMostraGenerali(true)} aria-expanded={false} className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 rounded-xl border bg-card px-3 py-2 text-left text-xs text-muted-foreground shadow-sm max-sm:min-h-10 hover:bg-muted/50">
           {notifiche.length > 0 && <span className="font-semibold text-red-700 dark:text-red-300">🔔 {notifiche.length} da gestire</span>}
           {avvisi.length > 0 && <span>⚠️ {avvisi.length} avvisi</span>}
+          {novita.length > 0 && <span>🆕 {novita.length} risposte dei clienti</span>}
           {nRichieste > 0 && <span>💬 {nRichieste} richieste</span>}
-          {(cruscotto || []).filter((f) => f.n > 0).slice(0, 4).map((f) => <span key={f.codice}>{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
-          <span className="ml-auto underline">elenco</span>
+          {(cruscotto || []).filter((f) => f.n > 0).slice(0, 4).map((f) => <span key={f.codice} className="max-sm:hidden">{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
+          <span className="ml-auto underline">mostra</span>
         </button>
       )}
-      <div className={`space-y-2 ${aperta ? "max-lg:hidden" : ""}`}>
+      <div className={`space-y-2 ${aperta && !mostraGenerali ? "hidden" : ""}`}>
+      {aperta && <div className="text-right"><button type="button" className="min-h-8 text-xs text-muted-foreground underline" onClick={() => setMostraGenerali(false)}>riduci a una riga</button></div>}
       {fase?.tecnico && <MessaggiTecnico tecnico={fase.tecnico} schede={elenco} operatore={operatore} onApri={apri} onLetto={carica} />}
       {/* 30/10/2026: notifiche da gestire — restano finché non sono chiuse con l'esito */}
       <NotificheBanco notifiche={notifiche} operatore={operatore} onScheda={apri}

@@ -128,6 +128,13 @@ function Bloccato({ da, il, extra, onSblocca, busy }: { da?: string | null; il?:
   );
 }
 
+/** 15/11/2026 (piano 2.13): «CHIUSA da imac-sx@negozio…» → «CHIUSA da IMAC SX» (nome dell'account, non l'indirizzo) */
+function nomeAccount(chi: string): string {
+  const prima = chi.split("·")[0].trim();
+  if (!prima.includes("@")) return prima;
+  return prima.split("@")[0].replace(/[-_.]+/g, " ").toUpperCase();
+}
+
 export default function CassaGiornataPage() {
   const { admin } = usePermessi();
   // giorno mostrato: quello dell'indirizzo o, finché il server non risponde, l'«oggi» dell'orologio del Mac;
@@ -608,7 +615,7 @@ export default function CassaGiornataPage() {
         {f && nonLav && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-800 dark:bg-slate-700 dark:text-slate-100">NON LAVORATO</span>}
         {f && !f.giornata.futura && !nonLav && (
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${chiusa ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"}`}>
-            {chiusa ? `CHIUSA${f.giornata.chiusa_da ? ` da ${f.giornata.chiusa_da}` : ""}` : "APERTA"}
+            {chiusa ? `CHIUSA${f.giornata.chiusa_da ? ` da ${nomeAccount(f.giornata.chiusa_da)}` : ""}` : "APERTA"}
           </span>
         )}
         <div className="ml-auto flex flex-wrap gap-2">
@@ -795,7 +802,7 @@ export default function CassaGiornataPage() {
                   <td data-label="Intestato a" className={`${r.intestato ? "" : "solo-desktop "}whitespace-normal break-words px-2 py-1 text-muted-foreground`}>{r.intestato || ""}</td>
                   <td className="azioni whitespace-nowrap px-2 py-1 text-right" onClick={(e) => e.stopPropagation()}>
                     {stornabile && (
-                      <button className="mr-2 text-muted-foreground hover:text-red-600" title="Storno / reso o annullo (va nella cassa di oggi)" disabled={!!busy}
+                      <button className="mr-2 inline-flex min-h-10 min-w-10 items-center justify-center text-muted-foreground hover:text-red-600 sm:min-h-0 sm:min-w-0" title="Storno / reso o annullo (va nella cassa di oggi)" disabled={!!busy}
                         onClick={() => apriStorno(r)}>{busy === "storno" ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}</button>)}
                     {stornabile && r.fonte === "scontrino" && !chiusa && (
                       <button className="mr-2 text-muted-foreground hover:text-sky-700" title="Il cliente vuole la fattura: annulla lo scontrino e fai la fattura (già pagata)" disabled={!!busy}

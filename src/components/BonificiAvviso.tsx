@@ -106,9 +106,9 @@ function Avviso() {
             aria-label={n > 0 ? `${n} ${n === 1 ? "bonifico nuovo" : "bonifici nuovi"} da gestire` : problema ? "Controllo bonifici non riuscito" : `${dich} ${dich === 1 ? "bonifico dichiarato" : "bonifici dichiarati"} da riscontrare`}>
             {n > 0 && <span className="absolute -left-1 -top-1 size-3 animate-ping rounded-full bg-red-400" />}
             <Banknote className="size-4" />
-            {n > 0 ? <>{n}<span className="hidden sm:inline"> {n === 1 ? "bonifico nuovo" : "bonifici nuovi"} da gestire</span></>
-              : problema ? <>!<span className="hidden sm:inline"> Controllo bonifici non riuscito</span></>
-              : <>{dich}<span className="hidden sm:inline"> {dich === 1 ? "bonifico dichiarato" : "bonifici dichiarati"} da riscontrare</span></>}
+            {n > 0 ? <>{n}<span className="testo-pila"> {n === 1 ? "bonifico nuovo" : "bonifici nuovi"} da gestire</span></>
+              : problema ? <>!<span className="testo-pila"> Controllo bonifici non riuscito</span></>
+              : <>{dich}<span className="testo-pila"> {dich === 1 ? "bonifico dichiarato" : "bonifici dichiarati"} da riscontrare</span></>}
           </button>
         </NellaPila>
       )}

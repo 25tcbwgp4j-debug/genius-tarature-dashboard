@@ -4,6 +4,7 @@
 // L'amministratore le approva — il server esegue da solo la stessa chiamata — o le rifiuta. Sotto lo storico.
 // L'operatore vede in sola lettura le proprie richieste e il loro esito.
 
+import { testoItaliano } from "@/lib/formato";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Check, Loader2, RefreshCw, ShieldCheck, X } from "lucide-react";
@@ -80,7 +81,7 @@ export default function AutorizzazioniPage() {
             <span className="font-medium">{TIPI_AUTORIZZAZIONE[a.tipo] || a.tipo}</span>
             <Stato s={a.stato} />
           </div>
-          {a.descrizione && <div>{a.descrizione}</div>}
+          {a.descrizione && <div>{testoItaliano(a.descrizione)}</div>}
           <div className="text-xs text-muted-foreground">
             chiesta da <b>{a.richiesta_da || "—"}</b> il {quando(a.created_at)}
             {a.decisa_da && <> · {a.stato === "rifiutata" ? "rifiutata" : "autorizzata"} da <b>{a.decisa_da}</b>{a.decisa_il ? ` il ${quando(a.decisa_il)}` : ""}</>}

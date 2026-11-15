@@ -215,3 +215,26 @@
   table.tabella-schede > tbody > tr > td.solo-desktop,
   table.tabella-schede > thead .solo-desktop { display: none; }
 }
+
+/* 15/11/2026 (piano 2.11): PILA DEGLI AVVISI compatta anche sul computer — icona + numero; il testo completo compare
+   al passaggio del mouse (o col focus da tastiera) e resta sempre nel title/aria-label. Prima, larga ~450px, copriva
+   pulsanti della scheda («Etichetta», «A4», «Foglio riconsegna»). */
+.testo-pila { display: none; }
+@media (hover: hover) {
+  #pila-avvisi button:hover .testo-pila, #pila-avvisi a:hover .testo-pila,
+  #pila-avvisi button:focus-visible .testo-pila, #pila-avvisi a:focus-visible .testo-pila { display: inline; }
+}
+
+/* 15/11/2026 (piano 2.9): tabelle a schede su iPhone (vedi components/TabelleSchede.tsx) */
+@media (max-width: 639.98px) {
+  table.tabella-schede { min-width: 0 !important; }
+  table.tabella-schede thead { display: none; }
+  table.tabella-schede, table.tabella-schede tbody { display: block; width: 100%; }
+  table.tabella-schede tbody tr { display: block; margin: 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--card); }
+  table.tabella-schede tbody td { display: flex; gap: 0.75rem; justify-content: space-between; align-items: baseline; padding: 0.15rem 0 !important; text-align: right; border: 0; min-width: 0; overflow-wrap: anywhere; }
+  table.tabella-schede tbody td::before { content: attr(data-label); flex: none; max-width: 45%; text-align: left; font-size: 0.75rem; color: var(--muted-foreground); }
+  table.tabella-schede tbody td:not([data-label])::before, table.tabella-schede tbody td[data-label=""]::before { content: none; }
+  table.tabella-schede tbody td:not([data-label]), table.tabella-schede tbody td[data-label=""] { justify-content: flex-start; text-align: left; }
+  table.tabella-schede tbody td:empty { display: none; }
+  table.tabella-schede tbody td:first-child { font-weight: 600; }
+}

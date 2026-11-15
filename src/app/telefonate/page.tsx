@@ -2,7 +2,7 @@
 
 // TELEFONATE (04/11/2026, Christian): agenda con tutti i giorni e le telefonate del centralino, entranti e uscenti,
 // per ritrovare i numeri di chi ha chiamato. I dati vengono dal tabulato del Panasonic (agente sul PC HP del negozio).
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { AlertTriangle, ChevronLeft, ChevronRight, Flag, Loader2, NotebookPen, PhoneIncoming, PhoneMissed, PhoneOutgoing, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -147,7 +147,7 @@ function Elenco({ righe, conData, onCambiata }: { righe: Telefonata[]; conData?:
   );
 }
 
-export default function TelefonatePage() {
+function TelefonatePageContenuto() {
   const [giorno, setGiorno] = useState(oggi);
   const [mese, setMese] = useState(() => oggi().slice(0, 7));
   const [giorni, setGiorni] = useState<Giorno[]>([]);
@@ -236,4 +236,13 @@ export default function TelefonatePage() {
       </div>
     </div>
   );
+}
+
+
+// 15/11/2026 (piano 2.13): errore React #418 a ogni apertura — la pagina è prerenderizzata al build con la data di quel
+// giorno («oggi», titoli del giorno e del mese) e nel browser la data è un'altra. Ora il contenuto si disegna solo nel browser.
+const nessuno = () => () => undefined;
+export default function TelefonatePage() {
+  const nelBrowser = useSyncExternalStore(nessuno, () => true, () => false);
+  return nelBrowser ? <TelefonatePageContenuto /> : <div className="p-6 text-sm text-muted-foreground">Carico le telefonate…</div>;
 }

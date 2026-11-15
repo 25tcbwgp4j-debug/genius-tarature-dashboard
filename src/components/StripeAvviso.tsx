@@ -52,8 +52,8 @@ export function StripeAvviso() {
             aria-label={rossi ? `${rossi} ${rossi === 1 ? "pagamento Stripe NON abbinato" : "pagamenti Stripe NON abbinati"}` : `${n} ${n === 1 ? "pagamento Stripe ricevuto" : "pagamenti Stripe ricevuti"}`}>
             <span className={`absolute -left-1 -top-1 size-3 animate-ping rounded-full ${rossi ? "bg-red-400" : "bg-indigo-400"}`} />
             <CreditCard className="size-4" />
-            {rossi ? <>{rossi}<span className="hidden sm:inline"> {rossi === 1 ? "pagamento Stripe NON abbinato" : "pagamenti Stripe NON abbinati"}</span></>
-              : <>{n}<span className="hidden sm:inline"> {n === 1 ? "pagamento Stripe ricevuto" : "pagamenti Stripe ricevuti"}</span></>}
+            {rossi ? <>{rossi}<span className="testo-pila"> {rossi === 1 ? "pagamento Stripe NON abbinato" : "pagamenti Stripe NON abbinati"}</span></>
+              : <>{n}<span className="testo-pila"> {n === 1 ? "pagamento Stripe ricevuto" : "pagamenti Stripe ricevuti"}</span></>}
           </button>
         </NellaPila>
       )}

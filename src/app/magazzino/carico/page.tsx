@@ -227,8 +227,8 @@ export default function CaricoMagazzinoPage() {
       {stampa && <StampaEtichette voci={caricati} titolo="Etichette dei pezzi caricati" onClose={() => setStampa(false)}
         onStampato={(anteprima) => { if (!anteprima) setCaricati([]); }} />}
 
-      <Card className="overflow-x-auto p-0">
-        <table className="w-full min-w-[820px] text-sm">
+      <Card className="overflow-x-auto p-0 max-sm:overflow-visible max-sm:border-0 max-sm:bg-transparent max-sm:shadow-none">
+        <table className="tabella-schede w-full min-w-[820px] text-sm">
           <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
             <tr><th className="px-2 py-2 text-left">Codice</th><th className="text-left">Articolo</th><th className="text-right">In magazzino</th>
               <th className="text-right">{modo === "carico" ? "Carico" : "Contati"}</th><th className="text-right">{modo === "carico" ? "Dopo" : "Differenza"}</th>

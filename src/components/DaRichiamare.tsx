@@ -65,8 +65,8 @@ export function DaRichiamare() {
           <button type="button" onClick={() => setAperto(true)} title={`${n} ${n === 1 ? "telefonata" : "telefonate"} da richiamare`}
             aria-label={`${n} ${n === 1 ? "telefonata" : "telefonate"} da richiamare`}
             className={`${CLASSI_PULSANTE_PILA} bg-amber-600 hover:bg-amber-700`}>
-            <span className="absolute -left-1 -top-1 size-3 animate-ping rounded-full bg-amber-400" />
-            <PhoneCall className="size-4" /> {n}<span className="hidden sm:inline"> da richiamare</span>
+            <span className="absolute -left-1 -top-1 size-3 animate-ping rounded-full bg-amber-400 motion-reduce:animate-none" />
+            <PhoneCall className="size-4" /> {n}<span className="testo-pila"> da richiamare</span>
           </button>
         </NellaPila>
       )}

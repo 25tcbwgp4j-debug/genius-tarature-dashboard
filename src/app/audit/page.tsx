@@ -57,13 +57,13 @@ export default async function AuditPage({
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
           <ShieldCheck className="w-6 h-6 text-purple-600" />
-          Audit log
+          Registro modifiche
         </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Forensics + compliance: tutti i cambiamenti su sessioni, clienti, strumenti,
-          scadenze, proforma negli ultimi {days} giorni. Solo admin.
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Tutti i cambiamenti su sessioni, clienti, strumenti, scadenze e pro forma
+          degli ultimi {days} giorni: chi, quando, cosa. Solo il titolare.
         </p>
       </div>
 
@@ -122,7 +122,7 @@ export default async function AuditPage({
       {/* Events table */}
       <div className="rounded-xl bg-white border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="tabella-schede w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr className="text-left text-xs uppercase text-gray-500">
                 <th className="px-3 py-2">Data/ora</th>

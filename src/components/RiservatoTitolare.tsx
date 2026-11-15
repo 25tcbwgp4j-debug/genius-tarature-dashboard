@@ -19,7 +19,7 @@ export function RiservatoTitolare() {
         Questa sezione è visibile solo all&apos;amministratore. Se ti serve qualcosa da qui, chiedi a Christian.
       </p>
       <Link href="/" className="mt-5 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
-        Torna al registro
+        Torna alla pagina iniziale
       </Link>
     </div>
   );

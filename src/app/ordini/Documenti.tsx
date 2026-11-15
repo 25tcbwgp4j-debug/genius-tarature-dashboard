@@ -816,7 +816,7 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
     <div className="space-y-4 p-1 md:p-2">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-2 text-2xl font-semibold">{soloTipo === "proforma" ? "Pro forma" : "Ordini e preventivi"}</h1>
-        <Button className="ml-auto" onClick={() => setEditor(bozzaVuota(tipo, societa))}><Plus className="mr-1 size-4" />Nuovo {NOME[tipo]}</Button>
+        <Button className="ml-auto" onClick={() => setEditor(bozzaVuota(tipo, societa))}><Plus className="mr-1 size-4" />{tipo === "proforma" ? "Nuova" : "Nuovo"} {NOME[tipo]}</Button>
       </div>
       {/* Selettore della società (29/10/2026), come in Fatturazione: compare solo a chi può vedere più società */}
       {permesse.length > 1 && (
@@ -855,8 +855,8 @@ export function PaginaDocumenti({ soloTipo }: { soloTipo?: TipoDocumento } = {})
           ))}
         </div>
       )}
-      <Card className="overflow-x-auto p-0">
-        <table className="w-full min-w-[720px] text-sm">
+      <Card className="overflow-x-auto p-0 max-sm:overflow-visible max-sm:border-0 max-sm:bg-transparent max-sm:shadow-none">
+        <table className="tabella-schede w-full min-w-[720px] text-sm">
           <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
             <tr><th className="px-3 py-2 text-left">Numero</th><th className="text-left">Data</th><th className="text-left">Cliente</th><th className="text-left">Rif.</th>{tipo === "ordine" && <th className="text-left">Fornitore</th>}
               <th className="text-right">Totale</th>{tipo === "ordine" && <><th className="text-right">Pagato</th><th className="px-3 text-right">Resta</th></>}<th className="px-3 text-left">Stato</th><th className="px-3 text-left" title="Operatore">Op.</th></tr>

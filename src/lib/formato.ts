@@ -80,3 +80,15 @@ export function telefonoLeggibile(n: string): string {
   }
   return `+${d}`;
 }
+
+/** 15/11/2026 (piano 2.13): testi scritti dal server con date ISO e importi col punto («incassata con bonifico il
+ *  2026-10-27», «del 2026-11-04 — 299.00 €») → «27/10/2026», «299,00 €». Tocca solo date e importi riconoscibili. */
+export function testoItaliano(t: string | null | undefined): string {
+  if (!t) return "";
+  const migliaia = (i: string) => String(Number(i)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return t
+    .replace(/\b(\d{4})-(\d{2})-(\d{2})(?!\d)(?:[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?/g,
+      (_m, a: string, me: string, g: string, h?: string, mi?: string) => `${g}/${me}/${a}${h ? ` ${h}:${mi}` : ""}`)
+    .replace(/(€\s?)(\d+)\.(\d{2})\b/g, (_m, e: string, i: string, c: string) => `${e}${migliaia(i)},${c}`)
+    .replace(/\b(\d+)\.(\d{2})(\s?€)/g, (_m, i: string, c: string, e: string) => `${migliaia(i)},${c}${e}`);
+}

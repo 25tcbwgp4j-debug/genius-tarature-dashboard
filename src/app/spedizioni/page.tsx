@@ -272,7 +272,7 @@ function NuovaSpedizione({ stato, onFatta }: { stato: SpedStato; onFatta: () => 
                   <Input className="h-8" value={note} onChange={(e) => setNote(e.target.value)} /></label>
               </div>
             )}
-            {ante?.mancanti?.length ? <p className="text-sm text-red-700 mt-1">Mancano: {ante.mancanti.join(", ")}</p> : null}
+            {ante?.mancanti?.length ? <p className="text-sm text-red-700 mt-1 dark:text-red-300">Mancano: {ante.mancanti.join(", ")}</p> : null}
           </div>
 
           {ante && (ante.oggetto || ante.nota) && (
@@ -289,8 +289,8 @@ function NuovaSpedizione({ stato, onFatta }: { stato: SpedStato; onFatta: () => 
             {modo === "sessione" && <label className="flex items-center gap-1"><input type="checkbox" checked={wa} onChange={(e) => setWa(e.target.checked)} /> WhatsApp dalla linea staff</label>}
             {!prova && direzione !== "ritiro" && <label className="flex items-center gap-1"><input type="checkbox" checked={banco} onChange={(e) => setBanco(e.target.checked)} /> Stampa al banco (agente di stampa)</label>}
           </div>
-          {corriere === "DHL" && !stato.dhl_configurato && <p className="text-sm text-red-700">DHL non configurato sul server.</p>}
-          {corriere === "DHL" && stato.dhl_configurato && !prova && !stato.dhl_produzione && <p className="text-sm text-amber-800">DHL produzione non ancora attiva sul server: per ora solo in prova (sandpit).</p>}
+          {corriere === "DHL" && !stato.dhl_configurato && <p className="text-sm text-red-700 dark:text-red-300">DHL non configurato sul server.</p>}
+          {corriere === "DHL" && stato.dhl_configurato && !prova && !stato.dhl_produzione && <p className="text-sm text-amber-800 dark:text-amber-300">DHL produzione non ancora attiva sul server: per ora solo in prova (sandpit).</p>}
           {serveOperatore && <SceltaOperatore value={operatore} onChange={setOperatore} compatto className="max-w-md" />}
           <div className="flex justify-end">
             <Button disabled={busy || !ante || !!ante.mancanti?.length || dhlBloccato || (serveOperatore && !operatore)} onClick={crea}>
@@ -415,23 +415,23 @@ function Elenco({ versione, vedeSchede }: { versione: number; vedeSchede: boolea
                 <b>{r.carrier}</b>
                 <span className={`rounded px-1.5 py-0.5 text-xs ${r.direction === "ritiro" ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"}`}>{ETICHETTA_TIPO[r.tipo || ""] || (r.direction === "ritiro" ? "Ritiro" : "Spedizione")}</span>
                 {r.test_mode && <span className="rounded px-1.5 py-0.5 text-xs bg-gray-200 text-gray-700">PROVA</span>}
-                {annullata && <span className="rounded px-1.5 py-0.5 text-xs bg-red-100 text-red-700">ANNULLATA</span>}
+                {annullata && <span className="rounded px-1.5 py-0.5 text-xs bg-red-100 text-red-700 dark:text-red-300">ANNULLATA</span>}
                 {r.pratica.tipo === "sessione" ? <Link className="underline" href={`/sessioni/${r.pratica.id}`}>{r.pratica.titolo}</Link>
                   : r.pratica.tipo === "scheda" ? <Link className="underline" href={`/assistenza?id=${r.pratica.id}`}>{r.pratica.titolo}</Link>
                   : <span className="text-muted-foreground">{r.riferimento || "Libera"}</span>}
                 <span>{r.controparte}{r.address?.city ? ` (${r.address.city})` : ""}</span>
-                {r.tracking_url ? <a href={r.tracking_url} target="_blank" rel="noreferrer" className="font-mono text-blue-700 inline-flex items-center gap-1">{r.tracking}<ExternalLink className="w-3 h-3" /></a> : <span className="font-mono">{r.tracking}</span>}
+                {r.tracking_url ? <a href={r.tracking_url} target="_blank" rel="noreferrer" className="font-mono text-blue-700 inline-flex min-h-10 items-center gap-1 dark:text-blue-300 sm:min-h-0">{r.tracking}<ExternalLink className="w-3 h-3" /></a> : <span className="font-mono">{r.tracking}</span>}
                 {!annullata && !r.test_mode && <BadgeFase r={r} />}
-                {r.avviso_pacco && <span className="text-red-700">{r.avviso_pacco}</span>}
+                {r.avviso_pacco && <span className="text-red-700 dark:text-red-300">{r.avviso_pacco}</span>}
                 {r.pickup_prn && <span>ritiro {r.pickup_prn}{r.pickup_date ? ` il ${dataIt(r.pickup_date)}` : ""}{r.pickup_location === "lab" ? " da noi" : ""}</span>}
-                {r.pickup_error && <span className="text-red-700">ritiro NON prenotato: {r.pickup_error}</span>}
+                {r.pickup_error && <span className="text-red-700 dark:text-red-300">ritiro NON prenotato: {r.pickup_error}</span>}
                 {r.packages > 1 && <span>{r.packages} colli</span>}
                 <span className={r.email_error ? "text-red-700" : "text-muted-foreground"}>mail: {r.email_sent_at ? `inviata${r.email_to ? ` a ${r.email_to}` : ""}` : r.email_error ? "errore" : "—"}</span>
                 <span className="ml-auto flex gap-1">
-                  <a href={getShipmentLabelUrl(r.id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 px-1"><FileText className="w-3 h-3" />PDF</a>
+                  <a href={getShipmentLabelUrl(r.id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 px-1 dark:text-blue-300"><FileText className="w-3 h-3" />PDF</a>
                   {r.direction !== "ritiro" && <Button size="sm" variant="outline" className="h-7" onClick={() => stampaBrowser(r.id)}><Printer className="w-3 h-3 mr-1" />Stampa</Button>}
                   {!annullata && !r.test_mode && r.direction !== "ritiro" && <Button size="sm" variant="outline" className="h-7" disabled={busy === r.id} onClick={() => banco(r)}>Al banco</Button>}
-                  {!annullata && <Button size="sm" variant="ghost" className="h-7 text-red-700" disabled={busy === r.id} onClick={() => annulla(r)}><X className="w-3 h-3 mr-1" />Annulla</Button>}
+                  {!annullata && <Button size="sm" variant="ghost" className="h-7 text-red-700 dark:text-red-300" disabled={busy === r.id} onClick={() => annulla(r)}><X className="w-3 h-3 mr-1" />Annulla</Button>}
                 </span>
               </div>
             );

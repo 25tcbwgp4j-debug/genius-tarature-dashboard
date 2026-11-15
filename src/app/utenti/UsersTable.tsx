@@ -131,7 +131,7 @@ export default function UsersTable({
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">
-          {initialUsers.length} utente{initialUsers.length === 1 ? "" : "i"} configurati
+          {initialUsers.length} {initialUsers.length === 1 ? "utente configurato" : "utenti configurati"}
         </p>
         <button
           onClick={() => setShowCreate(!showCreate)}

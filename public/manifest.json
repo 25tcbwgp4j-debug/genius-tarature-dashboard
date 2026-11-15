@@ -5,13 +5,20 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait",
   "theme_color": "#10b981",
   "background_color": "#ffffff",
   "lang": "it",
   "dir": "ltr",
-  "categories": ["business", "productivity", "utilities"],
+  "categories": [
+    "business",
+    "productivity",
+    "utilities"
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -34,25 +41,52 @@
   ],
   "shortcuts": [
     {
-      "name": "Chat WhatsApp",
+      "name": "Schede assistenza",
+      "short_name": "Schede",
+      "description": "Banco delle schede di assistenza Apple",
+      "url": "/assistenza",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Nuova scheda",
+      "short_name": "Nuova scheda",
+      "description": "Accettazione di un nuovo dispositivo",
+      "url": "/assistenza?nuova=1",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Scontrino",
+      "short_name": "Scontrino",
+      "description": "Registratore di cassa",
+      "url": "/cassa",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Chat WhatsApp tarature",
       "short_name": "Chat",
-      "description": "Conversazioni clienti",
+      "description": "Conversazioni clienti tarature",
       "url": "/chat",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Sessioni",
-      "short_name": "Sessioni",
-      "description": "Sessioni di taratura",
-      "url": "/sessioni",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Clienti",
-      "short_name": "Clienti",
-      "description": "Anagrafica clienti",
-      "url": "/clienti",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ],
   "prefer_related_applications": false
