@@ -5,11 +5,13 @@
 //   (/api/chat-apple-staff/conversazioni: ultimo.da_noi = false). Solo gli ultimi 7 giorni, le più vecchie in cima.
 // · «Schede ferme»: in arrivo da più di 5 giorni, accettate da più di 7 giorni e non ancora finite, ricambi ordinati
 //   senza data di arrivo (/api/assistenza/schede?stato=…).
+//   15/11/2026 (sera): i giorni di fermo sono quelli REALI, dall'ultimo cambiamento della scheda (updated_at): una scheda
+//   accettata da 10 giorni ma toccata ieri non è ferma.
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Hourglass, MessageCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { assElenco, assStaffConversazioni, type SchedaBreve, type StaffConv } from "@/lib/assistenza";
+import { assElenco, assStaffConversazioni, dataOra, type SchedaBreve, type StaffConv } from "@/lib/assistenza";
 import { senzaIdWhatsApp, telefonoLeggibile } from "@/lib/formato";
 
 const ORA = 3600_000;
@@ -65,19 +67,26 @@ export function SchedeFerme() {
       if (!vivo) return;
       const ora = Date.now();
       const out: Ferma[] = [];
+      // ultimo movimento della scheda (senza updated_at: la data della fase)
+      const fermaDa = (s: SchedaBreve, fase: string) => s.updated_at || fase;
+      const ferma = (s: SchedaBreve, fase: string, giorni: number) => ora - new Date(fase).getTime() > giorni * GIORNO
+        && ora - new Date(fermaDa(s, fase)).getTime() > giorni * GIORNO;
+      const nota = (s: SchedaBreve) => s.updated_at ? ` · ferma ${daQuanto(s.updated_at)} (ultimo cambiamento ${dataOra(s.updated_at)})` : "";
       for (const s of arr.schede) {
         if (s.sola_lettura) continue;
-        const da = new Date(s.fasi?.in_arrivo?.il || s.created_at).getTime();
-        if (ora - da > 5 * GIORNO) out.push({ s, perche: `in arrivo ${daQuanto(s.fasi?.in_arrivo?.il || s.created_at)}` });
+        const da = s.fasi?.in_arrivo?.il || s.created_at;
+        if (ferma(s, da, 5)) out.push({ s, perche: `in arrivo ${daQuanto(da)}${nota(s)}` });
       }
       for (const s of acc.schede) {
         if (s.sola_lettura) continue;
         const senzaData = (s.ricambi_attesi || []).filter((r) => r.stato === "ordinato" && !r.arrivo_previsto);
         if (senzaData.length) { out.push({ s, perche: `ricambio ordinato senza data di arrivo: ${senzaData.map((r) => r.cosa || "ricambio").join(", ")}` }); continue; }
         const da = s.fasi?.riparazione?.il;
-        if (da && ora - new Date(da).getTime() > 7 * GIORNO && !["finita", "non_riparabile"].includes(s.riparazione_stato || ""))
-          out.push({ s, perche: `accettata ${daQuanto(da)}, riparazione non finita` });
+        if (da && ferma(s, da, 7) && !["finita", "non_riparabile"].includes(s.riparazione_stato || ""))
+          out.push({ s, perche: `accettata ${daQuanto(da)}, riparazione non finita${nota(s)}` });
       }
+      // le più ferme in cima
+      out.sort((a, b) => String(a.s.updated_at || a.s.created_at).localeCompare(String(b.s.updated_at || b.s.created_at)));
       setLista(out);
     }).catch(() => { if (vivo) setLista([]); });
     return () => { vivo = false; };

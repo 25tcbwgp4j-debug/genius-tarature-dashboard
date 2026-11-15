@@ -89,7 +89,7 @@ export function Scelta<T extends string>({ valore, opzioni, onChange, disabled, 
     <div className="inline-flex flex-wrap gap-1 rounded-lg border bg-muted/40 p-0.5">
       {opzioni.map(([k, l]) => (
         <button key={k} type="button" disabled={disabled} onClick={() => onChange(k)} aria-pressed={valore === k}
-          className={cn("rounded-md px-2.5 font-medium transition-colors disabled:opacity-60", piccolo ? "h-7 text-xs" : "h-8 text-sm",
+          className={cn("rounded-md px-2.5 font-medium transition-colors disabled:opacity-60 max-sm:min-h-10", piccolo ? "h-7 text-xs" : "h-8 text-sm",
             valore === k ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground")}>{l}</button>
       ))}
     </div>

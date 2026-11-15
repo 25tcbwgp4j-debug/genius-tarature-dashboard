@@ -35,12 +35,12 @@ function Pacco({ r }: { r: SpedRiga }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <BadgeFase r={r} />
         <BadgeAttivita a={r.attivita} />
-        {r.pratica.tipo === "sessione" ? <Link className="underline" href={`/sessioni/${r.pratica.id}`}>{r.pratica.titolo}</Link>
-          : r.pratica.tipo === "scheda" ? <Link className="underline" href={`/assistenza?id=${r.pratica.id}`}>{r.pratica.titolo}</Link>
+        {r.pratica.tipo === "sessione" ? <Link className="underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center" href={`/sessioni/${r.pratica.id}`}>{r.pratica.titolo}</Link>
+          : r.pratica.tipo === "scheda" ? <Link className="underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center" href={`/assistenza?id=${r.pratica.id}`}>{r.pratica.titolo}</Link>
           : <span className="text-muted-foreground">{r.riferimento || "Libera"}</span>}
         <span>{r.controparte}{r.address?.city ? ` (${r.address.city})` : ""}</span>
         <b>{r.carrier}</b>
-        {r.tracking_url && <a href={r.tracking_url} target="_blank" rel="noreferrer" className="font-mono text-xs text-blue-700 inline-flex items-center gap-1">{r.tracking}<ExternalLink className="w-3 h-3" /></a>}
+        {r.tracking_url && <a href={r.tracking_url} target="_blank" rel="noreferrer" className="font-mono text-xs text-blue-700 inline-flex items-center gap-1 max-sm:min-h-10 dark:text-blue-300">{r.tracking}<ExternalLink className="w-3 h-3" /></a>}
       </div>
       <div className="mt-0.5 text-xs text-muted-foreground">
         {r.tracking_ultimo_movimento && <span>{quando(r.tracking_ultimo_movimento)}{r.tracking_luogo ? ` · ${r.tracking_luogo}` : ""}{r.tracking_descrizione ? ` · ${r.tracking_descrizione}` : ""}</span>}

@@ -234,7 +234,7 @@ function NuovaSpedizione({ stato, onFatta }: { stato: SpedStato; onFatta: () => 
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {TIPI.map((t) => (
                 <button key={t.k} type="button" onClick={() => setTipo(t.k)}
-                  className={`rounded-md border p-2 text-left text-sm ${tipo === t.k ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30" : "hover:bg-muted"}`}>
+                  className={`rounded-md border p-2 text-left text-sm max-sm:min-h-10 ${tipo === t.k ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30" : "hover:bg-muted"}`}>
                   <div className="font-semibold">{t.l}</div><div className="text-xs text-muted-foreground">{t.d}</div>
                 </button>
               ))}
@@ -318,7 +318,7 @@ function CercaPratica({ tipo, onScelta }: { tipo: "sessione" | "scheda"; onScelt
         {ris === null ? <div className="p-2"><Loader2 className="w-4 h-4 animate-spin" /></div>
           : ris.length === 0 ? <div className="p-2 text-sm text-muted-foreground">Nessun risultato</div>
           : ris.map((p) => (
-            <button key={p.id} type="button" onClick={() => onScelta(p)} className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted">
+            <button key={p.id} type="button" onClick={() => onScelta(p)} className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted max-sm:min-h-10">
               <b>{p.titolo}</b> · {p.cliente} <span className="text-muted-foreground">{p.dettaglio} · {dataIt(p.data)}</span>
             </button>
           ))}
@@ -344,7 +344,7 @@ function CercaRubrica({ onScelta }: { onScelta: (r: SpedRubrica) => void }) {
         <div className="max-h-56 overflow-y-auto divide-y rounded border">
           {visibili.map((r, i) => (
             <button key={(r.customer_id || r.anagrafica_id || "") + i} type="button" onClick={() => { onScelta(r); setQ(""); setRis([]); }}
-              className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted">
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted max-sm:min-h-10">
               <b>{r.indirizzo.name}</b>{r.indirizzo.attention && r.indirizzo.attention !== r.indirizzo.name ? ` (${r.indirizzo.attention})` : ""}
               <span className="text-muted-foreground"> · {[r.indirizzo.street, r.indirizzo.zip, r.indirizzo.city].filter(Boolean).join(" ")} · {r.fonte === "clienti" ? "clienti" : "anagrafiche fatture"}</span>
             </button>
@@ -416,8 +416,8 @@ function Elenco({ versione, vedeSchede }: { versione: number; vedeSchede: boolea
                 <span className={`rounded px-1.5 py-0.5 text-xs ${r.direction === "ritiro" ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"}`}>{ETICHETTA_TIPO[r.tipo || ""] || (r.direction === "ritiro" ? "Ritiro" : "Spedizione")}</span>
                 {r.test_mode && <span className="rounded px-1.5 py-0.5 text-xs bg-gray-200 text-gray-700">PROVA</span>}
                 {annullata && <span className="rounded px-1.5 py-0.5 text-xs bg-red-100 text-red-700 dark:text-red-300">ANNULLATA</span>}
-                {r.pratica.tipo === "sessione" ? <Link className="underline" href={`/sessioni/${r.pratica.id}`}>{r.pratica.titolo}</Link>
-                  : r.pratica.tipo === "scheda" ? <Link className="underline" href={`/assistenza?id=${r.pratica.id}`}>{r.pratica.titolo}</Link>
+                {r.pratica.tipo === "sessione" ? <Link className="underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center" href={`/sessioni/${r.pratica.id}`}>{r.pratica.titolo}</Link>
+                  : r.pratica.tipo === "scheda" ? <Link className="underline max-sm:inline-flex max-sm:min-h-10 max-sm:items-center" href={`/assistenza?id=${r.pratica.id}`}>{r.pratica.titolo}</Link>
                   : <span className="text-muted-foreground">{r.riferimento || "Libera"}</span>}
                 <span>{r.controparte}{r.address?.city ? ` (${r.address.city})` : ""}</span>
                 {r.tracking_url ? <a href={r.tracking_url} target="_blank" rel="noreferrer" className="font-mono text-blue-700 inline-flex min-h-10 items-center gap-1 dark:text-blue-300 sm:min-h-0">{r.tracking}<ExternalLink className="w-3 h-3" /></a> : <span className="font-mono">{r.tracking}</span>}
@@ -428,7 +428,7 @@ function Elenco({ versione, vedeSchede }: { versione: number; vedeSchede: boolea
                 {r.packages > 1 && <span>{r.packages} colli</span>}
                 <span className={r.email_error ? "text-red-700" : "text-muted-foreground"}>mail: {r.email_sent_at ? `inviata${r.email_to ? ` a ${r.email_to}` : ""}` : r.email_error ? "errore" : "—"}</span>
                 <span className="ml-auto flex gap-1">
-                  <a href={getShipmentLabelUrl(r.id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 px-1 dark:text-blue-300"><FileText className="w-3 h-3" />PDF</a>
+                  <a href={getShipmentLabelUrl(r.id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 px-1 dark:text-blue-300 max-sm:min-h-10 max-sm:px-2"><FileText className="w-3 h-3" />PDF</a>
                   {r.direction !== "ritiro" && <Button size="sm" variant="outline" className="h-7" onClick={() => stampaBrowser(r.id)}><Printer className="w-3 h-3 mr-1" />Stampa</Button>}
                   {!annullata && !r.test_mode && r.direction !== "ritiro" && <Button size="sm" variant="outline" className="h-7" disabled={busy === r.id} onClick={() => banco(r)}>Al banco</Button>}
                   {!annullata && <Button size="sm" variant="ghost" className="h-7 text-red-700 dark:text-red-300" disabled={busy === r.id} onClick={() => annulla(r)}><X className="w-3 h-3 mr-1" />Annulla</Button>}

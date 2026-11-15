@@ -93,17 +93,17 @@ function RigaComponente({ m, c, onSalvato }: { m: Modello; c: Componente; onSalv
           <div className="flex gap-1">
             {!convalidato && (
               <button type="button" disabled={salvo} onClick={() => invia({ azione: "convalida" }, "Prezzo convalidato")}
-                className="px-2 py-1 rounded bg-green-600 text-white text-xs inline-flex items-center gap-1" title="Va bene il prezzo proposto">
+                className="px-2 py-1 rounded bg-green-600 text-white text-xs inline-flex items-center gap-1 max-sm:min-h-10 max-sm:px-3" title="Va bene il prezzo proposto">
                 <Check className="h-3 w-3" /> Convalida
               </button>
             )}
             <button type="button" disabled={salvo} onClick={salva}
-              className="px-2 py-1 rounded border text-xs inline-flex items-center gap-1" title="Salva prezzo, scontato da, margine e 1ª ipotesi">
+              className="px-2 py-1 rounded border text-xs inline-flex items-center gap-1 max-sm:min-h-10 max-sm:px-3" title="Salva prezzo, scontato da, margine e 1ª ipotesi">
               {salvo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Salva
             </button>
             {(convalidato || c.margine_min != null) && (
               <button type="button" disabled={salvo} onClick={() => invia({ azione: "ripristina" }, "Tornato alla proposta")}
-                className="px-2 py-1 rounded border text-xs" title="Torna al prezzo calcolato"><RotateCcw className="h-3 w-3" /></button>
+                className="px-2 py-1 rounded border text-xs max-sm:min-h-10 max-sm:min-w-10 inline-flex items-center justify-center" title="Torna al prezzo calcolato"><RotateCcw className="h-3 w-3" /></button>
             )}
           </div>
         </td>
@@ -175,7 +175,7 @@ export default function PrezziUfficiali() {
         <div className="inline-flex rounded-md border overflow-hidden text-sm">
           {(["macbook", "imac"] as const).map((f) => (
             <button key={f} type="button" onClick={() => setFam(f)}
-              className={`px-3 py-1.5 ${fam === f ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-900"}`}>
+              className={`px-3 py-1.5 max-sm:min-h-10 ${fam === f ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-900"}`}>
               {f === "imac" ? "iMac" : "MacBook"} ({modelli.filter((m) => (m.famiglia || "macbook") === f).length})
             </button>
           ))}
