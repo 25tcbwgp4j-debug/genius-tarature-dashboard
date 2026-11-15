@@ -22,7 +22,7 @@ const SOTTO_IN_RIGA_DEFAULT: Record<string, string[]> = {
 const CHIAVE_TUTTE = "gl_cruscotto_tutte";
 // nomi brevi sui chip (il nome intero resta nel suggerimento e nella riga «Filtro:»), così «Lavoro» sta in una riga sul Mac
 const BREVI: Record<string, string> = {
-  in_arrivo: "In arrivo", ricambi_arrivati: "Ricambio arrivato", trova_attivo: "🔒 Trova il mio", rifiutati_da_rimontare: "Rifiutati da richiudere",
+  in_arrivo: "In arrivo", ricambi_arrivati: "Ricambio arrivato", trova_attivo: "🔒 Trova il mio", rifiutati_da_rimontare: "Rifiutati da richiudere", attesa_ricambi: "Attesa ricambi",
   rifiutati: "Rifiutati: invia pronto", presso_cliente: "Fuori negozio", attesa_cliente: "Attesa risposta cliente",
   riparazione_finita: "Finite: avvisa", aggiornamenti: "Aggiornamenti", bagnetti: "Bagnetti", conto_vendita: "Conto vendita",
   invii_programmati: "Invii programmati",
@@ -84,7 +84,7 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
         !f.n && !attiva && "opacity-60")}>
         <button type="button" data-fase={f.codice} aria-pressed={sel} onClick={() => scegli(f.codice)}
           title={sel ? `${f.etichetta} · clic di nuovo per togliere il filtro` : `Mostra solo: ${f.etichetta}`}
-          className={cn("inline-flex items-center gap-1 px-2 py-0.5 font-medium max-sm:min-h-9",
+          className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 font-medium max-sm:min-h-9",
             sel ? "bg-primary text-primary-foreground"
               : gruppo === "da_gestire" && f.n ? "bg-red-600 text-white hover:bg-red-700"
                 : urgente ? "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30" : f.n ? "bg-card hover:bg-muted" : "bg-card text-muted-foreground")}>
@@ -144,7 +144,7 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
       {visibili.map(({ g, voci }, i) => (
         <div key={g.codice} data-gruppo={g.codice}
           className={cn("flex items-start gap-2", g.codice === "da_gestire" && "rounded-lg bg-red-50 px-1 py-0.5 dark:bg-red-950/30")}>
-          <span className={cn("w-[4.5rem] shrink-0 pt-1 text-[10px] font-bold uppercase leading-tight tracking-wide sm:w-20",
+          <span className={cn("w-[4.5rem] shrink-0 pt-1 text-[10px] font-bold uppercase leading-tight tracking-wide sm:w-16",
             g.codice === "da_gestire" ? "text-red-700 dark:text-red-300" : "text-muted-foreground")}>{g.titolo}</span>
           {/* su iPhone la riga scorre in orizzontale dentro il riquadro (la pagina no) */}
           <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible">
