@@ -62,7 +62,8 @@ export function DaGestire({ fasi, onApri, novita = [], onScheda }: {
           <b>Scheda {x.sigla}</b><span>{x.cliente}</span><span className="text-xs text-muted-foreground">{x.prodotto}</span>
           <span className="text-xs text-muted-foreground">{x.canale ? `${x.canale} · ` : ""}{new Date(x.il).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
           <span className="text-xs font-medium">{x.tipo === "accettato" ? "→ assegna la riparazione" : dopoRifiuto(x)}</span>
-          {x.richiesta && <span className="w-full text-xs"><b>Il cliente chiede:</b> {x.richiesta}</span>}
+          {/* 15/11/2026 (piano 2.6): niente etichetta doppia «Il cliente chiede: RICHIESTA DEL CLIENTE (per mail): …» */}
+          {x.richiesta && <span className="w-full text-xs"><b>Il cliente chiede:</b> {x.richiesta.replace(/^\s*RICHIESTA DEL CLIENTE(\s*\([^)]*\))?\s*:\s*/i, "")}</span>}
         </button>
       ))}
       {voci.length > 0 && <div className="flex flex-wrap items-center gap-1.5">
@@ -71,7 +72,7 @@ export function DaGestire({ fasi, onApri, novita = [], onScheda }: {
         const nuovo = (conta[k] || 0) > (visti[k] ?? conta[k]);
         return (
           <button key={k} type="button" onClick={() => onApri(k)}
-            className="rounded-full border border-amber-300 bg-white px-2.5 py-0.5 text-xs font-medium hover:bg-amber-100 dark:bg-amber-950/40">
+            className="rounded-full border border-amber-300 bg-white px-2.5 py-0.5 text-xs font-medium hover:bg-amber-100 dark:bg-amber-950/40 max-sm:min-h-10 max-sm:px-3">
             {testo(conta[k])}{nuovo && <span className="ml-1 rounded bg-red-600 px-1 text-[10px] font-bold text-white">NUOVO</span>}
           </button>
         );

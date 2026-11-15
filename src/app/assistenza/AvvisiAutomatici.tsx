@@ -3,6 +3,7 @@
 // 27/10/2026 (Christian): quello che è stato fatto IN AUTOMATICO o da Claude (bonifico arrivato, fattura emessa, scheda chiusa
 // e spedita, etichetta stampata, pronto programmato partito…) compare qui come BANNER GRANDE, una riga per ogni cosa fatta,
 // finché un operatore non clicca «Ho visto» (resta tracciato chi e quando). Poi va nello storico.
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Bot, History } from "lucide-react";
@@ -47,7 +48,7 @@ export function AvvisiAutomatici({ avvisi, operatore, onScheda, onVisto, attivit
   // 27/10/2026 (Gianni Gallo): spedizione + fattura da incassare in un clic; il risultato (tracking, fattura) resta a video
   async function spedisciFattura(a: AvvisoDashboard) {
     if (!op) { toast.error("Scegli chi sei (CHR · VALE · DUMY · MARTINA · ALTRO) prima di spedire"); return; }
-    if (!a.scheda_id || !confirm(`Spedire ora la scheda ${a.sigla} ed emettere la fattura DA INCASSARE?`)) return;
+    if (!a.scheda_id || !(await conferma({ titolo: "Spedire e fatturare?", testo: `Spedire ora la scheda ${a.sigla} ed emettere la fattura DA INCASSARE?`, ok: "Spedisci e fattura" }))) return;
     setBusy(a.id);
     try {
       const r = await assSpedisciFatturaDaIncassare(a.scheda_id, op, a.id);

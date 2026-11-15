@@ -3,6 +3,7 @@
 // RICAMBI DA ORDINARE (03/11/2026, Christian, 63281): tutti i ricambi delle schede aperte in un solo elenco, con il link messo
 // dal tecnico ben visibile. Da qui si apre il link, si segna ordinato (n. ordine e arrivo previsto) e arrivato; la scheda segue da sola.
 // «Ordina con Claude» mette il ricambio nella coda d'acquisto già esistente (fattura Genius, PayPal con l'impronta di Christian).
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { useCallback, useEffect, useState } from "react";
 import { Check, ExternalLink, Loader2, PackageCheck, RotateCcw, ShoppingCart, Truck } from "lucide-react";
 import Link from "next/link";
@@ -94,7 +95,7 @@ function RigaRicambio({ r, operatore, onCambiata }: { r: Riga; operatore: string
         {r.stato === "da_ordinare" && <>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => setApriOrdine((x) => !x)}><Truck />Ho ordinato</Button>
           <Button size="sm" variant="outline" disabled={busy} title="Lo compra Claude: fattura Genius e PayPal, col riferimento alla scheda. Il pagamento chiede la tua impronta."
-            onClick={() => { if (confirm(`Mettere in coda l'acquisto per la scheda ${r.scheda}?\n\n${r.cosa || ""}`)) chiama("ordina", { indice: r.indice }, "In coda per l'acquisto"); }}><ShoppingCart />Ordina con Claude</Button>
+            onClick={async () => { if (await conferma({ titolo: "Mettere in coda l'acquisto?", testo: `Scheda ${r.scheda}\n\n${r.cosa || ""}`, ok: "Ordina" })) chiama("ordina", { indice: r.indice }, "In coda per l'acquisto"); }}><ShoppingCart />Ordina con Claude</Button>
         </>}
         {r.stato === "richiesto" && <Button size="sm" variant="outline" disabled={busy} onClick={() => setApriOrdine((x) => !x)}><Truck />Ordinato</Button>}
         {r.stato === "ordinato" && <Button size="sm" disabled={busy} onClick={() => aggiorna({ stato: "arrivato" }, "Ricambio arrivato")}><PackageCheck />Arrivato</Button>}

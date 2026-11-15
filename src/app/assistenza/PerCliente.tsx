@@ -3,6 +3,7 @@
 // 26/10/2026 (Christian, es. Altramela): TUTTE le schede APERTE di un cliente, divise per fase (preventivi, in riparazione,
 // pronti da ritirare, da spedire…), con i filtri; si scelgono e si manda un unico RIEPILOGO al cliente (mail + WhatsApp)
 // con lo stato e il link al PDF di ogni scheda.
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Search, Send, Users } from "lucide-react";
@@ -66,7 +67,7 @@ export function PerCliente({ operatore: opEsterno, onApri, onClose, iniziale }: 
     if (!cliente) return;
     if (!operatore) { toast.error("Scegli l'operatore"); return; }
     if (!scelteVisibili.length) { toast.error("Scegli almeno una scheda"); return; }
-    if (!confirm(`Mandare a ${cliente.denominazione}${mail ? " per mail" : ""}${mail && wa ? " e" : ""}${wa ? " su WhatsApp" : ""} il riepilogo di ${scelteVisibili.length} schede?`)) return;
+    if (!(await conferma({ titolo: "Inviare il riepilogo?", testo: `Mandare a ${cliente.denominazione}${mail ? " per mail" : ""}${mail && wa ? " e" : ""}${wa ? " su WhatsApp" : ""} il riepilogo di ${scelteVisibili.length} schede?`, ok: "Invia il riepilogo" }))) return;
     setBusy(true);
     try {
       const r = await fetchAPI(`/api/assistenza/clienti/${cliente.id}/riepilogo`, { method: "POST",

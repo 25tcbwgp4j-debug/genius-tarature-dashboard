@@ -2,6 +2,7 @@
 
 // 28/10/2026 (Christian): «🎙 Chiedi a Claude» — si detta (microfono della tastiera iPhone o del pulsante) cosa fare sulla
 // scheda: l'assistente PROPONE il piano (riepilogo, azioni, anteprima del preventivo) e si esegue solo con «Conferma».
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Mic, Sparkles } from "lucide-react";
@@ -56,7 +57,7 @@ export function Assistente({ s, operatore, sporca, onEseguito }: { s: Scheda; op
     if (!piano?.firma) return;
     if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
     const invio = piano.azioni.some((a) => a.tipo === "invia");
-    if (invio && !confirm("Il piano INVIA al cliente mail e WhatsApp. Confermi?")) return;
+    if (invio && !(await conferma({ titolo: "Il piano invia al cliente", testo: "Il piano INVIA al cliente mail e WhatsApp. Confermi?", ok: "Esegui e invia" }))) return;
     setBusy(true);
     try {
       const r = await assAzione(s.id, "assistente/esegui", { operatore, azioni: piano.azioni, scade: piano.scade, firma: piano.firma }) as { fatto: string[]; scheda: Scheda };

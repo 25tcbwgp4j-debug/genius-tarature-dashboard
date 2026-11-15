@@ -4,6 +4,7 @@
 // Tarature: «⏰ … programmato per le 17:00 di oggi» con Invia subito · Modifica orario · Annulla; dopo l'invio l'esito
 // (inviato, non inviato perché la scheda è cambiata, errore). Lo spedisce lo scheduler (ogni minuto) con la stessa logica
 // del pulsante.
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -49,10 +50,10 @@ function Riga({ s, cosa, ro, operatore, onScheda }: { s: Scheda; cosa: Cosa; ro:
     setBusy(chi);
     try { await fn(); } catch (e) { toastErrore(e); } finally { setBusy(null); }
   }
-  const annulla = () => { if (confirm(`Annullare l'invio programmato del ${nome.toLowerCase()}?`)) chiama("annulla", async () => {
+  const annulla = async () => { if (await conferma({ titolo: "Annullare l'invio programmato?", testo: `Il ${nome.toLowerCase()} non partirà all'orario programmato.`, ok: "Annulla l'invio", pericolo: true })) chiama("annulla", async () => {
     onScheda(await fetchAPI(`${base}?operatore=${encodeURIComponent(operatore)}`, { method: "DELETE" })); toast.success(`${nome} programmato annullato`);
   }); };
-  const subito = () => { if (confirm(`Inviare ADESSO il ${nome.toLowerCase()} al cliente?`)) chiama("subito", async () => {
+  const subito = async () => { if (await conferma({ titolo: "Inviare adesso?", testo: `Inviare ADESSO il ${nome.toLowerCase()} al cliente?`, ok: "Invia adesso" })) chiama("subito", async () => {
     const r: { scheda: Scheda; esito: Esito } = await fetchAPI(`${base}/invia-subito`, { method: "POST", body: JSON.stringify({ operatore }) });
     onScheda(r.scheda);
     toast.success(`${nome} inviato` + (r.esito?.mail ? ` · mail ${r.esito.mail}` : "") + (r.esito?.whatsapp ? ` · WhatsApp ${r.esito.whatsapp}` : ""), { duration: 7000 });

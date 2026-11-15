@@ -11,6 +11,7 @@ import { assAnteprimaMail, assAzione, assProntoControlli, type ProntoControlli, 
 import { blocchi, ipotesiDelBlocco, isActive, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, Pill, Scelta, area, campo } from "./ui";
+import { conferma } from "@/components/Conferma";
 
 // ---------------------------------------------------------------------------
 const TITOLI_PDF: Record<string, string> = { ricevuta: "ricevuta d'ingresso", preventivo: "preventivo", pronto: "pronto per il ritiro / la spedizione",
@@ -139,11 +140,15 @@ export function DialogoEsito({ s, righe, onClose, onEsito }: { s: Scheda; righe:
   const [busy, setBusy] = useState(false);
   // 05/10/2026 (§10.5): da dove è arrivata la risposta (l'accettazione online arriva da sola dal link del cliente)
   const [canale, setCanale] = useState("telefono");
+  // 15/11/2026 (piano 2.6): RICHIESTA DEL CLIENTE insieme alla risposta (es. «stress test prima della consegna»):
+  // va nelle note di riparazione e arriva come messaggio al tecnico
+  const [richiesta, setRichiesta] = useState("");
+  const rc = richiesta.trim() ? { richiesta_cliente: richiesta.trim() } : {};
   const fisse = righe.filter((r) => (r.b ?? 0) === b && r.opt == null).reduce((t, r) => t + rowTotal(r), 0);
   const tot = fisse + (soloFisse ? 0 : alt.find((x) => x.opt === opt)?.totale || 0) + agg.filter((x) => prese.includes(x.opt)).reduce((t, x) => t + x.totale, 0);
   async function vai(esito: "accettato" | "rifiutato", tutto = false) {
     setBusy(true);
-    try { if (await onEsito(esito === "accettato" ? { esito, blocco: b, ...(soloFisse ? { solo_fisse: true } : { ipotesi: opt }), aggiunte: prese, canale } : { esito, blocco: b, canale, tutto })) onClose(); } finally { setBusy(false); }
+    try { if (await onEsito(esito === "accettato" ? { esito, blocco: b, ...(soloFisse ? { solo_fisse: true } : { ipotesi: opt }), aggiunte: prese, canale, ...rc } : { esito, blocco: b, canale, tutto, ...rc })) onClose(); } finally { setBusy(false); }
   }
   // 28/10/2026 (Christian, 63224): con un preventivo AGGIUNTIVO il rifiuto va detto esattamente: solo l'aggiuntivo (resta
   // valido quello già accettato) oppure tutto (il cliente non vuole più nessuna lavorazione)
@@ -151,7 +156,7 @@ export function DialogoEsito({ s, righe, onClose, onEsito }: { s: Scheda; righe:
   return (
     <Modale titolo={`Risposta del cliente${b > 0 ? " al preventivo aggiuntivo" : ""} — scheda ${s.sigla}`} onClose={onClose}
       piedi={b > 0 ? <>
-        <Button variant="outline" className="mr-auto text-red-700" disabled={busy} onClick={() => { if (confirm("Il cliente RIFIUTA TUTTO, anche il preventivo già accettato? La scheda diventa «rifiutato · da restituire».")) vai("rifiutato", true); }}>Rifiuta TUTTO</Button>
+        <Button variant="outline" className="mr-auto text-red-700" disabled={busy} onClick={async () => { if (await conferma({ titolo: "Il cliente rifiuta TUTTO?", testo: "Anche il preventivo già accettato. La scheda diventa «rifiutato · da restituire».", ok: "Rifiuta tutto", pericolo: true })) vai("rifiutato", true); }}>Rifiuta TUTTO</Button>
         <Button variant="outline" className="border-red-300 text-red-700" disabled={busy} onClick={() => vai("rifiutato")}>Rifiuta solo l&apos;aggiuntivo</Button>
         <Button disabled={busy || (alt.length > 0 && opt == null && !soloFisse)} onClick={() => vai("accettato")}>{busy && <Loader2 className="animate-spin" />}Accetta l&apos;aggiuntivo · + {eur(tot)}</Button></> : <>
         <Button variant="outline" className="mr-auto text-red-700" disabled={busy} onClick={() => vai("rifiutato")}>RIFIUTATO</Button>
@@ -182,6 +187,11 @@ export function DialogoEsito({ s, righe, onClose, onEsito }: { s: Scheda; righe:
           <span className="text-xs font-medium text-muted-foreground">Il cliente ha risposto</span>
           <Scelta piccolo valore={canale} opzioni={CANALI_RISPOSTA.filter(([k]) => k !== "online").map(([k, l]) => [k, l])} onChange={setCanale} />
         </div>
+        <label className="block pt-1">
+          <span className="mb-0.5 block text-xs font-medium text-muted-foreground">📝 Richiesta del cliente (facoltativa): cosa chiede sul lavoro, arriva al tecnico</span>
+          <textarea className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" rows={2} value={richiesta} onChange={(e) => setRichiesta(e.target.value)}
+            placeholder="es. dopo l'intervento stress test prolungato e conferma dell'esito prima della consegna" />
+        </label>
         <p className="text-xs text-muted-foreground">Con «ACCETTATO» la scheda va IN RIPARAZIONE (poi si assegna al tecnico) e la lavorazione effettuata si compila con l&apos;ipotesi scelta e il suo importo.{s.spedizione_tipo && s.spedizione_tipo !== "nessuna" ? ` Spedizione ${eur(s.spedizione_importo)} a parte nel totale.` : ""}</p>
       </div>
     </Modale>
@@ -399,22 +409,86 @@ export function DialogoChiudiTutto({ s, onClose, onChiudi }: { s: Scheda; onClos
   );
 }
 
-export function DialogoConsegna({ s, onClose, onConsegna }: { s: Scheda; onClose: () => void; onConsegna: (modo: string) => Promise<boolean> }) {
+/** 15/11/2026 (piano 2.4 + 2.5): «INCASSA E CONSEGNA» in un solo flusso — 1) pagamento (scontrino, fattura, pagamento già
+ *  arrivato) · 2) come esce il dispositivo · 3) foglio di riconsegna se il Mac ha OpenCore · 4) «Conferma consegna».
+ *  Prima un clic su «Rottamato» o «Venduto» chiudeva subito la scheda e il saldo aperto era solo un avviso: ora la scelta
+ *  si conferma, Rottamato/Venduto stanno a parte con una seconda conferma e senza incasso serve la spunta esplicita. */
+export function DialogoConsegna({ s, onClose, onConsegna, onScontrino, onFattura, onPagato, onStampaRiconsegna }: {
+  s: Scheda; onClose: () => void; onConsegna: (modo: string, senzaIncasso: boolean) => Promise<boolean>;
+  onScontrino?: () => void; onFattura?: () => void; onPagato?: () => void; onStampaRiconsegna?: () => void;
+}) {
   const [busy, setBusy] = useState(false);
+  const daPagare = !s.pagata && s.saldo > 0 && !pagaFineMese(s);
   const opz: [string, string, string][] = [
     ["ritiro", "Ritirato in negozio", "il cliente è passato a prenderlo"], ["spedizione", "Spedito con il nostro corriere", "etichetta UPS/DHL fatta da noi"],
-    ["corriere_cliente", "Ritirato dal corriere del cliente", "il cliente ha mandato il suo corriere"], ["rottamato", "Rottamato", ""], ["venduto", "Venduto", ""]];
+    ["corriere_cliente", "Ritirato dal corriere del cliente", "il cliente ha mandato il suo corriere"]];
+  const predefinito = s.consegna_modo === "spedizione" ? (s.consegna_corriere === "cliente" ? "corriere_cliente" : "spedizione") : "ritiro";
+  const [modo, setModo] = useState<string>(predefinito);
+  const [senzaIncasso, setSenzaIncasso] = useState(false);
+  const [foglio, setFoglio] = useState(false);
+  const [altri, setAltri] = useState(false);
+  const serveIncasso = daPagare && ["ritiro", "spedizione", "corriere_cliente"].includes(modo);
+  const pronta = !!modo && (!serveIncasso || senzaIncasso) && (!onStampaRiconsegna || foglio || modo !== "ritiro");
+  async function vai(m: string) {
+    setBusy(true);
+    try { if (await onConsegna(m, serveIncasso && senzaIncasso)) onClose(); } finally { setBusy(false); }
+  }
+  const passo = (n: number, titolo: string, fatto: boolean) => (
+    <div className="flex items-center gap-2 text-sm font-semibold">
+      <span className={`flex size-6 items-center justify-center rounded-full text-xs ${fatto ? "bg-emerald-600 text-white" : "bg-muted text-foreground"}`}>{fatto ? "✓" : n}</span>{titolo}
+    </div>);
   return (
-    <Modale titolo={`Consegna — scheda ${s.sigla}`} onClose={onClose}>
-      <div className="space-y-2">
-        {!s.pagata && s.saldo > 0 && !pagaFineMese(s) && <div className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">Attenzione: risulta ancora da pagare {eur(s.saldo)}. Prima incassa (Scontrino / Fattura / Pagato).</div>}
-        {opz.map(([k, l, d]) => (
-          <Button key={k} variant={k === (s.consegna_modo === "spedizione" ? (s.consegna_corriere === "cliente" ? "corriere_cliente" : "spedizione") : "ritiro") ? "default" : "outline"}
-            className="h-auto w-full justify-start py-2 text-left" disabled={busy}
-            onClick={async () => { setBusy(true); try { if (await onConsegna(k)) onClose(); } finally { setBusy(false); } }}>
-            <span><b>{l}</b>{d && <span className="block text-xs font-normal opacity-80">{d}</span>}</span>
-          </Button>
-        ))}
+    <Modale titolo={`Incassa e consegna — scheda ${s.sigla}`} onClose={onClose} piedi={<>
+      <Button variant="outline" onClick={onClose}>Indietro</Button>
+      <Button disabled={busy || !pronta} onClick={() => vai(modo)} data-testid="conferma-consegna">{busy && <Loader2 className="animate-spin" />}Conferma consegna</Button>
+    </>}>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          {passo(1, "Pagamento", !daPagare)}
+          {!daPagare ? <p className="pl-8 text-sm text-emerald-800 dark:text-emerald-300">{s.pagata || s.saldo <= 0 ? `✔ Pagata${s.pagamento_modo ? ` (${s.pagamento_modo})` : ""}` : "✔ Pagamento a fine mese (cliente con conto mensile)"}</p> : <>
+            <p className="pl-8 text-sm">Da incassare: <b className="tabular-nums">{eur(s.saldo)}</b></p>
+            <div className="flex flex-wrap gap-1.5 pl-8">
+              {onScontrino && <Button size="sm" onClick={onScontrino} title="Apre la cassa con le righe della scheda; dopo lo scontrino torna qui">🧾 Scontrino</Button>}
+              {onFattura && <Button size="sm" variant="outline" onClick={onFattura} title="Fattura in bozza collegata alla scheda (non va allo SdI finché non la emetti)">Fattura</Button>}
+              {onPagato && <Button size="sm" variant="outline" onClick={onPagato} title="Bonifico, POS o PayPal già arrivati">Pagamento già arrivato</Button>}
+            </div>
+            <label className="ml-8 flex min-h-10 items-start gap-2 rounded-lg border-2 border-amber-400 bg-amber-50 p-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+              <input type="checkbox" className="mt-0.5 size-4" checked={senzaIncasso} onChange={(e) => setSenzaIncasso(e.target.checked)} />
+              <span>Consegno <b>senza incasso</b>: restano da pagare {eur(s.saldo)}</span>
+            </label>
+          </>}
+        </div>
+        <div className="space-y-2">
+          {passo(2, "Come esce il dispositivo", !!modo)}
+          <div className="space-y-1.5 pl-8">
+            {opz.map(([k, l, d]) => (
+              <label key={k} className={`flex min-h-10 cursor-pointer items-start gap-2 rounded-lg border p-2 text-sm ${modo === k ? "border-primary bg-primary/5" : ""}`}>
+                <input type="radio" name="modo-consegna" className="mt-1" checked={modo === k} onChange={() => setModo(k)} />
+                <span><b>{l}</b>{d && <span className="block text-xs opacity-80">{d}</span>}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        {onStampaRiconsegna && (
+          <div className="space-y-2">
+            {passo(3, "Foglio di riconsegna (Mac con OpenCore)", foglio)}
+            <div className="flex flex-wrap items-center gap-2 pl-8 text-sm">
+              <Button size="sm" variant="outline" onClick={onStampaRiconsegna}><Printer />Stampa il foglio da far firmare</Button>
+              <label className="flex min-h-10 items-center gap-2"><input type="checkbox" className="size-4" checked={foglio} onChange={(e) => setFoglio(e.target.checked)} />Il cliente l&apos;ha firmato</label>
+            </div>
+          </div>
+        )}
+        <div className="border-t pt-2">
+          <button type="button" className="min-h-10 text-xs text-muted-foreground underline" onClick={() => setAltri((x) => !x)}>{altri ? "Nascondi" : "Altri esiti: rottamato o venduto…"}</button>
+          {altri && (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {([["rottamato", "Rottamato"], ["venduto", "Venduto"]] as const).map(([k, l]) => (
+                <Button key={k} size="sm" variant="outline" className="border-red-300 text-red-700" disabled={busy}
+                  onClick={async () => { if (await conferma({ titolo: `${l}: chiudere la scheda?`, testo: `La scheda ${s.sigla} si chiude come «${l.toUpperCase()}». Si può riaprire solo dal titolare.`, ok: `Sì, ${l.toLowerCase()}`, pericolo: true })) vai(k); }}>{l}</Button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </Modale>
   );
@@ -468,10 +542,10 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
     if (!operatore) { toast.error("Scegli l'operatore"); return; }
     if (dir === "riconsegna" && !inProva && !parte) { toast.error("Scegli quando parte il pacco: oggi o un altro giorno"); return; }
     const conRitiro = dir === "ritiro" ? !!giorno : prenotaDaNoi;
-    if (!inProva && !confirm(`Creare l'etichetta ${corriere} VERA (costo sul conto ${corriere})${conRitiro ? " e prenotare il corriere" : ""}?`)) return;
+    if (!inProva && !(await conferma({ titolo: `Etichetta ${corriere} vera`, testo: `Creare l'etichetta ${corriere} VERA (costo sul conto ${corriere})${conRitiro ? " e prenotare il corriere" : ""}?`, ok: "Crea l'etichetta" }))) return;
     // 14/10/2026: riconsegna di una scheda non ancora pagata → il backend la ferma; qui si chiede conferma esplicita
     const nonPagata = dir === "riconsegna" && !inProva && !s.pagata && s.saldo > 0 && !pagaFineMese(s);
-    if (nonPagata && !confirm(`ATTENZIONE: risulta ancora da pagare ${eur(s.saldo)}. Spedire lo stesso, senza pagamento?`)) return;
+    if (nonPagata && !(await conferma({ titolo: "Non ancora pagata", testo: `Risulta ancora da pagare ${eur(s.saldo)}.`, spunta: `Spedisco senza incasso (restano da pagare ${eur(s.saldo)})`, ok: "Spedisci lo stesso", pericolo: true }))) return;
     setBusy(true);
     try {
       const r = await assAzione(s.id, "spedizione", { operatore, corriere, direzione: dir, indirizzo: ind, giorno_ritiro: giorno || undefined, test: inProva,

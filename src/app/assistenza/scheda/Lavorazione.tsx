@@ -3,6 +3,7 @@
 // LAVORAZIONE (05/10/2026, specifica §2-3): ricambi (disponibile / in attesa con data d'arrivo e dove è stato ordinato:
 // NOTA INTERNA), tecnico della verifica e sue note, tecnico della riparazione e sue note, LAVORAZIONE EFFETTUATA
 // (precompilata dall'ipotesi accettata), totale, esito. Tutto ciò che è interno non va mai sui PDF del cliente.
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { eur, type Scheda, type VoceLavorazione } from "@/lib/assistenza";
@@ -168,7 +169,7 @@ function PressoCliente({ s, ro, busy, onAzione }: { s: Scheda; ro: boolean; busy
     <div className={cn("space-y-2 rounded-lg border p-3", attivo && arrivati && !p?.richiesto_il && "border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30")}>
       <label className="flex items-center gap-1.5 text-sm font-medium">
         <input type="checkbox" className="size-4" disabled={ro || busy} checked={attivo}
-          onChange={(e) => { if (e.target.checked) onAzione("riconsegnato"); else if (confirm("Il dispositivo non è dal cliente? Tolgo la riconsegna.")) onAzione("annulla"); }} />
+          onChange={(e) => { if (e.target.checked) onAzione("riconsegnato"); else conferma({ titolo: "Togliere la riconsegna?", testo: "Il dispositivo non è dal cliente? Tolgo la riconsegna.", ok: "Togli" }).then((ok) => { if (ok) onAzione("annulla"); }); }} />
         Riconsegnato al cliente in attesa del ricambio
       </label>
       {p?.riportato_il && <p className="text-xs text-muted-foreground">Riportato dal cliente il {quando(p.riportato_il)}.</p>}
@@ -181,7 +182,7 @@ function PressoCliente({ s, ro, busy, onAzione }: { s: Scheda; ro: boolean; busy
             <div className="flex flex-wrap gap-2 pt-1">
               {!p?.richiesto_il && <Button size="sm" variant={arrivati ? "default" : "outline"} disabled={busy || !arrivati}
                 title={arrivati ? "Parte una mail e un WhatsApp" : "Si attiva quando il ricambio risulta arrivato"}
-                onClick={() => { if (confirm("Mando al cliente mail e WhatsApp: ricambio arrivato, può riportare il dispositivo?")) onAzione("richiedi"); }}>Chiedi al cliente di riportarlo</Button>}
+                onClick={async () => { if (await conferma({ titolo: "Chiedere di riportarlo?", testo: "Mando al cliente mail e WhatsApp: ricambio arrivato, può riportare il dispositivo?", ok: "Invia al cliente" })) onAzione("richiedi"); }}>Chiedi al cliente di riportarlo</Button>}
               <Button size="sm" variant={p?.richiesto_il ? "default" : "outline"} disabled={busy} onClick={() => onAzione("riportato")}>Il cliente lo ha riportato</Button>
             </div>
           )}

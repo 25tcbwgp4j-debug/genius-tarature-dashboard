@@ -9,8 +9,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Copy, Download, FileText, Loader2, Mail, MessageSquareText, Package, Printer, RefreshCw, RotateCcw, Save, Tag, Trash2, UserRound,
-  ChevronRight, Plus, Send,
+  ChevronRight, ChevronDown, MoreHorizontal, NotebookPen, Plus, Send,
 } from "lucide-react";
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { Button } from "@/components/ui/button";
 import { SceltaOperatore, type Operatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
@@ -43,7 +44,7 @@ import { DialogoDuplica, nuovaChiave } from "./SchedaDoppia";
 
 type Bozza = Partial<Scheda>;
 type Dialogo = null | { k: "acconto"; inizio: "invia" | "incassa" } | { k: "invio"; tipo: TipoInvio } | { k: "chiudi_tutto" } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
-  | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" } | { k: "stato_riparazione"; stato: string } | { k: "trova_dopo_preventivo" };
+  | { k: "richiesta" } | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" } | { k: "stato_riparazione"; stato: string } | { k: "trova_dopo_preventivo" };
 
 function bozzaPreventivo(m: Partial<Scheda>): BozzaPreventivo {
   return { righe: (m.preventivo_righe as EstimateLine[]) || [], diagnosi: m.preventivo?.diagnosi || "", note: m.preventivo?.note || "",
@@ -57,6 +58,80 @@ function rifCliente(s: Scheda): string {
   if (r) return r;
   const ni = (s.numero_interno || "").trim();
   return !ni || (s.origine === "filemaker" && /^\d+$/.test(ni)) ? "" : ni;
+}
+
+// 15/11/2026 (piano 2.3): le quattro linguette della scheda
+type Linguetta = "accettazione" | "preventivo" | "lavorazione" | "chiusura";
+const LINGUETTE: [Linguetta, string][] = [["accettazione", "Accettazione"], ["preventivo", "Preventivo"], ["lavorazione", "Lavorazione"], ["chiusura", "Chiusura"]];
+/** La linguetta della fase in cui si trova la scheda (quella che si apre da sola). */
+function linguettaDellaFase(s: Scheda): Linguetta {
+  if (s.stato === "in_arrivo") return "accettazione";
+  if (s.stato === "da_preventivare" || s.stato === "preventivo_inviato") return "preventivo";
+  if (s.stato === "accettato") return "lavorazione";
+  if (s.stato === "rifiutato") return ["fatto", "non_serve"].includes(s.rimontaggio || "") ? "chiusura" : "lavorazione";
+  return "chiusura";
+}
+function Linguette({ tab, setTab, info, fase }: { tab: Linguetta; setTab: (t: Linguetta) => void; info: Partial<Record<Linguetta, string>>; fase: Linguetta }) {
+  return (
+    <div role="tablist" aria-label="Parti della scheda" className="grid grid-cols-2 gap-1 rounded-xl border bg-muted/40 p-1 sm:grid-cols-4"
+      onKeyDown={(e) => {
+        const i = LINGUETTE.findIndex(([k]) => k === tab);
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); const n = LINGUETTE[(i + (e.key === "ArrowRight" ? 1 : LINGUETTE.length - 1)) % LINGUETTE.length][0]; setTab(n); document.getElementById(`linguetta-${n}`)?.focus(); }
+      }}>
+      {LINGUETTE.map(([k, l]) => (
+        <button key={k} id={`linguetta-${k}`} type="button" role="tab" aria-selected={tab === k} aria-controls={`pannello-${k}`} tabIndex={tab === k ? 0 : -1}
+          onClick={() => setTab(k)}
+          className={`flex min-h-10 flex-col items-center justify-center rounded-lg px-2 py-1 text-sm font-semibold transition-colors ${tab === k ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:bg-background/60 hover:text-foreground"}`}>
+          <span>{l}{fase === k && <span className="ml-1 inline-block size-2 rounded-full bg-primary align-middle" title="Fase in corso" />}</span>
+          {info[k] && <span className="text-[11px] font-normal text-muted-foreground">{info[k]}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+/** 15/11/2026 (piano 2.5): menu «Altro…» per le azioni rare o pericolose (annulla scheda), lontano dalle abituali. */
+function MenuAltro({ children }: { children: React.ReactNode }) {
+  const [aperto, setAperto] = useState(false);
+  const rif = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!aperto) return;
+    const fuori = (e: MouseEvent) => { if (!rif.current?.contains(e.target as Node)) setAperto(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setAperto(false); };
+    document.addEventListener("mousedown", fuori); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", fuori); document.removeEventListener("keydown", esc); };
+  }, [aperto]);
+  return (
+    <div ref={rif} className="relative">
+      <Button size="sm" variant="ghost" aria-haspopup="menu" aria-expanded={aperto} onClick={() => setAperto((x) => !x)}><MoreHorizontal />Altro…</Button>
+      {aperto && <div role="menu" className="absolute right-0 z-30 mt-1 w-56 rounded-lg border bg-popover p-1 shadow-lg" onClick={() => setAperto(false)}>{children}</div>}
+    </div>
+  );
+}
+
+/** 15/11/2026 (piano 2.6): RICHIESTA DEL CLIENTE (testo + da dove è arrivata) → POST /schede/{id}/richiesta-cliente */
+function DialogoRichiesta({ sigla, onClose, onSalva }: { sigla: string; onClose: () => void; onSalva: (b: { testo: string; canale: string }) => Promise<boolean> }) {
+  const [testo, setTesto] = useState("");
+  const [canale, setCanale] = useState("whatsapp");
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modale titolo={`📝 Richiesta del cliente — scheda ${sigla}`} onClose={onClose} piedi={<>
+      <Button variant="outline" onClick={onClose}>Indietro</Button>
+      <Button disabled={busy || testo.trim().length < 3} onClick={async () => { setBusy(true); try { if (await onSalva({ testo: testo.trim(), canale })) onClose(); } finally { setBusy(false); } }}>
+        {busy && <Loader2 className="animate-spin" />}Registra la richiesta</Button></>}>
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">Cosa chiede il cliente sul lavoro. Resta nelle note di riparazione e arriva come messaggio al tecnico (a quello assegnato, altrimenti al primo che prende la scheda). Al cliente non parte nulla.</p>
+        <textarea className={`${area} min-h-[96px] text-[15px]`} autoFocus value={testo} onChange={(e) => setTesto(e.target.value)}
+          placeholder="es. dopo l'intervento stress test prolungato e conferma dell'esito prima della consegna" />
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-xs font-medium text-muted-foreground">Arrivata per</span>
+          {([["mail", "Mail"], ["whatsapp", "WhatsApp"], ["negozio", "In negozio"], ["online", "Online"]] as const).map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setCanale(k)} aria-pressed={canale === k}
+              className={`min-h-10 rounded-md border px-3 text-sm font-medium sm:min-h-8 ${canale === k ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}>{l}</button>
+          ))}
+        </div>
+      </div>
+    </Modale>
+  );
 }
 
 export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiata, onChiudi }: {
@@ -84,20 +159,42 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const refInt = useRef<HTMLDivElement>(null);
   // 12/11/2026 (Christian): la scheda è lunga → ogni sezione si apre e si chiude da una barra di pulsanti (si ricorda la scelta)
   type SezId = "cliente" | "apparecchio" | "intervento" | "tecnici" | "preventivo" | "lavorazione" | "documenti" | "ricambi";
+  // 15/11/2026 (piano 2.7): un solo nome «Ricambi» (prima il pulsante «Pronto pezzi» apriva il riquadro «Ricambi»)
   const SEZ: { id: SezId; nome: string }[] = [
-    { id: "cliente", nome: "Cliente" }, { id: "apparecchio", nome: "Apparecchio e GSX" }, { id: "intervento", nome: "Intervento" }, { id: "ricambi", nome: "Pronto pezzi" },
-    { id: "tecnici", nome: "Tecnici" }, { id: "preventivo", nome: "Preventivo" }, { id: "lavorazione", nome: "Lavorazione" }, { id: "documenti", nome: "Documenti e pagamento" },
+    { id: "cliente", nome: "Cliente" }, { id: "apparecchio", nome: "Apparecchio e GSX" }, { id: "intervento", nome: "Intervento" },
+    { id: "preventivo", nome: "Preventivo" }, { id: "tecnici", nome: "Tecnici" }, { id: "ricambi", nome: "Ricambi" }, { id: "lavorazione", nome: "Lavorazione" }, { id: "documenti", nome: "Documenti e pagamento" },
   ];
+  // 15/11/2026 (piano 2.3): la scheda a QUATTRO LINGUETTE (prima ~5.900px di riquadri uno sotto l'altro, 10.700 su iPhone).
+  // Sempre in vista sopra le linguette: numero, stato, avvisi rossi, «Prossimo passo» e barra delle azioni.
+  // Si apre da sola la linguetta della fase in corso; le sezioni delle altre restano montate (nascoste), così niente si perde.
+  const TAB_DI: Record<SezId, Linguetta> = { cliente: "accettazione", apparecchio: "accettazione", intervento: "accettazione",
+    preventivo: "preventivo", tecnici: "lavorazione", ricambi: "lavorazione", lavorazione: "lavorazione", documenti: "chiusura" };
+  const [tab, setTab] = useState<Linguetta>("accettazione");
+  const faseVista = useRef("");
   const [busyIdon, setBusyIdon] = useState(false);
   const [chiuse, setChiuse] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem("gl_scheda_chiuse") || "{}"); } catch { return {}; } });
   const toggleSez = (id: SezId) => setChiuse((x) => { const n = { ...x, [id]: !x[id] }; try { localStorage.setItem("gl_scheda_chiuse", JSON.stringify(n)); } catch { /* niente memoria locale */ } return n; });
   const refDi = (id: SezId) => ({ preventivo: refPrev, lavorazione: refLav, ricambi: refRic, documenti: refDoc, tecnici: refTec, intervento: refInt } as Partial<Record<SezId, React.RefObject<HTMLDivElement | null>>>)[id];
-  const vaiA = (id: SezId) => { if (chiuse[id]) toggleSez(id); setTimeout(() => (refDi(id)?.current || document.getElementById(`sez-${id}`))?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); };
+  // 15/11/2026 (piano 2.7): un clic sul pulsante di sezione PORTA alla sezione (apre la sua linguetta e la sezione se chiusa)
+  const vaiA = (id: SezId) => {
+    setTab(TAB_DI[id]);
+    if (chiuse[id]) toggleSez(id);
+    setTimeout(() => (refDi(id)?.current || document.getElementById(`sez-${id}`))?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+  };
   const tecnici = (cfg?.tecnici || []).filter((t) => t.attivo !== false);
   const admin = !!cfg?.admin;
 
   const ricarica = useCallback(() => assScheda(id).then((x) => { setS(x); setB({}); }).catch(toastErrore), [id]);
   useEffect(() => { ricarica(); }, [ricarica]);
+  // linguetta della fase: all'apertura e quando la scheda cambia fase (es. dopo «ACCETTATO» si passa a Lavorazione)
+  useEffect(() => {
+    if (!s) return;
+    const f = `${s.id}|${linguettaDellaFase(s)}`;
+    if (faseVista.current === f) return;
+    faseVista.current = f;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- la linguetta segue la fase della scheda appena caricata
+    setTab(linguettaDellaFase(s));
+  }, [s]);
   // 29/10/2026 (pop-up «dopo il bonifico»): /assistenza?id=…&az=spedisci apre subito l'etichetta di riconsegna
   const azLink = useRef(false);
   useEffect(() => {
@@ -186,7 +283,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   async function stampaAggiuntivo(n?: number) {
     if (!s) return;
     if (sporca && !ro && !(await salva(true))) return;
-    if (s.cliente_no_etichette && !confirm(`⚠️ ${s.cliente_no_etichette}\n\nProcedi comunque con la stampa dell'etichetta?`)) return;
+    if (s.cliente_no_etichette && !(await conferma({ titolo: "Cliente senza etichette adesive", testo: `⚠️ ${s.cliente_no_etichette}\n\nProcedi comunque con la stampa dell'etichetta?`, ok: "Stampa lo stesso" }))) return;
     try {
       const r = await assAzione(s.id, "stampa", { tipo: "etichetta_aggiuntivo", n, copie: 1, conferma_no_etichette: !!s.cliente_no_etichette });
       toast.success(r.simulata ? "Scheda di PROVA: stampa simulata (niente stampanti del negozio), apro il PDF"
@@ -200,7 +297,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     if (sporca && !ro && !(await salva(true))) return;
     // 30/10/2026 (Christian, Archimedia/Zanella): cliente che non vuole etichette adesive → conferma esplicita
     const etich = tipo === "etichetta" || tipo === "etichetta_accessori";
-    if (etich && s.cliente_no_etichette && !confirm(`⚠️ ${s.cliente_no_etichette}\n\nProcedi comunque con la stampa dell'etichetta?`)) return;
+    if (etich && s.cliente_no_etichette && !(await conferma({ titolo: "Cliente senza etichette adesive", testo: `⚠️ ${s.cliente_no_etichette}\n\nProcedi comunque con la stampa dell'etichetta?`, ok: "Stampa lo stesso" }))) return;
     try {
       const r = await assAzione(s.id, "stampa", { tipo, copie: 1, conferma_no_etichette: etich && !!s.cliente_no_etichette });
       toast.success(r.simulata ? "Scheda di PROVA: stampa simulata (niente stampanti del negozio), apro il PDF"
@@ -212,39 +309,42 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     const r = await azione("vendi", { tipo }, tipo === "fattura" ? "Fattura in BOZZA creata (non inviata allo SdI)" : "Pro forma creato");
     if (r?.url) router.push(r.url);
   }
-  function onAzione(a: string) {
-    if (a === "arrivato") azione("arrivato", {}, "Dispositivo arrivato · ricevuta inviata");
-    else if (a === "preventivo") refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  // 15/11/2026 (piano 2.5): le azioni che mandano qualcosa al cliente o cambiano lo stato chiedono conferma con il
+  // dialogo dell'app (prima confirm() del browser, o partivano al primo clic come «Dispositivo arrivato»)
+  async function onAzione(a: string) {
+    const ok = (titolo: string, testo: string, bottone = "Conferma", pericolo = false) => conferma({ titolo, testo, ok: bottone, pericolo });
+    if (a === "arrivato") { if (await ok("Dispositivo arrivato?", "La scheda passa a «da preventivare» e al cliente parte la ricevuta d'ingresso (mail + WhatsApp).", "Arrivato: manda la ricevuta")) azione("arrivato", {}, "Dispositivo arrivato · ricevuta inviata"); }
+    else if (a === "preventivo") vaiA("preventivo");
     else if (a === "invia_preventivo") apriInvio(s?.preventivo_stato && s.preventivo_stato !== "da_fare" ? "aggiornamento" : "preventivo");
     else if (a === "esito") setDlg({ k: "esito" });
     // 28/10/2026 (63130): pagato + corriere del cliente → «pagamento arrivato, mandateci l'etichetta di ritorno»
-    else if (a === "richiedi_etichetta") { if (confirm("Mandare al cliente (mail + WhatsApp) «pagamento ricevuto: inviateci l'etichetta di spedizione di ritorno»?")) azione("richiedi-etichetta", {}, "Chiesta l'etichetta di ritorno"); }
+    else if (a === "richiedi_etichetta") { if (await ok("Chiedere l'etichetta di ritorno?", "Al cliente parte (mail + WhatsApp) «pagamento ricevuto: inviateci l'etichetta di spedizione di ritorno».", "Invia la richiesta")) azione("richiedi-etichetta", {}, "Chiesta l'etichetta di ritorno"); }
     // 28/10/2026 (63247): conto vendita → in vendita in negozio, senza pronto al cliente
-    else if (a === "in_vendita") { if (confirm("Mettere il dispositivo IN VENDITA in negozio (conto vendita)?\nNon parte nessun pronto al cliente.")) azione("in-vendita", {}, "Messo IN VENDITA (conto vendita)"); }
+    else if (a === "in_vendita") { if (await ok("Mettere IN VENDITA?", "Il dispositivo va in vendita in negozio (conto vendita). Non parte nessun pronto al cliente.", "Metti in vendita")) azione("in-vendita", {}, "Messo IN VENDITA (conto vendita)"); }
     else if (a === "pronto") setDlg({ k: "pronto" });
-    else if (a === "incassa") { refDoc.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }
-    else if (a === "consegna") setDlg({ k: "consegna" });
+    // 15/11/2026 (piano 2.4): «Incassa» e «CONSEGNA» aprono lo stesso flusso unico «Incassa e consegna»
+    else if (a === "incassa" || a === "consegna") setDlg({ k: "consegna" });
     else if (a === "spedisci") setDlg({ k: "corriere" });   // 28/10/2026 (63224): etichetta di riconsegna dal passo
     // 05/10/2026 (§10.5): verifica e riparazione assegnate ai tecnici
     else if (a === "assegna_verifica") setDlg({ k: "assegna_verifica" });
     else if (a === "chiudi_verifica") setDlg({ k: "chiudi_verifica" });
     else if (a === "assegna_riparazione") setDlg({ k: "assegna_riparazione" });
-    else if (a === "stato_riparazione") refTec.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    else if (a === "ricambi") refRic.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (a === "stato_riparazione") vaiA("tecnici");
+    else if (a === "ricambi") vaiA("ricambi");
     else if (a === "aggiornamento") setDlg({ k: "invio", tipo: "aggiornamento_riparazione" });
-    else if (a === "trova") { if (confermaTrova()) setDlg({ k: "invio", tipo: "trova" }); }   // 13/11: solo se Apple lo conferma
+    else if (a === "trova") { if (await confermaTrova()) setDlg({ k: "invio", tipo: "trova" }); }   // 13/11: solo se Apple lo conferma
     // 02/11/2026 (Christian, 63270): rifiutato → da richiudere (tecnico) → richiuso → solo allora pronto negativo
     // 26/10/2026 (63118): preventivo negativo → RIFIUTATO subito, senza mandarlo da accettare
-    else if (a === "rifiutato_diretto") { if (confirm("Preventivo NEGATIVO: segnare la scheda come RIFIUTATA senza inviare il preventivo al cliente?\nPoi lo si richiude, se è stato smontato, e si manda il PRONTO (restituzione).")) azione("esito-preventivo", { esito: "rifiutato", canale: "negozio" }, "Preventivo RIFIUTATO (negativo, non inviato)"); }
+    else if (a === "rifiutato_diretto") { if (await ok("Preventivo NEGATIVO", "Segnare la scheda come RIFIUTATA senza inviare il preventivo al cliente?\nPoi lo si richiude, se è stato smontato, e si manda il PRONTO (restituzione).", "Segna RIFIUTATO", true)) azione("esito-preventivo", { esito: "rifiutato", canale: "negozio" }, "Preventivo RIFIUTATO (negativo, non inviato)"); }
     // 26/10/2026 (63214): la ricevuta d'ingresso si manda a scheda compilata (oppure «Non serve»)
     else if (a === "ricevuta") apriInvio("ricevuta");
-    else if (a === "ricevuta_no") { if (s && confirm("Non mandare la ricevuta d'ingresso per questa scheda?")) assModifica(s.id, { ricevuta_da_inviare: false, operatore }).then(async () => { await ricarica(); onCambiata(); }).catch(toastErrore); }
+    else if (a === "ricevuta_no") { if (s && await ok("Niente ricevuta?", "Non mandare la ricevuta d'ingresso per questa scheda?", "Non serve")) assModifica(s.id, { ricevuta_da_inviare: false, operatore }).then(async () => { await ricarica(); onCambiata(); }).catch(toastErrore); }
     // 29/10/2026 (Christian): verifica e preventivo si saltano quando non servono
-    else if (a === "salta_verifica") { if (confirm("Saltare la verifica? Si passa direttamente al preventivo.")) azione("salta-passo", { passo: "verifica" }, "Verifica saltata"); }
-    else if (a === "salta_preventivo") { if (confirm("Saltare il preventivo? Si considera accettato senza inviarlo al cliente e si passa alla riparazione.")) azione("salta-passo", { passo: "preventivo" }, "Preventivo saltato: si passa alla riparazione"); }
+    else if (a === "salta_verifica") { if (await ok("Saltare la verifica?", "Si passa direttamente al preventivo.", "Salta la verifica")) azione("salta-passo", { passo: "verifica" }, "Verifica saltata"); }
+    else if (a === "salta_preventivo") { if (await ok("Saltare il preventivo?", "Si considera accettato senza inviarlo al cliente e si passa alla riparazione.", "Salta il preventivo", true)) azione("salta-passo", { passo: "preventivo" }, "Preventivo saltato: si passa alla riparazione"); }
     else if (a === "rimontaggio") setDlg({ k: "assegna_rimontaggio" });
     // 04/11/2026 (Christian): il dispositivo potrebbe non essere mai stato smontato
-    else if (a === "non_richiudere") { if (confirm("Il dispositivo non è stato smontato e non serve richiuderlo?\nSi passa al PRONTO (restituzione).")) azione("rimontaggio", { azione: "non_serve" }, "Non smontato: ora invia il PRONTO (negativo)"); }
+    else if (a === "non_richiudere") { if (await ok("Non smontato?", "Il dispositivo non è stato smontato e non serve richiuderlo?\nSi passa al PRONTO (restituzione).", "Non serve richiuderlo")) azione("rimontaggio", { azione: "non_serve" }, "Non smontato: ora invia il PRONTO (negativo)"); }
     // 02/11/2026 (Christian, 63278): scheda ferma perché abbiamo chiesto qualcosa al cliente
     else if (a === "risposta_cliente") azione("attesa-cliente", { azione: "togli" }, "Il cliente ha risposto: la scheda riprende il suo giro");
     else if (a === "rimontato") azione("rimontaggio", { azione: "fatto" }, "Richiuso: ora invia il PRONTO (negativo)");
@@ -252,12 +352,12 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   // 26/10/2026: «Trova il mio» attivo / risolto (la riparazione resta bloccata finché il cliente non abilita la riparazione)
   // 13/11/2026 (Christian, 63418): le istruzioni al cliente solo se Apple ha verificato «Trova il mio» ATTIVO.
   // «non attivo» → non si mandano; «non determinabile»/mai verificato → solo dopo il controllo sul dispositivo (forza).
-  function confermaTrova(): boolean {
+  async function confermaTrova(): Promise<boolean> {
     const st = s?.gsx?.trova_verifica?.stato;
     trovaForza.current = false;
     if (st === "attivo") return true;
     if (st === "non_attivo") { toast.error("Apple dice che «Trova il mio» NON è attivo: le istruzioni non si mandano (rifai la Decodifica se è cambiato qualcosa)."); return false; }
-    if (!confirm(`Apple non ha verificato «Trova il mio»${s?.gsx?.trova_verifica?.messaggio ? ` (${s.gsx.trova_verifica.messaggio})` : " (fai la Decodifica)"}.\nL'hai controllato sul dispositivo ed è ATTIVO? Solo così si mandano le istruzioni.`)) return false;
+    if (!(await conferma({ titolo: "«Trova il mio» non verificato da Apple", testo: `Apple non ha verificato «Trova il mio»${s?.gsx?.trova_verifica?.messaggio ? ` (${s.gsx.trova_verifica.messaggio})` : " (fai la Decodifica)"}.\nSolo se l'hai controllato sul dispositivo ed è ATTIVO si mandano le istruzioni.`, spunta: "L'ho controllato sul dispositivo: è ATTIVO", ok: "Prepara le istruzioni" }))) return false;
     trovaForza.current = true;
     return true;
   }
@@ -266,8 +366,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   }
   async function riconsegna() {
     if (!s) return;
-    const x = prompt("Cosa si riconsegna al cliente? (es. «Si riconsegna SOLO l'hard disk con i dati: il MacBook resta a noi»). Vuoto = tutto.",
-      s.riconsegna_nota || "");
+    const x = await chiediTesto({ titolo: "Cosa si riconsegna al cliente?", etichetta: "Vuoto = si riconsegna tutto", iniziale: s.riconsegna_nota || "",
+      segnaposto: "es. Si riconsegna SOLO l'hard disk con i dati: il MacBook resta a noi", ok: "Salva" });
     if (x === null) return;
     if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
     try { await assModifica(s.id, { riconsegna_nota: x.trim() || null, operatore }); toast.success(x.trim() ? "Scritto nel prossimo passo" : "Si riconsegna tutto"); await ricarica(); onCambiata(); }
@@ -301,12 +401,12 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   const st = s.stato;
   // 12/11/2026 (Christian): dal pannello GSX della scheda → 1ª + 2ª ipotesi (e Touch ID abbinato) direttamente nel preventivo,
   // nel blocco attivo (l'ultimo); le ipotesi già scritte si sostituiscono dopo conferma, le voci fisse restano
-  function inserisciDaGsx(p: GsxPrincipale) {
+  async function inserisciDaGsx(p: GsxPrincipale) {
     const pr = p.preventivo;
     if (!pr) return;
     const bl = Math.max(...blocchi(bz.righe));
     const esistenti = bz.righe.filter((x) => blocco(x) === bl && x.opt != null);
-    if (esistenti.length && !confirm(`Sostituire le ${esistenti.length} voci di ipotesi già scritte con «${pr.etichetta}» (prezzi GSX)? Le voci fisse restano.`)) return;
+    if (esistenti.length && !(await conferma({ titolo: "Sostituire le ipotesi?", testo: `Sostituire le ${esistenti.length} voci di ipotesi già scritte con «${pr.etichetta}» (prezzi GSX)? Le voci fisse restano.`, ok: "Sostituisci" }))) return;
     // 12/11/2026: COPERTURA — se l'idoneità Apple dice che il ricambio è coperto (garanzia, programma, AppleCare+ senza franchigia)
     // la 2ª ipotesi (ufficiale) va a 0 € ed è quella proposta; il listino non si tocca, è la copertura che decide
     const idon = (v("gsx") as Scheda["gsx"])?.idoneita;
@@ -324,8 +424,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     if (pr.due_touch_id) nuove.push(riga(pr.due_touch_id, pr.uno ? 1 : 0, !pr.uno || coperto, coperto));
     setBz((cur) => ({ ...cur, righe: [...cur.righe.filter((x) => !(blocco(x) === bl && x.opt != null)), ...nuove] }));
     toast.success(`${pr.etichetta}: ${pr.uno ? "1ª + 2ª ipotesi" : "ipotesi"} inserite dal GSX${pr.due_touch_id ? " (Touch ID nella 2ª)" : ""}${coperto ? " · COPERTO: 2ª a € 0" : franchigia ? ` · AppleCare+: 2ª alla franchigia ${eur(franchigia)}` : ""}: controlla e salva`);
-    if (chiuse.preventivo) toggleSez("preventivo");
-    setTimeout(() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    vaiA("preventivo");
   }
   // 12/11/2026: idoneità e copertura Apple (repair/eligibility) col difetto Apple della sezione «Intervento»; il server salva gsx.idoneita
   async function verificaIdoneita() {
@@ -343,35 +442,39 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
 
   return (
     <div className="space-y-3">
-      {/* testata */}
-      <div className="sticky top-0 z-20 rounded-xl border bg-card/95 p-2.5 shadow-sm backdrop-blur md:p-3">
+      {/* testata: 15/11/2026 (piano 2.2) resta davvero ferma in alto (scorre <main>); su iPhone fissi solo numero, stato e Salva */}
+      <div className="sticky top-0 z-20 -mx-1 rounded-xl border bg-card/95 p-2 shadow-sm backdrop-blur md:p-3">
         <div className="flex flex-wrap items-center gap-2">
-          {onChiudi && <Button size="icon-sm" variant="ghost" className="lg:hidden" onClick={onChiudi} title="Torna all'elenco"><ArrowLeft /></Button>}
-          <Button size="icon-xs" variant="outline" disabled={!s.precedente} onClick={() => s.precedente && onApri(s.precedente.id)} title="Precedente (Alt+←)"><ArrowLeft /></Button>
+          {onChiudi && <Button size="icon-sm" variant="ghost" className="lg:hidden" onClick={onChiudi} title="Torna all'elenco" aria-label="Torna all'elenco"><ArrowLeft /></Button>}
+          <Button size="icon-xs" variant="outline" className="max-sm:hidden" disabled={!s.precedente} onClick={() => s.precedente && onApri(s.precedente.id)} title="Precedente (Alt+←)" aria-label="Scheda precedente"><ArrowLeft /></Button>
           <span className="text-2xl font-bold tabular-nums tracking-tight">{s.sigla}</span>
-          {rifCliente(s) && <span className="rounded-md border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:bg-blue-950/30 dark:text-blue-100" title="Riferimento del rivenditore / cliente">Vs. rif. {rifCliente(s)}</span>}
-          <Button size="icon-xs" variant="outline" disabled={!s.successiva} onClick={() => s.successiva && onApri(s.successiva.id)} title="Successiva (Alt+→)"><ArrowRight /></Button>
+          {rifCliente(s) && <span className="rounded-md border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:bg-blue-950/30 dark:text-blue-100 max-sm:hidden" title="Riferimento del rivenditore / cliente">Vs. rif. {rifCliente(s)}</span>}
+          <Button size="icon-xs" variant="outline" className="max-sm:hidden" disabled={!s.successiva} onClick={() => s.successiva && onApri(s.successiva.id)} title="Successiva (Alt+→)" aria-label="Scheda successiva"><ArrowRight /></Button>
           <Badge stato={st} rip={s.riparazione_stato} />
           {s.prova && s.origine === "prova" && <Pill tono="ambra">PROVA</Pill>}
           {s.sola_lettura && <Pill>storica FileMaker</Pill>}
           <span className="hidden min-w-0 truncate text-sm text-muted-foreground md:inline">{s.azienda || s.nominativo} · {s.modello || s.prodotto}</span>
           <div className="ml-auto flex flex-wrap items-center gap-1">
-            <Button size="sm" variant="ghost" onClick={ricarica} title="Ricarica"><RefreshCw /></Button>
+            <Button size="sm" variant="ghost" className="max-sm:hidden" onClick={ricarica} title="Ricarica" aria-label="Ricarica"><RefreshCw /></Button>
             {!ro && <Button size="sm" disabled={!sporca} onClick={() => salva()} title="Ctrl/Cmd+S"><Save />Salva{sporca ? " *" : ""}</Button>}
           </div>
         </div>
-        {/* l'operatore serve anche sulle schede chiuse (Duplica) */}
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        {/* sul computer: operatore + pulsanti delle sezioni (clic = vai alla sezione) */}
+        <div className="mt-2 hidden flex-wrap items-center gap-2 sm:flex">
           <SceltaOperatore value={operatore as Operatore} onChange={setOperatore} compatto />
-          {/* 12/11/2026 (Christian): pulsanti delle sezioni — pieno = aperta, vuoto = chiusa; clic = apri/chiudi e vai lì */}
-          <div className="ml-auto flex flex-wrap items-center gap-1">
-            {SEZ.filter((x) => x.id !== "ricambi" || !["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0).map((x) => (
-              <button key={x.id} type="button" onClick={() => (chiuse[x.id] ? vaiA(x.id) : toggleSez(x.id))} onDoubleClick={() => vaiA(x.id)}
-                title={chiuse[x.id] ? `Apri «${x.nome}»` : `Chiudi «${x.nome}» (doppio clic: vai alla sezione)`}
-                className={`rounded-full border px-2 py-0.5 text-[11px] font-medium max-sm:min-h-10 max-sm:px-3 max-sm:text-xs ${chiuse[x.id] ? "bg-background text-muted-foreground hover:bg-muted" : "border-primary/40 bg-primary/10 text-primary"}`}>
+          <div className="ml-auto flex flex-wrap items-center gap-1" aria-label="Vai alla sezione">
+            {SEZ.filter((x) => x.id !== "ricambi" || !["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0).filter((x) => x.id !== "intervento" || v("famiglia") !== "non_apple").map((x) => (
+              <button key={x.id} type="button" onClick={() => vaiA(x.id)} title={`Vai a «${x.nome}»`}
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${TAB_DI[x.id] === tab ? "border-primary/40 bg-primary/10 text-primary" : "bg-background text-muted-foreground hover:bg-muted"}`}>
                 {x.nome}{x.id === "preventivo" && bz.righe.length ? ` · ${eur(totaleConSpedizione(bz.righe, Number(bz.spedizione_tipo && bz.spedizione_tipo !== "nessuna" ? bz.spedizione_importo : 0) || 0))}` : ""}{x.id === "ricambi" && (s.ricambi_attesi || []).length ? ` · ${(s.ricambi_attesi || []).length}` : ""}</button>))}
           </div>
         </div>
+      </div>
+      {/* su iPhone l'operatore sta qui sotto (non fisso) con le frecce precedente/successiva */}
+      <div className="flex items-end gap-2 sm:hidden">
+        <Button size="icon-xs" variant="outline" disabled={!s.precedente} onClick={() => s.precedente && onApri(s.precedente.id)} aria-label="Scheda precedente"><ArrowLeft /></Button>
+        <SceltaOperatore value={operatore as Operatore} onChange={setOperatore} compatto className="min-w-0 flex-1" />
+        <Button size="icon-xs" variant="outline" disabled={!s.successiva} onClick={() => s.successiva && onApri(s.successiva.id)} aria-label="Scheda successiva"><ArrowRight /></Button>
       </div>
 
       {/* 13/11/2026: scheda consegnata = sola consultazione finché il titolare non la riapre esplicitamente */}
@@ -405,8 +508,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         catch (e) { toastErrore(e); return false; }
       }} />
       <ExSchede ex={s.collegamenti?.ex_schede} />
-      <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={() => { if (confermaTrova()) setDlg({ k: "invio", tipo: "trova" }); }}
-        onPreventivo={() => refPrev.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+      <BannerScheda s={s} ro={ro} onTrova={trova} onIstruzioni={async () => { if (await confermaTrova()) setDlg({ k: "invio", tipo: "trova" }); }}
+        onPreventivo={() => vaiA("preventivo")} />
       <Avanzamento av={s.avanzamento} trovaDopoFinita={trovaDopoFinita(s)} prontoProgrammato={s.pronto_prog_stato === "programmato" ? s.pronto_prog_il || null : null} onAzione={onAzione} disabilitato={!!busy || ro} chiusa={["consegnato", "annullata"].includes(st)} nome={(c) => nomeTecnico(c, tecnici)}
         rinvii={<>
           {!ro && st !== "in_arrivo" && st !== "annullata" && <>
@@ -423,7 +526,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           {/* 28/10/2026 (Christian): preventivi e modifiche dettate anche da iPhone */}
           {!ro && <Assistente s={s} operatore={operatore} sporca={sporca} onEseguito={(n) => { setS(n); setB({}); onCambiata(); }} />}
           {(admin ? st !== "consegnato" || riaperta : !["consegnato", "annullata"].includes(st)) && (
-            <Button size="xs" className="ml-auto bg-amber-500 text-white hover:bg-amber-600" onClick={() => setDlg({ k: "cambia_stato" })}
+            <Button size="xs" className="ml-auto bg-amber-400 text-amber-950 hover:bg-amber-500" onClick={() => setDlg({ k: "cambia_stato" })}
               title="Riporta la scheda a qualsiasi stato (anche indietro) o la chiude"><RotateCcw />Cambia stato</Button>)}
         </>}
         onGiaFatto={ro ? undefined : () => setDlg({ k: "chiudi_tutto" })} onRiconsegna={ro ? undefined : riconsegna} />
@@ -434,7 +537,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           piedi={<>
             <Button variant="outline" onClick={() => chiudiPassaggio()}>Chiudi (non sono {s.passaggio.a})</Button>
             <Button onClick={async () => {
-              if (!s.passaggio || !confirm(`Sei ${s.passaggio.a}? Il messaggio sparirà per tutti (resta nelle note di riparazione).`)) return;
+              if (!s.passaggio || !(await conferma({ titolo: `Sei ${s.passaggio.a}?`, testo: "Il messaggio sparirà per tutti (resta nelle note di riparazione).", ok: "Ho letto" }))) return;
               try { setS(await fetchAPI(`/api/assistenza/schede/${s.id}/passaggio-letto`, { method: "POST", body: JSON.stringify({ operatore }) })); toast.success("Messaggio letto: resta nelle note di riparazione"); } catch (e) { toastErrore(e); }
             }}>Sono {s.passaggio.a}: ho letto</Button></>}>
           <p className="whitespace-pre-line text-base">{s.passaggio.testo}</p>
@@ -444,12 +547,6 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       <DaRicordare key={s.id} s={s} ro={ro} operatore={operatore} onSalvata={async () => { await ricarica(); onCambiata(); }} />
       {/* 30/10/2026: preventivo e pronto programmati (come le Tarature): Invia subito · Modifica orario · Annulla, poi l'esito */}
       <InviiProgrammati key={`prog-${s.id}-${s.preventivo_prog_il}-${s.pronto_prog_il}`} s={s} ro={ro} operatore={operatore || ""} onScheda={(x) => { setS(x); onCambiata(); }} />
-      {/* 28/10/2026 (Christian): la sezione RICAMBI c'è in qualunque stato (anche prima dell'accettazione o dopo il pronto) */}
-      {(!["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0) && <div ref={refRic} className="scroll-mt-28"><Piega id="ricambi" nome="Pronto pezzi (ricambi della scheda)" chiusa={!!chiuse.ricambi} onApri={() => toggleSez("ricambi")} riassunto={`${(s.ricambi_attesi || []).length} ricambi`}><RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
-        onSalvata={async () => { await ricarica(); onCambiata(); }} /></Piega></div>}
-      {!ro && s.stato !== "annullata" && <ComunicazioneCliente key={`com-${s.id}`} s={s} operatore={operatore} invia={(b) => azione("comunicazione", b, "Comunicazione inviata al cliente")}
-        togli={async () => { if (!confirm("Togliere la comunicazione dalla scheda? Non comparirà più nelle prossime mail, WhatsApp e PDF.")) return;
-          try { await assModifica(s.id, { comunicazione_cliente: null, operatore }); await ricarica(); onCambiata(); toast.success("Comunicazione tolta"); } catch (e) { toastErrore(e); } }} />}
       {/* 28/10/2026 (Christian, 63251): WhatsApp NON consegnati — di solito il cellulare in scheda è sbagliato */}
       {!!s.wa_falliti?.length && (
         <div className="rounded-xl border-2 border-red-500 bg-red-50 px-3 py-2 text-sm text-red-950 dark:bg-red-950/30 dark:text-red-100">
@@ -488,10 +585,13 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             title="Il cliente ha accettato le voci aggiunte (al banco o al telefono): si segnano accettate senza inviare l'aggiornamento">Aggiuntivo accettato / rifiutato</Button>)}
         {!ro && ["da_preventivare", "preventivo_inviato", "accettato"].includes(st) && !s.attesa_cliente_il && (
           <Button size="sm" variant="outline" disabled={!!busy} title="Abbiamo chiesto qualcosa al cliente: la scheda resta ferma nella sua sezione finché non risponde. Non manda nulla al cliente."
-            onClick={() => azione("attesa-cliente", { azione: "metti" }, "Scheda in attesa di risposta dal cliente")}>💬 In attesa di risposta dal cliente</Button>)}
+            onClick={async () => { if (await conferma({ titolo: "In attesa di risposta dal cliente?", testo: "La scheda resta ferma nella sua sezione finché il cliente non risponde. Al cliente non parte nulla.", ok: "Metti in attesa" })) azione("attesa-cliente", { azione: "metti" }, "Scheda in attesa di risposta dal cliente"); }}>💬 In attesa di risposta dal cliente</Button>)}
+        {/* 15/11/2026 (piano 2.6): RICHIESTA DEL CLIENTE sul lavoro (es. «stress test prima della consegna») → note di riparazione + messaggio al tecnico */}
+        {!ro && !["consegnato", "annullata"].includes(st) && !s.sola_lettura && (
+          <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "richiesta" })} title="Cosa chiede il cliente sul lavoro: arriva al tecnico e resta nelle note di riparazione"><NotebookPen />📝 Richiesta del cliente</Button>)}
         {!ro && st === "accettato" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "invio", tipo: "aggiornamento_riparazione" })}><MessageSquareText />Aggiornamento riparazione</Button>}
         {!ro && st !== "in_arrivo" && st !== "consegnato" && !(st === "rifiutato" && !["fatto", "non_serve"].includes(s.rimontaggio || "")) && <Button size="sm" variant={(st === "accettato" && ["finita", "non_riparabile"].includes(s.riparazione_stato || "")) || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
-        {!ro && st === "pronto" && <Button size="sm" variant={s.pagata || s.saldo <= 0 ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "consegna" })}>CONSEGNA</Button>}
+        {!ro && st === "pronto" && <Button size="sm" variant={s.pagata || s.saldo <= 0 ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "consegna" })}>{s.pagata || s.saldo <= 0 || pagaFineMese(s) ? "CONSEGNA" : "💶 Incassa e consegna"}</Button>}
         <span className="mx-0.5 hidden h-6 w-px bg-border sm:block" />
         <MenuPdf id={s.id} prima={() => salva(true)} />
         <Button size="sm" variant="outline" onClick={() => stampa("etichetta")} title="Etichetta Brother"><Tag />Etichetta</Button>
@@ -502,7 +602,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {/* 14/11/2026 (Christian, 63414): foglio di riconsegna da far firmare (sui Mac con OpenCore: divieto di aggiornare) */}
         {s.opencore_avviso && <Button size="sm" variant="outline" onClick={() => stampa("riconsegna")} title="Foglio che il cliente firma al ritiro, con l'avvertenza di NON installare aggiornamenti"><Printer />Foglio riconsegna</Button>}
         <span className="ml-auto" />
-        <a className="text-xs text-muted-foreground underline" href={assTrackUrl(s.token_pubblico)} target="_blank" rel="noreferrer" title="Pagina pubblica per il cliente (senza dati personali)">pagina cliente</a>
+        <a className="inline-flex min-h-10 items-center text-xs text-muted-foreground underline sm:min-h-0" href={assTrackUrl(s.token_pubblico)} target="_blank" rel="noreferrer" title="Pagina pubblica per il cliente (senza dati personali)">pagina cliente</a>
         {/* 26/10/2026 (62245): DUPLICA anche dalle schede chiuse e storiche (la scheda originale non cambia) */}
         {/* 01/11/2026 (63257, 63267-63269): niente più confirm() con «Annulla» che creava comunque la scheda */}
         <Button size="sm" variant="outline" title="Nuova scheda dello stesso cliente: identica oppure per un altro dispositivo" onClick={() => {
@@ -514,14 +614,26 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {/* 25/10/2026: la chat WhatsApp 334 di questo cliente (dati di fatturazione, foto, risposte) */}
         {s.telefono && <Button size="sm" variant="outline" title="Apri la chat WhatsApp staff 334 di questo numero"
           onClick={() => { window.location.href = `/chat-apple?tab=staff&tel=${encodeURIComponent(s.telefono || "")}`; }}><MessageSquareText />Chat WhatsApp</Button>}
-        {/* 03/11/2026 (Christian, 63289): anche il banco, con operatore e motivo; il server blocca le schede con movimenti */}
-        {!ro && <Button size="sm" variant="ghost" className="text-red-700" onClick={() => {
-          if (!admin && !operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
-          const m = prompt("Motivo dell'annullamento della scheda?");
-          if (m !== null) azione("annulla", { motivo: m }, "Scheda annullata");
-        }}><Trash2 />Annulla</Button>}
+        {/* 15/11/2026 (piano 2.5): «Annulla scheda» non sta più accanto a «Duplica»: è nel menu «Altro…», con motivo obbligatorio */}
+        {!ro && <MenuAltro>
+          <button type="button" className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-sm text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40" onClick={async () => {
+            if (!admin && !operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
+            const m = await chiediTesto({ titolo: `Annullare la scheda ${s.sigla}?`, testo: "La scheda si chiude come ANNULLATA (il server la ferma se ha incassi o documenti). Si può riaprire solo dal titolare.",
+              etichetta: "Motivo dell'annullamento", obbligatorio: true, ok: "Annulla la scheda", pericolo: true });
+            if (m) azione("annulla", { motivo: m }, "Scheda annullata");
+          }}><Trash2 className="size-4" />Annulla scheda…</button>
+        </MenuAltro>}
       </div>
 
+      {/* 15/11/2026 (piano 2.3): LE QUATTRO LINGUETTE */}
+      <Linguette tab={tab} setTab={setTab} info={{
+        preventivo: bz.righe.length ? eur(totaleConSpedizione(bz.righe, Number(bz.spedizione_tipo && bz.spedizione_tipo !== "nessuna" ? bz.spedizione_importo : 0) || 0)) : "",
+        lavorazione: (s.ricambi_attesi || []).some((r) => r.stato !== "arrivato") ? `${(s.ricambi_attesi || []).filter((r) => r.stato !== "arrivato").length} ricambi attesi` : "",
+        chiusura: st === "pronto" && !s.pagata && s.saldo > 0 ? `da pagare ${eur(s.saldo)}` : s.pagata ? "pagata" : "",
+      }} fase={linguettaDellaFase(s)} />
+      <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="min-w-0 space-y-3">
+          <div hidden={tab !== "accettazione"} className="space-y-3" role="tabpanel" id="pannello-accettazione" aria-labelledby="linguetta-accettazione">
       <div className="grid gap-3 xl:grid-cols-2">
         <Piega id="cliente" nome="Cliente" chiusa={!!chiuse.cliente} onApri={() => toggleSez("cliente")} riassunto={`${s.azienda || s.nominativo || "—"}${s.telefono ? ` · ${s.telefono}` : ""}`}>
         <Sezione titolo="Cliente" icona={<UserRound />}
@@ -569,16 +681,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
 
       <Aggiuntivi s={s} ro={ro} busy={!!busy} azione={azione} stampa={stampaAggiuntivo} />
 
-      <div ref={refTec} className="scroll-mt-28">
-        <Piega id="tecnici" nome="Verifica e riparazione (tecnici)" chiusa={!!chiuse.tecnici} onApri={() => toggleSez("tecnici")} riassunto={`${s.tecnico_verifica ? `verifica ${nomeTecnico(s.tecnico_verifica)}` : "verifica da assegnare"}${s.tecnico_riparazione ? ` · riparazione ${nomeTecnico(s.tecnico_riparazione)}` : ""}`}>
-        <PannelloTecnici s={s} tecnici={tecnici} ro={ro} busy={!!busy}
-          onAssegnaVerifica={() => setDlg({ k: "assegna_verifica" })} onChiudiVerifica={() => setDlg({ k: "chiudi_verifica" })}
-          onRiapriVerifica={() => azione("riapri-verifica", {}, "Verifica riaperta")}
-          onAssegnaRiparazione={() => setDlg({ k: "assegna_riparazione" })} onStato={statoRiparazione}
-          onVai={(dove) => (dove === "preventivo" ? refPrev : refLav).current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
-        </Piega>
-      </div>
-
+          </div>
+          <div hidden={tab !== "preventivo"} className="space-y-3" role="tabpanel" id="pannello-preventivo" aria-labelledby="linguetta-preventivo">
       <div ref={refPrev} className="scroll-mt-28">
         <Piega id="preventivo" nome="Preventivo" chiusa={!!chiuse.preventivo} onApri={() => toggleSez("preventivo")} riassunto={`${bz.righe.length} voci · ${eur(totaleConSpedizione(bz.righe, Number(bz.spedizione_tipo && bz.spedizione_tipo !== "nessuna" ? bz.spedizione_importo : 0) || 0))} · ${s.preventivo_stato || "da fare"}`}>
         {!ro && bz.righe.length > 0 && ["da_preventivare", "preventivo_inviato", "accettato"].includes(st) && (
@@ -594,7 +698,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           onConcordato={async () => {
             if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
             if (!("preventivo_righe" in b)) { toast.error("Prima modifica le voci del preventivo (alternativa / upgrade), poi premi di nuovo"); return; }
-            const nota = prompt("Come e quando l'ha concordato il cliente? (es. «WhatsApp 28/10: disco da 128 GB a € 179»)", "");
+            const nota = await chiediTesto({ titolo: "Concordato con il cliente", etichetta: "Come e quando l'ha concordato il cliente?", segnaposto: "es. WhatsApp 28/10: disco da 128 GB a € 179", ok: "Salva e accetta" });
             if (nota === null) return;
             const t = nota.toLowerCase();
             const canale = /whats|wa\b/.test(t) ? "whatsapp" : /mail/.test(t) ? "mail" : /telef|chiam/.test(t) ? "telefono" : /negozio|banco|a voce/.test(t) ? "negozio" : undefined;
@@ -607,11 +711,30 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         </Piega>
       </div>
 
+          </div>
+          <div hidden={tab !== "lavorazione"} className="space-y-3" role="tabpanel" id="pannello-lavorazione" aria-labelledby="linguetta-lavorazione">
+      <div ref={refTec} className="scroll-mt-28">
+        <Piega id="tecnici" nome="Verifica e riparazione (tecnici)" chiusa={!!chiuse.tecnici} onApri={() => toggleSez("tecnici")} riassunto={`${s.tecnico_verifica ? `verifica ${nomeTecnico(s.tecnico_verifica)}` : "verifica da assegnare"}${s.tecnico_riparazione ? ` · riparazione ${nomeTecnico(s.tecnico_riparazione)}` : ""}`}>
+        <PannelloTecnici s={s} tecnici={tecnici} ro={ro} busy={!!busy}
+          onAssegnaVerifica={() => setDlg({ k: "assegna_verifica" })} onChiudiVerifica={() => setDlg({ k: "chiudi_verifica" })}
+          onRiapriVerifica={() => azione("riapri-verifica", {}, "Verifica riaperta")}
+          onAssegnaRiparazione={() => setDlg({ k: "assegna_riparazione" })} onStato={statoRiparazione}
+          onVai={(dove) => vaiA(dove === "preventivo" ? "preventivo" : "lavorazione")} />
+        </Piega>
+      </div>
+
+      {/* 28/10/2026 (Christian): la sezione RICAMBI c'è in qualunque stato (anche prima dell'accettazione o dopo il pronto) */}
+      {(!["consegnato", "annullata"].includes(st) || (s.ricambi_attesi || []).length > 0) && <div ref={refRic} className="scroll-mt-28"><Piega id="ricambi" nome="Ricambi" chiusa={!!chiuse.ricambi} onApri={() => toggleSez("ricambi")} riassunto={`${(s.ricambi_attesi || []).length} ricambi`}><RicambiAttesi key={`ric-${s.id}`} s={s} ro={ro} operatore={operatore}
+        onSalvata={async () => { await ricarica(); onCambiata(); }} /></Piega></div>}
       {/* 04/11/2026 (Christian): la lavorazione a tutta larghezza, come il preventivo */}
       <div ref={refLav} className="scroll-mt-28"><Piega id="lavorazione" nome="Lavorazione" chiusa={!!chiuse.lavorazione} onApri={() => toggleSez("lavorazione")} riassunto={(s.lavorazione || "").split("\n")[0] || "—"}><Lavorazione s={s} v={v} set={set} ro={ro} tecnici={tecnici.map((t) => t.codice)} busy={!!busy}
         onNonFatta={(chiave, non_fatta) => azione("voce-non-fatta", { chiave, non_fatta }, non_fatta ? "Voce segnata NON FATTA: tolta da lavorazione e totale" : "Voce di nuovo da fare: rimessa in lavorazione e totale")}
         onPressoCliente={(a) => azione("presso-cliente", { azione: a }, { riconsegnato: "Segnato: riconsegnato al cliente in attesa del ricambio", annulla: "Riconsegna tolta", richiedi: "Chiesto al cliente di riportarlo", riportato: "Dispositivo riportato: torna in lavorazione" }[a])} /></Piega></div>
-      <div className="grid gap-3 xl:grid-cols-[3fr_2fr]">
+        <Sezione titolo="Nota interna" sottotitolo="mai al cliente">
+          <textarea className={area} rows={3} disabled={ro} value={(v("note_interne") as string) || ""} onChange={(e) => set("note_interne", e.target.value)} />
+        </Sezione>
+          </div>
+          <div hidden={tab !== "chiusura"} className="space-y-3" role="tabpanel" id="pannello-chiusura" aria-labelledby="linguetta-chiusura">
         <div ref={refDoc} className="scroll-mt-28">
           <Piega id="documenti" nome="Documenti e pagamento" chiusa={!!chiuse.documenti} onApri={() => toggleSez("documenti")} riassunto={`${s.pagamento_modo || "pagamento da definire"}${s.fattura_id ? " · fattura" : s.scontrino_id ? " · scontrino" : ""}`}>
           <Documenti s={s} ro={ro} busy={!!busy} onFatturaEliminata={async () => { await ricarica(); onCambiata(); }}
@@ -621,21 +744,22 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             onPagamentoAnticipato={async (documento) => {
               if (sporca && !(await salva(true))) return;
               const cosa = documento === "proforma" ? "il PRO FORMA" : "la FATTURA (va allo SdI da incassare)";
-              if (!confirm(`Chiedere ORA il pagamento di ${eur(s.saldo)} con ${cosa}? Parte una mail con il documento, IBAN e causale, e un WhatsApp.`)) return;
+              if (!(await conferma({ titolo: "Pagamento anticipato", testo: `Chiedere ORA il pagamento di ${eur(s.saldo)} con ${cosa}? Parte una mail con il documento, IBAN e causale, e un WhatsApp.`, ok: "Chiedi il pagamento" }))) return;
               await azione("pagamento-anticipato", { documento }, `Richiesta di pagamento anticipato di ${eur(s.saldo)} inviata`);
             }}
             onVendi={vendi} onPagato={() => setDlg({ k: "pagato" })} onCorriere={() => setDlg({ k: "corriere" })} />
           </Piega>
         </div>
-        <Sezione titolo="Nota interna" sottotitolo="mai al cliente">
-          <textarea className={area} rows={3} disabled={ro} value={(v("note_interne") as string) || ""} onChange={(e) => set("note_interne", e.target.value)} />
-        </Sezione>
-      </div>
-
-      {/* 24/10/2026 (Christian): comunicazioni e fasi si aprono con un clic, così la scheda non è infinita */}
-      <div className="grid gap-3 xl:grid-cols-2">
-        <Apribile titolo="Comunicazioni al cliente" conteggio={(s.comunicazioni || []).length}><Comunicazioni s={s} /></Apribile>
-        <Apribile titolo="Fasi e registro" conteggio={(s.eventi || []).length}><Registro s={s} /></Apribile>
+          </div>
+        </div>
+          {/* 15/11/2026 (piano 2.3): comunicazioni e registro nel PANNELLO LATERALE (sotto, su schermi più stretti) */}
+          <aside className="min-w-0 space-y-3" aria-label="Comunicazioni e registro">
+            {!ro && s.stato !== "annullata" && <ComunicazioneCliente key={`com-${s.id}`} s={s} operatore={operatore} invia={(b) => azione("comunicazione", b, "Comunicazione inviata al cliente")}
+        togli={async () => { if (!(await conferma({ titolo: "Togliere la comunicazione?", testo: "Non comparirà più nelle prossime mail, WhatsApp e PDF.", ok: "Togli" }))) return;
+          try { await assModifica(s.id, { comunicazione_cliente: null, operatore }); await ricarica(); onCambiata(); toast.success("Comunicazione tolta"); } catch (e) { toastErrore(e); } }} />}
+            <Apribile titolo="Comunicazioni al cliente" conteggio={(s.comunicazioni || []).length}><Comunicazioni s={s} /></Apribile>
+            <Apribile titolo="Fasi e registro" conteggio={(s.eventi || []).length}><Registro s={s} /></Apribile>
+          </aside>
       </div>
 
       {dlg?.k === "chiudi_tutto" && <DialogoChiudiTutto s={s} onClose={() => setDlg(null)} onChiudi={async (b) => !!(await azione("chiudi-tutto", b, "Scheda chiusa: già fatto tutto"))} />}
@@ -674,12 +798,19 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         onScontrino={async (imp) => { if (sporca && !(await salva(true))) return; router.push(`/cassa?${new URLSearchParams({ scheda: s.id, acconto: imp.toFixed(2) })}`); }}
         onIncassato={async () => { setDlg(null); await ricarica(); onCambiata(); }} />}
       {dlg?.k === "pagato" && <DialogoPagato s={s} onClose={() => setDlg(null)} onPagato={async (body) => !!(await azione("pagamento", body, "Pagamento registrato"))} />}
-      {dlg?.k === "consegna" && <DialogoConsegna s={s} onClose={() => setDlg(null)} onConsegna={async (modo) => {
-        // 14/10/2026: con un saldo aperto il backend ferma la consegna; si va avanti solo con conferma esplicita
-        const daPagare = ["ritiro", "spedizione", "corriere_cliente"].includes(modo) && !s.pagata && s.saldo > 0 && !pagaFineMese(s);
-        if (daPagare && !confirm(`Risulta ancora da pagare ${eur(s.saldo)}. Consegnare lo stesso senza pagamento?`)) return false;
-        return !!(await azione("consegna", { modo, forza: daPagare || undefined }, "Consegnata: scheda chiusa"));
-      }} />}
+      {/* 15/11/2026 (piano 2.4): INCASSA E CONSEGNA in un flusso — con un saldo aperto si consegna solo con la spunta «senza incasso» */}
+      {dlg?.k === "consegna" && <DialogoConsegna s={s} onClose={() => setDlg(null)}
+        onScontrino={async () => { if (sporca && !(await salva(true))) return; router.push(`/cassa?scheda=${s.id}`); }}
+        onFattura={() => { setDlg(null); vendi("fattura"); }}
+        onPagato={() => setDlg({ k: "pagato" })}
+        onStampaRiconsegna={s.opencore_avviso ? () => stampa("riconsegna") : undefined}
+        onConsegna={async (modo, senzaIncasso) => {
+          const daPagare = ["ritiro", "spedizione", "corriere_cliente"].includes(modo) && !s.pagata && s.saldo > 0 && !pagaFineMese(s);
+          if (daPagare && !senzaIncasso) { toast.error(`Risulta ancora da pagare ${eur(s.saldo)}: incassa oppure spunta «Consegno senza incasso»`); return false; }
+          return !!(await azione("consegna", { modo, forza: daPagare || undefined }, "Consegnata: scheda chiusa"));
+        }} />}
+      {dlg?.k === "richiesta" && <DialogoRichiesta sigla={s.sigla} onClose={() => setDlg(null)}
+        onSalva={async (b) => !!(await azione("richiesta-cliente", b, "Richiesta del cliente registrata: arriva al tecnico"))} />}
       {dlg?.k === "corriere" && <DialogoCorriere s={s} operatore={operatore} onClose={() => setDlg(null)}
         onFatta={() => { setDlg(null); ricarica(); onCambiata(); }}
         onCorriereCliente={async () => {
@@ -733,7 +864,13 @@ function MenuPdf({ id, prima }: { id: string; prima: () => Promise<boolean> }) {
 
 /** 12/11/2026 (Christian): sezione chiudibile — chiusa = una riga con il riassunto e «apri»; aperta = il contenuto com'è. */
 function Piega({ id, nome, chiusa, onApri, riassunto, children }: { id: string; nome: string; chiusa: boolean; onApri: () => void; riassunto?: string; children: React.ReactNode }) {
-  if (!chiusa) return <div id={`sez-${id}`} className="min-w-0">{children}</div>;
+  // 15/11/2026 (piano 2.7): aperta, si richiude dalla freccia sul suo titolo (i pulsanti in alto ora PORTANO alla sezione)
+  if (!chiusa) return (
+    <div id={`sez-${id}`} className="min-w-0 scroll-mt-28">
+      <button type="button" onClick={onApri} className="mb-1 flex min-h-8 items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground max-sm:min-h-10" aria-expanded>
+        <ChevronDown className="size-3.5" />{nome} · chiudi</button>
+      {children}
+    </div>);
   return (
     <button id={`sez-${id}`} type="button" onClick={onApri} className="flex w-full min-w-0 items-center gap-2 rounded-xl border bg-card px-4 py-2.5 text-left text-sm shadow-sm hover:bg-muted/50">
       <ChevronRight className="size-4 shrink-0" /><span className="font-semibold">{nome}</span>
@@ -779,7 +916,7 @@ function RiferimentiScheda({ s, v, set, ro, operatore, onApri, onCambiata, salva
     if (!comb) { toast.error("Prima crea il codice della spedizione combinata"); return; }
     // 26/10/2026 (Christian, 63228): quanti ALTRI dispositivi sono nel pacco → altrettante schede VUOTE (numeri progressivi),
     // stesso cliente e stesso pacco; modello, seriale e difetto si compilano dopo (la ricevuta si manda a scheda compilata)
-    const x = prompt(`Quanti ALTRI dispositivi ci sono nel pacco ${comb}? (oltre a questo)`, "1");
+    const x = await chiediTesto({ titolo: `Altre schede nel pacco ${comb}`, etichetta: "Quanti ALTRI dispositivi ci sono nel pacco (oltre a questo)?", iniziale: "1", righe: 1, ok: "Crea le schede" });
     if (x === null) return;
     const quante = Number(x.trim());
     if (!Number.isInteger(quante) || quante < 1 || quante > 20) { toast.error("Scrivi un numero da 1 a 20"); return; }
@@ -934,7 +1071,7 @@ function ComunicazioneCliente({ s, operatore, invia, togli }: { s: Scheda; opera
     if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
     if (testo.trim().length < 3) { toast.error("Scrivi la comunicazione"); return; }
     const allegato = DOC.find(([k]) => k === documento)?.[1] || "";
-    if (!confirm(`Inviare al cliente${mail ? " per mail" : ""}${mail && wa ? " e" : ""}${wa ? " su WhatsApp" : ""}?\n\n«${testo.trim()}»\n\n${documento ? `Insieme a: ${allegato}` : "Solo il testo, senza scheda"}`)) return;
+    if (!(await conferma({ titolo: "Inviare al cliente?", testo: `${mail ? "Per mail" : ""}${mail && wa ? " e " : ""}${wa ? "su WhatsApp" : ""}:\n\n«${testo.trim()}»\n\n${documento ? `Insieme a: ${allegato}` : "Solo il testo, senza scheda"}`, ok: "Invia al cliente" }))) return;
     setBusy(true);
     try { if (await invia({ testo: testo.trim(), invia_mail: mail, invia_wa: wa, ricorda, documento: documento || null })) { setInviata(testo.trim()); setTesto(""); } } finally { setBusy(false); }
   }
@@ -1012,7 +1149,7 @@ function RicambiAttesi({ s, ro, operatore, onSalvata }: { s: Scheda; ro: boolean
               <Button size="xs" title="Mette il ricambio in coda per l'acquisto: si ordina con fattura Genius e PayPal, col riferimento a questa scheda"
                 onClick={async () => {
                   if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
-                  if (!confirm(`Ordinare questo ricambio per la scheda ${s.sigla}?\n\n${r.cosa || ""}\n${r.link || ""}\n\nVa in coda per l'acquisto (fattura Genius, PayPal): il pagamento chiede l'impronta di Christian.`)) return;
+                  if (!(await conferma({ titolo: `Ordinare il ricambio per la ${s.sigla}?`, testo: `${r.cosa || ""}\n${r.link || ""}\n\nVa in coda per l'acquisto (fattura Genius, PayPal): il pagamento chiede l'impronta di Christian.`, ok: "🛒 Ordina" }))) return;
                   try { await fetchAPI(`/api/assistenza/schede/${s.id}/ricambi/ordina`, { method: "POST", body: JSON.stringify({ indice: i, operatore }) }); toast.success("Ordine richiesto: è in coda per l'acquisto"); await onSalvata(); }
                   catch (e) { toastErrore(e); }
                 }}>🛒 Ordina</Button>)}
@@ -1060,7 +1197,7 @@ function VerificaPreventivo({ s, admin, busy, onAzione, onInvia }: {
 }) {
   const v = s.preventivo_verifica;
   const quando = (x?: string) => x ? new Date(x).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-  const richiedi = () => { const n = prompt("Nota per Christian (facoltativa): cosa deve guardare?", ""); if (n !== null) onAzione("richiedi", n); };
+  const richiedi = async () => { const n = await chiediTesto({ titolo: "👑 Verifica del preventivo", etichetta: "Nota per Christian (facoltativa): cosa deve guardare?", ok: "Richiedi la verifica" }); if (n !== null) onAzione("richiedi", n); };
   if (!v) return (
     <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-dashed px-3 py-2 text-sm">
       <span className="text-muted-foreground">Preventivo preparato dal banco? Prima dell&apos;invio fallo verificare.</span>
@@ -1084,7 +1221,7 @@ function VerificaPreventivo({ s, admin, busy, onAzione, onInvia }: {
           <Button size="sm" variant="outline" disabled={busy} onClick={() => onAzione("approva")}
             title="Approva senza inviare ora (lo invia il banco)">Approva (invia il banco)</Button>
           <Button size="sm" variant="outline" className="border-red-300 text-red-700" disabled={busy}
-            onClick={() => { const n = prompt("Cosa devono sistemare nel preventivo?", ""); if (n && n.trim()) onAzione("correggi", n); }}>✏️ Rimanda al banco con una nota</Button>
+            onClick={async () => { const n = await chiediTesto({ titolo: "Rimanda al banco", etichetta: "Cosa devono sistemare nel preventivo?", obbligatorio: true, ok: "Rimanda al banco" }); if (n) onAzione("correggi", n); }}>✏️ Rimanda al banco con una nota</Button>
           <span className="self-center text-xs opacity-80">Per modificarlo: correggi le voci qui sotto, poi «Approva e invia».</span></>}
         {v.stato !== "richiesta" && <Button size="sm" variant="outline" disabled={busy} onClick={richiedi}>👑 Richiedi di nuovo la verifica</Button>}
         {v.stato === "approvato" && <Button size="sm" disabled={busy} onClick={onInvia}>Invia il preventivo</Button>}

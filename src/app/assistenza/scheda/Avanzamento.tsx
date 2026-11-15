@@ -20,17 +20,32 @@ const TONI: Record<Situazione["tono"], { box: string; pallino: string; etichetta
   grigio: { box: "border-border bg-muted/60 text-foreground", pallino: "bg-muted-foreground", etichetta: "CHIUSA" },
 };
 
+/** 15/11/2026 (piano 2.13): giorni di CALENDARIO nel fuso di Roma (prima contava le 24 ore: ieri alle 16:53 era «da oggi») */
+export function giorniCalendario(iso: string | null | undefined): number {
+  if (!iso) return NaN;
+  const g = (d: Date) => { const [a, m, gg] = d.toLocaleDateString("en-CA", { timeZone: "Europe/Rome" }).split("-").map(Number); return Date.UTC(a, m - 1, gg) / 86400000; };
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return NaN;
+  return Math.round(g(new Date()) - g(d));
+}
+const migliaia = (i: string) => String(Number(i)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+/** 15/11/2026 (piano 2.13): «€ 119.00» scritto dal backend → «€ 119,00» */
+export function importiItaliani(t: string): string {
+  return t.replace(/(€\s?)(\d{1,3}(?:\d{3})*)\.(\d{2})\b/g, (_, e: string, i: string, c: string) => `${e}${migliaia(i)},${c}`)
+    .replace(/\b(\d{1,3}(?:\d{3})*)\.(\d{2})(\s?€)/g, (_, i: string, c: string, e: string) => `${migliaia(i)},${c}${e}`);
+}
+
 /** «da 3 giorni» / «da oggi» / «da ieri» */
 function daQuanto(iso: string | null | undefined): string {
   if (!iso) return "";
-  const giorni = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  const giorni = giorniCalendario(iso);
   if (Number.isNaN(giorni)) return "";
   return giorni <= 0 ? "da oggi" : giorni === 1 ? "da ieri" : `da ${giorni} giorni`;
 }
 
 const AZIONI: Record<string, string> = {
   arrivato: "Dispositivo arrivato", preventivo: "Vai al preventivo", invia_preventivo: "INVIA PREVENTIVO", esito: "Accettato / Rifiutato",
-  pronto: "PRONTO", incassa: "Incassa / Pagato", consegna: "CONSEGNA", spedisci: "🚚 Crea l'etichetta di riconsegna",
+  pronto: "PRONTO", incassa: "💶 Incassa e consegna", consegna: "CONSEGNA", spedisci: "🚚 Crea l'etichetta di riconsegna",
   assegna_verifica: "Assegna in verifica", chiudi_verifica: "Scrivi e chiudi la verifica", assegna_riparazione: "Assegna in riparazione",
   stato_riparazione: "Stato riparazione", ricambi: "Vai ai ricambi", aggiornamento: "Aggiornamento al cliente", trova: "Invia le istruzioni «Trova il mio»",
   rimontaggio: "Da richiudere: assegna a un tecnico", rimontato: "✔ Richiuso", risposta_cliente: "✔ Il cliente ha risposto",
@@ -72,19 +87,19 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
           {sit && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide opacity-80">
-                <span className={cn("size-2.5 rounded-full", tono.pallino, sit.tono === "verde" && "animate-pulse")} />{tono.etichetta}</span>
-              <span className="text-lg font-bold leading-tight sm:text-xl">{titolo}</span>
+                <span className={cn("size-2.5 rounded-full", tono.pallino, sit.tono === "verde" && "animate-pulse motion-reduce:animate-none")} />{tono.etichetta}</span>
+              <span className="text-lg font-bold leading-tight sm:text-xl">{importiItaliani(titolo)}</span>
               {sit.da && <span className="text-sm font-medium tabular-nums opacity-80" title={dataOra(sit.da)}>{daQuanto(sit.da)} · {dataOra(sit.da)}</span>}
               {soloAvviso ? <span className="w-full text-sm opacity-90">Il ripristino del software lo fa il cliente, oppure lo facciamo noi se disattiva «Trova il mio».</span>
-                : sit.dettaglio && <span className="w-full text-sm opacity-90">{sit.dettaglio}</span>}
+                : sit.dettaglio && <span className="w-full text-sm opacity-90">{importiItaliani(sit.dettaglio)}</span>}
               {prontoProgrammato && <span className="w-full rounded-lg border-2 border-red-500 bg-red-100 px-2 py-1 text-base font-extrabold uppercase tracking-wide text-red-700 dark:bg-red-950/60 dark:text-red-200" data-testid="pronto-programmato">⏰ Pronto programmato per {quandoLungo(prontoProgrammato)}</span>}
             </div>
           )}
           {av.prossimo?.testo && (
             <div className={cn("flex flex-wrap items-center gap-2 text-sm", sit && "mt-2 border-t border-current/15 pt-2")}>
               <span className="font-semibold">{bloccata ? "🔒 Prossimo passo:" : "Prossimo passo:"}</span>
-              <span className="font-medium">{soloAvviso ? av.prossimo.testo.replace(/^BLOCCATA:\s*/i, "") : av.prossimo.testo}</span>
-              {av.prossimo.poi && <span className="text-xs opacity-80">· poi: {av.prossimo.poi}</span>}
+              <span className="font-medium">{importiItaliani(soloAvviso ? av.prossimo.testo.replace(/^BLOCCATA:\s*/i, "") : av.prossimo.testo)}</span>
+              {av.prossimo.poi && <span className="text-xs opacity-80">· poi: {importiItaliani(av.prossimo.poi)}</span>}
               {az === "spedisci" && (
                 <Button size="sm" variant="outline" className="ml-auto" disabled={disabilitato} onClick={() => onAzione("consegna")}
                   title="Il pacco è già partito (etichetta fatta altrove) o il cliente l'ha ritirato: registra solo la consegna">Già spedito: CONSEGNA</Button>)}
@@ -129,7 +144,7 @@ export function Avanzamento({ av, onAzione, disabilitato, chiusa, onGiaFatto, on
             <span className={cn("text-[11px] leading-tight", p.stato === "attuale" ? "font-semibold text-foreground" : "text-muted-foreground")}>{p.etichetta}</span>
             {/* 04/11/2026 (Christian): giorno e ora sotto ogni passo, senza dover aprire «Fasi e registro» */}
             {p.quando && <span className="whitespace-pre-line text-[10px] font-medium leading-tight tabular-nums text-foreground/80">{dataOra(p.quando).replace(", ", "\n")}</span>}
-            {p.dettaglio && <span className="text-[10px] leading-tight text-muted-foreground">{p.dettaglio}</span>}
+            {p.dettaglio && <span className="text-[10px] leading-tight text-muted-foreground">{importiItaliani(p.dettaglio)}</span>}
           </li>
         ))}
       </ol>

@@ -4,6 +4,7 @@
 // Arrivano dal chatbot (richiesta di riparazione) o dalla chat dello staff (QR + nome + email).
 // Le schede per cui è già prenotato il ritiro non passano di qui: nascono subito «in arrivo col corriere».
 
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { MessageCircle, Trash2, FilePlus2, Loader2 } from "lucide-react";
@@ -20,7 +21,7 @@ export function RichiesteWhatsApp({ operatore, onApriScheda, onCambiate }: {
   useEffect(() => { carica(); }, []);
   async function scarta(r: Richiesta) {
     if (!operatore) { toast.error("Scegli l'operatore"); return; }
-    const m = prompt("Perché si scarta? (es. solo informazioni, spam, già passato al banco)", "");
+    const m = await chiediTesto({ titolo: "Scartare la richiesta?", etichetta: "Perché si scarta?", segnaposto: "es. solo informazioni, spam, già passato al banco", ok: "Scarta" });
     if (m === null) return;
     try { await assRichiestaScarta(r.id, { motivo: m, operatore }); toast.success("Richiesta scartata"); carica(); onCambiate(); }
     catch (e) { toastErrore(e); }

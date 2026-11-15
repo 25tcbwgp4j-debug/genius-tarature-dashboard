@@ -7,6 +7,7 @@
 // · spedizione a flag (A/R · solo ritiro · solo ritorno, 28 € modificabile), testi standard che si AGGIUNGONO;
 // · preventivo AGGIUNTIVO dopo l'accettazione (nuovo blocco con le sue ipotesi);
 // · pulsante chiaro «INVIA PREVENTIVO» → mail + WhatsApp.
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { useState } from "react";
 import { toast } from "sonner";
 import { BookText, ChevronDown, ChevronRight, Copy, ListPlus, Plus, Search, Send, Sparkles, Trash2, Truck, X } from "lucide-react";
@@ -51,7 +52,7 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
   // restano). Prima il clic sulla stessa voce la ripeteva come voce fissa in 1ª/2ª/3ª: ora una voce già presente nel
   // blocco non si aggiunge due volte.
   const rigaDa = (v: VoceProposta, b: number): EstimateLine => ({ t: v.descrizione, p: v.prezzo ?? "", listino: v.scontato_da || null, nota: null, b, voce_id: v.id, opt: null, on: false });
-  function inserisciCombo(c: Combo) {
+  async function inserisciCombo(c: Combo) {
     const b = bloccoAttivo;
     // 04/11/2026 (Christian): aggiornamento OpenCore = voce fissa + eventuale extra (conservazione di dati e programmi)
     // 09/11/2026 (Christian, 63351): tutta la parte software è UNA voce fissa, backup compreso (niente ipotesi aggiungibile):
@@ -73,7 +74,7 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
       return;
     }
     const esistenti = ipotesiDelBlocco(righe, b);
-    if (esistenti.length && !confirm(`Sostituire le ${esistenti.length} ipotesi già scritte con la combinazione «${c.etichetta}»? (le voci fisse restano)`)) return;
+    if (esistenti.length && !(await conferma({ titolo: "Sostituire le ipotesi?", testo: `Sostituire le ${esistenti.length} ipotesi già scritte con la combinazione «${c.etichetta}»? (le voci fisse restano)`, ok: "Sostituisci" }))) return;
     setRighe((r) => {
       const resto = r.filter((x) => !(blocco(x) === b && x.opt != null));
       const nuove: EstimateLine[] = [];
@@ -161,10 +162,10 @@ export function Preventivo({ s, attuale, bz, setBz, ro, onInvia, onNotaInterna, 
             <Button size="sm" variant="outline" onClick={() => setRighe((r) => [...r, { t: "", p: "", opt: null, on: false, b: bloccoAttivo }])}><Plus />Voce fissa</Button>
             {/* 29/10/2026 (Christian): SCONTO / ASSISTENZA DI CORTESIA = riga con importo negativo (anche tutto il totale → € 0) */}
             <Button size="sm" variant="outline" className="border-rose-300 text-rose-800" title="Riga con importo NEGATIVO: sconto oppure assistenza di cortesia (per azzerare il totale metti tutto l'importo)"
-              onClick={() => {
-                const tipo = window.prompt("Descrizione della riga (es. SCONTO, ASSISTENZA DI CORTESIA):", "ASSISTENZA DI CORTESIA");
+              onClick={async () => {
+                const tipo = await chiediTesto({ titolo: "Sconto / assistenza di cortesia", etichetta: "Descrizione della riga (es. SCONTO, ASSISTENZA DI CORTESIA)", iniziale: "ASSISTENZA DI CORTESIA", righe: 1, ok: "Avanti" });
                 if (tipo === null) return;
-                const imp = window.prompt("Importo dello sconto in euro (positivo: verrà messo in negativo). Per azzerare scrivi il totale:", "");
+                const imp = await chiediTesto({ titolo: "Importo dello sconto", etichetta: "Euro (positivo: verrà messo in negativo). Per azzerare scrivi il totale", righe: 1, ok: "Aggiungi la riga" });
                 const n = Number(String(imp || "").replace(",", "."));
                 if (!n || n <= 0) return;
                 setRighe((r) => [...r, { t: (tipo.trim() || "SCONTO").toUpperCase(), p: -Math.abs(n), opt: null, on: false, b: bloccoAttivo }]);

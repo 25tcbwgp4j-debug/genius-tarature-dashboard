@@ -2,6 +2,7 @@
 
 // 03/11/2026 (Christian): altri pezzi consegnati con la stessa scheda (hard disk dove riversare i dati, iPhone di
 // destinazione…): ognuno ha una descrizione e la sua etichetta con lo stesso numero, 63300/1, /2, /3.
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { useState } from "react";
 import { Check, HardDrive, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,7 @@ export function Aggiuntivi({ s, ro, busy, azione, stampa }: {
                     onClick={() => { setInModifica(x.n); setTesto(x.descrizione); }}><Pencil /></Button>}
                   {!ro && <Button size="sm" variant="ghost" className="text-red-700" disabled={busy} aria-label={`Togli ${s.sigla}/${x.n}`}
                     title="Togli dalla scheda (il numero non viene riusato)"
-                    onClick={() => { if (confirm(`Togliere ${s.sigla}/${x.n} (${x.descrizione}) dalla scheda?`)) azione(`aggiuntivi/${x.n}/togli`, {}, `${s.sigla}/${x.n} tolto`); }}><Trash2 /></Button>}
+                    onClick={async () => { if (await conferma({ titolo: "Togliere il dispositivo aggiuntivo?", testo: `Togliere ${s.sigla}/${x.n} (${x.descrizione}) dalla scheda?`, ok: "Togli", pericolo: true })) azione(`aggiuntivi/${x.n}/togli`, {}, `${s.sigla}/${x.n} tolto`); }}><Trash2 /></Button>}
                 </>
               )}
             </li>

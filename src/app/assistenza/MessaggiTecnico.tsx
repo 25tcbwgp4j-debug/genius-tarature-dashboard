@@ -2,6 +2,7 @@
 
 // 27/10/2026 (Christian, 63228): cliccando un tecnico nel cruscotto («In riparazione · ROBERTO») compaiono SUBITO i messaggi
 // di passaggio non ancora letti per lui, prima ancora di aprire la scheda. La X li chiude solo su questo computer.
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,7 @@ export function MessaggiTecnico({ tecnico, schede, operatore, onApri, onLetto }:
   if (!tecnico || !nuovi.length || chiuso) return null;
   const chiudi = () => { try { sessionStorage.setItem(chiave, "1"); } catch { /* */ } setChiuso(true); };
   async function letto(id: string) {
-    if (!confirm(`Sei ${tecnico}? Il messaggio sparirà per tutti (resta nelle note di riparazione).`)) return;
+    if (!(await conferma({ titolo: `Sei ${tecnico}?`, testo: "Il messaggio sparirà per tutti (resta nelle note di riparazione).", ok: "Ho letto" }))) return;
     try { await fetchAPI(`/api/assistenza/schede/${id}/passaggio-letto`, { method: "POST", body: JSON.stringify({ operatore }) }); toast.success("Messaggio letto"); onLetto(); }
     catch (e) { toastErrore(e); }
   }

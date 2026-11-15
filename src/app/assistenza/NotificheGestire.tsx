@@ -1,4 +1,6 @@
 "use client";
+import { chiediTesto, conferma } from "@/components/Conferma";
+import { giorniCalendario } from "./scheda/Avanzamento";
 
 // 30/10/2026 (Christian): NOTIFICHE DA GESTIRE. Diverse dagli avvisi automatici (che spariscono con «Ho visto»):
 // «Segna come letta» NON la chiude; si chiude solo con «Chiudi: gestita» scrivendo l'esito (cosa è stato fatto).
@@ -15,7 +17,8 @@ import { senzaIdWhatsApp } from "@/lib/formato";   // 13/11/2026: niente «…@c
 import { toastErrore } from "@/lib/errori";
 
 const ora = (s: string) => new Date(s).toLocaleString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
-const giorni = (s: string) => Math.max(0, Math.floor((Date.now() - new Date(s).getTime()) / 86_400_000));
+// 15/11/2026 (piano 2.13): giorni di calendario (fuso di Roma), non blocchi di 24 ore
+const giorni = (s: string) => Math.max(0, giorniCalendario(s) || 0);
 const eta = (s: string) => { const g = giorni(s); return g === 0 ? "oggi" : g === 1 ? "da 1 giorno" : `da ${g} giorni`; };
 const area = "w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/40";
 
@@ -115,7 +118,7 @@ export function NotificaCard({ n, operatore, onScheda, onCambiata, compatta = fa
 function Chiuse({ lista, operatore, onCambiata }: { lista: NotificaGestire[]; operatore: string; onCambiata: () => void }) {
   async function riapri(id: string) {
     if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
-    if (!confirm("Riaprire la notifica? L'esito attuale resta scritto nella storia.")) return;
+    if (!(await conferma({ titolo: "Riaprire la notifica?", testo: "L'esito attuale resta scritto nella storia.", ok: "Riapri" }))) return;
     try { await assNotificaRiapri(id, operatore); toast.success("Notifica riaperta"); onCambiata(); } catch (e) { toastErrore(e); }
   }
   if (!lista.length) return <p className="text-sm text-muted-foreground">Nessuna notifica chiusa.</p>;

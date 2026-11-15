@@ -3,6 +3,7 @@
 // DOCUMENTI E SPEDIZIONI della scheda (05/10/2026, specifica §6b e §8.10-8.11): scontrino, acconto, fattura (bozza),
 // pro forma (per la spedizione con bonifico) — come Tarature e la cassa. L'«ordine al cliente» non serve più qui.
 // Corriere: «Spedisco io» (etichetta UPS o DHL) · etichetta per farci arrivare il dispositivo · corriere del cliente.
+import { chiediTesto, conferma } from "@/components/Conferma";
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -106,7 +107,7 @@ function RigaFattura({ f, altra, onEliminata }: { f: FatturaCollegata; altra?: b
   const nc = f.tipo_documento === "TD04";
   const [via, setVia] = useState(false);
   async function elimina() {
-    if (!confirm(`Eliminare la bozza di fattura da ${eur(f.totale)}? Non è mai stata numerata né inviata allo SdI.`)) return;
+    if (!(await conferma({ titolo: "Eliminare la bozza di fattura?", testo: `Bozza da ${eur(f.totale)}: non è mai stata numerata né inviata allo SdI.`, ok: "Elimina la bozza", pericolo: true }))) return;
     setVia(true);
     try { await fattElimina(f.id); toast.success("Bozza di fattura eliminata"); onEliminata?.(); } catch (e) { toastErrore(e); } finally { setVia(false); }
   }
@@ -130,7 +131,7 @@ function RigaSpedizione({ s, x, ro }: { s: Scheda; x: Spedizione; ro: boolean })
   const [annullata, setAnnullata] = useState(x.status === "annullata");
   const cor = x.carrier || "UPS";
   async function annulla() {
-    if (!confirm(`Annullare la spedizione ${cor} ${x.tracking}${x.pickup_prn ? ` e il ritiro ${x.pickup_prn}` : ""}${x.test_mode ? " (prova)" : ""}?`)) return;
+    if (!(await conferma({ titolo: "Annullare la spedizione?", testo: `Spedizione ${cor} ${x.tracking}${x.pickup_prn ? ` e il ritiro ${x.pickup_prn}` : ""}${x.test_mode ? " (prova)" : ""}.`, ok: "Annulla la spedizione", pericolo: true }))) return;
     setBusy(true);
     try {
       const r = await assAzione(s.id, `spedizioni/${x.id}/annulla`, {});
