@@ -79,7 +79,7 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
     const urgente = (DA_FARE.has(f.codice) || gruppo === "da_gestire") && f.n > 0;
     const sotto = (inRiga[f.codice] || []).map((c) => f.sotto?.find((x) => x.codice === c)).filter((x): x is NonNullable<typeof x> => !!x);
     return (
-      <span key={f.codice} className={cn("inline-flex shrink-0 items-stretch overflow-hidden rounded-full border text-xs",
+      <span key={f.codice} className={cn("inline-flex shrink-0 items-stretch overflow-hidden rounded-full border text-xs sm:text-[11.5px]",
         attiva ? "border-primary ring-2 ring-primary/40" : gruppo === "da_gestire" && f.n ? "border-red-400" : urgente ? "border-amber-300 dark:border-amber-700" : "",
         !f.n && !attiva && "opacity-60")}>
         <button type="button" data-fase={f.codice} aria-pressed={sel} onClick={() => scegli(f.codice)}
@@ -143,8 +143,8 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
     <div className="space-y-1 rounded-xl border bg-card px-2 py-1.5 shadow-sm" data-testid="cruscotto">
       {visibili.map(({ g, voci }, i) => (
         <div key={g.codice} data-gruppo={g.codice}
-          className={cn("flex items-start gap-2", g.codice === "da_gestire" && "rounded-lg bg-red-50 px-1 py-0.5 dark:bg-red-950/30")}>
-          <span className={cn("w-[4.5rem] shrink-0 pt-1 text-[10px] font-bold uppercase leading-tight tracking-wide sm:w-14",
+          className={cn("flex items-start gap-2", g.codice === "da_gestire" && "-mx-1 rounded-lg bg-red-50 px-1 dark:bg-red-950/30")}>
+          <span className={cn("w-[4.5rem] shrink-0 whitespace-nowrap pt-1 text-[10px] font-bold uppercase leading-tight tracking-wide",
             g.codice === "da_gestire" ? "text-red-700 dark:text-red-300" : "text-muted-foreground")}>{g.titolo}</span>
           {/* su iPhone la riga scorre in orizzontale dentro il riquadro (la pagina no) */}
           <div className="flex min-w-0 flex-1 gap-x-0.5 gap-y-1 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible">
