@@ -17,7 +17,7 @@ import { Smartphone, PackageCheck, Euro, Landmark, Mail, Calculator, Clock, Plus
 import { fetchAPI } from "@/lib/api";
 import { usePermessi } from "@/components/permessi";
 import { FuoriDalCliente } from "@/app/assistenza/scheda/ui";
-import { COLORE_STATO, ETICHETTA_STATO, dataOra, eur, type SchedaBreve, type ConfigAssistenza, type FaseCruscotto } from "@/lib/assistenza";
+import { COLORE_STATO, ETICHETTA_STATO, dataOra, eur, type SchedaBreve, type ConfigAssistenza, type FaseCruscotto, type GruppoCruscotto } from "@/lib/assistenza";
 
 // letture silenziose: un 403 o un backend in avvio non deve aprire finestre di errore sulla home
 const leggi = <T,>(path: string): Promise<T | null> => fetchAPI(path, { timeoutMs: 20_000 }, false).catch(() => null);
@@ -67,7 +67,7 @@ export function HomeApple() {
   const [cfg, setCfg] = useState<ConfigAssistenza | null>(null);
   const router = useRouter();
   // 05/10/2026 (§10.6): stessi contatori per fase del cruscotto delle schede assistenza
-  const [cruscotto, setCruscotto] = useState<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[] } | null>(null);
+  const [cruscotto, setCruscotto] = useState<{ fasi: FaseCruscotto[]; gruppi?: GruppoCruscotto[]; sotto_in_riga?: Record<string, string[]>; tecnici: { codice: string; nome: string }[] } | null>(null);
   // 13/11/2026 (revisione): le due liste usano le STESSE regole del cruscotto (fasi «da_pagare» e «pagati» del backend).
   // Prima la lista prendeva tutte le schede in stato «pronto» (52, comprese quelle a 0 € in garanzia e quelle da ritirare
   // o spedire) mentre il riquadro diceva «21 Pronti da pagare»: due numeri diversi per la stessa cosa.
@@ -86,7 +86,7 @@ export function HomeApple() {
     leggi<ConfigAssistenza>("/api/assistenza/config").then(set((c) => {
       setCfg(c);
       if (!c?.visibile) return;
-      leggi<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[] }>("/api/assistenza/cruscotto").then(set((r) => setCruscotto(r)));
+      leggi<{ fasi: FaseCruscotto[]; gruppi?: GruppoCruscotto[]; sotto_in_riga?: Record<string, string[]>; tecnici: { codice: string; nome: string }[] }>("/api/assistenza/cruscotto").then(set((r) => setCruscotto(r)));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?fase=da_pagare&limit=500").then(set((r) => setDaPagare(r?.schede || [])));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?fase=pagati&limit=500").then(set((r) => setPagate(r?.schede || [])));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=da_preventivare&limit=10").then(set((r) => setDaPrev(r?.schede || [])));
@@ -127,7 +127,7 @@ export function HomeApple() {
       )}
 
       {visibili && (
-        <Cruscotto fasi={cruscotto?.fasi || null} tecnici={cruscotto?.tecnici || []} scelta={null}
+        <Cruscotto fasi={cruscotto?.fasi || null} gruppi={cruscotto?.gruppi} sottoInRiga={cruscotto?.sotto_in_riga} tecnici={cruscotto?.tecnici || []} scelta={null}
           onScegli={(x) => { if (x) router.push(`/assistenza?${new URLSearchParams({ fase: x.fase, ...(x.tecnico ? { tecnico: x.tecnico } : {}) })}`); }} />
       )}
 
@@ -178,11 +178,11 @@ export function HomeApple() {
 
       {visibili && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <Elenco titolo={<span className="flex items-center gap-2"><Euro className="w-4 h-4" /> Pronte, in attesa di pagamento{daPagare ? ` (${daPagare.length})` : ""}</span>}
+          <Elenco titolo={<span className="flex items-center gap-2"><Euro className="w-4 h-4" /> Pronti da pagare (da ritirare + da spedire){daPagare ? ` (${daPagare.length})` : ""}</span>}
             schede={daPagare} href="/assistenza?fase=da_pagare" vuoto="Nessuna scheda pronta da incassare."
             extra={(s) => { const imp = s.totale_lavorazione ?? s.preventivo_totale;
               return imp == null ? <span className="text-xs text-amber-700 dark:text-amber-300">importo da indicare</span> : <span className="text-sm font-medium tabular-nums">{eur(imp)}</span>; }} />
-          <Elenco titolo={<span className="flex items-center gap-2"><PackageCheck className="w-4 h-4" /> Pagate, da consegnare o spedire{pagate ? ` (${pagate.length})` : ""}</span>}
+          <Elenco titolo={<span className="flex items-center gap-2"><PackageCheck className="w-4 h-4" /> Pronti pagati o a € 0, da ritirare o spedire{pagate ? ` (${pagate.length})` : ""}</span>}
             schede={pagate} href="/assistenza?fase=pagati" vuoto="Nessuna scheda pagata in attesa di consegna." />
           <Elenco titolo={<span className="flex items-center gap-2"><FileQuestion className="w-4 h-4" /> In attesa di preventivo</span>}
             schede={daPrev} href="/assistenza?stato=da_preventivare" vuoto="Nessuna scheda da preventivare." />

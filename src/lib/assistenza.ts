@@ -29,6 +29,8 @@ export interface SchedaBreve {
   dati_cliente?: DatiCliente | null; dati_cliente_nota?: string | null; rimontaggio?: string | null; riparazione_stato_il?: string | null;
   /** 15/11/2026: ultimo cambiamento della scheda (giorni di fermo reali in «Schede ferme») */
   updated_at?: string | null;
+  /** 15/11/2026 (Christian): segnata «DA GESTIRE» con la nota di gestione, chi e quando (migr. 216) */
+  da_gestire?: boolean | null; nota_gestione?: string | null; da_gestire_il?: string | null; da_gestire_da?: string | null;
 }
 export type DatiCliente = "importanti" | "formattabile";
 export interface Evento { id: string; tipo: string; descrizione: string; operatore: string | null; creato_da: string | null; created_at: string; dati?: Record<string, unknown> }
@@ -151,6 +153,8 @@ export type FatturaCollegata = { id: string; numero: string | null; stato: strin
 export interface FaseCruscotto { codice: string; etichetta: string; n: number; tecnici: { tecnico: string; n: number }[];
   /** 24/10/2026: sottosezioni cliccabili (in arrivo, da ritirare, da spedire) */
   sotto?: { codice: string; etichetta: string; n: number }[] }
+/** 15/11/2026: gruppo del cruscotto compatto (Da gestire · Lavoro · Preventivi · Pronti · Oggi), voci = codici delle fasi */
+export interface GruppoCruscotto { codice: string; titolo: string; voci: string[] }
 export interface TestoStandard { id: string; titolo: string; categoria: string; uso: "cliente" | "interno"; famiglie: string[]; interventi: string[]; testo: string;
   prezzi_da_verificare: boolean }
 export interface ConfigAssistenza { operatori_abilitati: boolean; numerazione_live: boolean; ultimo_numero_filemaker: number | null; admin: boolean;
@@ -176,7 +180,7 @@ const j = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
 
 export const assConfig = (): Promise<ConfigAssistenza> => fetchAPI("/api/assistenza/config");
 export const assSetConfig = (b: { operatori_abilitati: boolean }): Promise<ConfigAssistenza> => fetchAPI("/api/assistenza/config", { method: "PATCH", body: JSON.stringify(b) });
-export const assCruscotto = (): Promise<{ fasi: FaseCruscotto[]; tecnici: { codice: string; nome: string }[]; richieste_nuove?: number;
+export const assCruscotto = (): Promise<{ fasi: FaseCruscotto[]; gruppi?: GruppoCruscotto[]; sotto_in_riga?: Record<string, string[]>; tecnici: { codice: string; nome: string }[]; richieste_nuove?: number;
   novita?: { id: string; sigla: string; cliente: string | null; prodotto: string | null; tipo: "accettato" | "rifiutato"; il: string; canale: string | null; richiesta: string | null }[];
   avvisi?: AvvisoDashboard[]; notifiche?: NotificaGestire[]; per_tecnico?: CaricoTecnico[] }> => fetchAPI("/api/assistenza/cruscotto");
 /** 29/10/2026: «I miei lavori» — carico di ogni tecnico (fasi tec_*) */

@@ -8,6 +8,8 @@ import { BellRing } from "lucide-react";
 import type { FaseCruscotto } from "@/lib/assistenza";
 
 const VOCI: [string, (n: number) => string][] = [
+  // 15/11/2026 (Christian): schede segnate a mano «DA GESTIRE» con la nota di gestione
+  ["da_gestire", (n) => `📌 ${n} ${n === 1 ? "scheda" : "schede"} da gestire (con la nota)`],
   ["finita_da_avvisare", (n) => `✅ ${n} ${n === 1 ? "riparazione finita" : "riparazioni finite"}: manda il PRONTO o il consuntivo`],
   ["ricambi_arrivati", (n) => `🔧 ${n} ${n === 1 ? "ricambio arrivato" : "ricambi arrivati"}: il tecnico può riparare`],
   ["da_assegnare_riparazione", (n) => `👍 ${n} ${n === 1 ? "preventivo accettato" : "preventivi accettati"}: assegna la riparazione`],

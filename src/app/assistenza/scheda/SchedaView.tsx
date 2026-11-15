@@ -294,6 +294,15 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       toastErrore(e); return null;
     } finally { setBusy(""); }
   }
+  // 15/11/2026 (Christian): «Segna da gestire» / «Modifica nota» — la nota di gestione è obbligatoria
+  async function notaGestione() {
+    if (!s) return;
+    const nota = await chiediTesto({ titolo: s.da_gestire ? `Nota di gestione · scheda ${s.sigla}` : `Segna da gestire la scheda ${s.sigla}`,
+      testo: "La scheda compare in «Da gestire» in cima al cruscotto, con questa nota, finché qualcuno non la segna «Gestita». Al cliente non parte nulla.",
+      etichetta: "Nota di gestione: cosa c'è da gestire e perché", iniziale: s.nota_gestione || "", obbligatorio: true, righe: 3,
+      segnaposto: "es. il cliente ha scritto che il difetto si ripresenta: verificare e rispondere per iscritto", ok: s.da_gestire ? "Salva la nota" : "📌 Segna da gestire" });
+    if (nota) azione("da-gestire", { attivo: true, nota }, s.da_gestire ? "Nota di gestione aggiornata" : "Scheda segnata da gestire");
+  }
   // 15/11/2026 (piano 1.4): la recensione non si chiede con un reclamo aperto (409 «reclamo_aperto») e «inviata» solo se è partita
   async function recensione(az: "invia" | "no") {
     if (!s) return;
@@ -528,6 +537,22 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           {admin && <Button size="sm" variant="outline" className="ml-auto" onClick={() => setRiaperta(!riaperta)}>{riaperta ? "Blocca di nuovo" : "Riapri per modificare"}</Button>}
           {!admin && <span className="ml-auto text-xs opacity-70">Solo il titolare può riaprirla.</span>}
         </div>)}
+      {/* 15/11/2026 (Christian): «DA GESTIRE» — la nota di gestione in cima, con chi e quando; «Gestita» con esito facoltativo */}
+      {s.da_gestire && (
+        <div className="flex flex-wrap items-start gap-2 rounded-xl border-2 border-red-500 bg-red-50 px-3 py-2 text-sm text-red-950 dark:bg-red-950/30 dark:text-red-100" data-testid="banner-da-gestire">
+          <div className="min-w-0 flex-1">
+            <b>📌 DA GESTIRE</b> <span className="whitespace-pre-line">{s.nota_gestione}</span>
+            <div className="text-xs opacity-80">Segnata{s.da_gestire_da ? ` da ${s.da_gestire_da}` : ""}{s.da_gestire_il ? ` il ${dataOra(s.da_gestire_il)}` : ""}</div>
+          </div>
+          {st !== "annullata" && <div className="flex flex-wrap gap-1">
+            <Button size="sm" variant="outline" disabled={!!busy} onClick={notaGestione}>Modifica nota</Button>
+            <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700" disabled={!!busy} onClick={async () => {
+              const esito = await chiediTesto({ titolo: `Scheda ${s.sigla} gestita?`, testo: `Nota: «${s.nota_gestione || ""}»\n\nLa scheda esce da «Da gestire». Nota ed esito restano nel registro.`,
+                etichetta: "Esito (facoltativo): cosa è stato fatto", segnaposto: "es. scritto al fornitore, reso autorizzato", ok: "✅ Gestita" });
+              if (esito !== null) azione("da-gestire", { attivo: false, esito }, "Scheda gestita: tolta da «Da gestire»");
+            }}>✅ Gestita</Button>
+          </div>}
+        </div>)}
       {/* 30/10/2026 (Christian): notifiche da gestire della scheda, in alto finché non sono chiuse con l'esito */}
       <NotificheScheda key={`ng-${s.id}`} schedaId={s.id} aperte={s.notifiche_gestire || []} operatore={operatore}
         onCambiata={async () => { window.dispatchEvent(new Event("gl-notifiche")); await ricarica(); onCambiata(); }} />
@@ -636,6 +661,11 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {/* 15/11/2026 (piano 2.6): RICHIESTA DEL CLIENTE sul lavoro (es. «stress test prima della consegna») → note di riparazione + messaggio al tecnico */}
         {!ro && !["consegnato", "annullata"].includes(st) && !s.sola_lettura && (
           <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "richiesta" })} title="Cosa chiede il cliente sul lavoro: arriva al tecnico e resta nelle note di riparazione"><NotebookPen />📝 Richiesta del cliente</Button>)}
+        {/* 15/11/2026 (Christian): «Segna da gestire» con la nota (anche sulle consegnate: è un promemoria per il banco) */}
+        {st !== "annullata" && !s.da_gestire && (
+          <Button size="sm" variant="outline" className="border-red-300 text-red-800 hover:bg-red-50 dark:text-red-200 dark:hover:bg-red-950/40" disabled={!!busy} onClick={notaGestione}
+            title="La scheda va nella voce «Da gestire» in cima al cruscotto, con la nota, finché qualcuno non la segna «Gestita». Al cliente non parte nulla."
+            data-testid="segna-da-gestire">📌 Segna da gestire</Button>)}
         {!ro && st === "accettato" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "invio", tipo: "aggiornamento_riparazione" })}><MessageSquareText />Aggiornamento riparazione</Button>}
         {!ro && st !== "in_arrivo" && st !== "consegnato" && !(st === "rifiutato" && !["fatto", "non_serve"].includes(s.rimontaggio || "")) && <Button size="sm" variant={(st === "accettato" && ["finita", "non_riparabile"].includes(s.riparazione_stato || "")) || st === "rifiutato" ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "pronto" })}>PRONTO</Button>}
         {!ro && st === "pronto" && <Button size="sm" variant={s.pagata || s.saldo <= 0 ? "default" : "outline"} disabled={!!busy} onClick={() => setDlg({ k: "consegna" })}>{s.pagata || s.saldo <= 0 || pagaFineMese(s) ? "CONSEGNA" : "💶 Incassa e consegna"}</Button>}

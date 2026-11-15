@@ -8,13 +8,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, PanelLeftClose, PanelLeftOpen, Plus, Search, Users, Wrench } from "lucide-react";
+import { Loader2, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Search, Users, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOperatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
-import { assRichiestaCollega, type Richiesta, STATI_RIPARAZIONE, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, nomeTecnico, type AvvisoDashboard, type NotificaGestire, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve, type CaricoTecnico } from "@/lib/assistenza";
-import { Cruscotto } from "./Cruscotto";
+import { assRichiestaCollega, type Richiesta, STATI_RIPARAZIONE, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, nomeTecnico, type AvvisoDashboard, type NotificaGestire, type ConfigAssistenza, type FaseCruscotto, type GruppoCruscotto, type SchedaBreve, type CaricoTecnico } from "@/lib/assistenza";
+import { Cruscotto, nomeFase, vociInEvidenza } from "./Cruscotto";
 import { DatiBadge } from "./scheda/DatiCliente";
 import { AvvisoRichieste } from "./Richieste";
 import { PerCliente } from "./PerCliente";
@@ -73,6 +73,9 @@ export function Banco() {
   const [esatta, setEsatta] = useState(false);   // 13/11/2026: risultati a parola intera
   // 05/10/2026 (§10.6): cruscotto per fase (e tecnico) al posto dei chip filtro
   const [cruscotto, setCruscotto] = useState<FaseCruscotto[] | null>(null);
+  // 15/11/2026 (Christian): gruppi del cruscotto compatto e sotto-filtri in riga (dal backend)
+  const [gruppiCr, setGruppiCr] = useState<GruppoCruscotto[] | null>(null);
+  const [sottoInRiga, setSottoInRiga] = useState<Record<string, string[]> | null>(null);
   // 13/11/2026 (revisione Mac): cruscotto RIPIEGABILE. Con una ricerca in corso o una scheda aperta parte ridotto a una
   // riga (prima i suoi ~840px spingevano i risultati sotto la piega); senza ricerca vale la scelta ricordata su questo
   // dispositivo (localStorage «gl_cruscotto_ridotto»).
@@ -136,12 +139,12 @@ export function Banco() {
       : q.trim().length >= 3 ? tutteLeSchede(q, st) : assElenco(q, st, "", q.trim() ? 500 : 150);
     p.then((r) => { if (mia !== ultimaRicerca.current) return; setElenco(r.schede); setTotale(r.totale); setEsatta((r as { ricerca?: string }).ricerca === "esatta"); })
       .catch((e) => { if (mia !== ultimaRicerca.current) return; toastErrore(e); setElenco([]); });
-    assCruscotto().then((r) => { setCruscotto(r.fasi); setTecniciCr(r.tecnici); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); setNotifiche(r.notifiche || []); }).catch(() => undefined);
+    assCruscotto().then((r) => { setCruscotto(r.fasi); setGruppiCr(r.gruppi || null); setSottoInRiga(r.sotto_in_riga || null); setTecniciCr(r.tecnici); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); setNotifiche(r.notifiche || []); }).catch(() => undefined);
   }, [q, filtro, fase]);
   useEffect(() => { const t = setTimeout(carica, 250); return () => clearTimeout(t); }, [carica]);
   // 26/10/2026: il cruscotto (e il banner «Da gestire adesso») si aggiorna da solo ogni minuto
   useEffect(() => {
-    const t = setInterval(() => assCruscotto().then((r) => { setCruscotto(r.fasi); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); setNotifiche(r.notifiche || []); }).catch(() => undefined), 60000);
+    const t = setInterval(() => assCruscotto().then((r) => { setCruscotto(r.fasi); setGruppiCr(r.gruppi || null); setSottoInRiga(r.sotto_in_riga || null); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); setNotifiche(r.notifiche || []); }).catch(() => undefined), 60000);
     return () => clearInterval(t);
   }, []);
   // 13/11/2026: l'indirizzo comanda. Su /assistenza senza ?id (clic su «Schede assistenza» nel menu, oppure «Indietro»
@@ -160,6 +163,13 @@ export function Banco() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp]);
 
+  // 15/11/2026 (Christian): RESET DEI FILTRI — c'è almeno un filtro? (voce o sotto-filtro del cruscotto, ricerca, stato, numero)
+  const filtriAttivi = !!fase || inRicerca || filtro !== "aperte" || !!salto.trim();
+  const azzeraFiltri = () => {
+    setFase(null); setQ(""); setFiltro("aperte"); setSalto(""); setElenco(null);
+    // l'indirizzo non deve rimettere il filtro (es. /assistenza?fase=da_pagare dalla Panoramica)
+    if (!aperta && (sp.get("fase") || sp.get("stato"))) router.replace("/assistenza");
+  };
   const [altreInCarico, setAltreInCarico] = useState(false);
   async function caricaAltre() {
     if (!elenco || altreInCarico) return;
@@ -240,7 +250,7 @@ export function Banco() {
           {avvisi.length > 0 && <span>⚠️ {avvisi.length} avvisi</span>}
           {novita.length > 0 && <span>🆕 {novita.length} risposte dei clienti</span>}
           {nRichieste > 0 && <span>💬 {nRichieste} richieste</span>}
-          {(cruscotto || []).filter((f) => f.n > 0).slice(0, 4).map((f) => <span key={f.codice} className="max-sm:hidden">{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
+          {vociInEvidenza(cruscotto, gruppiCr).slice(0, 4).map((f) => <span key={f.codice} className={f.codice === "da_gestire" ? "font-semibold text-red-700 dark:text-red-300" : "max-sm:hidden"}>{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
           <span className="ml-auto underline">mostra</span>
         </button>
       )}
@@ -261,14 +271,14 @@ export function Banco() {
       {(aperta || inRicerca ? !mostraCr : crRidottoPref) ? (
         <button type="button" onClick={() => { if (aperta || inRicerca) setMostraCr(true); else cambiaCrPref(false); }} aria-expanded={false} className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm hover:bg-muted/50">
           <span className="font-semibold text-foreground">Cruscotto</span>
-          {(cruscotto || []).filter((f) => f.n > 0).slice(0, 8).map((f) => <span key={f.codice}>{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
+          {vociInEvidenza(cruscotto, gruppiCr).slice(0, 8).map((f) => <span key={f.codice} className={f.codice === "da_gestire" ? "font-semibold text-red-700 dark:text-red-300" : ""}>{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
           <span className="ml-auto underline">mostra</span>
         </button>
       ) : (
       <>
       <div className="flex justify-end"><button type="button" aria-expanded className="min-h-8 text-xs text-muted-foreground underline"
         onClick={() => { if (aperta || inRicerca) setMostraCr(false); else cambiaCrPref(true); }}>riduci il cruscotto</button></div>
-      <Cruscotto fasi={cruscotto} tecnici={tecniciCr} scelta={fase} carichi={carichi}
+      <Cruscotto fasi={cruscotto} gruppi={gruppiCr} sottoInRiga={sottoInRiga} tecnici={tecniciCr} scelta={fase} carichi={carichi}
         onScegli={(x) => {
           setFase(x); setElenco(null); setQ("");
           if (x) setElencoChiuso(false);
@@ -291,18 +301,22 @@ export function Banco() {
               onKeyDown={(e) => { if (e.key === "Enter") salta(); }} inputMode="numeric" />
           </div>
           <div className="flex flex-wrap items-center gap-1 text-xs">
-            {fase && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary/10 px-2 py-0.5 font-medium">
-                {fase.fase.startsWith("tec_") ? `I miei lavori${fase.fase === "tec_tutto" ? "" : " · " + (carichi[0]?.sotto.find((x) => x.codice === fase.fase)?.etichetta || fase.fase)}` : (() => { const p = cruscotto?.find((f) => f.codice === fase.fase || f.sotto?.some((x) => x.codice === fase.fase));
-                  const x = p?.sotto?.find((y) => y.codice === fase.fase); return x ? `${p?.etichetta} · ${x.etichetta}` : p?.etichetta || fase.fase; })()}{fase.tecnico ? ` · ${nomeTecnico(fase.tecnico, tecniciCr)}` : ""}
-                <button onClick={() => { setFase(null); setElenco(null); }} aria-label="Togli il filtro della fase" className="ml-0.5">✕</button>
-              </span>
-            )}
             {([["aperte", "Aperte"], ["consegnato", "Consegnate"], ["tutte", "Tutte"]] as const).map(([k, l]) => (
               <button key={k} onClick={() => { setFiltro(k); setFase(null); setElenco(null); }}
                 className={`rounded-full border px-2 py-0.5 max-sm:min-h-10 max-sm:px-3 ${!fase && filtro === k ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{l}</button>
             ))}
+            {/* 15/11/2026 (Christian): «Azzera filtri» = Aperte, nessuna voce del cruscotto, ricerca vuota */}
+            {filtriAttivi && (
+              <button type="button" onClick={azzeraFiltri} data-testid="azzera-filtri" title="Torna all'elenco iniziale: schede aperte, nessun filtro, ricerca vuota"
+                className="ml-auto inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2 py-0.5 font-medium text-red-800 hover:bg-red-100 max-sm:min-h-10 max-sm:px-3 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200">
+                <RotateCcw className="size-3" />Azzera filtri</button>)}
           </div>
+          {fase && (
+            <div className="flex items-center gap-1 rounded-md border border-primary bg-primary/10 px-2 py-1 text-xs" data-testid="filtro-attivo">
+              <span className="min-w-0 flex-1 truncate"><span className="text-muted-foreground">Filtro:</span> <b>{fase.fase.startsWith("tec_") ? `I miei lavori${fase.fase === "tec_tutto" ? "" : " · " + (carichi[0]?.sotto.find((x) => x.codice === fase.fase)?.etichetta || fase.fase)}` : nomeFase(fase.fase, cruscotto, gruppiCr)}{fase.tecnico ? ` · ${nomeTecnico(fase.tecnico, tecniciCr)}` : ""}</b>{inRicerca ? <span className="text-muted-foreground"> (la ricerca vale su tutte le schede)</span> : null}</span>
+              <button type="button" onClick={() => { setFase(null); setElenco(null); }} aria-label="Togli il filtro" title="Togli il filtro" className="shrink-0 rounded px-1.5 text-base leading-none hover:bg-primary/20 max-sm:min-h-10 max-sm:px-3">×</button>
+            </div>
+          )}
           {/* 13/11/2026: «1 scheda trovata» (non «1 schede trovate»); con un tetto: «prime N di M» + come vedere le altre */}
           <div className="text-xs text-muted-foreground" aria-live="polite">{elenco ? <>
             {totale.toLocaleString("it-IT")} {totale === 1 ? (inRicerca ? "scheda trovata" : "scheda") : (inRicerca ? "schede trovate" : "schede")}{inRicerca ? " su tutte le schede" : ""}{inRicerca && esatta ? " (parola intera: scrivi meno lettere per trovare anche le parole che iniziano così)" : ""}
@@ -328,6 +342,10 @@ export function Banco() {
                   <DatiBadge dati={s.dati_cliente} nota={s.dati_cliente_nota} />
                 </div>
                 <div className="truncate text-xs text-muted-foreground">{s.prodotto}{s.anno ? ` ${s.anno}` : ""}{s.difetto ? ` · ${s.difetto}` : ""}</div>
+                {/* 15/11/2026 (Christian): «DA GESTIRE» con la nota di gestione, accanto alla scheda */}
+                {s.da_gestire && (
+                  <div className="mt-0.5 line-clamp-2 rounded bg-red-50 px-1.5 py-0.5 text-[11px] font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-200" title={s.nota_gestione || ""} data-testid="nota-gestione">
+                    📌 Da gestire: <span className="font-normal">{s.nota_gestione}</span>{s.da_gestire_da ? <span className="font-normal opacity-70"> · {s.da_gestire_da}</span> : null}</div>)}
                 {/* 11/11/2026 (Christian): rifiutato da richiudere → a chi è assegnato, finché non lo richiude */}
                 {s.stato === "rifiutato" && s.rimontaggio === "da_fare" && (
                   <div className="truncate text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">🔩 Da richiudere — {nomeTecnico(s.tecnico_riparazione, tecniciCr) || "da assegnare"}</div>)}
