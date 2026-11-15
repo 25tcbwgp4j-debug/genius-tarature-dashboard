@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOperatore } from "@/components/Operatore";
 import { toastErrore } from "@/lib/errori";
-import { assRichiestaCollega, type Richiesta, STATI_RIPARAZIONE, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, assSetConfig, nomeTecnico, type AvvisoDashboard, type NotificaGestire, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve, type CaricoTecnico } from "@/lib/assistenza";
+import { assRichiestaCollega, type Richiesta, STATI_RIPARAZIONE, assConfig, assCruscotto, assElenco, assElencoFase, assPerNumero, nomeTecnico, type AvvisoDashboard, type NotificaGestire, type ConfigAssistenza, type FaseCruscotto, type SchedaBreve, type CaricoTecnico } from "@/lib/assistenza";
 import { Cruscotto } from "./Cruscotto";
 import { DatiBadge } from "./scheda/DatiCliente";
 import { AvvisoRichieste } from "./Richieste";
@@ -179,7 +179,8 @@ export function Banco() {
   const apri = useCallback((id: string) => {
     const url = `/assistenza?id=${id}`;
     if (apertaRef.current) router.replace(url); else router.push(url);
-    setAperta(id); window.scrollTo({ top: 0 });
+    // 15/11/2026 (piano 2.2): scorre <main> (la pagina ha altezza fissa), non più la finestra
+    setAperta(id); document.getElementById("contenuto")?.scrollTo({ top: 0 });
   }, [router]);
   const chiudi = useCallback(() => { setAperta(null); router.replace("/assistenza"); }, [router]);
 
@@ -214,26 +215,32 @@ export function Banco() {
           <Button size="sm" variant="outline" className="hidden lg:inline-flex" onClick={() => cambiaElenco(!nascondiElenco)} title={nascondiElenco ? "Mostra l'elenco delle schede" : "Nascondi l'elenco (la scheda a pagina piena)"}>
             {nascondiElenco ? <PanelLeftOpen /> : <PanelLeftClose />}{nascondiElenco ? "Elenco" : "Nascondi elenco"}</Button>
         )}
-        <Wrench className="size-5" />
-        <h1 className="mr-2 text-xl font-semibold tracking-tight">Schede di assistenza</h1>
+        <Wrench className={`size-5 ${aperta ? "max-lg:hidden" : ""}`} />
+        <h1 className={`mr-2 text-xl font-semibold tracking-tight ${aperta ? "max-lg:sr-only" : ""}`}>Schede di assistenza</h1>
         {cfg && !cfg.numerazione_live && (
           <span className="rounded border border-amber-400 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
             title="FileMaker è ancora in uso: le schede nuove hanno numeri da 900001, le mail vanno solo all'indirizzo di prova e i WhatsApp non partono">
             PROVA · numeri da 900001 · mail solo a {cfg.email_test} · WhatsApp da mandare a mano
           </span>
         )}
-        {cfg?.admin && (
-          <label className="ml-auto flex items-center gap-1.5 text-xs">
-            <input type="checkbox" checked={cfg.operatori_abilitati}
-              onChange={(e) => assSetConfig({ operatori_abilitati: e.target.checked }).then((c) => { setCfg(c); toast.success(c.operatori_abilitati ? "Ora la vedono anche gli operatori" : "Di nuovo solo per il titolare"); }).catch(toastErrore)} />
-            Visibile agli operatori
-          </label>
-        )}
-        <Button variant="outline" className={cfg?.admin ? "" : "ml-auto"} onClick={() => setPerCliente(true)} title="Tutte le schede aperte di un cliente, per fase, e riepilogo in blocco"><Users />Per cliente</Button>
+        {/* 15/11/2026 (piano 2.13): la spunta «Visibile agli operatori» è in Impostazioni (qui salvava al primo clic, accanto a NUOVA SCHEDA) */}
+        <Button variant="outline" className={`ml-auto ${aperta ? "max-sm:hidden" : ""}`} onClick={() => setPerCliente(true)} title="Tutte le schede aperte di un cliente, per fase, e riepilogo in blocco"><Users />Per cliente</Button>
         <Button onClick={() => setNuova(true)} title="F2 o Alt+N"><Plus />NUOVA SCHEDA</Button>
         {perCliente && <PerCliente operatore={operatore} onClose={() => setPerCliente(false)} onApri={(id) => { setPerCliente(false); apri(id); }} />}
       </div>
 
+      {/* 15/11/2026 (piano 2.1): con una SCHEDA APERTA su iPhone/iPad la pagina inizia dalla scheda: i riquadri generali
+          (notifiche, avvisi, da gestire, richieste, cruscotto) diventano una riga di contatori che riporta all'elenco */}
+      {aperta && (
+        <button type="button" onClick={chiudi} className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 rounded-xl border bg-card px-3 py-2 text-left text-xs text-muted-foreground shadow-sm lg:hidden">
+          {notifiche.length > 0 && <span className="font-semibold text-red-700 dark:text-red-300">🔔 {notifiche.length} da gestire</span>}
+          {avvisi.length > 0 && <span>⚠️ {avvisi.length} avvisi</span>}
+          {nRichieste > 0 && <span>💬 {nRichieste} richieste</span>}
+          {(cruscotto || []).filter((f) => f.n > 0).slice(0, 4).map((f) => <span key={f.codice}>{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
+          <span className="ml-auto underline">elenco</span>
+        </button>
+      )}
+      <div className={`space-y-2 ${aperta ? "max-lg:hidden" : ""}`}>
       {fase?.tecnico && <MessaggiTecnico tecnico={fase.tecnico} schede={elenco} operatore={operatore} onApri={apri} onLetto={carica} />}
       {/* 30/10/2026: notifiche da gestire — restano finché non sono chiuse con l'esito */}
       <NotificheBanco notifiche={notifiche} operatore={operatore} onScheda={apri}
@@ -241,7 +248,7 @@ export function Banco() {
       <AvvisiAutomatici avvisi={avvisi} operatore={operatore} onScheda={apri}
         onVisto={() => assCruscotto().then((r) => setAvvisi(r.avvisi || [])).catch(() => undefined)} />
       {/* 03/11/2026 (Christian, 63281): i ricambi delle schede in un solo elenco */}
-      <div className="text-right"><a className="text-sm font-medium text-blue-700 underline" href="/assistenza/ricambi-da-ordinare">🛒 Ricambi da ordinare</a></div>
+      <div className="text-right"><a className="inline-flex min-h-10 items-center text-sm font-medium text-blue-700 underline dark:text-blue-300 sm:min-h-0" href="/assistenza/ricambi-da-ordinare">🛒 Ricambi da ordinare</a></div>
       <DaGestire fasi={cruscotto} novita={novita} onScheda={apri} onApri={(f) => { setFase({ fase: f, tecnico: "" }); setElenco(null); setQ(""); }} />
       <AvvisoRichieste n={nRichieste} operatore={operatore} onCambiate={carica}
         onApriScheda={(r) => { setDaRichiesta(r); setNuova(true); }} />
@@ -265,6 +272,7 @@ export function Banco() {
         }} />
       </>
       )}
+      </div>
 
       <div className={`grid grid-cols-1 gap-3 [&>*]:min-w-0 ${nascondiElenco ? "" : "lg:grid-cols-[300px_minmax(0,1fr)]"}`}>  {/* 11/11/2026: grid-cols-1 + min-w-0 = niente sbordi su iPhone (la pagina non si rimpicciolisce più) */}
         {/* elenco */}

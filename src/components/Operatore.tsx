@@ -18,30 +18,89 @@ export const OPERATORI_TARATURE = ["CHR", "DUMY"] as const satisfies readonly Op
 export const NOMI_OPERATORI: Partial<Record<Operatore, string>> = { CHR: "Christian", DUMY: "Dumy" };
 
 const CHIAVE = "gl_operatore";
+const CHIAVE_IL = "gl_operatore_il";   // 15/11/2026: quando è stato scelto / usato l'ultima volta
 const EVENTO = "gl-operatore";
+// 15/11/2026 (piano 2.15): sugli account CONDIVISI del banco (iMac SX/DX, iPad) l'operatore si ricorda per 15 minuti
+// di inattività, poi si richiede (al banco si danno il cambio); sugli account PERSONALI si propone da solo.
+const DURATA_CONDIVISO_MS = 15 * 60 * 1000;
 
-function leggi(): Operatore | "" {
+type Account = { condiviso: boolean; proposto: Operatore | "" };
+let accountCache: Promise<Account> | null = null;
+/** Chi è collegato (una sola richiesta per pagina): account condiviso del banco o personale, e l'operatore da proporre. */
+function leggiAccount(): Promise<Account> {
+  if (!accountCache) {
+    accountCache = fetch("/api/backend/api/auth/me", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u: { email?: string; full_name?: string | null } | null) => {
+        const email = (u?.email || "").toLowerCase();
+        const nome = `${u?.full_name || ""} ${email}`.toLowerCase();
+        const condiviso = /imac|ipad|negozio|banco|postazione/.test(email);
+        let proposto: Operatore | "" = "";
+        if (!condiviso) {
+          if (/christian|avantifiori|admin/.test(nome)) proposto = "CHR";
+          else if (/valentina|vale\b/.test(nome)) proposto = "VALE";
+          else if (/dumy/.test(nome)) proposto = "DUMY";
+          else if (/martina/.test(nome)) proposto = "MARTINA";
+        }
+        return { condiviso, proposto };
+      })
+      .catch(() => ({ condiviso: false, proposto: "" as const }));
+  }
+  return accountCache;
+}
+
+function leggi(condiviso = false): Operatore | "" {
   try {
     const v = localStorage.getItem(CHIAVE) || "";
-    return (OPERATORI as readonly string[]).includes(v) ? (v as Operatore) : "";
+    if (!(OPERATORI as readonly string[]).includes(v)) return "";
+    if (condiviso && Date.now() - Number(localStorage.getItem(CHIAVE_IL) || 0) > DURATA_CONDIVISO_MS) return "";
+    return v as Operatore;
   } catch { return ""; }
 }
 
 /** Operatore scelto su questo dispositivo ("" = nessuno) e la funzione per cambiarlo. */
 export function useOperatore(): [Operatore | "", (o: Operatore | "") => void] {
   const [op, setOpState] = useState<Operatore | "">("");
-  useEffect(() => {
-    setOpState(leggi());
-    const agg = () => setOpState(leggi());
-    window.addEventListener(EVENTO, agg);
-    window.addEventListener("storage", agg);
-    return () => { window.removeEventListener(EVENTO, agg); window.removeEventListener("storage", agg); };
-  }, []);
+  const [condiviso, setCondiviso] = useState(false);
   const setOp = useCallback((o: Operatore | "") => {
-    try { if (o) localStorage.setItem(CHIAVE, o); else localStorage.removeItem(CHIAVE); } catch { /* storage non disponibile */ }
+    try {
+      if (o) { localStorage.setItem(CHIAVE, o); localStorage.setItem(CHIAVE_IL, String(Date.now())); }
+      else localStorage.removeItem(CHIAVE);
+    } catch { /* storage non disponibile */ }
     setOpState(o);
     window.dispatchEvent(new Event(EVENTO));
   }, []);
+  useEffect(() => {
+    setOpState(leggi());
+    let vivo = true;
+    leggiAccount().then((a) => {
+      if (!vivo) return;
+      setCondiviso(a.condiviso);
+      const ora = leggi(a.condiviso);
+      if (!ora && a.proposto) setOp(a.proposto);   // account personale: si propone da solo (si può cambiare)
+      else setOpState(ora);
+    });
+    const agg = () => setOpState(leggi());
+    window.addEventListener(EVENTO, agg);
+    window.addEventListener("storage", agg);
+    return () => { vivo = false; window.removeEventListener(EVENTO, agg); window.removeEventListener("storage", agg); };
+  }, [setOp]);
+  // account condiviso: chi lavora tiene vivo l'operatore (un tocco o un tasto rinnova i 15 minuti, al massimo una volta al minuto);
+  // dopo 15 minuti senza toccare nulla l'operatore si azzera e si richiede
+  useEffect(() => {
+    if (!condiviso) return;
+    let ultimo = 0;
+    const attivita = () => {
+      const n = Date.now();
+      if (n - ultimo < 60_000) return;
+      ultimo = n;
+      try { if (leggi(true)) localStorage.setItem(CHIAVE_IL, String(n)); } catch { /* */ }
+    };
+    const controllo = setInterval(() => setOpState(leggi(true)), 30_000);
+    window.addEventListener("pointerdown", attivita);
+    window.addEventListener("keydown", attivita);
+    return () => { clearInterval(controllo); window.removeEventListener("pointerdown", attivita); window.removeEventListener("keydown", attivita); };
+  }, [condiviso]);
   return [op, setOp];
 }
 
@@ -64,7 +123,7 @@ export function SceltaOperatore({ value, onChange, className, compatto = false, 
       <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${opzioni.length}, minmax(0, 1fr))` }}>
         {opzioni.map((o) => (
           <button key={o} type="button" onClick={() => onChange(o)} aria-pressed={value === o}
-            className={cn("rounded-md border font-semibold tracking-wide transition-colors", compatto ? "h-7 text-xs" : "h-9 text-sm",
+            className={cn("rounded-md border font-semibold tracking-wide transition-colors", compatto ? "h-7 text-xs max-sm:h-10" : "h-9 text-sm max-sm:h-10",
               value === o ? "border-emerald-600 bg-emerald-600 text-white shadow-sm" : "border-input bg-background hover:bg-muted")}>
             {nomi?.[o] || o}
           </button>

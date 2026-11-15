@@ -129,6 +129,16 @@ export const MENU_APPLE: Voce[] = [
 const DELLE_SCHEDE = new Set(["/assistenza", "/assistenza/voci", "/assistenza/gsx", "/assistenza/ricambi-gsx", "/assistenza/prezzi-ufficiali", "/rubrica-apple"]);
 // il Magazzino ricambi (23/10/2026, Christian) lo vedono e lo modificano tutti: non è in DELLE_SCHEDE
 
+// 15/11/2026 (piano 2.12): il menu è diviso in TRE GRUPPI con titolo (prima 25 voci in fila: «Scontrino» era la 13ª)
+const NEGOZIO = new Set([...COMUNI.map((v) => v.href), "/statistiche/fatturato"]);
+const AMMIN = new Set(AMMINISTRAZIONE.map((v) => v.href));
+function gruppoDi(href: string, apple: boolean): string {
+  if (NEGOZIO.has(href)) return "Negozio";
+  if (AMMIN.has(href)) return "Amministrazione";
+  if (apple) return "Schede e ricambi";
+  return ["/scadenzario", "/automazioni", "/enrichment", "/statistiche", "/qrcode"].includes(href) ? "Amministrazione" : "Laboratorio tarature";
+}
+
 /** La pagina appartiene solo all'altra divisione? (serve per tornare alla home quando si cambia divisione) */
 function soloDellAltra(pathname: string, menu: Voce[]): boolean {
   if (pathname === "/") return false;
@@ -230,6 +240,28 @@ export function Sidebar() {
     };
   }, [pathname, admin]);
 
+  // 15/11/2026 (piano 2.12): voce attiva (calcolata una volta) → aria-current, portata in vista all'apertura del menu
+  const voceAttiva = voci.find((item) => pathname === item.href ||
+    (item.href !== "/" && pathname.startsWith(item.href + "/") && !voci.some((o) => o.href !== item.href && o.href.startsWith(item.href) && pathname.startsWith(o.href))));
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const t = setTimeout(() => document.querySelector('#menu-principale [aria-current="page"]')?.scrollIntoView({ block: "center" }), 60);
+    return () => clearTimeout(t);
+  }, [mobileOpen]);
+  // 15/11/2026 (piano 2.13): titolo della scheda del browser = la pagina aperta («Cassa del giorno · Genius Lab»)
+  const titoloPagina = voceAttiva ? (voceAttiva.href === "/" ? (attivita === "apple" ? "Panoramica Apple" : "Registro tarature") : voceAttiva.label) : "";
+  useEffect(() => {
+    if (titoloPagina) document.title = `${titoloPagina} · Genius Lab`;
+  }, [titoloPagina]);
+  // 15/11/2026 (piano 2.14): iPhone/iPad in Safari NON installato: le notifiche push esistono solo dalla schermata Home
+  const [iosNonInstallato, setIosNonInstallato] = useState(false);
+  useEffect(() => {
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- dato del dispositivo letto dopo l'idratazione
+    setIosNonInstallato(ios && !standalone);
+  }, []);
+
   // Non mostrare la sidebar sulla pagina login
   // 13/11/2026: niente menu (né contatori) su nessuna pagina senza accesso: login, password dimenticata, reimpostazione
   if (["/login", "/forgot-password", "/reset-password"].some((p) => pathname === p || pathname.startsWith(p + "/"))) {
@@ -238,16 +270,27 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Hamburger mobile (visibile <lg) */}
-      <button
-        type="button"
-        onClick={() => setMobileOpen(true)}
-        aria-label="Apri menu"
-        className={`${menuNascosto ? "" : "lg:hidden"} print:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm`}
-        style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
-      >
-        <Menu className="w-5 h-5 text-gray-700 dark:text-gray-200" />
-      </button>
+      {/* 15/11/2026 (piano 2.12): su iPhone/iPad una BARRA SUPERIORE piena (prima un pulsante flottante che copriva il testo
+          che scorreva sotto). Sul computer col menu nascosto resta il pulsante ☰ in alto a sinistra. */}
+      <div className="print:hidden fixed inset-x-0 top-0 z-40 flex items-center gap-2 border-b border-gray-200 bg-white/95 px-2 backdrop-blur dark:border-gray-700 dark:bg-gray-900/95 lg:hidden"
+        style={{ paddingTop: "env(safe-area-inset-top)", height: "calc(3rem + env(safe-area-inset-top))" }}>
+        <button type="button" onClick={() => setMobileOpen(true)} aria-label="Apri menu" aria-expanded={mobileOpen}
+          className="inline-flex size-10 items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">
+          <Menu className="w-5 h-5" />
+        </button>
+        <span className="min-w-0 truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{titoloPagina || "Genius Lab"}</span>
+        <span className="ml-auto shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">{attivita === "apple" ? "Apple" : "Tarature"}</span>
+      </div>
+      {menuNascosto && (
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Apri menu"
+          className="print:hidden fixed top-3 left-3 z-50 hidden rounded-lg border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-900 lg:block"
+        >
+          <Menu className="w-5 h-5 text-gray-700 dark:text-gray-200" />
+        </button>
+      )}
 
       {/* Overlay scuro mobile quando aperto */}
       {mobileOpen && (
@@ -303,19 +346,21 @@ export function Sidebar() {
         {/* 13/11/2026 (revisione iPhone): su iPhone Tema / Notifiche / Esci / indirizzo non sono più un fondo fisso che
             occupava un quarto dello schermo: stanno in fondo all'elenco e scorrono con le voci. Sul computer resta come prima. */}
         <div className="flex-1 min-h-0 overflow-y-auto lg:flex lg:flex-col lg:overflow-hidden">
-        <nav className="p-4 space-y-1 lg:flex-1 lg:overflow-y-auto">
-          {voci.map((item) => {
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(item.href + "/") && !voci.some((o) => o.href !== item.href && o.href.startsWith(item.href) && pathname.startsWith(o.href)));
+        <nav id="menu-principale" aria-label="Menu principale" className="p-4 space-y-1 lg:flex-1 lg:overflow-y-auto">
+          {voci.map((item, i) => {
+            const isActive = item === voceAttiva;
+            const gruppo = gruppoDi(item.href, attivita === "apple");
+            const nuovoGruppo = i === 0 || gruppoDi(voci[i - 1].href, attivita === "apple") !== gruppo;
             const Icon = item.icon;
             const showBadge = item.href === "/chat" && unread > 0;
             const badgeAut = item.href === "/autorizzazioni" && nInAttesa > 0;
             const badgeNot = item.href === "/assistenza" && nNotifiche > 0;
             return (
+              <div key={item.href}>
+              {nuovoGruppo && <p className={`px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 ${i ? "pt-3" : ""}`}>{gruppo}</p>}
               <Link
-                key={item.href}
                 href={item.href}
+                aria-current={isActive ? "page" : undefined}
                 {...(item.href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
@@ -341,6 +386,7 @@ export function Sidebar() {
                   </span>
                 )}
               </Link>
+              </div>
             );
           })}
         </nav>
@@ -354,6 +400,12 @@ export function Sidebar() {
             {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             {theme === "dark" ? "Tema chiaro" : "Tema scuro"}
           </button>
+          {/* 15/11/2026 (piano 2.14): su iPhone in Safari il pulsante non spariva più senza spiegazione */}
+          {admin && iosNonInstallato && (
+            <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+              🔔 Per le notifiche su iPhone: tocca <b>Condividi</b> → <b>Aggiungi alla schermata Home</b>, poi apri Genius Lab dall&apos;icona e premi «Attiva notifiche».
+            </p>
+          )}
           {/* le notifiche push sono quelle dei messaggi WhatsApp: solo per il titolare */}
           {admin && push.status !== "unsupported" && (
             <button

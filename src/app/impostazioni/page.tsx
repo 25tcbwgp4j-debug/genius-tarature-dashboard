@@ -17,7 +17,8 @@ import {
 import { Settings, Loader2, Pencil, Save, X, Plus, Trash2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { PosImpostazioni } from "@/components/PosImpostazioni";
-import { euro } from "@/lib/formato";   // 13/11/2026: «200,08 €» invece di «EUR 200.08»
+import { euro } from "@/lib/formato";
+import { assConfig, assSetConfig, type ConfigAssistenza } from "@/lib/assistenza";   // 13/11/2026: «200,08 €» invece di «EUR 200.08»
 
 interface SettingField {
   key: string;
@@ -511,6 +512,7 @@ export default function ImpostazioniPage() {
 
       {/* === POS SUMUP === */}
       <PosImpostazioni />
+      <SchedeOperatori />
 
       {/* === TEMPLATE MESSAGGI === */}
       <Card className="p-6">
@@ -705,5 +707,31 @@ function TemplatesSection() {
         );
       })}
     </div>
+  );
+}
+
+
+/** 15/11/2026 (piano 2.13): «Visibile agli operatori» delle schede di assistenza Apple. Prima stava nella testata del
+ *  banco, accanto a NUOVA SCHEDA, e salvava al primo clic; ora qui, con conferma. Solo il titolare la vede. */
+function SchedeOperatori() {
+  const [cfg, setCfg] = useState<ConfigAssistenza | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { assConfig().then(setCfg).catch(() => undefined); }, []);
+  if (!cfg?.admin) return null;
+  async function cambia(v: boolean) {
+    if (!confirm(v ? "Rendere visibili le schede di assistenza Apple a tutti gli operatori del negozio?" : "Nascondere le schede di assistenza agli operatori (le vedrà solo il titolare)?")) return;
+    setBusy(true);
+    try { const c = await assSetConfig({ operatori_abilitati: v }); setCfg(c); toast.success(c.operatori_abilitati ? "Ora le vedono anche gli operatori" : "Di nuovo solo per il titolare"); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "Salvataggio non riuscito"); } finally { setBusy(false); }
+  }
+  return (
+    <Card className="p-6">
+      <h3 className="mb-2 font-semibold text-lg">Schede di assistenza Apple</h3>
+      <label className="flex min-h-10 items-center gap-2 text-sm">
+        <input type="checkbox" className="size-4" checked={cfg.operatori_abilitati} disabled={busy} onChange={(e) => cambia(e.target.checked)} />
+        Visibile agli operatori (banco, iMac del negozio)
+      </label>
+      <p className="mt-1 text-xs text-muted-foreground">Spenta: schede, rubrica Apple, GSX e voci di preventivo le vede solo il titolare.</p>
+    </Card>
   );
 }

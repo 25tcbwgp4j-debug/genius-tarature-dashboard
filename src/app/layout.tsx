@@ -17,6 +17,7 @@ import { DopoBonifico } from "@/components/DopoBonifico";
 import { StripeAvviso } from "@/components/StripeAvviso";
 import { PilaAvvisi } from "@/components/PilaAvvisi";
 import { AttivitaProvider } from "@/components/attivita";
+import { DialoghiApp } from "@/components/Conferma";
 
 const geist = Geist({
   variable: "--font-geist",
@@ -24,7 +25,8 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Genius Lab Gestionale",
+  // 15/11/2026 (piano 2.13): ogni pagina ha il suo titolo nella scheda del browser («Scontrino · Genius Lab»)
+  title: { default: "Genius Lab Gestionale", template: "%s · Genius Lab" },
   description: "Gestionale Genius Lab: laboratorio tarature F-GAS e assistenza Mac e iPhone",
   manifest: "/manifest.json",
   appleWebApp: {
@@ -46,7 +48,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#10b981",
+  // 15/11/2026 (piano 2.14): barra di stato scura col tema scuro di sistema
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#10b981" },
+    { media: "(prefers-color-scheme: dark)", color: "#030712" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -64,6 +70,10 @@ if ('serviceWorker' in navigator) {
 }
 `;
 
+// 15/11/2026 (piano 2.14): il tema scuro si applica PRIMA che la pagina si disegni (niente lampo bianco all'apertura
+// della PWA). Stessa regola di ThemeProvider: scelta salvata su questo dispositivo, altrimenti quella del sistema.
+const TEMA_SUBITO = `try{var t=localStorage.getItem('tarature-theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -71,14 +81,22 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it" className={`${geist.variable} h-full antialiased`} suppressHydrationWarning>
-      <body className="min-h-full flex bg-gray-50 dark:bg-gray-950">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: TEMA_SUBITO }} />
+      </head>
+      {/* 15/11/2026 (piano 2.2): la pagina ha altezza FISSA (h-dvh) e scorre solo <main>: così le testate «sticky» (scheda,
+          elenchi) restano davvero ferme in alto e il menu laterale non scorre via. In stampa torna tutto a flusso normale. */}
+      <body className="flex h-dvh overflow-hidden bg-gray-50 dark:bg-gray-950 print:block print:h-auto print:overflow-visible">
+        <a href="#contenuto" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[100] focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow dark:focus:bg-gray-900">Vai al contenuto</a>
         <ThemeProvider>
           <PermessiProvider>
            <AttivitaProvider>
             <Sidebar />
             {/* 13/11/2026: spazio di sicurezza in fondo pari all'altezza della pila degli avvisi (e della barra verde del bonifico),
                 così nessun pulsante fisso copre l'ultimo contenuto della pagina. min-w-0: la pagina non scorre mai di lato */}
-            <main className="min-w-0 flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 p-3 sm:p-6 pt-14 sm:pt-14 lg:pt-6 pb-[calc(var(--pila-avvisi-h,0px)+var(--barra-bonifico-h,0px)+0.75rem)] sm:pb-[calc(var(--pila-avvisi-h,0px)+var(--barra-bonifico-h,0px)+1.5rem)] print:p-0">
+            {/* 15/11/2026 (piano 2.12): sotto i 1024px c'è la barra superiore fissa del menu (alta 3rem + zona della tacca):
+                <main> parte SOTTO la barra, così niente scorre sotto il pulsante del menu */}
+            <main id="contenuto" tabIndex={-1} className="min-w-0 flex-1 overflow-y-auto overscroll-contain outline-none bg-gray-50 dark:bg-gray-950 p-3 sm:p-6 max-lg:mt-[calc(3rem+env(safe-area-inset-top))] print:mt-0 print:overflow-visible pb-[calc(var(--pila-avvisi-h,0px)+var(--barra-bonifico-h,0px)+0.75rem)] sm:pb-[calc(var(--pila-avvisi-h,0px)+var(--barra-bonifico-h,0px)+1.5rem)] print:p-0">
               <GuardiaTitolare>{children}</GuardiaTitolare>
               <AggiornaVersione />
             </main>
@@ -103,6 +121,8 @@ export default function RootLayout({
            </AttivitaProvider>
           </PermessiProvider>
           <Toaster richColors position="top-right" />
+          {/* 15/11/2026 (piano 2.5): conferme e motivi con i dialoghi dell'app, non quelli del browser */}
+          <DialoghiApp />
         </ThemeProvider>
         <Script id="sw-register" strategy="afterInteractive">
           {SW_REGISTER}
