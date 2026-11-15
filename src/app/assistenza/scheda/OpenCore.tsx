@@ -120,7 +120,7 @@ export function RiquadroOpencore({ s, ro, operatore, onRicarica }: { s: Scheda; 
   }
 
   return (
-    <section className="space-y-3 rounded-xl border-2 border-violet-300 bg-card p-3 shadow-sm dark:border-violet-800 md:p-4" aria-label="OpenCore">
+    <section className="scroll-mt-24 space-y-3 rounded-xl border-2 border-violet-300 bg-card p-3 sm:scroll-mt-44 shadow-sm dark:border-violet-800 md:p-4" aria-label="OpenCore">
       <div className="flex flex-wrap items-center gap-2">
         <Cpu className="size-4 text-violet-600" />
         <h3 className="text-sm font-semibold">OpenCore · modello, versioni e lavorazione</h3>

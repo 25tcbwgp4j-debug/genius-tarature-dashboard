@@ -672,8 +672,10 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <div className="min-w-0 space-y-3">
           <div hidden={tab !== "accettazione"} className="space-y-3" role="tabpanel" id="pannello-accettazione" aria-labelledby="linguetta-accettazione">
       {/* 15/11/2026 (piano 6.1): accettazione dei Mac OpenCore — password provata e dati sì/no (si salvano con «Salva») */}
-      {s.opencore_avviso && <CampiAccettazioneOpencore provata={v("opencore_password_provata")} dati={v("opencore_dati_conservare")} disabled={ro}
-        onProvata={(x) => set("opencore_password_provata", x)} onDati={(x) => set("opencore_dati_conservare", x)} evidenzia />}
+      {/* sulle schede già in lavorazione o chiuse si vede solo se compilato (la regola vale per le accettazioni dal 15/11) */}
+      {s.opencore_avviso && (["in_arrivo", "da_preventivare", "preventivo_inviato"].includes(st) || s.opencore_password_provata != null || s.opencore_dati_conservare != null) &&
+        <CampiAccettazioneOpencore provata={v("opencore_password_provata")} dati={v("opencore_dati_conservare")} disabled={ro}
+          onProvata={(x) => set("opencore_password_provata", x)} onDati={(x) => set("opencore_dati_conservare", x)} evidenzia={["in_arrivo", "da_preventivare"].includes(st)} />}
       <div className="grid gap-3 xl:grid-cols-2">
         <Piega id="cliente" nome="Cliente" chiusa={!!chiuse.cliente} onApri={() => toggleSez("cliente")} riassunto={`${s.azienda || s.nominativo || "—"}${s.telefono ? ` · ${s.telefono}` : ""}`}>
         <Sezione titolo="Cliente" icona={<UserRound />}
