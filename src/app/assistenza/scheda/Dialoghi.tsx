@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { CheckCircle2, Copy, Loader2, Mail, MessageCircle, Printer, Send, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
-import { assAnteprimaMail, assAzione, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, lordoPaypal, pagaFineMese, type DocPdf, type PaypalFee, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
+import { assAnteprimaMail, assAzione, assProntoControlli, type ProntoControlli, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, lordoPaypal, pagaFineMese, type DocPdf, type PaypalFee, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
 import { blocchi, ipotesiDelBlocco, isActive, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, Pill, Scelta, area, campo } from "./ui";
@@ -26,7 +26,7 @@ function Anteprima({ s, corpo }: { s: Scheda; corpo: Record<string, unknown> }) 
   if (!a) return <div className="text-xs text-muted-foreground">anteprima…</div>;
   return (
     <div className="grid gap-2 md:grid-cols-2">
-      <div className="rounded-lg border bg-muted/30 p-2.5 text-xs">
+      <div className="rounded-lg border bg-muted/30 p-2.5 text-sm">
         <div className="mb-1 flex items-center gap-1.5 font-semibold"><Mail className="size-3.5" />{a.documento ? "Mail con PDF" : "Mail (senza PDF)"}</div>
         {/* 26/10/2026 (Christian, 63118): si vede SEMPRE quale scheda PDF parte allegata, calcolata con i valori del pannello */}
         {a.documento && (
@@ -39,11 +39,12 @@ function Anteprima({ s, corpo }: { s: Scheda; corpo: Record<string, unknown> }) 
         )}
         <div>A: <b>{a.destinatario || "— (manca l'email)"}</b>{a.prova && <span className="text-amber-800"> · PROVA: non va al cliente ({s.email || "senza email"})</span>}</div>
         <div>Oggetto: <b>{a.oggetto}</b></div>
-        <pre className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap font-sans">{a.corpo}</pre>
+        {/* 15/11/2026 (piano 0.2): anteprima intera e leggibile (prima 192px a 12px: se ne leggeva un terzo) */}
+        <pre className="mt-1 whitespace-pre-wrap font-sans text-sm leading-relaxed">{a.corpo}</pre>
       </div>
-      <div className="rounded-lg border bg-emerald-50/40 p-2.5 text-xs dark:bg-emerald-950/20">
+      <div className="rounded-lg border bg-emerald-50/40 p-2.5 text-sm dark:bg-emerald-950/20">
         <div className="mb-1 flex items-center gap-1.5 font-semibold"><MessageCircle className="size-3.5" />WhatsApp</div>
-        <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap font-sans">{a.whatsapp}</pre>
+        <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{a.whatsapp}</pre>
         <div className="mt-1 text-[11px] text-muted-foreground">{s.prova ? "Scheda di prova: il WhatsApp non parte, resta da mandare a mano." : !s.wa_linea_attiva ? "Linea 334 in sola lettura: il WhatsApp non parte, resta da mandare a mano (Copia testo / Apri chat)." : "Parte dalla linea Apple 334 986 7400."}</div>
       </div>
     </div>
@@ -205,7 +206,8 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
   const vuoto = (x: unknown) => x === null || x === undefined || String(x).trim() === "";
   const totIniziale = !vuoto(totale) ? totale : !vuoto(s.totale_lavorazione) ? s.totale_lavorazione : (s.totale_dovuto ?? "");
   const ricavato = vuoto(totale) && vuoto(s.totale_lavorazione) && vuoto(s.preventivo_totale) && Number(s.totale_dovuto || 0) > 0;
-  const [tot, setTot] = useState(String(totIniziale ?? ""));
+  // 15/11/2026 (piano 0.2): totale scritto all'italiana («89,00»), non «89»
+  const [tot, setTot] = useState(vuoto(totIniziale) ? "" : (Number.isFinite(Number(totIniziale)) ? Number(totIniziale).toFixed(2).replace(".", ",") : String(totIniziale)));
   const [esito, setEsito] = useState(s.esito_pronto || (s.esito === "EFFETTUATO" || s.esito === "NEGATIVO" ? s.esito : (s.preventivo_esito === "rifiutato" ? "NEGATIVO" : "EFFETTUATO")));
   const [ind, setInd] = useState(s.indirizzo_spedizione || "");
   // 11/11/2026 (Christian, 63354): NOTA PER IL CLIENTE sull'esito, scritta dal tecnico all'esito e correggibile qui
@@ -218,6 +220,30 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
   // 26/10/2026: stesse scelte delle Tarature — Adesso · Oggi alle… · Domani alle… · Data e ora a scelta
   const q = useQuando();
   const { quando, programma, passato } = q;
+  // 15/11/2026 (piano 0.2, caso 63407): controlli del backend — blocchi, notifiche aperte, richieste del cliente, attesa,
+  // pronto già inviato, versioni di macOS diverse, proposta fuori orario (primo giorno lavorativo alle 9:30)
+  const [ctl, setCtl] = useState<ProntoControlli | null>(null);
+  const [ctlErr, setCtlErr] = useState(false);
+  const [confLav, setConfLav] = useState(false);
+  const [confDiv, setConfDiv] = useState(false);
+  const [forza, setForza] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  useEffect(() => {
+    assProntoControlli(s.id).then((c) => {
+      setCtl(c);
+      if (c.fuori_orario) {   // D7: fuori orario si propone da solo di programmarlo (si può tornare ad «Adesso»)
+        const d = new Date(c.fuori_orario.proposta);
+        q.setDataLibera(d.toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" }));
+        q.setOraLibera("09:30");
+        q.setQuando("libero");
+      }
+    }).catch(() => setCtlErr(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.id]);
+  const duri = (ctl?.blocchi || []).filter((b) => b.codice !== "conferma" && b.codice !== "divergenza");
+  const serveConf = (ctl?.blocchi || []).some((b) => b.codice === "conferma");
+  const serveDiv = (ctl?.divergenze || []).length > 0;
+  const bloccato = !ctl || (duri.length > 0 && !(forza && motivo.trim().length >= 5)) || (serveConf && !confLav) || (serveDiv && !confDiv);
   // 26/10/2026 (Christian, 63118): a costo zero niente pagamento da chiedere (né bonifico, né consuntivo, né fattura)
   // «1.197,50» e «1197.50» sono lo stesso importo (prima «1.197.50» = 0 = gratis)
   const totNum = (() => { const t = String(tot).trim(); const n = t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t; return Number(n) || 0; })();
@@ -229,20 +255,57 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
     setBusy(true);
     try {
       const r = await onInvia({ ...corpo, consegna_corriere: cons === "spedizione" ? corr : null, esito, pagamento_modo: pagEff || "", invia_mail: mail, invia_wa: wa,
-        ...(programma ? { programma_il: programma } : {}) });
+        ...(programma ? { programma_il: programma } : {}),
+        ...(confLav ? { conferma_lavorazione: true } : {}), ...(confDiv ? { divergenza_confermata: true } : {}),
+        ...(forza && duri.length ? { forza: true, forza_motivo: motivo.trim() } : {}) });
       if (r) setFatto(r);
     } finally { setBusy(false); }
   }
   return (
     <Modale titolo={`PRONTO — scheda ${s.sigla}`} onClose={onClose} largo
       piedi={fatto ? <Button onClick={onClose}>Chiudi</Button> : <><Button variant="outline" onClick={onClose}>Annulla</Button>
-        <Button disabled={busy || (quando !== "adesso" && (!programma || passato))} onClick={invia}>{busy && <Loader2 className="animate-spin" />}{programma ? `PROGRAMMA il pronto (${new Date(programma).toLocaleString("it-IT", { timeZone: "Europe/Rome", weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })})` : `PRONTO${mail || wa ? " e avvisa il cliente" : ""}`}</Button></>}>
+        <Button disabled={busy || bloccato || (quando !== "adesso" && (!programma || passato))} onClick={invia}>{busy && <Loader2 className="animate-spin" />}{programma ? `PROGRAMMA il pronto (${new Date(programma).toLocaleString("it-IT", { timeZone: "Europe/Rome", weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })})` : `PRONTO${mail || wa ? " e avvisa il cliente" : ""}`}</Button></>}>
       {fatto ? <div className="space-y-3"><EsitoInvio e={fatto} />
         {onStampaRiconsegna && <div className="flex flex-wrap items-center gap-3 rounded-lg border-2 border-amber-400 bg-amber-50 p-3 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
           <span className="text-sm font-semibold">🖨 Mac con OpenCore: stampa il FOGLIO DI RICONSEGNA (avvertenza di NON installare aggiornamenti) e fallo firmare al cliente al ritiro.</span>
           <Button size="sm" onClick={() => void onStampaRiconsegna()}><Printer />Stampa il foglio di riconsegna</Button>
         </div>}</div> : (
         <div className="space-y-3">
+          {!ctl && !ctlErr && <div className="text-sm text-muted-foreground"><Loader2 className="mr-1 inline size-4 animate-spin" />Controllo la scheda…</div>}
+          {ctlErr && <div className="rounded-lg border-2 border-red-600 bg-red-50 p-3 text-sm font-semibold text-red-950 dark:bg-red-950/40 dark:text-red-50">Non riesco a controllare la scheda (notifiche, attesa del cliente): chiudi e riapri il dialogo. Il PRONTO resta spento.</div>}
+          {ctl && (duri.length > 0 || ctl.notifiche_aperte.length > 0 || ctl.richieste_cliente.length > 0) && (
+            <div className="space-y-1.5 rounded-lg border-2 border-red-600 bg-red-50 p-3 text-sm text-red-950 dark:bg-red-950/40 dark:text-red-50">
+              {duri.map((b, i) => <div key={i} className="font-semibold">⛔ {b.testo}</div>)}
+              {ctl.notifiche_aperte.length > 0 && <div className="font-semibold">Notifiche aperte sulla scheda:</div>}
+              {ctl.notifiche_aperte.map((n) => <div key={n.id}>{n.livello === "blocco" ? "⛔" : n.livello === "urgente" ? "🚨" : n.livello === "attenzione" ? "⚠️" : "ℹ️"} <b>{n.titolo}</b>{n.da_fare ? ` — da fare: ${n.da_fare}` : ""}</div>)}
+              {ctl.richieste_cliente.length > 0 && <div className="font-semibold">Richieste del cliente:</div>}
+              {ctl.richieste_cliente.map((r, i) => <div key={i}>📝 {r}</div>)}
+              {duri.length > 0 && ctl.puo_forzare && (
+                <div className="mt-2 space-y-1.5 border-t border-red-300 pt-2">
+                  <label className="flex items-center gap-2"><input type="checkbox" className="size-4" checked={forza} onChange={(e) => setForza(e.target.checked)} />Sono il titolare: mando il PRONTO lo stesso</label>
+                  {forza && <input className={campo} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo (obbligatorio, finisce nel registro della scheda)" />}
+                </div>)}
+            </div>)}
+          {ctl && (ctl.attesa_cliente || ctl.pronto_gia_inviato) && (
+            <div className="space-y-1 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-50">
+              {ctl.attesa_cliente && <div>⏳ <b>In attesa di risposta dal cliente</b> dal {dataOra(ctl.attesa_cliente.il)}{ctl.attesa_cliente.nota ? `: «${ctl.attesa_cliente.nota}»` : ""}</div>}
+              {ctl.pronto_gia_inviato && <div>📣 <b>Pronto già inviato il {dataOra(ctl.pronto_gia_inviato)}</b>: così lo rimandi al cliente.</div>}
+            </div>)}
+          {ctl && serveDiv && (
+            <div className="space-y-1.5 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-50">
+              {ctl.divergenze.map((d, i) => <div key={i} className="font-semibold">⚠️ Attenzione: {d}</div>)}
+              <label className="flex items-center gap-2"><input type="checkbox" className="size-4" checked={confDiv} onChange={(e) => setConfDiv(e.target.checked)} />Ho controllato: il messaggio al cliente dice il lavoro fatto davvero</label>
+            </div>)}
+          {ctl && serveConf && (
+            <div className="space-y-1.5 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-50">
+              <div className="font-semibold">La lavorazione non è stata confermata dal tecnico. Controlla le righe che vanno al cliente:</div>
+              <pre className="whitespace-pre-wrap rounded border bg-white p-2 font-sans text-sm text-foreground dark:bg-gray-900">{lavorazione || s.lavorazione || "(vuota: si riempie con le righe accettate del preventivo)"}</pre>
+              <label className="flex items-center gap-2"><input type="checkbox" className="size-4" checked={confLav} onChange={(e) => setConfLav(e.target.checked)} />Ho controllato la lavorazione: è il lavoro fatto</label>
+            </div>)}
+          {ctl?.fuori_orario && (
+            <div className="rounded-lg border border-sky-400 bg-sky-50 p-2.5 text-sm text-sky-950 dark:bg-sky-950/40 dark:text-sky-50">
+              🕘 Negozio chiuso adesso ({ctl.fuori_orario.motivo}): ho proposto di programmarlo per <b>{ctl.fuori_orario.etichetta}</b>. Per mandarlo subito scegli «Adesso».
+            </div>)}
           <div className="flex flex-wrap items-center gap-3">
             <Scelta valore={cons} opzioni={[["ritiro", "Ritiro in negozio"], ["spedizione", "Per corriere"]]} onChange={setCons} />
             {cons === "spedizione" && <Scelta valore={corr} opzioni={[["noi", "Spediamo noi (UPS/DHL)"], ["cliente", "Corriere del cliente"]]} onChange={setCorr} />}
@@ -256,6 +319,7 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
                 PayPal: si chiede {paypalFee ? eur(lordoPaypal(totNum - (Number(s.acconto) || 0), paypalFee)) : "il saldo + la commissione"} (saldo + commissione PayPal{paypalFee ? ` ${String(paypalFee.pct).replace(".", ",")}% + ${eur(paypalFee.fisso)}` : ""}: a noi arriva netto il saldo); mail, WhatsApp e PDF del consuntivo si rifanno con PayPal{s.pagamento_abituale === "paypal" ? " · cliente che paga di solito con PayPal" : ""}</span>}
             </Campo>
             <Campo label="Totale € (IVA compresa)"><input className={`${campo} text-right font-semibold`} inputMode="decimal" value={tot} onChange={(e) => setTot(e.target.value)} />
+              <span className="mt-1 block text-right text-sm font-semibold">{eur(totNum)}</span>
               {ricavato && <span className="mt-1 block rounded bg-amber-100 px-1 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">Ricavato dalle voci accettate del preventivo + spedizione (i totali della scheda erano vuoti): controllalo</span>}</Campo>
             <Campo label="Esito">
               <select className={campo} value={esito} onChange={(e) => setEsito(e.target.value)}><option value="EFFETTUATO">Effettuato</option><option value="NEGATIVO">Negativo</option></select>

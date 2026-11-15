@@ -45,6 +45,8 @@ export interface Scheda extends SchedaBreve {
   dati_cliente_il?: string | null; dati_cliente_da?: string | null; dati_cliente_proposta?: { valore: DatiCliente; motivo: string } | null;
   nota_cliente_esito?: string | null; riparazione_stato_da?: string | null;
   attesa_cliente_il?: string | null; attesa_cliente_nota?: string | null;
+  /** 15/11/2026 (piano 0.2, 63407): lavorazione confermata dal tecnico a «riparazione finita» */
+  lavorazione_confermata_il?: string | null; lavorazione_confermata_da?: string | null;
   /** 27/10/2026 (63182): calcolati dal backend (stessa regola di pronto, PDF, mail) */
   totale_dovuto?: number; esito_pronto?: string; seriale_nuovo?: string | null; imei_nuovo?: string | null; consegna_effettiva?: "ritiro" | "spedizione";
   /** 12/11/2026: ultima lettura Apple GSX salvata nella scheda (Decodifica): dispositivo, garanzia, ricambi col preventivo pronto, riparazioni GSX */
@@ -163,7 +165,7 @@ export interface AvvisoDashboard { id: string; created_at: string; updated_at?: 
 /** 30/10/2026 (Christian): NOTIFICA DA GESTIRE — LETTA e CHIUSA sono stati separati; resta visibile finché non è chiusa con l'esito. */
 export interface NotificaGestire { id: string; created_at: string; updated_at?: string; scheda_id: string | null; sigla?: string | null;
   cliente?: string | null; prodotto?: string | null; titolo: string; storia: string | null; da_fare: string | null;
-  livello: "info" | "attenzione" | "urgente"; creata_da: string | null; letta_il: string | null; letta_da: string | null;
+  livello: "info" | "attenzione" | "urgente" | "blocco"; creata_da: string | null; letta_il: string | null; letta_da: string | null;
   chiusa_il: string | null; chiusa_da: string | null; esito: string | null; telegram_inviato?: boolean; fonte?: "gestionale" | "skill" }
 export const assNotifiche = (stato: "aperte" | "chiuse" | "tutte" = "aperte", schedaId?: string): Promise<{ notifiche: NotificaGestire[] }> =>
   fetchAPI(`/api/assistenza/notifiche-gestire?stato=${stato}${schedaId ? `&scheda_id=${encodeURIComponent(schedaId)}` : ""}`);
@@ -209,6 +211,19 @@ export const assScheda = (id: string): Promise<Scheda> => fetchAPI(`/api/assiste
 export const assCrea = (b: Record<string, unknown>): Promise<Scheda & { esiti: Record<string, unknown> }> => fetchAPI("/api/assistenza/schede", j(b));
 export const assModifica = (id: string, b: Record<string, unknown>): Promise<Scheda> => fetchAPI(`/api/assistenza/schede/${id}`, { method: "PATCH", body: JSON.stringify(b) });
 export const assAzione = (id: string, azione: string, b: Record<string, unknown>) => fetchAPI(`/api/assistenza/schede/${id}/${azione}`, j(b));
+/** 15/11/2026 (piano 0.2, caso 63407): cosa blocca o va controllato prima del PRONTO (dialogo). */
+export interface ProntoControlli {
+  blocchi: { codice: "richiudere" | "riparazione" | "conferma" | "stato" | "attesa_cliente" | "notifica_blocco" | "divergenza"; testo: string }[];
+  notifiche_aperte: { id: string; titolo: string; da_fare: string | null; livello: NotificaGestire["livello"]; created_at: string; creata_da: string | null }[];
+  richieste_cliente: string[];
+  attesa_cliente: { il: string; da: string | null; nota: string | null } | null;
+  pronto_gia_inviato: string | null;
+  divergenze: string[];
+  lavorazione_confermata: { il: string; da: string | null } | null;
+  fuori_orario: { proposta: string; etichetta: string; motivo: string } | null;
+  puo_forzare: boolean;
+}
+export const assProntoControlli = (id: string): Promise<ProntoControlli> => fetchAPI(`/api/assistenza/schede/${id}/pronto-controlli`);
 export const assAnteprimaMail = (id: string, b: Record<string, unknown>): Promise<{ tipo: string; documento?: DocPdf | null; oggetto: string; corpo: string; prova: boolean; destinatario: string | null; whatsapp: string }> =>
   fetchAPI(`/api/assistenza/anteprima-mail/${id}`, j(b));
 export const assListino = (): Promise<{ voci: VoceListino[]; coppie: Coppia[] }> => fetchAPI("/api/assistenza/listino");

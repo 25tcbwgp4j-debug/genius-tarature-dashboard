@@ -23,8 +23,12 @@ const STILE: Record<NotificaGestire["livello"], string> = {
   urgente: "border-red-600 bg-red-50 text-red-950 dark:bg-red-950/40 dark:text-red-50",
   attenzione: "border-amber-500 bg-amber-50 text-amber-950 dark:bg-amber-950/40 dark:text-amber-50",
   info: "border-sky-500 bg-sky-50 text-sky-950 dark:bg-sky-950/40 dark:text-sky-50",
+  // 15/11/2026 (piano 0.2, 63407): BLOCCO = finché è aperta il PRONTO non parte
+  blocco: "border-red-700 bg-red-100 text-red-950 ring-2 ring-red-600 dark:bg-red-950/60 dark:text-red-50",
 };
-const ICONA: Record<NotificaGestire["livello"], string> = { urgente: "🚨", attenzione: "⚠️", info: "ℹ️" };
+const ICONA: Record<NotificaGestire["livello"], string> = { blocco: "⛔", urgente: "🚨", attenzione: "⚠️", info: "ℹ️" };
+// stessa regola del backend (pronto_controlli.RE_PAROLE_BLOCCO): «NON…», «aspettare», «finché» → si propone BLOCCO
+const PAROLE_BLOCCO = /\bNON\b|aspett|finch[eé]/i;
 
 function SceltaChi({ op, setOp }: { op: string; setOp: (o: Operatore) => void }) {
   return (
@@ -141,6 +145,11 @@ function NuovaNotifica({ schedaId, operatore, onCreata, onAnnulla }: { schedaId:
   const [storia, setStoria] = useState("");
   const [daFare, setDaFare] = useState("");
   const [livello, setLivello] = useState<NotificaGestire["livello"]>("attenzione");
+  const [sceltoAMano, setSceltoAMano] = useState(false);
+  function cambiaTitolo(t: string) {
+    setTitolo(t);
+    if (!sceltoAMano) setLivello(PAROLE_BLOCCO.test(t) ? "blocco" : "attenzione");   // proposta, si può cambiare
+  }
   const [telegram, setTelegram] = useState(false);
   const [busy, setBusy] = useState(false);
   async function crea() {
@@ -154,14 +163,15 @@ function NuovaNotifica({ schedaId, operatore, onCreata, onAnnulla }: { schedaId:
   }
   return (
     <div className="space-y-2 rounded-lg border bg-background p-3">
-      <input className={area} placeholder="Titolo" value={titolo} onChange={(e) => setTitolo(e.target.value)} />
+      <input className={area} placeholder="Titolo" value={titolo} onChange={(e) => cambiaTitolo(e.target.value)} />
       <textarea className={area} rows={4} placeholder="Storia: cosa è successo (racconto completo)" value={storia} onChange={(e) => setStoria(e.target.value)} />
       <textarea className={area} rows={2} placeholder="Da fare: l'azione richiesta" value={daFare} onChange={(e) => setDaFare(e.target.value)} />
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <span>Livello:</span>
-        {(["info", "attenzione", "urgente"] as const).map((l) => (
-          <label key={l} className="inline-flex items-center gap-1"><input type="radio" checked={livello === l} onChange={() => setLivello(l)} />{ICONA[l]} {l}</label>
+        {(["info", "attenzione", "urgente", "blocco"] as const).map((l) => (
+          <label key={l} className="inline-flex items-center gap-1"><input type="radio" checked={livello === l} onChange={() => { setLivello(l); setSceltoAMano(true); }} />{ICONA[l]} {l === "blocco" ? "BLOCCO (ferma il PRONTO)" : l}</label>
         ))}
+        {livello === "blocco" && !sceltoAMano && <span className="w-full text-xs text-red-800 dark:text-red-200">Proposto BLOCCO dal titolo: finché la notifica è aperta il PRONTO non parte.</span>}
         <label className="inline-flex items-center gap-1"><input type="checkbox" checked={telegram} onChange={(e) => setTelegram(e.target.checked)} />avvisa lo staff su Telegram</label>
         <div className="ml-auto flex gap-2">
           <Button size="sm" variant="ghost" onClick={onAnnulla}>Annulla</Button>

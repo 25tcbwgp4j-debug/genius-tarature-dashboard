@@ -274,11 +274,13 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     catch (e) { toastErrore(e); }
   }
   // 03/11/2026 (Christian, 63185): la nota si scrive in una finestra vera; «non riparabile» chiede il motivo e l'importo
-  async function salvaStatoRiparazione(stato: string, nota = "", importo?: number, notaCliente?: string) {
+  async function salvaStatoRiparazione(stato: string, nota = "", importo?: number, notaCliente?: string, lavorazione?: string) {
     const finale = stato === "finita" ? "FINITA — ora «PRONTO»" : stato === "non_riparabile" ? "NON RIPARABILE — ora «PRONTO»" : "stato aggiornato";
     // 11/11/2026 (Christian, 63354): all'esito anche la NOTA PER IL CLIENTE (va nel pronto; non parte niente adesso)
     const r = await azione("stato-riparazione", { riparazione_stato: stato, nota, ...(importo !== undefined ? { importo } : {}),
-      ...(notaCliente !== undefined ? { nota_cliente: notaCliente } : {}) }, `Riparazione: ${finale}`);
+      ...(notaCliente !== undefined ? { nota_cliente: notaCliente } : {}),
+      // 15/11/2026 (piano 0.2): a «finita» il tecnico conferma (o corregge) la lavorazione che andrà nel PRONTO
+      ...(lavorazione !== undefined ? { lavorazione, conferma_lavorazione: true } : {}) }, `Riparazione: ${finale}`);
     if (r && (stato === "aggiornamento_cliente" || stato === "disabilitare_trova")) setDlg({ k: "invio", tipo: "aggiornamento_riparazione" });
     return !!r;
   }
@@ -662,8 +664,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         onEsito={async (body) => !!(await azione("esito-preventivo", body, body.esito === "accettato" ? "ACCETTATO: in riparazione, lavorazione precompilata" : "Preventivo RIFIUTATO"))} />}
       {dlg?.k === "stato_riparazione" && <DialogoStatoRiparazione stato={dlg.stato} totale={s.totale_lavorazione as number | null | undefined}
         serveRicambio={!(s.ricambi_attesi || []).some((r) => r.stato !== "arrivato")} onClose={() => setDlg(null)}
-        notaClienteIniziale={s.nota_cliente_esito || ""}
-        onConferma={(nota, importo, notaCliente) => salvaStatoRiparazione(dlg.stato, nota, importo, notaCliente)} />}
+        notaClienteIniziale={s.nota_cliente_esito || ""} lavorazioneIniziale={String(v("lavorazione") || "")}
+        onConferma={(nota, importo, notaCliente, lav) => salvaStatoRiparazione(dlg.stato, nota, importo, notaCliente, lav)} />}
       {dlg?.k === "pronto" && <DialogoPronto paypalFee={cfg?.paypal_fee} s={s} onStampaRiconsegna={s.opencore_avviso ? () => stampa("riconsegna") : undefined} lavorazione={String(v("lavorazione") || "")} totale={(v("totale_lavorazione") as number | null) ?? null} onClose={() => setDlg(null)}
         onInvia={async (body) => { const r = await azione("pronto", body, body.programma_il ? "PRONTO programmato" : "PRONTO"); return r ? (r.esito as Esito) : null; }} />}
       {dlg?.k === "cambia_stato" && <DialogoCambiaStato s={s} onClose={() => setDlg(null)} onConferma={async (b) => !!(await azione("riapri", b, "Stato della scheda cambiato"))} />}

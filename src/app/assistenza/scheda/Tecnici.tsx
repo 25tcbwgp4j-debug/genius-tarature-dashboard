@@ -88,12 +88,15 @@ function colorePill(k: string): "verde" | "ambra" | "rosso" | "blu" {
 }
 
 /** La nota che accompagna lo stato della riparazione (prima era un prompt del browser). */
-export function DialogoStatoRiparazione({ stato, serveRicambio, totale, onClose, onConferma, notaClienteIniziale = "" }: {
+export function DialogoStatoRiparazione({ stato, serveRicambio, totale, onClose, onConferma, notaClienteIniziale = "", lavorazioneIniziale = "" }: {
   stato: string; serveRicambio: boolean; totale: number | null | undefined; onClose: () => void;
-  /** 11/11/2026: notaCliente = NOTA PER IL CLIENTE (solo «finita» / «non riparabile»): va nel PRONTO, non parte adesso */
-  onConferma: (nota: string, importo?: number, notaCliente?: string) => Promise<boolean>; notaClienteIniziale?: string;
+  /** 11/11/2026: notaCliente = NOTA PER IL CLIENTE (solo «finita» / «non riparabile»): va nel PRONTO, non parte adesso.
+   *  15/11/2026 (piano 0.2, 63407): lavorazione = le righe del PRONTO confermate o corrette dal tecnico a «finita». */
+  onConferma: (nota: string, importo?: number, notaCliente?: string, lavorazione?: string) => Promise<boolean>; notaClienteIniziale?: string;
+  lavorazioneIniziale?: string;
 }) {
   const [nota, setNota] = useState("");
+  const [lavorazione, setLavorazione] = useState(lavorazioneIniziale);
   const esito = stato === "finita" || stato === "non_riparabile";
   const [notaCliente, setNotaCliente] = useState(notaClienteIniziale);
   const [importo, setImporto] = useState("0");
@@ -116,11 +119,17 @@ export function DialogoStatoRiparazione({ stato, serveRicambio, totale, onClose,
       <Button variant="outline" onClick={onClose}>Annulla</Button>
       <Button disabled={busy || (obbligatoria && !nota.trim())} onClick={async () => {
         setBusy(true);
-        try { if (await onConferma(nota.trim(), nonRip ? Number(importo.replace(",", ".")) || 0 : undefined, esito ? notaCliente.trim() : undefined)) onClose(); } finally { setBusy(false); }
+        try { if (await onConferma(nota.trim(), nonRip ? Number(importo.replace(",", ".")) || 0 : undefined, esito ? notaCliente.trim() : undefined,
+          stato === "finita" ? lavorazione : undefined)) onClose(); } finally { setBusy(false); }
       }}>{busy && <Loader2 className="animate-spin" />}Conferma</Button>
     </>}>
       <div className="space-y-3">
         <Campo label={testo}><textarea className={`${area} min-h-[84px]`} autoFocus value={nota} placeholder={esempio} onChange={(e) => setNota(e.target.value)} /></Campo>
+        {stato === "finita" && (
+          <Campo label="✅ Lavorazione effettuata: CONFERMA o CORREGGI le righe (vanno nel PRONTO al cliente)"
+            aiuto="È la copia del preventivo accettato: se hai fatto altro (es. installato Monterey invece di Sonoma) correggi qui. Confermando, il preventivo non la riscrive più.">
+            <textarea className={`${area} min-h-[96px] border-emerald-500 text-sm`} value={lavorazione} onChange={(e) => setLavorazione(e.target.value)} maxLength={5000} />
+          </Campo>)}
         {esito && (
           <Campo label="📣 Nota per il CLIENTE (facoltativa)" aiuto="Va nel PRONTO al cliente (mail, WhatsApp e PDF) e nel consuntivo. Ora non parte niente: il pronto lo manda il banco.">
             <textarea className={`${area} min-h-[70px] border-sky-400`} value={notaCliente} onChange={(e) => setNotaCliente(e.target.value)} maxLength={1500}
