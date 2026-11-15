@@ -17,7 +17,7 @@ const VOCI: [string, (n: number) => string][] = [
   // 11/11/2026 (Christian): prima «da richiudere» (il tecnico), solo DOPO «invia il pronto»
   ["rifiutati_da_rimontare", (n) => `🔩 ${n} ${n === 1 ? "rifiutato" : "rifiutati"} da richiudere (tecnico)`],
   ["rifiutati", (n) => `↩️ ${n} ${n === 1 ? "rifiutato richiuso" : "rifiutati richiusi"}: invia il pronto (restituzione)`],
-  ["da_spedire_noi", (n) => `📦 ${n} ${n === 1 ? "pagato" : "pagati"} da spedire`],
+  ["da_spedire_noi", (n) => `📦 ${n} senza saldo da spedire noi`],   // 15/11/2026: pagati o con nulla da pagare
   ["trova_attivo", (n) => `🔒 ${n} con «Trova il mio» da disattivare`],
   ["da_assegnare_verifica", (n) => `🔍 ${n} da assegnare in verifica`],
 ];

@@ -73,6 +73,8 @@ export function HomeApple() {
   // o spedire) mentre il riquadro diceva «21 Pronti da pagare»: due numeri diversi per la stessa cosa.
   const [daPagare, setDaPagare] = useState<SchedaBreve[] | null>(null);
   const [pagate, setPagate] = useState<SchedaBreve[] | null>(null);
+  // 15/11/2026 (Christian): le schede a € 0 (garanzia) non sono «pagate»: lista a parte «senza nulla da pagare»
+  const [aZero, setAZero] = useState<SchedaBreve[] | null>(null);
   const [daPrev, setDaPrev] = useState<SchedaBreve[] | null>(null);
   const [ultime, setUltime] = useState<SchedaBreve[] | null>(null);
   const [cassa, setCassa] = useState<{ n: number; totale: number } | null>(null);
@@ -89,6 +91,7 @@ export function HomeApple() {
       leggi<{ fasi: FaseCruscotto[]; gruppi?: GruppoCruscotto[]; sotto_in_riga?: Record<string, string[]>; tecnici: { codice: string; nome: string }[] }>("/api/assistenza/cruscotto").then(set((r) => setCruscotto(r)));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?fase=da_pagare&limit=500").then(set((r) => setDaPagare(r?.schede || [])));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?fase=pagati&limit=500").then(set((r) => setPagate(r?.schede || [])));
+      leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?fase=zero&limit=500").then(set((r) => setAZero(r?.schede || [])));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=da_preventivare&limit=10").then(set((r) => setDaPrev(r?.schede || [])));
       leggi<{ schede: SchedaBreve[] }>("/api/assistenza/schede?stato=tutte&limit=10").then(set((r) => setUltime(r?.schede || [])));
     }));
@@ -182,8 +185,10 @@ export function HomeApple() {
             schede={daPagare} href="/assistenza?fase=da_pagare" vuoto="Nessuna scheda pronta da incassare."
             extra={(s) => { const imp = s.totale_lavorazione ?? s.preventivo_totale;
               return imp == null ? <span className="text-xs text-amber-700 dark:text-amber-300">importo da indicare</span> : <span className="text-sm font-medium tabular-nums">{eur(imp)}</span>; }} />
-          <Elenco titolo={<span className="flex items-center gap-2"><PackageCheck className="w-4 h-4" /> Pronti pagati o a € 0, da ritirare o spedire{pagate ? ` (${pagate.length})` : ""}</span>}
+          <Elenco titolo={<span className="flex items-center gap-2"><PackageCheck className="w-4 h-4" /> Pronti pagati, da ritirare o spedire{pagate ? ` (${pagate.length})` : ""}</span>}
             schede={pagate} href="/assistenza?fase=pagati" vuoto="Nessuna scheda pagata in attesa di consegna." />
+          <Elenco titolo={<span className="flex items-center gap-2"><PackageCheck className="w-4 h-4" /> Pronti senza nulla da pagare (€ 0), da ritirare o spedire{aZero ? ` (${aZero.length})` : ""}</span>}
+            schede={aZero} href="/assistenza?fase=zero" vuoto="Nessuna scheda a € 0 in attesa di consegna." />
           <Elenco titolo={<span className="flex items-center gap-2"><FileQuestion className="w-4 h-4" /> In attesa di preventivo</span>}
             schede={daPrev} href="/assistenza?stato=da_preventivare" vuoto="Nessuna scheda da preventivare." />
           <Elenco titolo={<span className="flex items-center gap-2"><Clock className="w-4 h-4" /> Ultime schede</span>}

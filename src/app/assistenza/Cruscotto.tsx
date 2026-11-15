@@ -5,7 +5,8 @@
 // 15/11/2026 (Christian): CRUSCOTTO COMPATTO a gruppi — Da gestire · Lavoro · Preventivi · Pronti · Oggi — ogni gruppo è
 // una riga di chip (etichetta + numero) con il titolo piccolo a sinistra (prima i riquadri occupavano mezza pagina, ~650 px
 // sul Mac). Le voci a zero stanno dietro «mostra tutte»; «Da ritirare» e «Da spedire» hanno in riga i sotto-filtri
-// «da pagare» / «pagati» (al posto delle vecchie voci «Pronti da pagare» e «Pagati»). Tecnici e altri sotto-filtri si
+// «da pagare» / «pagati» / «nulla da pagare» (al posto delle vecchie voci «Pronti da pagare» e «Pagati»; dal 15/11 sera
+// le schede a € 0 in garanzia sono «nulla da pagare», non «pagati»). Tecnici e altri sotto-filtri si
 // vedono sotto, quando la voce è scelta. Clic sulla voce già scelta = la toglie. I gruppi arrivano dal backend
 // (V2.GRUPPI_CRUSCOTTO); senza, un gruppo unico con tutte le fasi.
 import { useEffect, useState } from "react";
@@ -16,9 +17,13 @@ import { nomeTecnico, type CaricoTecnico, type FaseCruscotto, type GruppoCruscot
 const DA_FARE = new Set(["da_assegnare_verifica", "da_preventivare", "da_verificare", "preventivi_da_inviare", "da_assegnare_riparazione",
   "aggiornamenti", "riparazione_finita", "rifiutati_da_rimontare", "rifiutati", "ricambi_arrivati", "trova_attivo", "da_spedire"]);
 // già dentro i sotto-filtri di Da ritirare / Da spedire: non sono voci a sé
-const DENTRO_I_SOTTO = new Set(["da_pagare", "pagati"]);
+const DENTRO_I_SOTTO = new Set(["da_pagare", "pagati", "zero"]);
 const SOTTO_IN_RIGA_DEFAULT: Record<string, string[]> = {
-  da_ritirare: ["da_ritirare_da_pagare", "da_ritirare_pagati"], da_spedire: ["da_spedire_da_pagare", "da_spedire_pagati"] };
+  da_ritirare: ["da_ritirare_da_pagare", "da_ritirare_pagati", "da_ritirare_zero"],
+  da_spedire: ["da_spedire_da_pagare", "da_spedire_pagati", "da_spedire_zero"] };
+// suggerimento dei sotto-filtri in riga
+const TITOLO_SOTTO = (codice: string) => codice.endsWith("_zero") ? "Nulla da pagare: totale € 0 (garanzia, rifiutato senza spese)"
+  : codice.endsWith("pagati") ? "Pagati davvero: incasso registrato (scontrino, fattura pagata, bonifico, acconti)" : "Da incassare prima della consegna";
 const CHIAVE_TUTTE = "gl_cruscotto_tutte";
 // nomi brevi sui chip (il nome intero resta nel suggerimento e nella riga «Filtro:»), così «Lavoro» sta in una riga sul Mac
 const BREVI: Record<string, string> = {
@@ -95,7 +100,7 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
           return (
             <button key={x.codice} type="button" data-fase={x.codice} aria-pressed={xs}
               onClick={() => onScegli(xs ? null : { fase: x.codice, tecnico: "" })}
-              title={x.codice.endsWith("pagati") ? "Pagati o a € 0 (garanzia): nulla da incassare" : "Da incassare prima della consegna"}
+              title={TITOLO_SOTTO(x.codice)}
               className={cn("inline-flex items-center gap-1 border-l px-1.5 text-[11px] font-semibold max-sm:min-h-9",
                 xs ? "bg-primary text-primary-foreground" : x.n ? "bg-background hover:bg-muted" : "bg-background text-muted-foreground")}>
               <span className="whitespace-nowrap">{x.etichetta}</span><span className="tabular-nums">{x.n}</span></button>
