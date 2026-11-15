@@ -20,6 +20,13 @@ const DENTRO_I_SOTTO = new Set(["da_pagare", "pagati"]);
 const SOTTO_IN_RIGA_DEFAULT: Record<string, string[]> = {
   da_ritirare: ["da_ritirare_da_pagare", "da_ritirare_pagati"], da_spedire: ["da_spedire_da_pagare", "da_spedire_pagati"] };
 const CHIAVE_TUTTE = "gl_cruscotto_tutte";
+// nomi brevi sui chip (il nome intero resta nel suggerimento e nella riga «Filtro:»), così «Lavoro» sta in una riga sul Mac
+const BREVI: Record<string, string> = {
+  in_arrivo: "In arrivo", ricambi_arrivati: "Ricambio arrivato", trova_attivo: "🔒 Trova il mio", rifiutati_da_rimontare: "Rifiutati da richiudere",
+  rifiutati: "Rifiutati: invia pronto", presso_cliente: "Fuori negozio", attesa_cliente: "Attesa risposta cliente",
+  riparazione_finita: "Finite: avvisa", aggiornamenti: "Aggiornamenti", bagnetti: "Bagnetti", conto_vendita: "Conto vendita",
+  invii_programmati: "Invii programmati",
+};
 
 /** Gruppi da mostrare: quelli del backend o, se mancano, uno solo con tutte le fasi. */
 export function gruppiCruscotto(fasi: FaseCruscotto[], gruppi?: GruppoCruscotto[] | null): GruppoCruscotto[] {
@@ -76,12 +83,12 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
         attiva ? "border-primary ring-2 ring-primary/40" : gruppo === "da_gestire" && f.n ? "border-red-400" : urgente ? "border-amber-300 dark:border-amber-700" : "",
         !f.n && !attiva && "opacity-60")}>
         <button type="button" data-fase={f.codice} aria-pressed={sel} onClick={() => scegli(f.codice)}
-          title={sel ? "Clic di nuovo per togliere il filtro" : `Mostra solo: ${f.etichetta}`}
+          title={sel ? `${f.etichetta} · clic di nuovo per togliere il filtro` : `Mostra solo: ${f.etichetta}`}
           className={cn("inline-flex items-center gap-1 px-2 py-0.5 font-medium max-sm:min-h-9",
             sel ? "bg-primary text-primary-foreground"
               : gruppo === "da_gestire" && f.n ? "bg-red-600 text-white hover:bg-red-700"
                 : urgente ? "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30" : f.n ? "bg-card hover:bg-muted" : "bg-card text-muted-foreground")}>
-          <span className="whitespace-nowrap">{f.etichetta}</span><b className="tabular-nums">{f.n}</b>
+          <span className="whitespace-nowrap">{BREVI[f.codice] || f.etichetta}</span><b className="tabular-nums">{f.n}</b>
         </button>
         {sotto.map((x) => {
           const xs = scelta?.fase === x.codice;
@@ -144,7 +151,7 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
             {voci.map((f) => chip(f, g.codice))}
             {/* «mostra tutte» in coda all'ultima riga: nessuna riga in più */}
             {i === visibili.length - 1 && nZero > 0 && (
-              <button type="button" className="ml-auto shrink-0 self-center whitespace-nowrap px-1 text-[11px] text-muted-foreground underline max-sm:min-h-9" onClick={() => cambiaTutte(!tutte)}>
+              <button type="button" className="shrink-0 self-center whitespace-nowrap px-1 text-[11px] text-muted-foreground underline max-sm:min-h-9" onClick={() => cambiaTutte(!tutte)}>
                 {tutte ? "nascondi gli zeri" : `mostra tutte (+${nZero})`}</button>)}
           </div>
         </div>
