@@ -18,12 +18,13 @@ const SENZA = ["/login", "/forgot-password", "/reset-password"];
 const CANALE = "gl-chiamata-in-arrivo";
 const LUCCHETTO = "gl-chiamata-in-arrivo-capo";
 
-// orario di negozio (ora di Roma): lunedì-sabato 9:00-20:00 → controllo ogni 6 s; fuori orario ogni 60 s
+// orario di negozio (ora di Roma): lunedì-venerdì 9:00-19:30 (apertura 9:30-19:00, il sabato è chiuso) → controllo
+// ogni 6 s; fuori orario ogni 60 s
 function inOrarioNegozio(): boolean {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Rome", weekday: "short", hour: "2-digit", hour12: false })
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Rome", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })
     .formatToParts(new Date()).map((x) => [x.type, x.value]));
-  const ora = Number(p.hour);
-  return p.weekday !== "Sun" && ora >= 9 && ora < 20;
+  const minuti = (Number(p.hour) % 24) * 60 + Number(p.minute);
+  return !["Sat", "Sun"].includes(p.weekday) && minuti >= 9 * 60 && minuti < 19 * 60 + 30;
 }
 const STATI: Record<string, string> = { in_arrivo: "In arrivo", accettato: "Accettato", da_preventivare: "Da preventivare", preventivo_inviato: "Preventivo inviato", pronto: "Pronto", consegnato: "Consegnato", annullata: "Annullata" };
 const giorno = (d: string) => new Date(d).toLocaleDateString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "2-digit" });
