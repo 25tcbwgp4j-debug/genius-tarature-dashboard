@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Building2, Loader2, Mail, MessageCircle, Phone, Search, Store, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
+import { usePermessi } from "@/components/permessi";
 import { assClienti, assSalvaCliente, assSchedaCliente, dataOra, TIPI_CLIENTE, type Anagrafica, type SchedaCliente } from "@/lib/assistenza";
 import { Badge, Campo, Modale, Pill, Scelta, campo, area } from "./ui";
 import { PerCliente } from "../PerCliente";
@@ -68,8 +69,14 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
   const [riep, setRiep] = useState(false);
   const [f, setF] = useState<Form>(iniziale || {});
   const [busy, setBusy] = useState(false);
+  // 15/11/2026 (piano 1.6): «Paga a fine mese» (condizione permanente, la cambia solo il titolare)
+  const { admin } = usePermessi();
   useEffect(() => {
-    if (id) assSchedaCliente(id).then((x) => { setC(x); setF(x); }).catch(toastErrore);
+    if (id) assSchedaCliente(id).then((x) => {
+      const pm = typeof x.pagamento_mensile === "boolean" ? x.pagamento_mensile : x.dati && typeof x.dati.pagamento_mensile === "boolean" ? x.dati.pagamento_mensile : x.dati ? false : undefined;
+      const y = pm === undefined ? x : { ...x, pagamento_mensile: pm };
+      setC(y); setF(y);
+    }).catch(toastErrore);
   }, [id]);
   const set = (k: keyof Anagrafica, v: unknown) => setF((x) => ({ ...x, [k]: v }));
   const T = (k: keyof Anagrafica, l: string, extra: React.ComponentProps<"input"> = {}, cls = "") => (
@@ -80,7 +87,8 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
     try {
       const corpo: Form = {};
       for (const k of Object.keys(f) as (keyof Anagrafica)[]) {
-        if (["id", "origine"].includes(k) || k === ("schede" as keyof Anagrafica)) continue;
+        if (["id", "origine", "dati"].includes(k) || k === ("schede" as keyof Anagrafica)) continue;
+        if (k === "pagamento_mensile" && !admin) continue;
         if (!c || f[k] !== c[k]) (corpo as Record<string, unknown>)[k] = f[k] ?? null;
       }
       const r = await assSalvaCliente(id, corpo);
@@ -144,6 +152,15 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
               </div>
             </div>
           </fieldset>
+          {/* 15/11/2026 (piano 1.6): pagamento a fine mese — il PRONTO non chiede bonifico né «importo da saldare» */}
+          {id && (admin ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border-2 border-sky-300 bg-sky-50/60 p-2 text-sm dark:bg-sky-950/20">
+              <span className="font-semibold">💶 Paga a fine mese</span>
+              <Scelta valore={f.pagamento_mensile === true ? "si" : f.pagamento_mensile === false ? "no" : null} opzioni={[["si", "Sì"], ["no", "No"]]}
+                onChange={(v) => set("pagamento_mensile", v === "si")} />
+              <span className="text-xs text-muted-foreground">{typeof c?.pagamento_mensile === "boolean" ? "il pronto e i solleciti non chiedono il saldo: riepilogo mensile" : "stato attuale non letto dal server: scegli e salva"}</span>
+            </div>
+          ) : f.pagamento_mensile ? <div className="rounded-md border border-sky-300 bg-sky-50/60 px-2 py-1.5 text-sm font-semibold dark:bg-sky-950/20">💶 Pagamento a fine mese (lo cambia il titolare)</div> : null)}
           {/* 24/10/2026: abitudini di consegna: la scheda nuova e il dialogo corriere le usano come valori iniziali */}
           <fieldset className="space-y-2 rounded-lg border p-3">
             <legend className="px-1 text-xs font-semibold text-muted-foreground">Consegna e corriere</legend>

@@ -14,7 +14,7 @@ import {
 import { chiediTesto, conferma } from "@/components/Conferma";
 import { Button } from "@/components/ui/button";
 import { SceltaOperatore, type Operatore } from "@/components/Operatore";
-import { toastErrore } from "@/lib/errori";
+import { codiceErrore, toastErrore } from "@/lib/errori";
 import type { RicambioAtteso } from "@/lib/assistenza";
 import { fetchAPI } from "@/lib/api";
 import {
@@ -30,7 +30,7 @@ import { Avanzamento } from "./Avanzamento";
 import { ExSchede } from "./ExSchede";
 import { CercaCliente, RiepilogoCliente, SchedaClienteModal } from "./Cliente";
 import { Comunicazioni, Registro } from "./Comunicazioni";
-import { DialogoCambiaStato, DialogoChiudiTutto, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoStessoModello, type TipoInvio } from "./Dialoghi";
+import { DialogoCambiaStato, DialogoChiudiTutto, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoSaltaPreventivo, DialogoStessoModello, type TipoInvio } from "./Dialoghi";
 import { DialogoAcconto } from "./Acconto";
 import { Aggiuntivi } from "./Aggiuntivi";
 import { Documenti } from "./Documenti";
@@ -41,10 +41,11 @@ import { DialogoAssegna, DialogoChiudiVerifica, DialogoStatoRiparazione, Pannell
 import { NotificheScheda } from "../NotificheGestire";
 import { Badge, Campo, Modale, Pill, Sezione, area, campo } from "./ui";
 import { DialogoDuplica, nuovaChiave } from "./SchedaDoppia";
+import { CampiAccettazioneOpencore, RiquadroOpencore } from "./OpenCore";
 
 type Bozza = Partial<Scheda>;
 type Dialogo = null | { k: "acconto"; inizio: "invia" | "incassa" } | { k: "invio"; tipo: TipoInvio } | { k: "chiudi_tutto" } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
-  | { k: "richiesta" } | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" } | { k: "stato_riparazione"; stato: string } | { k: "trova_dopo_preventivo" };
+  | { k: "richiesta" } | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" } | { k: "stato_riparazione"; stato: string } | { k: "trova_dopo_preventivo" } | { k: "salta_preventivo" };
 
 function bozzaPreventivo(m: Partial<Scheda>): BozzaPreventivo {
   return { righe: (m.preventivo_righe as EstimateLine[]) || [], diagnosi: m.preventivo?.diagnosi || "", note: m.preventivo?.note || "",
@@ -239,7 +240,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       if (!silenzioso) toast.success("Salvata");
       onCambiata();
       return true;
-    } catch (e) { toastErrore(e); return false; }
+    } catch (e) { erroreAccettazione(e); return false; }
   }, [s, b, sporca, operatore, onCambiata]);
 
   useEffect(() => {
@@ -266,7 +267,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     if (sporca && !(await salva(true))) return;
     setDlg({ k: "invio", tipo } as typeof dlg);
   }
-  async function azione(nome: string, body: Record<string, unknown>, msg: string) {
+  // 15/11/2026: `rilancia` = codici d'errore del server (detail.codice) che il dialogo gestisce da sé (elenco dei problemi,
+  // blocchi, canale dell'ok): l'errore torna al dialogo invece del messaggio generico
+  async function azione(nome: string, body: Record<string, unknown>, msg: string, rilancia: string[] = []) {
     if (!s) return null;
     if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return null; }
     if (sporca && !(await salva(true))) return null;
@@ -277,7 +280,34 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       toast.success(msg + (esito?.mail ? ` · mail ${esito.mail}` : "") + (esito?.whatsapp ? ` · WhatsApp ${esito.whatsapp}` : ""), { duration: 7000 });
       await ricarica(); onCambiata();
       return r;
-    } catch (e) { toastErrore(e); return null; } finally { setBusy(""); }
+    } catch (e) {
+      const c = codiceErrore(e);
+      if (c && rilancia.includes(c)) throw e;
+      toastErrore(e); return null;
+    } finally { setBusy(""); }
+  }
+  // 15/11/2026 (piano 1.4): la recensione non si chiede con un reclamo aperto (409 «reclamo_aperto») e «inviata» solo se è partita
+  async function recensione(az: "invia" | "no") {
+    if (!s) return;
+    if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
+    setBusy("recensione");
+    try {
+      const r = await assAzione(s.id, "recensione", { operatore, azione: az });
+      if (az === "no") toast.success("Recensione: non si chiede");
+      else if (r?.inviata === false) toast.warning(`La richiesta di recensione NON è partita (mail: ${r?.esito?.mail || "—"} · WhatsApp: ${r?.esito?.whatsapp || "—"}): resta da chiedere`, { duration: 12000 });
+      else toast.success("Richiesta di recensione inviata" + (r?.esito?.mail ? ` · mail ${r.esito.mail}` : "") + (r?.esito?.whatsapp ? ` · WhatsApp ${r.esito.whatsapp}` : ""), { duration: 7000 });
+      await ricarica(); onCambiata();
+    } catch (e) {
+      if (codiceErrore(e) === "reclamo_aperto") toast.error(`La recensione non si chiede: c'è un reclamo aperto. ${(e as Error).message || ""}`, { duration: 12000 });
+      else toastErrore(e);
+    } finally { setBusy(""); }
+  }
+  // 15/11/2026 (piano 1.3): un PATCH che segna il preventivo accettato da un non titolare → 409 «accettazione_da_esito»
+  function erroreAccettazione(e: unknown) {
+    if (codiceErrore(e) === "accettazione_da_esito")
+      toast.error("L'accettazione si registra con «Risposta del cliente», indicando dove ha accettato per iscritto (mail, WhatsApp, online, firmato in negozio).",
+        { duration: 12000, action: { label: "Risposta del cliente", onClick: () => setDlg({ k: "esito" }) } });
+    else toastErrore(e);
   }
   // 03/11/2026: etichette dei dispositivi aggiuntivi (63300/1): una sola o, senza numero, tutte
   async function stampaAggiuntivo(n?: number) {
@@ -341,7 +371,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     else if (a === "ricevuta_no") { if (s && await ok("Niente ricevuta?", "Non mandare la ricevuta d'ingresso per questa scheda?", "Non serve")) assModifica(s.id, { ricevuta_da_inviare: false, operatore }).then(async () => { await ricarica(); onCambiata(); }).catch(toastErrore); }
     // 29/10/2026 (Christian): verifica e preventivo si saltano quando non servono
     else if (a === "salta_verifica") { if (await ok("Saltare la verifica?", "Si passa direttamente al preventivo.", "Salta la verifica")) azione("salta-passo", { passo: "verifica" }, "Verifica saltata"); }
-    else if (a === "salta_preventivo") { if (await ok("Saltare il preventivo?", "Si considera accettato senza inviarlo al cliente e si passa alla riparazione.", "Salta il preventivo", true)) azione("salta-passo", { passo: "preventivo" }, "Preventivo saltato: si passa alla riparazione"); }
+    // 15/11/2026 (piano 1.3): saltare il preventivo vuol dire accettarlo → serve l'ok scritto del cliente (dialogo con il canale)
+    else if (a === "salta_preventivo") setDlg({ k: "salta_preventivo" });
     else if (a === "rimontaggio") setDlg({ k: "assegna_rimontaggio" });
     // 04/11/2026 (Christian): il dispositivo potrebbe non essere mai stato smontato
     else if (a === "non_richiudere") { if (await ok("Non smontato?", "Il dispositivo non è stato smontato e non serve richiuderlo?\nSi passa al PRONTO (restituzione).", "Non serve richiuderlo")) azione("rimontaggio", { azione: "non_serve" }, "Non smontato: ora invia il PRONTO (negativo)"); }
@@ -500,6 +531,12 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <div className="rounded-lg border-2 border-red-500 bg-red-50 px-3 py-3 text-center text-xl font-extrabold text-red-700 dark:bg-red-950/30 dark:text-red-200">
           ⚠️ {s.opencore_avviso}
         </div>)}
+      {/* 15/11/2026 (piano 1.6): condizioni permanenti del cliente (dall'anagrafica) */}
+      {(s.condizioni_cliente?.pagamento_mensile || s.condizioni_cliente?.no_etichette) && (
+        <div className="flex flex-wrap gap-1.5">
+          {s.condizioni_cliente?.pagamento_mensile && <span className="inline-flex items-center rounded-full border border-sky-400 bg-sky-50 px-2.5 py-0.5 text-xs font-bold text-sky-900 dark:bg-sky-950/40 dark:text-sky-100">💶 Pagamento a fine mese</span>}
+          {s.condizioni_cliente?.no_etichette && <span title={s.condizioni_cliente.no_etichette_nota || undefined} className="inline-flex items-center rounded-full border border-red-400 bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-900 dark:bg-red-950/40 dark:text-red-100">🏷️🚫 Niente etichette{s.condizioni_cliente.no_etichette_nota ? ` · ${s.condizioni_cliente.no_etichette_nota}` : ""}</span>}
+        </div>)}
       {/* 11/11/2026 (Christian): DATI DEL CLIENTE in cima, molto evidenti (rosso = non formattare) */}
       <BannerDati s={s} ro={ro} onSalva={async (valore, nota) => {
         if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return false; }
@@ -570,7 +607,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             } catch (e) { toastErrore(e); }
           }}>Aggiungi le spese</Button>
         </div>)}
-      <BannerRecensione s={s} ro={ro} onScelta={(az) => azione("recensione", { azione: az }, az === "invia" ? "Richiesta di recensione inviata" : "Recensione: non si chiede")} />
+      <BannerRecensione s={s} ro={ro} onScelta={(az) => recensione(az)} />
 
       {/* azioni e PDF */}
       <div className="flex flex-wrap items-center gap-1.5 rounded-xl border bg-card p-2 shadow-sm">
@@ -634,6 +671,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-3">
           <div hidden={tab !== "accettazione"} className="space-y-3" role="tabpanel" id="pannello-accettazione" aria-labelledby="linguetta-accettazione">
+      {/* 15/11/2026 (piano 6.1): accettazione dei Mac OpenCore — password provata e dati sì/no (si salvano con «Salva») */}
+      {s.opencore_avviso && <CampiAccettazioneOpencore provata={v("opencore_password_provata")} dati={v("opencore_dati_conservare")} disabled={ro}
+        onProvata={(x) => set("opencore_password_provata", x)} onDati={(x) => set("opencore_dati_conservare", x)} evidenzia />}
       <div className="grid gap-3 xl:grid-cols-2">
         <Piega id="cliente" nome="Cliente" chiusa={!!chiuse.cliente} onApri={() => toggleSez("cliente")} riassunto={`${s.azienda || s.nominativo || "—"}${s.telefono ? ` · ${s.telefono}` : ""}`}>
         <Sezione titolo="Cliente" icona={<UserRound />}
@@ -701,18 +741,20 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             const nota = await chiediTesto({ titolo: "Concordato con il cliente", etichetta: "Come e quando l'ha concordato il cliente?", segnaposto: "es. WhatsApp 28/10: disco da 128 GB a € 179", ok: "Salva e accetta" });
             if (nota === null) return;
             const t = nota.toLowerCase();
-            const canale = /whats|wa\b/.test(t) ? "whatsapp" : /mail/.test(t) ? "mail" : /telef|chiam/.test(t) ? "telefono" : /negozio|banco|a voce/.test(t) ? "negozio" : undefined;
+            const canale = /whats|wa\b/.test(t) ? "whatsapp" : /mail/.test(t) ? "mail" : /online|link/.test(t) ? "online" : /negozio|banco|firmat/.test(t) ? "negozio" : undefined;
             try {
               const n = await assModifica(s.id, { ...b, concordato: { canale, nota: nota.trim() || null }, operatore });
               setS(n); setB({}); onCambiata();
               toast.success("Preventivo modificato e ACCETTATO (concordato col cliente): lavorazione e totale aggiornati");
-            } catch (e) { toastErrore(e); }
+            } catch (e) { erroreAccettazione(e); }
           }} />
         </Piega>
       </div>
 
           </div>
           <div hidden={tab !== "lavorazione"} className="space-y-3" role="tabpanel" id="pannello-lavorazione" aria-labelledby="linguetta-lavorazione">
+      {/* 15/11/2026 (piano 6.1): riquadro OpenCore — modello confermato/proposto, versioni, ultimo annuncio, a che punto è */}
+      {(s.opencore_avviso || s.hw_model_annunciato || s.lavorazione_stato) && <RiquadroOpencore s={s} ro={ro} operatore={operatore} onRicarica={async () => { await ricarica(); onCambiata(); }} />}
       <div ref={refTec} className="scroll-mt-24 sm:scroll-mt-44">
         <Piega id="tecnici" nome="Verifica e riparazione (tecnici)" chiusa={!!chiuse.tecnici} onApri={() => toggleSez("tecnici")} riassunto={`${s.tecnico_verifica ? `verifica ${nomeTecnico(s.tecnico_verifica)}` : "verifica da assegnare"}${s.tecnico_riparazione ? ` · riparazione ${nomeTecnico(s.tecnico_riparazione)}` : ""}`}>
         <PannelloTecnici s={s} tecnici={tecnici} ro={ro} busy={!!busy}
@@ -762,15 +804,17 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           </aside>
       </div>
 
-      {dlg?.k === "chiudi_tutto" && <DialogoChiudiTutto s={s} onClose={() => setDlg(null)} onChiudi={async (b) => !!(await azione("chiudi-tutto", b, "Scheda chiusa: già fatto tutto"))} />}
-      {dlg?.k === "invio" && <DialogoInvio s={s} tipo={dlg.tipo} onClose={() => {
+      {dlg?.k === "chiudi_tutto" && <DialogoChiudiTutto s={s} admin={admin} onClose={() => setDlg(null)} onChiudi={async (b) => !!(await azione("chiudi-tutto", b, "Scheda chiusa: già fatto tutto", ["chiusura_bloccata"]))} />}
+      {dlg?.k === "salta_preventivo" && <DialogoSaltaPreventivo s={s} admin={admin} onClose={() => setDlg(null)}
+        onSalta={async (b) => !!(await azione("salta-passo", { passo: "preventivo", ...b }, "Preventivo saltato: si passa alla riparazione", ["ok_cliente_mancante"]))} />}
+      {dlg?.k === "invio" && <DialogoInvio s={s} admin={admin} tipo={dlg.tipo} onClose={() => {
         // 03/11/2026 (Christian, 63299): preventivo partito con «Trova il mio» attivo → si offre l'invio separato delle istruzioni
         setDlg(trovaDopoInvio.current ? { k: "trova_dopo_preventivo" } : null);
         trovaDopoInvio.current = false;
       }} onInvia={async (body) => {
         const nome = dlg.tipo === "ricevuta" ? "ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "aggiornamento-riparazione" : dlg.tipo === "trova" ? "trova" : "preventivo";
         const corpo = dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento" ? { ...body, tipo: dlg.tipo } : dlg.tipo === "trova" ? { ...body, azione: "invia", forza: trovaForza.current } : body;
-        const r = await azione(nome, corpo, dlg.tipo === "ricevuta" ? "Ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "Aggiornamento riparazione" : dlg.tipo === "trova" ? "Istruzioni «Trova il mio» inviate" : body.programma_il ? "Preventivo PROGRAMMATO" : "Preventivo inviato");
+        const r = await azione(nome, corpo, dlg.tipo === "ricevuta" ? "Ricevuta" : dlg.tipo === "aggiornamento_riparazione" ? "Aggiornamento riparazione" : dlg.tipo === "trova" ? "Istruzioni «Trova il mio» inviate" : body.programma_il ? "Preventivo PROGRAMMATO" : "Preventivo inviato", ["preventivo_testi"]);
         if (r && (dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento") && !body.programma_il && s.trova_il_mio === "attivo" && s.gsx?.trova_verifica?.stato === "attivo") trovaDopoInvio.current = true;   // 13/11: solo se lo conferma Apple
         return r ? (r.esito as Esito) : null;
       }} />}
@@ -784,8 +828,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           <p className="text-sm">Il preventivo è partito. Su questa scheda hai segnato «Trova il mio» attivo: inviare anche al cliente, con un messaggio a parte (mail e WhatsApp), le istruzioni per disabilitarlo?</p>
         </Modale>
       )}
-      {dlg?.k === "esito" && <DialogoEsito s={s} righe={bz.righe} onClose={() => setDlg(null)}
-        onEsito={async (body) => !!(await azione("esito-preventivo", body, body.esito === "accettato" ? "ACCETTATO: in riparazione, lavorazione precompilata" : "Preventivo RIFIUTATO"))} />}
+      {dlg?.k === "esito" && <DialogoEsito s={s} admin={admin} righe={bz.righe} onClose={() => setDlg(null)}
+        onEsito={async (body) => !!(await azione("esito-preventivo", body, body.esito === "accettato" ? "ACCETTATO: in riparazione, lavorazione precompilata" : "Preventivo RIFIUTATO", ["ok_cliente_mancante", "accettazione_da_esito"]))} />}
       {dlg?.k === "stato_riparazione" && <DialogoStatoRiparazione stato={dlg.stato} totale={s.totale_lavorazione as number | null | undefined}
         serveRicambio={!(s.ricambi_attesi || []).some((r) => r.stato !== "arrivato")} onClose={() => setDlg(null)}
         notaClienteIniziale={s.nota_cliente_esito || ""} lavorazioneIniziale={String(v("lavorazione") || "")}

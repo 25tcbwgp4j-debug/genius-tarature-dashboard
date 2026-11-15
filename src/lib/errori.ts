@@ -23,3 +23,15 @@ export function toastErrore(e: unknown) {
     toast.error(m);
   }
 }
+
+/** 15/11/2026: codice dell'errore strutturato del server (detail.codice: «proposta_cambiata», «preventivo_testi», …). */
+export function codiceErrore(e: unknown): string | undefined {
+  const d = (e as ApiError)?.detail;
+  return d && typeof d === "object" && typeof d.codice === "string" ? d.codice : undefined;
+}
+
+/** 15/11/2026: il dettaglio strutturato dell'errore (problemi, blocchi, mancano…), o un oggetto vuoto. */
+export function dettaglioErrore(e: unknown): Record<string, unknown> {
+  const d = (e as ApiError)?.detail;
+  return d && typeof d === "object" ? (d as Record<string, unknown>) : {};
+}

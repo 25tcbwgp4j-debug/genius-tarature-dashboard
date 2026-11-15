@@ -6,8 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, Copy, Loader2, Mail, MessageCircle, Printer, Send, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toastErrore } from "@/lib/errori";
-import { assAnteprimaMail, assAzione, assProntoControlli, type ProntoControlli, assDocUrl, assStessoModello, CANALI_RISPOSTA, dataOra, eur, lordoPaypal, pagaFineMese, type DocPdf, type PaypalFee, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
+import { codiceErrore, dettaglioErrore, toastErrore } from "@/lib/errori";
+import { assAnteprimaMail, assAzione, assProntoControlli, type ProntoControlli, assDocUrl, assStessoModello, CANALI_OK_SCRITTO, dataOra, eur, lordoPaypal, pagaFineMese, type DocPdf, type PaypalFee, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
 import { blocchi, ipotesiDelBlocco, isActive, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, Pill, Scelta, area, campo } from "./ui";
@@ -78,12 +78,40 @@ function Canali({ mail, wa, setMail, setWa }: { mail: boolean; wa: boolean; setM
 }
 
 // ---------------------------------------------------------------------------
+/** 15/11/2026 (piano 1.3, «sempre ok scritto»): dove il cliente ha dato l'ok per iscritto. Il telefono non vale.
+ *  Il titolare può registrare l'accettazione senza ok scritto, con il motivo (resta nel registro). */
+const SENZA_OK = "senza";
+function SceltaOk({ canale, setCanale, admin, motivo, setMotivo, evidenzia }: {
+  canale: string; setCanale: (c: string) => void; admin: boolean; motivo: string; setMotivo: (m: string) => void; evidenzia?: boolean;
+}) {
+  const opz: [string, string][] = [...CANALI_OK_SCRITTO, ...(admin ? [[SENZA_OK, "Nessun ok scritto (titolare)"] as [string, string]] : [])];
+  return (
+    <div className={`space-y-2 rounded-lg border p-2.5 ${evidenzia && !canale ? "border-2 border-red-500" : ""}`}>
+      <div className="text-xs font-medium text-muted-foreground">Dove ha accettato il cliente, per iscritto? *</div>
+      <Scelta valore={canale || null} opzioni={opz.map(([k, l]) => [k, l])} onChange={setCanale} />
+      {canale === SENZA_OK && <Campo label="Motivo (senza ok scritto del cliente, resta nel registro) *">
+        <textarea className={area} rows={2} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="es. garanzia nostra concordata con il titolare" /></Campo>}
+      <p className="text-[11px] text-muted-foreground">Il telefono non vale come ok: si chiede la conferma per mail o WhatsApp.</p>
+    </div>
+  );
+}
+/** Il corpo per il server: canale dell'ok scritto oppure (solo titolare) il motivo. */
+function corpoOk(canale: string, motivo: string): Record<string, unknown> {
+  return canale === SENZA_OK ? { motivo_accettazione: motivo.trim() } : canale ? { canale } : {};
+}
+const okValido = (canale: string, motivo: string) => !!canale && (canale !== SENZA_OK || motivo.trim().length >= 5);
+const MSG_OK_MANCANTE = "Serve l'ok del cliente PER ISCRITTO: scegli dove ha accettato (mail, WhatsApp, online, firmato in negozio). Il telefono non vale.";
+
+// ---------------------------------------------------------------------------
 export type TipoInvio = "ricevuta" | "preventivo" | "aggiornamento" | "aggiornamento_riparazione" | "trova";
 const TITOLI: Record<TipoInvio, string> = { ricevuta: "Ricevuta d'ingresso", preventivo: "INVIA PREVENTIVO", aggiornamento: "INVIA AGGIORNAMENTO PREVENTIVO",
   aggiornamento_riparazione: "Aggiornamento riparazione", trova: "Istruzioni «Trova il mio» (abilitare la riparazione)" };
 
 /** Invio al cliente: mail + WhatsApp SEMPRE selezionati (si possono togliere solo apposta). */
-export function DialogoInvio({ s, tipo, onClose, onInvia }: { s: Scheda; tipo: TipoInvio; onClose: () => void; onInvia: (b: Record<string, unknown>) => Promise<Esito | null> }) {
+export function DialogoInvio({ s, tipo, onClose, onInvia, admin = false }: { s: Scheda; tipo: TipoInvio; onClose: () => void; onInvia: (b: Record<string, unknown>) => Promise<Esito | null>; admin?: boolean }) {
+  // 15/11/2026 (piano 1.2): 409 «preventivo_testi» → elenco di cosa correggere; il titolare può inviare comunque con il motivo
+  const [problemi, setProblemi] = useState<string[] | null>(null);
+  const [motivoTesti, setMotivoTesti] = useState("");
   const [mail, setMail] = useState(true);
   const [wa, setWa] = useState(!s.cliente_no_whatsapp);   // 26/10/2026: cliente «niente WhatsApp» → spenta
   const [nota, setNota] = useState("");
@@ -94,18 +122,39 @@ export function DialogoInvio({ s, tipo, onClose, onInvia }: { s: Scheda; tipo: T
   const programmabile = tipo === "preventivo" || tipo === "aggiornamento";
   const q = useQuando();
   const programma = programmabile ? q.programma : null;
-  async function invia() {
+  async function invia(forza = false) {
     if (tipo === "aggiornamento_riparazione" && !nota.trim()) { toast.error("Scrivi cosa comunicare al cliente"); return; }
+    if (forza && motivoTesti.trim().length < 5) { toast.error("Scrivi il motivo per cui il preventivo parte lo stesso"); return; }
     setBusy(true);
-    try { const r = await onInvia({ invia_mail: mail, invia_wa: wa, nota, ...(programma ? { programma_il: programma } : {}) }); if (r) setFatto(r); } finally { setBusy(false); }
+    try {
+      const r = await onInvia({ invia_mail: mail, invia_wa: wa, nota, ...(programma ? { programma_il: programma } : {}),
+        ...(forza ? { forza_testi: true, motivo_testi: motivoTesti.trim() } : {}) });
+      if (r) { setFatto(r); setProblemi(null); }
+    } catch (e) {
+      if (codiceErrore(e) === "preventivo_testi") {
+        const p = dettaglioErrore(e).problemi;
+        setProblemi(Array.isArray(p) && p.length ? p.map(String) : [(e as Error).message]);
+      } else toastErrore(e);
+    } finally { setBusy(false); }
   }
   return (
     <Modale titolo={`${TITOLI[tipo]} — scheda ${s.sigla}`} onClose={onClose} largo
       piedi={fatto ? <Button onClick={onClose}>Chiudi</Button> : <><Button variant="outline" onClick={onClose}>Annulla</Button>
-        <Button disabled={busy || (!mail && !wa && (!programmabile || q.quando !== "adesso")) || (programmabile && q.quando !== "adesso" && (!programma || q.passato))} onClick={invia}>{busy ? <Loader2 className="animate-spin" /> : <Send />}
+        <Button disabled={busy || (!mail && !wa && (!programmabile || q.quando !== "adesso")) || (programmabile && q.quando !== "adesso" && (!programma || q.passato))} onClick={() => invia()}>{busy ? <Loader2 className="animate-spin" /> : <Send />}
           {programma ? `PROGRAMMA l'invio (${quandoBreve(programma)})` : mail && wa ? "Invia mail + WhatsApp" : mail ? "Invia solo mail" : wa ? "Solo WhatsApp" : "Registra senza inviare"}</Button></>}>
       {fatto ? <EsitoInvio e={fatto} /> : (
         <div className="space-y-3">
+          {problemi && (
+            <div className="space-y-2 rounded-lg border-2 border-red-500 bg-red-50 p-3 text-sm text-red-950 dark:bg-red-950/30 dark:text-red-100" role="alert">
+              <div className="font-semibold">⛔ Il preventivo non parte così: correggi le voci (linguetta Preventivo) e riprova</div>
+              <ul className="list-disc space-y-0.5 pl-5">{problemi.map((p, i) => <li key={i}>{p}</li>)}</ul>
+              {admin ? <div className="space-y-1.5 border-t border-red-300 pt-2">
+                <Campo label="Solo il titolare: motivo per inviarlo comunque (resta nel registro) *">
+                  <textarea className={area} rows={2} value={motivoTesti} onChange={(e) => setMotivoTesti(e.target.value)} placeholder="es. voce concordata così con il cliente" /></Campo>
+                <Button variant="outline" className="border-red-400 text-red-800 dark:text-red-200" disabled={busy || motivoTesti.trim().length < 5} onClick={() => invia(true)}>
+                  {busy && <Loader2 className="animate-spin" />}Invia comunque</Button>
+              </div> : <p className="text-xs">Solo il titolare può inviarlo comunque.</p>}
+            </div>)}
           {(tipo === "preventivo" || tipo === "aggiornamento") && <>
             <p className="text-sm text-muted-foreground">Controlla il PDF qui sotto: è quello che riceve il cliente. Si salva il preventivo, se ne tiene la copia nello storico e si manda.{" "}
               <a className="font-medium text-primary underline" href={assDocUrl(s.id, "preventivo")} target="_blank" rel="noreferrer">Apri a schermo intero</a></p>
@@ -128,7 +177,7 @@ export function DialogoInvio({ s, tipo, onClose, onInvia }: { s: Scheda; tipo: T
 
 // ---------------------------------------------------------------------------
 /** Risposta del cliente: quale ipotesi accetta (+ eventuali aggiungibili), oppure rifiuta. */
-export function DialogoEsito({ s, righe, onClose, onEsito }: { s: Scheda; righe: EstimateLine[]; onClose: () => void; onEsito: (b: Record<string, unknown>) => Promise<boolean> }) {
+export function DialogoEsito({ s, righe, onClose, onEsito, admin = false }: { s: Scheda; righe: EstimateLine[]; onClose: () => void; onEsito: (b: Record<string, unknown>) => Promise<boolean>; admin?: boolean }) {
   const b = Math.max(...blocchi(righe));
   const ips = ipotesiDelBlocco(righe, b);
   const alt = ips.filter((x) => !x.agg);
@@ -139,16 +188,28 @@ export function DialogoEsito({ s, righe, onClose, onEsito }: { s: Scheda; righe:
   const [soloFisse, setSoloFisse] = useState(false);
   const [busy, setBusy] = useState(false);
   // 05/10/2026 (§10.5): da dove è arrivata la risposta (l'accettazione online arriva da sola dal link del cliente)
-  const [canale, setCanale] = useState("telefono");
+  // 15/11/2026 (piano 1.3): nessuna scelta di partenza e niente «telefono»: per ACCETTATO serve l'ok scritto
+  const [canale, setCanale] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [errore, setErrore] = useState<string | null>(null);
   // 15/11/2026 (piano 2.6): RICHIESTA DEL CLIENTE insieme alla risposta (es. «stress test prima della consegna»):
   // va nelle note di riparazione e arriva come messaggio al tecnico
   const [richiesta, setRichiesta] = useState("");
   const rc = richiesta.trim() ? { richiesta_cliente: richiesta.trim() } : {};
   const fisse = righe.filter((r) => (r.b ?? 0) === b && r.opt == null).reduce((t, r) => t + rowTotal(r), 0);
   const tot = fisse + (soloFisse ? 0 : alt.find((x) => x.opt === opt)?.totale || 0) + agg.filter((x) => prese.includes(x.opt)).reduce((t, x) => t + x.totale, 0);
+  // a € 0 (garanzia, cortesia) l'ok scritto non serve
+  const serveOk = tot > 0.009 || Number(s.preventivo_totale || 0) > 0.009;
   async function vai(esito: "accettato" | "rifiutato", tutto = false) {
-    setBusy(true);
-    try { if (await onEsito(esito === "accettato" ? { esito, blocco: b, ...(soloFisse ? { solo_fisse: true } : { ipotesi: opt }), aggiunte: prese, canale, ...rc } : { esito, blocco: b, canale, tutto, ...rc })) onClose(); } finally { setBusy(false); }
+    if (esito === "accettato" && serveOk && !okValido(canale, motivo)) { setErrore(canale === SENZA_OK ? "Scrivi il motivo (almeno qualche parola)." : MSG_OK_MANCANTE); return; }
+    setBusy(true); setErrore(null);
+    const ok = corpoOk(canale, motivo);
+    try { if (await onEsito(esito === "accettato" ? { esito, blocco: b, ...(soloFisse ? { solo_fisse: true } : { ipotesi: opt }), aggiunte: prese, ...ok, ...rc }
+      : { esito, blocco: b, ...(canale && canale !== SENZA_OK ? { canale } : {}), tutto, ...rc })) onClose(); }
+    catch (e) {
+      const c = codiceErrore(e);
+      setErrore(c === "ok_cliente_mancante" ? MSG_OK_MANCANTE : c === "accettazione_da_esito" ? "L'accettazione va registrata da qui indicando il canale dell'ok scritto (mail, WhatsApp, online, firmato in negozio)." : (e as Error).message);
+    } finally { setBusy(false); }
   }
   // 28/10/2026 (Christian, 63224): con un preventivo AGGIUNTIVO il rifiuto va detto esattamente: solo l'aggiuntivo (resta
   // valido quello già accettato) oppure tutto (il cliente non vuole più nessuna lavorazione)
@@ -183,10 +244,9 @@ export function DialogoEsito({ s, righe, onClose, onEsito }: { s: Scheda; righe:
             <span className="flex-1"><b>{x.n}ª ipotesi · aggiungibile</b><br />{x.righe.map((y) => y.r.t).join(" + ")}</span><b className="tabular-nums">+ {eur(x.totale)}</b>
           </label>
         ))}
-        <div className="flex flex-wrap items-center gap-2 pt-1 text-sm">
-          <span className="text-xs font-medium text-muted-foreground">Il cliente ha risposto</span>
-          <Scelta piccolo valore={canale} opzioni={CANALI_RISPOSTA.filter(([k]) => k !== "online").map(([k, l]) => [k, l])} onChange={setCanale} />
-        </div>
+        <SceltaOk canale={canale} setCanale={(c) => { setCanale(c); setErrore(null); }} admin={admin} motivo={motivo} setMotivo={setMotivo} evidenzia={!!errore} />
+        {!serveOk && <p className="text-xs text-muted-foreground">Preventivo a € 0 (garanzia, cortesia): l&apos;ok scritto non è obbligatorio.</p>}
+        {errore && <div role="alert" className="rounded-md border-2 border-red-500 bg-red-50 px-2.5 py-2 text-sm font-semibold text-red-900 dark:bg-red-950/30 dark:text-red-100">⛔ {errore}</div>}
         <label className="block pt-1">
           <span className="mb-0.5 block text-xs font-medium text-muted-foreground">📝 Richiesta del cliente (facoltativa): cosa chiede sul lavoro, arriva al tecnico</span>
           <textarea className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" rows={2} value={richiesta} onChange={(e) => setRichiesta(e.target.value)}
@@ -381,7 +441,10 @@ export function DialogoPagato({ s, onClose, onPagato }: { s: Scheda; onClose: ()
 
 // ---------------------------------------------------------------------------
 /** 26/10/2026 (Christian, 62778): scheda già lavorata e riconsegnata ma rimasta aperta → si chiude in un passo. */
-export function DialogoChiudiTutto({ s, onClose, onChiudi }: { s: Scheda; onClose: () => void; onChiudi: (b: Record<string, unknown>) => Promise<boolean> }) {
+export function DialogoChiudiTutto({ s, onClose, onChiudi, admin = false }: { s: Scheda; onClose: () => void; onChiudi: (b: Record<string, unknown>) => Promise<boolean>; admin?: boolean }) {
+  // 15/11/2026 (piano 5.3): 409 «chiusura_bloccata» (attesa del cliente, notifica BLOCCO aperta) → elenco; forzatura solo del titolare
+  const [blocchiCh, setBlocchiCh] = useState<string[] | null>(null);
+  const [forzaMotivo, setForzaMotivo] = useState("");
   const [esito, setEsito] = useState<"riparato" | "non_riparato" | "nessun_intervento">("riparato");
   const [modo, setModo] = useState<"ritiro" | "spedizione" | "corriere_cliente">(s.consegna_modo === "spedizione" ? (s.consegna_corriere === "cliente" ? "corriere_cliente" : "spedizione") : "ritiro");
   const [fuori, setFuori] = useState(false);
@@ -389,21 +452,67 @@ export function DialogoChiudiTutto({ s, onClose, onChiudi }: { s: Scheda; onClos
   const [busy, setBusy] = useState(false);
   const saldo = Number(s.saldo || 0);
   const daPagare = !s.pagata && saldo > 0.009;
-  async function vai() {
+  async function vai(forza = false) {
     if (daPagare && !fuori) { toast.error("Risulta da pagare: incassa prima, oppure spunta «già pagato / non dovuto»"); return; }
+    if (forza && forzaMotivo.trim().length < 5) { toast.error("Scrivi il motivo per cui chiudi nonostante i blocchi"); return; }
     setBusy(true);
-    try { if (await onChiudi({ esito, modo, nota, pagamento_fuori: fuori })) onClose(); } finally { setBusy(false); }
+    try { if (await onChiudi({ esito, modo, nota, pagamento_fuori: fuori, ...(forza ? { forza: true, forza_motivo: forzaMotivo.trim() } : {}) })) onClose(); }
+    catch (e) {
+      if (codiceErrore(e) === "chiusura_bloccata") {
+        const bl = dettaglioErrore(e).blocchi;
+        setBlocchiCh(Array.isArray(bl) && bl.length ? bl.map((x) => String((x as { testo?: string })?.testo || x)) : [(e as Error).message]);
+      } else toastErrore(e);
+    } finally { setBusy(false); }
   }
   return (
     <Modale titolo={`Già fatto tutto — chiudi la scheda ${s.sigla}`} onClose={onClose}
-      piedi={<><Button variant="outline" onClick={onClose}>Annulla</Button><Button disabled={busy} onClick={vai}>{busy && <Loader2 className="animate-spin" />}Chiudi la scheda</Button></>}>
+      piedi={<><Button variant="outline" onClick={onClose}>Annulla</Button><Button disabled={busy} onClick={() => vai()}>{busy && <Loader2 className="animate-spin" />}Chiudi la scheda</Button></>}>
       <div className="space-y-3 text-sm">
+        {blocchiCh && (
+          <div role="alert" className="space-y-2 rounded-lg border-2 border-red-500 bg-red-50 p-3 text-red-950 dark:bg-red-950/30 dark:text-red-100">
+            <div className="font-semibold">⛔ La scheda non si chiude: prima va risolto</div>
+            <ul className="list-disc space-y-0.5 pl-5">{blocchiCh.map((x, i) => <li key={i}>{x}</li>)}</ul>
+            {admin ? <div className="space-y-1.5 border-t border-red-300 pt-2">
+              <Campo label="Solo il titolare: motivo per chiuderla comunque (resta nel registro) *">
+                <textarea className={area} rows={2} value={forzaMotivo} onChange={(e) => setForzaMotivo(e.target.value)} placeholder="es. il cliente ha risposto al banco, notifica superata" /></Campo>
+              <Button variant="outline" className="border-red-400 text-red-800 dark:text-red-200" disabled={busy || forzaMotivo.trim().length < 5} onClick={() => vai(true)}>
+                {busy && <Loader2 className="animate-spin" />}Chiudi comunque</Button>
+            </div> : <p className="text-xs">Risolvi i blocchi (risposta del cliente, notifica da gestire) oppure chiedi al titolare.</p>}
+          </div>)}
         <p className="text-muted-foreground">Per le schede già lavorate e riconsegnate ma rimaste a metà: segna pronto e consegna in un colpo solo, saltando i passaggi. Resta tutto nel registro.</p>
         <Campo label="Com'è andata"><Scelta valore={esito} opzioni={[["riparato", "Riparato"], ["non_riparato", "Non riparato"], ["nessun_intervento", "Nessun intervento"]]} onChange={(x) => setEsito(x as typeof esito)} /></Campo>
         <Campo label="Come è stato riconsegnato"><Scelta valore={modo} opzioni={[["ritiro", "Ritirato in negozio"], ["spedizione", "Spedito da noi"], ["corriere_cliente", "Corriere del cliente"]]} onChange={(x) => setModo(x as typeof modo)} /></Campo>
         {daPagare && <label className="flex items-center gap-2 rounded-md bg-amber-50 px-2.5 py-2 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
           <input type="checkbox" className="size-4" checked={fuori} onChange={(e) => setFuori(e.target.checked)} />Risulta da pagare {eur(saldo)}: è già stato pagato / non è dovuto</label>}
         <Campo label="Nota (facoltativa, resta nelle note interne)"><textarea className={area} rows={2} value={nota} onChange={(e) => setNota(e.target.value)} placeholder="es. ritirato dal cliente il 20/10, riparazione di cortesia" /></Campo>
+      </div>
+    </Modale>
+  );
+}
+
+/** 15/11/2026 (piano 1.3): «Salta preventivo» = il preventivo si considera ACCETTATO senza inviarlo → serve l'ok scritto
+ *  del cliente (mail, WhatsApp, online, firmato in negozio); a € 0 non serve; il titolare può senza, con il motivo. */
+export function DialogoSaltaPreventivo({ s, admin, onClose, onSalta }: { s: Scheda; admin: boolean; onClose: () => void; onSalta: (b: Record<string, unknown>) => Promise<boolean> }) {
+  const [canale, setCanale] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [errore, setErrore] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const serveOk = Number(s.preventivo_totale || 0) > 0.009;
+  async function vai() {
+    if (serveOk && !okValido(canale, motivo)) { setErrore(canale === SENZA_OK ? "Scrivi il motivo (almeno qualche parola)." : MSG_OK_MANCANTE); return; }
+    setBusy(true); setErrore(null);
+    const ok = corpoOk(canale, motivo);
+    try { if (await onSalta({ ...(ok.canale ? { ok_cliente: ok.canale } : {}), ...(ok.motivo_accettazione ? { motivo_accettazione: ok.motivo_accettazione } : {}) })) onClose(); }
+    catch (e) { setErrore(codiceErrore(e) === "ok_cliente_mancante" ? MSG_OK_MANCANTE : (e as Error).message); }
+    finally { setBusy(false); }
+  }
+  return (
+    <Modale titolo={`Saltare il preventivo — scheda ${s.sigla}`} onClose={onClose}
+      piedi={<><Button variant="outline" onClick={onClose}>Annulla</Button><Button disabled={busy} onClick={vai}>{busy && <Loader2 className="animate-spin" />}Salta il preventivo</Button></>}>
+      <div className="space-y-3 text-sm">
+        <p className="text-muted-foreground">Il preventivo si considera <b>accettato</b> senza inviarlo al cliente e si passa alla riparazione.{serveOk ? ` Totale ${eur(s.preventivo_totale)}: serve l'ok del cliente per iscritto.` : " Preventivo a € 0 (garanzia, cortesia): l'ok scritto non è obbligatorio."}</p>
+        <SceltaOk canale={canale} setCanale={(c) => { setCanale(c); setErrore(null); }} admin={admin} motivo={motivo} setMotivo={setMotivo} evidenzia={!!errore} />
+        {errore && <div role="alert" className="rounded-md border-2 border-red-500 bg-red-50 px-2.5 py-2 font-semibold text-red-900 dark:bg-red-950/30 dark:text-red-100">⛔ {errore}</div>}
       </div>
     </Modale>
   );

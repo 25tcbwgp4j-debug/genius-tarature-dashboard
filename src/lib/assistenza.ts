@@ -27,6 +27,8 @@ export interface SchedaBreve {
     risposta?: string | null; risposta_da?: string; risposta_il?: string } | null; passaggio?: { da: string; a: string; testo: string; il: string; letto_il: string | null } | null;
   /** 11/11/2026 (Christian): DATI DEL CLIENTE (importanti = tentare il recupero, NON formattare · formattabile) */
   dati_cliente?: DatiCliente | null; dati_cliente_nota?: string | null; rimontaggio?: string | null; riparazione_stato_il?: string | null;
+  /** 15/11/2026: ultimo cambiamento della scheda (giorni di fermo reali in «Schede ferme») */
+  updated_at?: string | null;
 }
 export type DatiCliente = "importanti" | "formattabile";
 export interface Evento { id: string; tipo: string; descrizione: string; operatore: string | null; creato_da: string | null; created_at: string; dati?: Record<string, unknown> }
@@ -38,7 +40,9 @@ export interface Anagrafica { id: string; denominazione: string; piva?: string |
   note_cliente?: string | null; origine?: string | null; corriere_default?: string | null; pagamento_default?: string | null;
   telefoni_altri?: string | null; consegna_default?: string | null; ritiro_prenotazione?: boolean | null; ritorno_corriere?: string | null;
   /** 28/10/2026: chi paga le spedizioni e le spese che la scheda nuova mette da sola */
-  spedizioni_carico?: "noi" | "cliente" | "misto" | null; spedizione_tipo_default?: "ar" | "solo_ritiro" | "solo_ritorno" | null; spedizione_importo_default?: number | string | null }
+  spedizioni_carico?: "noi" | "cliente" | "misto" | null; spedizione_tipo_default?: "ar" | "solo_ritiro" | "solo_ritorno" | null; spedizione_importo_default?: number | string | null;
+  /** 15/11/2026 (piano 1.6): pagamento a fine mese (in fatt_anagrafiche.dati; lo cambia solo il titolare) */
+  pagamento_mensile?: boolean | null; dati?: { pagamento_mensile?: boolean | null } | null }
 export interface SchedaCliente extends Anagrafica { schede: { id: string; sigla: string; prodotto: string | null; modello: string | null; difetto: string | null; stato: string; created_at: string }[] }
 export interface Scheda extends SchedaBreve {
   /** 11/11/2026: chi/quando ha scelto i dati · proposta dai testi (solo visiva) · nota per il cliente all'esito · ultimo stato riparazione */
@@ -86,7 +90,26 @@ export interface Scheda extends SchedaBreve {
   riparazione_assegnata_il: string | null; preventivo_risposta_canale: string | null; preventivo_risposta_il: string | null;
   avanzamento: Avanzamento; saldo: number; pagata: boolean; comunicazioni: Comunicazione[]; wa_linea_attiva: boolean;
   preventivo_totale: number | null; opencore_avviso?: string | null; voci_lavorazione?: VoceLavorazione[];
+  /** 15/11/2026 (piano 6.1): modello tecnico CONFERMATO (hw.model), proposta annunciata dal Mac, versioni di macOS, ultimo
+   *  annuncio, stato della lavorazione OpenCore, campi dell'accettazione OpenCore e condizioni permanenti del cliente */
+  hw_model?: string | null; hw_model_annunciato?: string | null; hw_model_annunciato_il?: string | null;
+  opencore_versioni?: OpencoreVersioni | null; mac_annuncio?: MacAnnuncio | null; lavorazione_stato?: LavorazioneStato | null;
+  opencore_password_provata?: boolean | null; opencore_dati_conservare?: boolean | null; condizioni_cliente?: CondizioniCliente | null;
 }
+/** 15/11/2026: versioni di macOS del modello (tabella OCLP da hw.model, o dal nome commerciale). */
+export interface OpencoreVersioni { ufficiale?: string | null; consigliata?: string | null; grafica?: string | null; note?: string | null; nome?: string | null;
+  hw_model?: string | null; fonte?: string | null; /** versione promessa nel preventivo PIÙ NUOVA della consigliata (es. «SONOMA») */ oltre_consigliata?: string | null }
+/** 15/11/2026: ultimo annuncio del Mac in lavorazione (5 ACCESSO / vai.command). */
+export interface MacAnnuncio { utente?: string | null; ip?: string | null; ip_mittente?: string | null; ip_diverso?: boolean | null; macos?: string | null;
+  nome_mac?: string | null; quando?: string | null; creato_il?: string | null; hw_model?: string | null; seriale?: string | null }
+/** 15/11/2026: a che punto è la lavorazione OpenCore (la scrive la sessione «opencore»). */
+export interface LavorazioneStato { fase?: string | null; testo?: string | null; azione_christian?: string | null; chiavetta?: string | null; aggiornato_il?: string | null }
+/** 15/11/2026 (piano 1.6): condizioni permanenti del cliente dall'anagrafica. */
+export interface CondizioniCliente { pagamento_mensile: boolean; no_etichette: boolean; no_etichette_nota: string | null; no_whatsapp: boolean }
+/** 15/11/2026: riga del riquadro «Mac in lavorazione» (GET /api/assistenza/mac-in-lavorazione). */
+export interface MacInLavorazione { id: string; sigla: string; numero: number; stato: StatoScheda; azienda: string | null; nominativo: string | null;
+  prodotto: string | null; modello: string | null; seriale: string | null; hw_model: string | null; riparazione_stato: string | null;
+  tecnico_riparazione: string | null; lavorazione_stato: LavorazioneStato | null; versioni: OpencoreVersioni | null }
 export interface Passo { codice: string; etichetta: string; stato: "fatto" | "attuale" | "da_fare" | "saltato"; dettaglio: string;
   /** 04/11/2026 (Christian): giorno e ora del passo */
   quando?: string | null }
@@ -208,6 +231,10 @@ export const assElenco = (q: string, stato: string, origine = "", limit = 150, o
 export const assContatori = (): Promise<{ contatori: Record<string, number> }> => fetchAPI("/api/assistenza/contatori");
 export const assPerNumero = (n: string): Promise<{ id: string; sigla: string; esatta: boolean }> => fetchAPI(`/api/assistenza/schede/numero/${encodeURIComponent(n.trim().replace(/^(\d{5,})\/\d+$/, "$1"))}`); // 03/11/2026: 63300/2 (dispositivo aggiuntivo) → scheda 63300
 export const assScheda = (id: string): Promise<Scheda> => fetchAPI(`/api/assistenza/schede/${id}`);
+/** 15/11/2026: conferma del modello tecnico proposto dal Mac (manda ESATTAMENTE il modello e la data mostrati). */
+export const assConfermaModello = (id: string, b: { operatore: string; hw_model: string; hw_model_annunciato_il: string }): Promise<{ hw_model: string; versioni: OpencoreVersioni | null }> =>
+  fetchAPI(`/api/assistenza/schede/${id}/conferma-modello`, j(b));
+export const assMacInLavorazione = (): Promise<{ schede: MacInLavorazione[] }> => fetchAPI("/api/assistenza/mac-in-lavorazione", { timeoutMs: 20_000 }, false);
 export const assCrea = (b: Record<string, unknown>): Promise<Scheda & { esiti: Record<string, unknown> }> => fetchAPI("/api/assistenza/schede", j(b));
 export const assModifica = (id: string, b: Record<string, unknown>): Promise<Scheda> => fetchAPI(`/api/assistenza/schede/${id}`, { method: "PATCH", body: JSON.stringify(b) });
 export const assAzione = (id: string, azione: string, b: Record<string, unknown>) => fetchAPI(`/api/assistenza/schede/${id}/${azione}`, j(b));
@@ -300,14 +327,24 @@ export const DATI_CLIENTE: Record<DatiCliente, { breve: string; lungo: string }>
   formattabile: { breve: "✅ Formattabile", lungo: "Si può formattare / resettare: dati non importanti o salvati altrove" },
 };
 export const CANALI_RISPOSTA: [string, string][] = [["telefono", "Telefono"], ["whatsapp", "WhatsApp"], ["mail", "Mail"], ["negozio", "In negozio"], ["online", "Online"]];
+/** 15/11/2026 (piano 1.3, «sempre ok scritto»): i soli canali che valgono come ok del cliente (il telefono no). */
+export const CANALI_OK_SCRITTO: [string, string][] = [["mail", "Mail"], ["whatsapp", "WhatsApp"], ["online", "Online"], ["negozio", "In negozio (firmato)"]];
+/** 15/11/2026: colori delle chiavette OpenCore (codici delle etichette: 1, 2, K2, K3, VERDE MAC, KING, VERDE WIN, BLU, WINDOWS). */
+export const COLORE_CHIAVETTA: Record<string, string> = {
+  "1": "bg-gray-700 text-white border-gray-800", "2": "bg-gray-500 text-white border-gray-600",
+  K2: "bg-violet-600 text-white border-violet-700", K3: "bg-purple-800 text-white border-purple-900",
+  "VERDE MAC": "bg-emerald-600 text-white border-emerald-700", "VERDE WIN": "bg-lime-500 text-lime-950 border-lime-600",
+  KING: "bg-red-600 text-white border-red-700", BLU: "bg-blue-600 text-white border-blue-700", WINDOWS: "bg-sky-400 text-sky-950 border-sky-500",
+};
 /** Nome del tecnico dal codice (ALEX → Alex). */
 export const nomeTecnico = (cod: string | null | undefined, tecnici: { codice: string; nome: string }[] = []) =>
   !cod ? "" : tecnici.find((t) => t.codice.toUpperCase() === cod.toUpperCase())?.nome || cod;
 
 /** 24/10/2026: rivenditore con riepilogo mensile (rete iGroup): resta da pagare, ma consegna e spedizione non si fermano
  *  (stessa regola del backend `paga_fine_mese`). */
-export const pagaFineMese = (s: { anagrafica: Anagrafica | null }): boolean =>
-  /mensil|fine\s*mese|\bf\.?m\.?\b/i.test(s.anagrafica?.pagamento_default || "");
+// 15/11/2026 (piano 1.6): vale anche la condizione permanente «pagamento mensile» dell'anagrafica (condizioni_cliente)
+export const pagaFineMese = (s: { anagrafica: Anagrafica | null; condizioni_cliente?: CondizioniCliente | null }): boolean =>
+  !!s.condizioni_cliente?.pagamento_mensile || /mensil|fine\s*mese|\bf\.?m\.?\b/i.test(s.anagrafica?.pagamento_default || "");
 
 /** 24/10/2026: linea STAFF Apple 334 (WAHA) in sola lettura, messaggi arrivati dal webhook. */
 export interface StaffMsg { id: string; chat_id: string; telefono: string | null; nome: string | null; da_noi: boolean; testo: string | null; tipo: string | null; media_url: string | null; inviato_il: string | null }

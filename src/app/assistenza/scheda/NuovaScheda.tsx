@@ -8,12 +8,13 @@ import { toast } from "sonner";
 import { Download, ExternalLink, FileText, Loader2, Mail, MessageCircle, Plus, Printer, Tag, UserRoundPen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SceltaOperatore, type Operatore } from "@/components/Operatore";
-import { toastErrore } from "@/lib/errori";
+import { codiceErrore, toastErrore } from "@/lib/errori";
 import { assCrea, assDocUrl, type Anagrafica, type ConfigAssistenza, type Esito, type Scheda } from "@/lib/assistenza";
 import { Apparecchio, type ValoriApparecchio } from "./Apparecchio";
 import { CercaCliente, PillTipo, SchedaClienteModal } from "./Cliente";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, campo } from "./ui";
+import { CampiAccettazioneOpencore, mancaAccettazioneOpencore, pareOpencore } from "./OpenCore";
 import { DialogoSchedaDoppia, nuovaChiave, schedaDoppia, type SchedaEsistente } from "./SchedaDoppia";
 
 export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, onApriEsistente, iniziale }: {
@@ -41,6 +42,13 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, o
   const [doppia, setDoppia] = useState<SchedaEsistente | null>(null);
   const [creata, setCreata] = useState<(Scheda & { esiti: Record<string, unknown> }) | null>(null);
   const setA = (k: keyof ValoriApparecchio, v: unknown) => setApp((x) => ({ ...x, [k]: v }));
+  // 15/11/2026 (piano 6.1 / OpenCore 4.3): Mac al banco con lavoro OpenCore → password provata e dati sì/no obbligatori.
+  // Si mostrano quando modello e testi lo dicono (stessa regola del server) o quando il server risponde «opencore_accettazione».
+  const [ocProvata, setOcProvata] = useState(false);
+  const [ocDati, setOcDati] = useState<boolean | null>(null);
+  const [ocDalServer, setOcDalServer] = useState(false);
+  const [ocEvidenzia, setOcEvidenzia] = useState(false);
+  const conOpencore = !inArrivo && (ocDalServer || pareOpencore(String(app.modello || app.prodotto || ""), [app.difetto, cli.note].filter(Boolean).join(" ")));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (iniziale?.anagrafica) daRubrica(iniziale.anagrafica); if (iniziale?.note) setCli((x) => ({ ...x, note: iniziale.note || "" })); }, []);
 
@@ -57,18 +65,29 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, o
     if (!cli.azienda.trim()) { toast.error("Scrivi il nome del cliente"); return; }
     // 26/10/2026: anche un prodotto scritto a mano (non Apple, senza famiglia del menu) va bene: la famiglia la deduce il server
     if (!app.famiglia && !(app.prodotto || "").trim()) { toast.error("Scegli il prodotto dal menu o scrivilo a mano"); return; }
+    if (conOpencore && mancaAccettazioneOpencore(ocProvata, ocDati).length) {
+      setOcEvidenzia(true);
+      toast.error(`Mac con OpenCore: manca ${mancaAccettazioneOpencore(ocProvata, ocDati).join(" e ")}`);
+      return;
+    }
     inviando.current = true;
     setBusy(true);
     try {
       const s = await assCrea({ ...cli, ...app, prodotto: app.prodotto || app.famiglia, operatore, anagrafica_id: anag?.id, in_arrivo: inArrivo,
         invia_ricevuta: false, invia_wa: true, stampa: inArrivo ? {} : { accettazione: stampaA4, etichetta: stampaEt },
-        chiave_idempotenza: chiave.current, ...(forza ? { forza_duplicato: true } : {}) });
+        chiave_idempotenza: chiave.current, ...(forza ? { forza_duplicato: true } : {}),
+        ...(conOpencore ? { opencore_password_provata: ocProvata, opencore_dati_conservare: ocDati } : {}) });
       toast.success(`Scheda ${s.sigla} creata`);
       setDoppia(null);
       setCreata(s);
     } catch (e) {
       const es = schedaDoppia(e);
-      if (es) setDoppia(es); else toastErrore(e);
+      if (es) setDoppia(es);
+      else if (codiceErrore(e) === "opencore_accettazione") {
+        // il server riconosce il lavoro OpenCore: si mostrano i due campi evidenziati
+        setOcDalServer(true); setOcEvidenzia(true);
+        toast.error("Mac con OpenCore: prima di accettarlo spunta «password provata davanti al cliente» e scegli se conservare i dati", { duration: 9000 });
+      } else toastErrore(e);
     } finally { inviando.current = false; setBusy(false); }
   }
 
@@ -147,6 +166,7 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, o
             <Apparecchio v={app} set={setA} famiglie={cfg?.famiglie} prodotti={cfg?.prodotti} compatto />
           </div>
         </div>
+        {conOpencore && <CampiAccettazioneOpencore provata={ocProvata} dati={ocDati} onProvata={setOcProvata} onDati={setOcDati} evidenzia={ocEvidenzia} />}
         <div className="space-y-3 border-t pt-3">
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
             <label className="flex items-center gap-1.5"><input type="checkbox" className="size-4" checked={inArrivo} onChange={(e) => setInArrivo(e.target.checked)} />Arriva col corriere (scheda «in arrivo»)</label>

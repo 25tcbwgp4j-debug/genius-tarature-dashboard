@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { Cruscotto } from "./assistenza/Cruscotto";
 import { PerseDaRichiamare } from "@/components/PerseDaRichiamare";
 import { AspettanoRisposta, SchedeFerme } from "./assistenza/Attese";
+import { MacInLavorazioneRiquadro } from "./assistenza/scheda/OpenCore";
 import { Card } from "@/components/ui/card";
 import { Smartphone, PackageCheck, Euro, Landmark, Mail, Calculator, Clock, Plus, FileQuestion } from "lucide-react";
 import { fetchAPI } from "@/lib/api";
@@ -136,6 +137,8 @@ export function HomeApple() {
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <AspettanoRisposta />
           <SchedeFerme />
+          {/* 15/11/2026 (piano 6.1, D11): Mac OpenCore in lavorazione con fase, prossima cosa per Christian e chiavetta */}
+          <MacInLavorazioneRiquadro />
         </div>
       )}
 
