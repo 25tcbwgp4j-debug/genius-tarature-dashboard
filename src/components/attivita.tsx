@@ -119,7 +119,7 @@ export function SceltaAttivita({ value, onChange, disabled = false }: { value?: 
           type="button"
           disabled={disabled}
           onClick={() => onChange(a.codice)}
-          className={`px-3 py-1 text-sm font-medium disabled:opacity-60 ${
+          className={`px-3 py-1 text-sm font-medium disabled:opacity-60 max-sm:min-h-10 ${
             value === a.codice
               ? a.codice === "apple"
                 ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
