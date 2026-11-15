@@ -28,11 +28,14 @@ export function DaGestireTarature() {
   // 403 = utente senza accesso: il riquadro non compare
   const carica = useCallback(() => { assTaratureDaGestire().then(setDati).catch(() => undefined); }, []);
 
+  // 15/11/2026 (consumi Vercel, DIGITALE-61): con la scheda nascosta niente chiamate; si ricarica quando torna visibile
   useEffect(() => {
     carica();
-    const t = setInterval(carica, OGNI_MS);
+    const t = setInterval(() => { if (!document.hidden) carica(); }, OGNI_MS);
+    const visibile = () => { if (!document.hidden) carica(); };
     window.addEventListener("focus", carica);
-    return () => { clearInterval(t); window.removeEventListener("focus", carica); };
+    document.addEventListener("visibilitychange", visibile);
+    return () => { clearInterval(t); window.removeEventListener("focus", carica); document.removeEventListener("visibilitychange", visibile); };
   }, [carica]);
 
   if (!dati) return null;
