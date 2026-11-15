@@ -29,7 +29,7 @@ export function AggiornaVersione() {
         else setNuova(true);
       } catch { /* rete assente: si riprova al giro dopo */ }
     };
-    const t = setInterval(controlla, 60_000);
+    const t = setInterval(() => { if (!document.hidden) controlla(); }, 60_000);   // 15/11/2026 (B-34): niente a scheda nascosta
     const vis = () => { if (document.visibilityState === "visible") controlla(); };
     document.addEventListener("visibilitychange", vis);
     return () => { attiva = false; clearInterval(t); document.removeEventListener("visibilitychange", vis); };

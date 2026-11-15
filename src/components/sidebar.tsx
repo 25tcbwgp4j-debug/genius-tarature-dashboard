@@ -56,6 +56,7 @@ import { usePermessi } from "@/components/permessi";
 import { paginaDelTitolare } from "@/lib/riservate";
 import { SelettoreAttivita, useAttivita } from "@/components/attivita";
 import { fetchAPI } from "@/lib/api";
+import { aggiornaRiepilogo, iscriviRiepilogo } from "@/lib/riepilogo";
 
 // MENU PER DIVISIONE (04/10/2026): il selettore Tarature/Apple cambia davvero ambiente.
 // Ogni divisione ha il suo menu; le sezioni del negozio (fatture, cassa, spedizioni, ordini, pro forma, magazzino,
@@ -212,13 +213,11 @@ export function Sidebar() {
   const vedeSchede = admin || assistenzaOperatori;
   useEffect(() => {
     if (!vedeSchede || pathname === "/login" || pathname.startsWith("/login/")) return;
-    let annullato = false;
-    const conta = () => fetchAPI("/api/assistenza/notifiche-gestire/conteggio")
-      .then((r: { aperte?: number }) => { if (!annullato) setNNotifiche(r.aperte || 0); }).catch(() => undefined);
-    conta();
-    const t = setInterval(conta, 60_000);
+    // 15/11/2026 (B-34): conteggio dal riepilogo condiviso (una chiamata al minuto per tutti gli avvisi, niente a scheda nascosta)
+    const via = iscriviRiepilogo("notifiche", (d) => setNNotifiche((d as { aperte?: number } | null)?.aperte || 0));
+    const conta = () => { void aggiornaRiepilogo("notifiche"); };
     window.addEventListener("gl-notifiche", conta);
-    return () => { annullato = true; clearInterval(t); window.removeEventListener("gl-notifiche", conta); };
+    return () => { via(); window.removeEventListener("gl-notifiche", conta); };
   }, [vedeSchede, pathname]);
 
   useEffect(() => {
@@ -233,7 +232,7 @@ export function Sidebar() {
         .catch(() => undefined);
     };
     fetchCount();
-    const id = setInterval(fetchCount, 30_000);
+    const id = setInterval(() => { if (!document.hidden) fetchCount(); }, 30_000);   // 15/11/2026 (B-34): niente a scheda nascosta
     return () => {
       cancelled = true;
       clearInterval(id);

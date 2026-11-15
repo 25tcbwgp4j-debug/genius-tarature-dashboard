@@ -4,7 +4,7 @@
 // (nome in rubrica) e le sue ultime schede assistenza. Arriva dal collegamento CTI del centralino (agente sul PC HP).
 // 13/11/2026: le schede APERTE vengono prima, evidenziate «IN CORSO», anche se sulla scheda c'è un altro telefono (stesso nome).
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { PhoneCall, PhoneIncoming, X } from "lucide-react";
@@ -15,6 +15,16 @@ type Scheda = { id: string; numero: number; nominativo?: string | null; azienda?
 type Chiamata = { call_id: string; stato: "squilla" | "risposta"; numero: string; interno?: string | null; contatto?: string | null; internazionale?: string | null; paese?: string | null; schede: Scheda[] };
 
 const SENZA = ["/login", "/forgot-password", "/reset-password"];
+const CANALE = "gl-chiamata-in-arrivo";
+const LUCCHETTO = "gl-chiamata-in-arrivo-capo";
+
+// orario di negozio (ora di Roma): lunedì-sabato 9:00-20:00 → controllo ogni 6 s; fuori orario ogni 60 s
+function inOrarioNegozio(): boolean {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Rome", weekday: "short", hour: "2-digit", hour12: false })
+    .formatToParts(new Date()).map((x) => [x.type, x.value]));
+  const ora = Number(p.hour);
+  return p.weekday !== "Sun" && ora >= 9 && ora < 20;
+}
 const STATI: Record<string, string> = { in_arrivo: "In arrivo", accettato: "Accettato", da_preventivare: "Da preventivare", preventivo_inviato: "Preventivo inviato", pronto: "Pronto", consegnato: "Consegnato", annullata: "Annullata" };
 const giorno = (d: string) => new Date(d).toLocaleDateString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "2-digit" });
 
@@ -24,18 +34,41 @@ export function ChiamataInArrivo() {
   const [chiuse, setChiuse] = useState<string[]>([]);
   const nascosto = SENZA.some((p) => pathname.startsWith(p));
 
-  const carica = useCallback(() => {
-    if (document.visibilityState !== "visible") return;
-    fetchAPI("/api/telefonate/in-arrivo", { timeoutMs: 8_000 }, false).then((r) => setChiamate(r.telefonate || [])).catch(() => undefined);
-  }, []);
-
+  // 15/11/2026 (B-34, consumi Vercel DIGITALE-61: questo controllo ogni 3 s da ogni scheda era il 59% delle chiamate).
+  // Ora per ogni browser UNA sola scheda visibile fa da «capo» (Web Locks): legge ogni 6 s in orario di negozio e ogni
+  // 60 s fuori orario, e passa l'esito alle altre schede (BroadcastChannel). Una scheda nascosta lascia il posto; se il
+  // capo si chiude o va in secondo piano, la prima scheda visibile in attesa prende il suo posto da sola.
   useEffect(() => {
     if (nascosto) return;
-    carica();
-    const t = setInterval(carica, 3_000);
-    window.addEventListener("focus", carica);
-    return () => { clearInterval(t); window.removeEventListener("focus", carica); };
-  }, [carica, nascosto]);
+    const canale = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(CANALE) : null;
+    if (canale) canale.onmessage = (e: MessageEvent) => { if (e.data?.tipo === "chiamate") setChiamate(e.data.telefonate || []); };
+    let ctl: AbortController | null = null;
+    const leggi = () => fetchAPI("/api/telefonate/in-arrivo", { timeoutMs: 8_000 }, false)
+      .then((r) => { const t: Chiamata[] = r.telefonate || []; setChiamate(t); canale?.postMessage({ tipo: "chiamate", telefonate: t }); })
+      .catch(() => undefined);
+    const faiIlCapo = (segnale: AbortSignal) => new Promise<void>((fine) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      segnale.addEventListener("abort", () => { clearTimeout(timer); fine(); });
+      const passo = async () => {
+        if (segnale.aborted) return;
+        await leggi();
+        if (!segnale.aborted) timer = setTimeout(passo, inOrarioNegozio() ? 6_000 : 60_000);
+      };
+      void passo();
+    });
+    const candidati = () => {
+      if (document.hidden || ctl) return;
+      const mio = new AbortController();
+      ctl = mio;
+      if (!navigator.locks) { void faiIlCapo(mio.signal); return; }   // browser senza Web Locks: ogni scheda legge da sé
+      navigator.locks.request(LUCCHETTO, { signal: mio.signal }, () => faiIlCapo(mio.signal)).catch(() => undefined);
+    };
+    const lascia = () => { ctl?.abort(); ctl = null; };
+    const vis = () => (document.hidden ? lascia() : candidati());
+    candidati();
+    document.addEventListener("visibilitychange", vis);
+    return () => { lascia(); canale?.close(); document.removeEventListener("visibilitychange", vis); };
+  }, [nascosto]);
 
   const visibili = chiamate.filter((c) => !chiuse.includes(c.call_id));
   if (nascosto || !visibili.length) return null;

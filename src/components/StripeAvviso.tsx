@@ -13,8 +13,9 @@ import { toast } from "sonner";
 import { AlertTriangle, ArrowRight, Check, CheckCircle2, CreditCard, ExternalLink, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
+import { aggiornaRiepilogo, iscriviRiepilogo } from "@/lib/riepilogo";
 import { CLASSI_PULSANTE_PILA, NellaPila } from "@/components/PilaAvvisi";
-import { stripeAvvisi, stripeVisto, type StripeAvviso as Avviso } from "@/lib/stripeAvvisi";
+import { stripeVisto, type StripeAvviso as Avviso } from "@/lib/stripeAvvisi";
 
 const SENZA = ["/login", "/forgot-password", "/reset-password"];
 
@@ -28,14 +29,13 @@ export function StripeAvviso() {
   const [avvisi, setAvvisi] = useState<Avviso[]>([]);
   const [aperto, setAperto] = useState(false);
 
-  const carica = useCallback(() => { stripeAvvisi().then((r) => setAvvisi(r.avvisi || [])).catch(() => undefined); }, []);
+  // 15/11/2026 (B-34): dati dal riepilogo condiviso (una chiamata al minuto per tutti gli avvisi, niente a scheda nascosta)
+  const carica = useCallback(() => { void aggiornaRiepilogo("stripe"); }, []);
+  const fuori = SENZA.some((p) => pathname.startsWith(p));
   useEffect(() => {
-    if (SENZA.some((p) => pathname.startsWith(p))) return;
-    carica();
-    const t = setInterval(carica, 60_000);
-    window.addEventListener("focus", carica);
-    return () => { clearInterval(t); window.removeEventListener("focus", carica); };
-  }, [carica, pathname]);
+    if (fuori) return;
+    return iscriviRiepilogo("stripe", (d) => setAvvisi((d as { avvisi?: Avviso[] } | null)?.avvisi || []));
+  }, [fuori]);
 
   if (SENZA.some((p) => pathname.startsWith(p))) return null;
   const n = avvisi.length;

@@ -123,5 +123,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Escludi asset statici e favicon dal proxy (non servono auth)
-  matcher: ["/((?!\\.well-known|_next/static|_next/image|_next/data|favicon.ico|robots.txt|sitemap.xml|manifest.json|sw.js|workbox-.*|icon-.*\\.png|apple-touch-icon.*\\.png).*)"],
+  // 15/11/2026 (B-34, consumi Vercel): /api/backend e /api/riepilogo controllano il JWT da sole (lib/authRoute), /api/versione
+  // è pubblica (solo il numero di build): passando dal proxy ogni chiamata costava due invocazioni.
+  matcher: ["/((?!api/backend/|api/backend$|api/riepilogo|api/versione|\\.well-known|_next/static|_next/image|_next/data|favicon.ico|robots.txt|sitemap.xml|manifest.json|sw.js|workbox-.*|icon-.*\\.png|apple-touch-icon.*\\.png).*)"],
 };

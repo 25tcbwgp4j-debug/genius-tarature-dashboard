@@ -18,10 +18,11 @@ import { dopoBonifico } from "@/components/DopoBonifico";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { usePermessi } from "@/components/permessi";
 import { fetchAPI } from "@/lib/api";
+import { aggiornaRiepilogo, iscriviRiepilogo } from "@/lib/riepilogo";
 import { CLASSI_PULSANTE_PILA, NellaPila } from "@/components/PilaAvvisi";
 import { toastErrore } from "@/lib/errori";
 import {
-  NOME_TIPO, avvisoEccedenza, bonAccetta, bonAccettaFatture, bonAnnullaAccettazione, bonConferma, bonDettaglio, bonElenco, bonIgnora, bonPrecompilato, bonStato,
+  NOME_TIPO, avvisoEccedenza, bonAccetta, bonAccettaFatture, bonAnnullaAccettazione, bonConferma, bonDettaglio, bonElenco, bonIgnora, bonPrecompilato,
   type BonAzione, type BonControllo, type BonPrecompilato, type BonProposta, type BonStato, type Bonifico,
 } from "@/lib/bonifici";
 
@@ -67,15 +68,15 @@ function Avviso() {
   const [chiusi, setChiusi] = useState<string[]>([]);
   const { admin } = usePermessi();
 
-  const carica = useCallback(() => { bonStato().then(setSt).catch(() => undefined); }, []);
+  // 15/11/2026 (B-34): dati dal riepilogo condiviso (una chiamata al minuto per tutti gli avvisi, niente a scheda nascosta)
+  const carica = useCallback(() => { void aggiornaRiepilogo("bonifici"); }, []);
+  const fuori = SENZA.some((p) => pathname.startsWith(p));
   useEffect(() => {
-    if (SENZA.some((p) => pathname.startsWith(p))) return;
-    carica();
-    const t = setInterval(carica, 60_000);
+    if (fuori) return;
+    const via = iscriviRiepilogo("bonifici", (d) => setSt(d as BonStato));
     window.addEventListener(EVENTO, carica);
-    window.addEventListener("focus", carica);
-    return () => { clearInterval(t); window.removeEventListener(EVENTO, carica); window.removeEventListener("focus", carica); };
-  }, [carica, pathname]);
+    return () => { via(); window.removeEventListener(EVENTO, carica); };
+  }, [carica, fuori]);
 
   // bonifico accettato: arriva con ?bonifico=<id> e resta (sessionStorage) anche se la pagina riscrive l'indirizzo
   const daUrl = sp.get("bonifico");

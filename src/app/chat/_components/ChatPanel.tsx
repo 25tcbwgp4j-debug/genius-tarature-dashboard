@@ -176,7 +176,7 @@ export function ChatPanel({
         // rete o sessione: si riprova al prossimo giro
       }
     };
-    const t = setInterval(giro, 5000);
+    const t = setInterval(() => { if (!document.hidden) giro(); }, 5000);   // 15/11/2026 (B-34)
     return () => {
       fermo = true;
       clearInterval(t);

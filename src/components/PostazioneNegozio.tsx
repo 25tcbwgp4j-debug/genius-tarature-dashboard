@@ -34,7 +34,7 @@ export function PostazioneNegozio() {
   const leggi = useCallback(() => {
     fetchAPI("/api/negozio/postazione", {}, false).then(setStato).catch(() => undefined);
   }, []);
-  useEffect(() => { leggi(); const t = setInterval(leggi, 15000); return () => clearInterval(t); }, [leggi]);
+  useEffect(() => { leggi(); const t = setInterval(() => { if (!document.hidden) leggi(); }, 15000); return () => clearInterval(t); }, [leggi]);
 
   if (!stato) return null;
   const nome = (p: string) => stato.nomi?.[p] ?? p;

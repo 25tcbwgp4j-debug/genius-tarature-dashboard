@@ -144,7 +144,8 @@ export function Banco() {
   useEffect(() => { const t = setTimeout(carica, 250); return () => clearTimeout(t); }, [carica]);
   // 26/10/2026: il cruscotto (e il banner «Da gestire adesso») si aggiorna da solo ogni minuto
   useEffect(() => {
-    const t = setInterval(() => assCruscotto().then((r) => { setCruscotto(r.fasi); setGruppiCr(r.gruppi || null); setSottoInRiga(r.sotto_in_riga || null); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); setNotifiche(r.notifiche || []); }).catch(() => undefined), 60000);
+    // 15/11/2026 (B-34): con la scheda nascosta non si chiede nulla
+    const t = setInterval(() => !document.hidden && assCruscotto().then((r) => { setCruscotto(r.fasi); setGruppiCr(r.gruppi || null); setSottoInRiga(r.sotto_in_riga || null); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); setNotifiche(r.notifiche || []); }).catch(() => undefined), 60000);
     return () => clearInterval(t);
   }, []);
   // 13/11/2026: l'indirizzo comanda. Su /assistenza senza ?id (clic su «Schede assistenza» nel menu, oppure «Indietro»

@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
+import { aggiornaRiepilogo, iscriviRiepilogo } from "@/lib/riepilogo";
 import { PulsanteChiama } from "@/components/PulsanteChiama";
 import { DettaglioDaRichiamare, type RigaDaRichiamare as Riga } from "@/components/PerseDaRichiamare";
 import { CLASSI_PULSANTE_PILA, NellaPila } from "@/components/PilaAvvisi";
@@ -25,17 +26,14 @@ export function DaRichiamare() {
   const [busy, setBusy] = useState("");
   const nascosto = SENZA.some((p) => pathname.startsWith(p));
 
-  const carica = useCallback(() => {
-    fetchAPI("/api/telefonate/da-richiamare", { timeoutMs: 20_000 }, false).then((r) => setRighe(r.telefonate || [])).catch(() => undefined);
-  }, []);
+  // 15/11/2026 (B-34): dati dal riepilogo condiviso (una chiamata al minuto per tutti gli avvisi, niente a scheda nascosta)
+  const carica = useCallback(() => { void aggiornaRiepilogo("richiamare"); }, []);
 
   useEffect(() => {
     if (nascosto) return;
-    carica();
-    const t = setInterval(carica, 60_000);
-    window.addEventListener("focus", carica);
+    const via = iscriviRiepilogo("richiamare", (d) => setRighe((d as { telefonate?: Riga[] } | null)?.telefonate || []));
     window.addEventListener("telefonate-cambiate", carica);
-    return () => { clearInterval(t); window.removeEventListener("focus", carica); window.removeEventListener("telefonate-cambiate", carica); };
+    return () => { via(); window.removeEventListener("telefonate-cambiate", carica); };
   }, [carica, nascosto]);
 
   if (nascosto) return null;

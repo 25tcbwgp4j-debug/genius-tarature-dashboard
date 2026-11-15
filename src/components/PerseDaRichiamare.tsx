@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { fetchAPI } from "@/lib/api";
+import { aggiornaRiepilogo, iscriviRiepilogo } from "@/lib/riepilogo";
 import { toastErrore } from "@/lib/errori";
 import { PulsanteChiama } from "@/components/PulsanteChiama";
 
@@ -37,15 +38,14 @@ export function PerseDaRichiamare() {
   const [righe, setRighe] = useState<RigaDaRichiamare[] | null>(null);
   const [busy, setBusy] = useState("");
 
-  const carica = useCallback(() => {
-    fetchAPI("/api/telefonate/da-richiamare", { timeoutMs: 20_000 }, false).then((r) => setRighe(r.telefonate || [])).catch(() => setRighe((x) => x ?? []));
-  }, []);
+  // 15/11/2026 (B-34): stessi dati del pulsante giallo, dal riepilogo condiviso (una chiamata per tutti)
+  const carica = useCallback(() => { void aggiornaRiepilogo("richiamare"); }, []);
 
   useEffect(() => {
-    carica();
-    const t = setInterval(carica, 60_000);
+    const via = iscriviRiepilogo("richiamare", (d) => setRighe((d as { telefonate?: RigaDaRichiamare[] } | null)?.telefonate || []));
+    const vuoto = setTimeout(() => setRighe((x) => x ?? []), 25_000);   // backend che non risponde: elenco vuoto, non «caricamento» infinito
     window.addEventListener("telefonate-cambiate", carica);
-    return () => { clearInterval(t); window.removeEventListener("telefonate-cambiate", carica); };
+    return () => { via(); clearTimeout(vuoto); window.removeEventListener("telefonate-cambiate", carica); };
   }, [carica]);
 
   async function fatto(r: RigaDaRichiamare) {

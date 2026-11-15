@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME } from "@/lib/auth";
+import { controllaSessione } from "@/lib/authRoute";
 
 /**
  * Proxy server-side: inoltra le richieste del frontend al backend Railway.
@@ -52,6 +53,9 @@ async function forward(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> },
 ): Promise<NextResponse> {
+  // 15/11/2026 (B-34): fuori dal proxy, il JWT si verifica qui (stesse risposte 401 di prima)
+  const sessione = await controllaSessione(request);
+  if (sessione instanceof NextResponse) return sessione;
   const { path } = await context.params;
   const pathname = "/" + (path || []).join("/");
   const search = request.nextUrl.search || "";
