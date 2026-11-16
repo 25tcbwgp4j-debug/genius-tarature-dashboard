@@ -19,6 +19,7 @@ import { DatiBadge } from "./scheda/DatiCliente";
 import { AvvisoRichieste } from "./Richieste";
 import { PerCliente } from "./PerCliente";
 import { DaGestire, type Novita } from "./DaGestire";
+import { SollecitiDaApprovare } from "./SollecitiDaApprovare";
 import { AvvisiAutomatici } from "./AvvisiAutomatici";
 import { NotificheBanco } from "./NotificheGestire";
 import { MessaggiTecnico } from "./MessaggiTecnico";
@@ -266,6 +267,8 @@ export function Banco() {
       {/* 03/11/2026 (Christian, 63281): i ricambi delle schede in un solo elenco */}
       <div className="text-right"><a className="inline-flex min-h-10 items-center text-sm font-medium text-blue-700 underline dark:text-blue-300 sm:min-h-0" href="/assistenza/ricambi-da-ordinare">🛒 Ricambi da ordinare</a></div>
       <DaGestire fasi={cruscotto} novita={novita} onScheda={apri} onApri={(f) => { setFase({ fase: f, tecnico: "" }); setElenco(null); setQ(""); }} />
+      {/* 16/11/2026 (Christian): solleciti solo su sua decisione, riga per riga */}
+      {cfg?.admin && <SollecitiDaApprovare onScheda={apri} />}
       <AvvisoRichieste n={nRichieste} operatore={operatore} onCambiate={carica}
         onApriScheda={(r) => { setDaRichiesta(r); setNuova(true); }} />
       {/* 24/10/2026 (Christian): con una scheda aperta il cruscotto si riduce a una riga (prima occupava mezzo schermo) */}
