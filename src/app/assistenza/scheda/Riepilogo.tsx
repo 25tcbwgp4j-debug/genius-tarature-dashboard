@@ -53,6 +53,12 @@ export function RiepilogoScheda({ s, tecnici, onVai }: {
         : g?.trova_verifica?.stato === "non_attivo" ? <Pillola tono="verde">«Trova il mio» non attivo</Pillola> : null;
   const garanzia = g?.garanzia ? `${g.garanzia}${g.fine_copertura ? ` · fino al ${data(g.fine_copertura)}` : ""}` : null;
 
+  const diagnosi = s.preventivo?.diagnosi || "";
+  // righe del preventivo: «1° ipotesi», voci fisse e aggiuntivi; in grassetto l'ipotesi scelta
+  const righePrev = (s.preventivo_righe || []).filter((r) => r && r.t).map((r) => ({
+    t: r.t, p: r.p === "" || r.p == null ? "da definire" : eur(Number(r.p)),
+    etichetta: `${(r.b || 0) > 0 ? "Aggiuntivo · " : ""}${r.opt != null ? `${Number(r.opt) + (s.preventivo_righe.some((x) => x.opt === 0) ? 1 : 0)}° ipotesi:` : ""}`.trim(),
+    scelta: r.opt == null || !!r.on }));
   const blocco = "rounded-xl border bg-card p-3 text-left shadow-sm transition-colors hover:border-primary/50 hover:bg-muted/30";
   return (
     <section aria-label="Riepilogo della scheda" data-testid="riepilogo-scheda" className="space-y-2">
@@ -78,17 +84,50 @@ export function RiepilogoScheda({ s, tecnici, onVai }: {
           <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
             <Voce k="Prodotto">{s.prodotto}</Voce>
             <Voce k="Seriale"><span className="font-mono">{s.seriale || "—"}</span>{s.imei ? <span className="font-mono text-muted-foreground"> · IMEI {s.imei}</span> : null}</Voce>
-            <Voce k="Difetto indicato" className="sm:col-span-2">{s.difetto}</Voce>
             <Voce k="Garanzia Apple">{garanzia}</Voce>
             <Voce k="Configurazione">{g?.configurazione}</Voce>
             <Voce k="Accessori">{s.accessori}</Voce>
-            <Voce k="Password del dispositivo">{s.password_dispositivo ? "presente in scheda" : <span className="text-muted-foreground">non indicata</span>}</Voce>
+            {/* 16/11/2026 (Christian): la password si vede in chiaro: «è una delle prime cose che dobbiamo verificare» */}
+            <Voce k="Password del dispositivo">{s.password_dispositivo ? <span className="select-all rounded bg-amber-100 px-1.5 py-0.5 font-mono text-base font-bold text-amber-950 dark:bg-amber-900/50 dark:text-amber-50">{s.password_dispositivo}</span> : <span className="text-amber-700">non indicata</span>}</Voce>
           </div>
           {(trova || s.dati_cliente) && <div className="mt-2 flex flex-wrap gap-1.5">
             {trova}
             {s.dati_cliente === "importanti" && <Pillola tono="rosso">💾 Dati importanti: non formattare</Pillola>}
             {s.dati_cliente === "formattabile" && <Pillola tono="verde">Si può formattare</Pillola>}
           </div>}
+        </button>
+      </div>
+      {/* 16/11/2026 (Christian): «mi serve chiaro e visibile: con che difetto è entrato, il test in ingresso, chi lo ha
+          verificato, il preventivo fatto e il consuntivo accettato» → tre colonne sempre in vista */}
+      <div className="grid gap-2 lg:grid-cols-3" data-testid="riepilogo-lavoro">
+        <button type="button" className={blocco} onClick={() => onVai("apparecchio")} title="Apri Apparecchio e verifica">
+          <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">1 · Ingresso e verifica</div>
+          <div className="space-y-1.5">
+            <Voce k="Difetto indicato dal cliente"><span className="text-base font-semibold">{s.difetto || "—"}</span></Voce>
+            <Voce k="Test in ingresso">{diagnosi && <span className="whitespace-pre-line">{diagnosi}</span>}</Voce>
+            <Voce k="Note del tecnico">{s.note_verifica && <span className="whitespace-pre-line">{s.note_verifica}</span>}</Voce>
+            <Voce k="Verificato da">{s.tecnico_verifica ? `${nomeTecnico(s.tecnico_verifica, tecnici) || s.tecnico_verifica}${s.verifica_chiusa_il ? ` · ${new Date(s.verifica_chiusa_il).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : " · in corso"}` : <span className="text-muted-foreground">non ancora verificato</span>}</Voce>
+          </div>
+        </button>
+        <button type="button" className={blocco} onClick={() => onVai("preventivo")} title="Apri il Preventivo">
+          <div className="mb-1.5 flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            <span>2 · Preventivo fatto</span>{s.preventivo_stato && s.preventivo_stato !== "da_fare" && <span className="normal-case">{s.preventivo_stato.replace(/_/g, " ")}</span>}</div>
+          {righePrev.length ? (
+            <ul className="space-y-1 text-sm">
+              {righePrev.map((r, i) => (
+                <li key={i} className={`flex items-start justify-between gap-2 ${r.scelta ? "font-semibold" : "text-muted-foreground"}`}>
+                  <span className="min-w-0">{r.etichetta && <b className="mr-1 whitespace-nowrap">{r.etichetta}</b>}{r.t}</span>
+                  <span className="whitespace-nowrap tabular-nums">{r.p}</span></li>))}
+            </ul>
+          ) : s.preventivo_testo ? <div className="whitespace-pre-line text-sm">{s.preventivo_testo}</div>
+            : <div className="text-sm text-muted-foreground">nessun preventivo</div>}
+        </button>
+        <button type="button" className={blocco} onClick={() => onVai("lavorazione")} title="Apri la Lavorazione">
+          <div className="mb-1.5 flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            <span>3 · Accettato / consuntivo</span>{s.preventivo_esito && s.preventivo_esito !== "attesa" && <span className="normal-case">{s.preventivo_esito}</span>}</div>
+          {s.lavorazione ? <div className="whitespace-pre-line text-sm font-medium">{s.lavorazione}</div>
+            : <div className="text-sm text-muted-foreground">{s.preventivo_esito === "accettato" ? "accettato: lavorazione non ancora scritta" : "non ancora accettato"}</div>}
+          {s.totale_lavorazione != null && s.lavorazione && <div className="mt-1.5 text-base font-bold">Totale {eur(s.totale_lavorazione)}</div>}
         </button>
       </div>
       {/* SITUAZIONE */}
