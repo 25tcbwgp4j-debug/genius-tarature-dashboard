@@ -326,6 +326,7 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
   const [ctlErr, setCtlErr] = useState(false);
   const [confLav, setConfLav] = useState(false);
   const [confDiv, setConfDiv] = useState(false);
+  const [confImp, setConfImp] = useState(false);   // 16/11/2026 (63401): totale più alto del preventivo accettato
   const [forza, setForza] = useState(false);
   const [motivo, setMotivo] = useState("");
   useEffect(() => {
@@ -340,7 +341,7 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
     }).catch(() => setCtlErr(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.id]);
-  const duri = (ctl?.blocchi || []).filter((b) => b.codice !== "conferma" && b.codice !== "divergenza");
+  const duri = (ctl?.blocchi || []).filter((b) => b.codice !== "conferma" && b.codice !== "divergenza" && b.codice !== "importo");
   const serveConf = (ctl?.blocchi || []).some((b) => b.codice === "conferma");
   const serveDiv = (ctl?.divergenze || []).length > 0;
   const bloccato = !ctl || (duri.length > 0 && !(forza && motivo.trim().length >= 5)) || (serveConf && !confLav) || (serveDiv && !confDiv);
@@ -348,6 +349,10 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
   // «1.197,50» e «1197.50» sono lo stesso importo (prima «1.197.50» = 0 = gratis)
   const totNum = (() => { const t = String(tot).trim(); const n = t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t; return Number(n) || 0; })();
   const gratis = totNum - (Number(s.acconto) || 0) <= 0.009 || !!s.pagata;
+  // 16/11/2026 (Christian, 63401): due ipotesi sommate (998 invece di 419) → il totale non può superare il preventivo
+  // accettato senza la conferma esplicita (lo controlla anche il backend: blocco «importo»)
+  const atteso = ctl?.importo_atteso ?? null;
+  const sopraPreventivo = atteso !== null && totNum > atteso + 0.009;
   const pagEff = gratis ? "" : (pag || (cons === "spedizione" ? "bonifico" : ""));
   const corpo = useMemo(() => ({ consegna_modo: cons, pagamento_modo: pagEff, totale_lavorazione: String(tot).trim() === "" ? null : totNum, indirizzo_spedizione: ind,
     consegna_corriere: cons === "spedizione" ? corr : "", esito, nota_cliente_esito: notaCli.trim() }), [cons, pagEff, tot, totNum, ind, corr, esito, notaCli]);
@@ -357,6 +362,7 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
       const r = await onInvia({ ...corpo, consegna_corriere: cons === "spedizione" ? corr : null, esito, pagamento_modo: pagEff || "", invia_mail: mail, invia_wa: wa,
         ...(programma ? { programma_il: programma } : {}),
         ...(confLav ? { conferma_lavorazione: true } : {}), ...(confDiv ? { divergenza_confermata: true } : {}),
+        ...(sopraPreventivo && confImp ? { conferma_importo: true } : {}),
         ...(forza && duri.length ? { forza: true, forza_motivo: motivo.trim() } : {}) });
       if (r) setFatto(r);
     } finally { setBusy(false); }
@@ -364,7 +370,7 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
   return (
     <Modale titolo={`PRONTO — scheda ${s.sigla}`} onClose={onClose} largo
       piedi={fatto ? <Button onClick={onClose}>Chiudi</Button> : <><Button variant="outline" onClick={onClose}>Annulla</Button>
-        <Button disabled={busy || bloccato || (quando !== "adesso" && (!programma || passato))} onClick={invia}>{busy && <Loader2 className="animate-spin" />}{programma ? `PROGRAMMA il pronto (${new Date(programma).toLocaleString("it-IT", { timeZone: "Europe/Rome", weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })})` : `PRONTO${mail || wa ? " e avvisa il cliente" : ""}`}</Button></>}>
+        <Button disabled={busy || bloccato || (sopraPreventivo && !confImp) || (quando !== "adesso" && (!programma || passato))} onClick={invia}>{busy && <Loader2 className="animate-spin" />}{programma ? `PROGRAMMA il pronto (${new Date(programma).toLocaleString("it-IT", { timeZone: "Europe/Rome", weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })})` : `PRONTO${mail || wa ? " e avvisa il cliente" : ""}`}</Button></>}>
       {fatto ? <div className="space-y-3"><EsitoInvio e={fatto} />
         {onStampaRiconsegna && <div className="flex flex-wrap items-center gap-3 rounded-lg border-2 border-amber-400 bg-amber-50 p-3 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
           <span className="text-sm font-semibold">🖨 Mac con OpenCore: stampa il FOGLIO DI RICONSEGNA (avvertenza di NON installare aggiornamenti) e fallo firmare al cliente al ritiro.</span>
@@ -395,6 +401,12 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
             <div className="space-y-1.5 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-50">
               {ctl.divergenze.map((d, i) => <div key={i} className="font-semibold">⚠️ Attenzione: {d}</div>)}
               <label className="flex items-center gap-2"><input type="checkbox" className="size-4" checked={confDiv} onChange={(e) => setConfDiv(e.target.checked)} />Ho controllato: il messaggio al cliente dice il lavoro fatto davvero</label>
+            </div>)}
+          {ctl && sopraPreventivo && (
+            <div className="space-y-1.5 rounded-lg border-2 border-red-600 bg-red-50 p-3 text-sm text-red-950 dark:bg-red-950/40 dark:text-red-50" data-testid="pronto-importo">
+              <div className="font-semibold">⛔ Il totale da far pagare ({eur(totNum)}) è più alto del preventivo accettato dal cliente ({eur(atteso ?? 0)}).</div>
+              <div>Con più ipotesi conta solo quella scelta, mai la somma: correggi il totale qui sotto o la lavorazione.</div>
+              <label className="flex items-center gap-2"><input type="checkbox" className="size-4" checked={confImp} onChange={(e) => setConfImp(e.target.checked)} />Confermo l&apos;importo: il cliente ha accettato {eur(totNum)}</label>
             </div>)}
           {ctl && serveConf && (
             <div className="space-y-1.5 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-50">

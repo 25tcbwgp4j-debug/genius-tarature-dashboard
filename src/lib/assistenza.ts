@@ -248,12 +248,14 @@ export const assAzione = (id: string, azione: string, b: Record<string, unknown>
   fetchAPI(`/api/assistenza/schede/${id}/${azione}`, { ...j(b), ...(headers ? { headers } : {}) });
 /** 15/11/2026 (piano 0.2, caso 63407): cosa blocca o va controllato prima del PRONTO (dialogo). */
 export interface ProntoControlli {
-  blocchi: { codice: "richiudere" | "riparazione" | "conferma" | "stato" | "attesa_cliente" | "notifica_blocco" | "divergenza"; testo: string }[];
+  blocchi: { codice: "richiudere" | "riparazione" | "conferma" | "stato" | "attesa_cliente" | "notifica_blocco" | "divergenza" | "importo"; testo: string }[];
   notifiche_aperte: { id: string; titolo: string; da_fare: string | null; livello: NotificaGestire["livello"]; created_at: string; creata_da: string | null }[];
   richieste_cliente: string[];
   attesa_cliente: { il: string; da: string | null; nota: string | null } | null;
   pronto_gia_inviato: string | null;
   divergenze: string[];
+  /** 16/11/2026 (63401): quanto il cliente ha accettato (voci fisse + ipotesi scelte + aggiuntivi accettati + spedizione); null = niente da confrontare */
+  importo_atteso?: number | null;
   lavorazione_confermata: { il: string; da: string | null } | null;
   fuori_orario: { proposta: string; etichetta: string; motivo: string } | null;
   puo_forzare: boolean;
