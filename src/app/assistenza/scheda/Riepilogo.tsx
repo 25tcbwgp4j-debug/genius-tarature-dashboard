@@ -59,7 +59,7 @@ export function RiepilogoScheda({ s, tecnici, onVai }: {
     t: r.t, p: r.p === "" || r.p == null ? "da definire" : eur(Number(r.p)),
     etichetta: `${(r.b || 0) > 0 ? "Aggiuntivo · " : ""}${r.opt != null ? `${Number(r.opt) + (s.preventivo_righe.some((x) => x.opt === 0) ? 1 : 0)}° ipotesi:` : ""}`.trim(),
     scelta: r.opt == null || !!r.on }));
-  const blocco = "rounded-xl border bg-card p-3 text-left shadow-sm transition-colors hover:border-primary/50 hover:bg-muted/30";
+  const blocco = "flex flex-col items-stretch justify-start rounded-xl border bg-card p-3 text-left shadow-sm transition-colors hover:border-primary/50 hover:bg-muted/30";
   return (
     <section aria-label="Riepilogo della scheda" data-testid="riepilogo-scheda" className="space-y-2">
       <div className="grid gap-2 lg:grid-cols-2">
