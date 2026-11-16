@@ -30,6 +30,7 @@ import { Avanzamento } from "./Avanzamento";
 import { ExSchede } from "./ExSchede";
 import { CercaCliente, RiepilogoCliente, SchedaClienteModal } from "./Cliente";
 import { Comunicazioni, Registro } from "./Comunicazioni";
+import { RiepilogoScheda } from "./Riepilogo";
 import { DialogoCambiaStato, DialogoChiudiTutto, DialogoConsegna, DialogoCorriere, DialogoEsito, DialogoInvio, DialogoPagato, DialogoPronto, DialogoSaltaPreventivo, DialogoStessoModello, MSG_PRONTO_NON_COMUNICATO, type TipoInvio } from "./Dialoghi";
 import { RiquadroNonSalvato, useSchedaCambiata } from "./SchedaCambiata";
 import { DialogoAcconto } from "./Acconto";
@@ -574,6 +575,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           {s.condizioni_cliente?.pagamento_mensile && <span className="inline-flex items-center rounded-full border border-sky-400 bg-sky-50 px-2.5 py-0.5 text-xs font-bold text-sky-900 dark:bg-sky-950/40 dark:text-sky-100">💶 Pagamento a fine mese</span>}
           {s.condizioni_cliente?.no_etichette && <span title={s.condizioni_cliente.no_etichette_nota || undefined} className="inline-flex items-center rounded-full border border-red-400 bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-900 dark:bg-red-950/40 dark:text-red-100">🏷️🚫 Niente etichette{s.condizioni_cliente.no_etichette_nota ? ` · ${s.condizioni_cliente.no_etichette_nota}` : ""}</span>}
         </div>)}
+      {/* 16/11/2026 (Christian): cliente, dispositivo e situazione SUBITO in vista, senza aprire Accettazione */}
+      <RiepilogoScheda s={s} tecnici={tecnici} onVai={(d) => vaiA(d)} />
       {/* 11/11/2026 (Christian): DATI DEL CLIENTE in cima, molto evidenti (rosso = non formattare) */}
       <BannerDati s={s} ro={ro} onSalva={async (valore, nota) => {
         if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return false; }
@@ -711,7 +714,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         lavorazione: (s.ricambi_attesi || []).some((r) => r.stato !== "arrivato") ? `${(s.ricambi_attesi || []).filter((r) => r.stato !== "arrivato").length} ricambi attesi` : "",
         chiusura: st === "pronto" && !s.pagata && s.saldo > 0 ? `da pagare ${eur(s.saldo)}` : s.pagata ? "pagata" : "",
       }} fase={linguettaDellaFase(s)} />
-      <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="space-y-3">  {/* 16/11/2026 (Christian): niente colonna a destra, il contenuto usa tutta la larghezza */}
         <div className="min-w-0 space-y-3">
           <div hidden={tab !== "accettazione"} className="space-y-3" role="tabpanel" id="pannello-accettazione" aria-labelledby="linguetta-accettazione">
       {/* 15/11/2026 (piano 6.1): accettazione dei Mac OpenCore — password provata e dati sì/no (si salvano con «Salva») */}
@@ -719,7 +722,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       {s.opencore_avviso && (["in_arrivo", "da_preventivare", "preventivo_inviato"].includes(st) || s.opencore_password_provata != null || s.opencore_dati_conservare != null) &&
         <CampiAccettazioneOpencore provata={v("opencore_password_provata")} dati={v("opencore_dati_conservare")} disabled={ro}
           onProvata={(x) => set("opencore_password_provata", x)} onDati={(x) => set("opencore_dati_conservare", x)} evidenzia={["in_arrivo", "da_preventivare"].includes(st)} />}
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid gap-3">  {/* 16/11/2026 (Christian): a tutta larghezza, prima affiancati i dati GSX diventavano una lista di 2-3 pagine */}
         <Piega id="cliente" nome="Cliente" chiusa={!!chiuse.cliente} onApri={() => toggleSez("cliente")} riassunto={`${s.azienda || s.nominativo || "—"}${s.telefono ? ` · ${s.telefono}` : ""}`}>
         <Sezione titolo="Cliente" icona={<UserRound />}
           azioni={<Button size="sm" variant="outline" onClick={() => setDlg({ k: "cliente" })}>{s.anagrafica ? "Scheda cliente" : "Crea scheda cliente"}</Button>}>
@@ -839,11 +842,11 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         </div>
           </div>
         </div>
-          {/* 15/11/2026 (piano 2.3): comunicazioni e registro nel PANNELLO LATERALE (sotto, su schermi più stretti) */}
-          <aside className="min-w-0 space-y-3" aria-label="Comunicazioni e registro">
-            {!ro && s.stato !== "annullata" && <ComunicazioneCliente key={`com-${s.id}`} s={s} operatore={operatore} invia={(b) => azione("comunicazione", b, "Comunicazione inviata al cliente")}
+          {/* 16/11/2026 (Christian: «a destra Comunicazione con il cliente / Fasi occupa metà schermo ed è inutile»): sotto, tutto ripiegato */}
+          <aside className="min-w-0 space-y-2" aria-label="Comunicazioni e registro">
+            {!ro && s.stato !== "annullata" && <Apribile titolo="✍️ Scrivi al cliente" conteggio={s.comunicazione_cliente ? 1 : 0}><ComunicazioneCliente key={`com-${s.id}`} s={s} operatore={operatore} invia={(b) => azione("comunicazione", b, "Comunicazione inviata al cliente")}
         togli={async () => { if (!(await conferma({ titolo: "Togliere la comunicazione?", testo: "Non comparirà più nelle prossime mail, WhatsApp e PDF.", ok: "Togli" }))) return;
-          try { await assModifica(s.id, { comunicazione_cliente: null, operatore }); await ricarica(); onCambiata(); toast.success("Comunicazione tolta"); } catch (e) { toastErrore(e); } }} />}
+          try { await assModifica(s.id, { comunicazione_cliente: null, operatore }); await ricarica(); onCambiata(); toast.success("Comunicazione tolta"); } catch (e) { toastErrore(e); } }} /></Apribile>}
             <Apribile titolo="Comunicazioni al cliente" conteggio={(s.comunicazioni || []).length}><Comunicazioni s={s} /></Apribile>
             <Apribile titolo="Fasi e registro" conteggio={(s.eventi || []).length}><Registro s={s} /></Apribile>
           </aside>

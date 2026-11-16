@@ -80,7 +80,6 @@ export function Banco() {
   // 13/11/2026 (revisione Mac): cruscotto RIPIEGABILE. Con una ricerca in corso o una scheda aperta parte ridotto a una
   // riga (prima i suoi ~840px spingevano i risultati sotto la piega); senza ricerca vale la scelta ricordata su questo
   // dispositivo (localStorage «gl_cruscotto_ridotto»).
-  const [mostraCr, setMostraCr] = useState(false);
   const [crRidottoPref, setCrRidottoPref] = useState(false);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- preferenza del dispositivo letta dopo l'idratazione
@@ -127,7 +126,6 @@ export function Banco() {
   // e porta TUTTI i risultati: così si vedono tutte le schede di un cliente, anche le storiche.
   const inRicerca = q.trim().length > 0;
   // finita la ricerca, la prossima ricerca riparte col cruscotto ridotto
-  useEffect(() => { if (!inRicerca && !aperta) setMostraCr(false); }, [inRicerca, aperta]);
   // 24/10/2026: ogni ricerca ha un numero; arriva in elenco SOLO la risposta dell'ultima. Prima una ricerca lenta
   // fatta a metà parola («B», «Bal»: migliaia di schede) arrivava dopo quella giusta («Baldi») e la sovrascriveva.
   const ultimaRicerca = useRef(0);
@@ -271,9 +269,12 @@ export function Banco() {
       {cfg?.admin && <SollecitiDaApprovare onScheda={apri} />}
       <AvvisoRichieste n={nRichieste} operatore={operatore} onCambiate={carica}
         onApriScheda={(r) => { setDaRichiesta(r); setNuova(true); }} />
-      {/* 24/10/2026 (Christian): con una scheda aperta il cruscotto si riduce a una riga (prima occupava mezzo schermo) */}
-      {(aperta || inRicerca ? !mostraCr : crRidottoPref) ? (
-        <button type="button" onClick={() => { if (aperta || inRicerca) setMostraCr(true); else cambiaCrPref(false); }} aria-expanded={false} className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm hover:bg-muted/50">
+      </div>
+      {/* 16/11/2026 (Christian: «ora devo fare mostra, poi mostra tutte le righe… come era prima era decisamente meglio»):
+          il cruscotto resta SEMPRE intero, anche con una scheda aperta o una ricerca; si riduce solo se lo sceglie chi lo usa
+          («riduci il cruscotto», ricordato su questo dispositivo) */}
+      {crRidottoPref ? (
+        <button type="button" onClick={() => cambiaCrPref(false)} aria-expanded={false} className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm hover:bg-muted/50">
           <span className="font-semibold text-foreground">Cruscotto</span>
           {vociInEvidenza(cruscotto, gruppiCr).slice(0, 8).map((f) => <span key={f.codice} className={f.codice === "da_gestire" ? "font-semibold text-red-700 dark:text-red-300" : ""}>{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
           <span className="ml-auto underline">mostra</span>
@@ -281,7 +282,7 @@ export function Banco() {
       ) : (
       <>
       <div className="flex justify-end"><button type="button" aria-expanded className="min-h-8 text-xs text-muted-foreground underline"
-        onClick={() => { if (aperta || inRicerca) setMostraCr(false); else cambiaCrPref(true); }}>riduci il cruscotto</button></div>
+        onClick={() => cambiaCrPref(true)}>riduci il cruscotto</button></div>
       <Cruscotto fasi={cruscotto} gruppi={gruppiCr} sottoInRiga={sottoInRiga} tecnici={tecniciCr} scelta={fase} carichi={carichi}
         onScegli={(x) => {
           setFase(x); setElenco(null); setQ("");
@@ -291,7 +292,6 @@ export function Banco() {
         }} />
       </>
       )}
-      </div>
 
       <div className={`grid grid-cols-1 gap-3 [&>*]:min-w-0 ${nascondiElenco ? "" : "lg:grid-cols-[300px_minmax(0,1fr)]"}`}>  {/* 11/11/2026: grid-cols-1 + min-w-0 = niente sbordi su iPhone (la pagina non si rimpicciolisce più) */}
         {/* elenco */}

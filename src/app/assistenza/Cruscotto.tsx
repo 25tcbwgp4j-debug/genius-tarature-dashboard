@@ -9,7 +9,6 @@
 // le schede a € 0 in garanzia sono «nulla da pagare», non «pagati»). Tecnici e altri sotto-filtri si
 // vedono sotto, quando la voce è scelta. Clic sulla voce già scelta = la toglie. I gruppi arrivano dal backend
 // (V2.GRUPPI_CRUSCOTTO); senza, un gruppo unico con tutte le fasi.
-import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { faseMadre } from "@/lib/cruscotto-fase";
 import { nomeTecnico, type CaricoTecnico, type FaseCruscotto, type GruppoCruscotto } from "@/lib/assistenza";
@@ -25,14 +24,6 @@ const SOTTO_IN_RIGA_DEFAULT: Record<string, string[]> = {
 // suggerimento dei sotto-filtri in riga
 const TITOLO_SOTTO = (codice: string) => codice.endsWith("_zero") ? "Nulla da pagare: totale € 0 (garanzia, rifiutato senza spese)"
   : codice.endsWith("pagati") ? "Pagati davvero: incasso registrato (scontrino, fattura pagata, bonifico, acconti)" : "Da incassare prima della consegna";
-const CHIAVE_TUTTE = "gl_cruscotto_tutte";
-// nomi brevi sui chip (il nome intero resta nel suggerimento e nella riga «Filtro:»), così «Lavoro» sta in una riga sul Mac
-const BREVI: Record<string, string> = {
-  in_arrivo: "In arrivo", ricambi_arrivati: "Ricambio arrivato", trova_attivo: "🔒 Trova il mio", rifiutati_da_rimontare: "Da richiudere", attesa_ricambi: "Attesa ricambi",
-  rifiutati: "Rifiutati: invia pronto", presso_cliente: "Fuori negozio", attesa_cliente: "Attesa risposta cliente",
-  riparazione_finita: "Finite: avvisa", aggiornamenti: "Aggiornamenti", bagnetti: "Bagnetti", conto_vendita: "Conto vendita",
-  invii_programmati: "Invii programmati",
-};
 
 /** Gruppi da mostrare: quelli del backend o, se mancano, uno solo con tutte le fasi. */
 export function gruppiCruscotto(fasi: FaseCruscotto[], gruppi?: GruppoCruscotto[] | null): GruppoCruscotto[] {
@@ -61,12 +52,6 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
   tecnici: { codice: string; nome: string }[]; carichi?: CaricoTecnico[];
   scelta: { fase: string; tecnico: string } | null; onScegli: (s: { fase: string; tecnico: string } | null) => void;
 }) {
-  const [tutte, setTutte] = useState(false);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- preferenza del dispositivo letta dopo l'idratazione
-    try { setTutte(localStorage.getItem(CHIAVE_TUTTE) === "1"); } catch { /* storage non disponibile */ }
-  }, []);
-  const cambiaTutte = (v: boolean) => { setTutte(v); try { localStorage.setItem(CHIAVE_TUTTE, v ? "1" : "0"); } catch { /* */ } };
   if (!fasi) return <div className="h-[74px] animate-pulse rounded-xl border bg-muted/40" />;
   // 29/10/2026 (Christian): «I miei lavori» — il tecnico clicca il suo nome e vede tutto quello che ha in carico
   const tecSel = scelta?.fase.startsWith("tec_") ? scelta.tecnico : "";
@@ -76,46 +61,64 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
   const gr = gruppiCruscotto(fasi, gruppi);
   // la voce scelta (anche tramite un suo sotto-filtro)
   const madre = !tecSel && scelta ? faseMadre(fasi, scelta.fase) : undefined;
-  const nZero = gr.reduce((t, g) => t + g.voci.filter((c) => !(per.get(c)?.n)).length, 0);
   const scegli = (codice: string) => onScegli(madre?.codice === codice && scelta?.fase === codice && !scelta?.tecnico ? null : { fase: codice, tecnico: "" });
 
-  const chip = (f: FaseCruscotto, gruppo: string) => {
+  // 16/11/2026 (Christian: «il cruscotto era fondamentale ed è stato ridotto: ora devo fare mostra, poi mostra tutte le
+  // righe… come era prima era decisamente meglio»): di nuovo i RIQUADRI di prima (numero grande, nome intero, sotto-filtri e
+  // tecnici dentro il riquadro), divisi per gruppo, TUTTI visibili (le voci a zero restano, più chiare).
+  const riquadro = (f: FaseCruscotto, gruppo: string) => {
     const attiva = madre?.codice === f.codice;
     const sel = attiva && scelta?.fase === f.codice && !scelta?.tecnico;
     const urgente = (DA_FARE.has(f.codice) || gruppo === "da_gestire") && f.n > 0;
-    const sotto = (inRiga[f.codice] || []).map((c) => f.sotto?.find((x) => x.codice === c)).filter((x): x is NonNullable<typeof x> => !!x);
+    const ordineSotto = [...(inRiga[f.codice] || []), ...(f.sotto || []).map((x) => x.codice).filter((c) => !(inRiga[f.codice] || []).includes(c))];
+    const sotto = ordineSotto.map((c) => f.sotto?.find((x) => x.codice === c)).filter((x): x is NonNullable<typeof x> => !!x);
     return (
-      <span key={f.codice} className={cn("inline-flex shrink-0 items-stretch overflow-hidden rounded-full border text-xs sm:text-[11.5px]",
-        attiva ? "border-primary ring-2 ring-primary/40" : gruppo === "da_gestire" && f.n ? "border-red-400" : urgente ? "border-amber-300 dark:border-amber-700" : "",
-        !f.n && !attiva && "opacity-60")}>
-        <button type="button" data-fase={f.codice} aria-pressed={sel} onClick={() => scegli(f.codice)}
-          title={sel ? `${f.etichetta} · clic di nuovo per togliere il filtro` : `Mostra solo: ${f.etichetta}`}
-          className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 font-medium max-sm:min-h-9",
-            sel ? "bg-primary text-primary-foreground"
-              : gruppo === "da_gestire" && f.n ? "bg-red-600 text-white hover:bg-red-700"
-                : urgente ? "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30" : f.n ? "bg-card hover:bg-muted" : "bg-card text-muted-foreground")}>
-          <span className="whitespace-nowrap">{BREVI[f.codice] || f.etichetta}</span><b className="tabular-nums">{f.n}</b>
-        </button>
-        {sotto.map((x) => {
-          const xs = scelta?.fase === x.codice;
-          return (
-            <button key={x.codice} type="button" data-fase={x.codice} aria-pressed={xs}
-              onClick={() => onScegli(xs ? null : { fase: x.codice, tecnico: "" })}
-              title={TITOLO_SOTTO(x.codice)}
-              className={cn("inline-flex items-center gap-1 border-l px-1.5 text-[11px] font-semibold max-sm:min-h-9",
-                xs ? "bg-primary text-primary-foreground" : x.n ? "bg-background hover:bg-muted" : "bg-background text-muted-foreground")}>
-              <span className="whitespace-nowrap">{x.etichetta}</span><span className="tabular-nums">{x.n}</span></button>
-          );
-        })}
-      </span>
+      <div key={f.codice} role="button" tabIndex={0} data-fase={f.codice} aria-pressed={sel} title={sel ? `${f.etichetta} · clic di nuovo per togliere il filtro` : `Mostra solo: ${f.etichetta}`}
+        onClick={() => scegli(f.codice)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); scegli(f.codice); } }}
+        className={cn("min-w-[118px] shrink-0 cursor-pointer select-none rounded-lg border px-2 py-1 text-left transition-colors sm:min-w-[124px] sm:flex-1 sm:basis-[124px] sm:max-w-[220px]",
+          sel ? "border-primary bg-primary text-primary-foreground shadow-sm"
+            : attiva ? "border-primary ring-2 ring-primary/40 bg-card"
+              : gruppo === "da_gestire" && f.n ? "border-red-400 bg-red-600 text-white hover:bg-red-700"
+                : urgente ? "border-amber-300 bg-amber-50 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30"
+                  : f.n ? "bg-card hover:bg-muted/60" : "bg-card text-muted-foreground opacity-60 hover:opacity-100")}>
+        <div className="flex items-baseline gap-1.5"><span className="text-xl font-bold tabular-nums leading-tight">{f.n}</span><span className="text-[11.5px] font-medium leading-tight">{f.etichetta}</span></div>
+        {sotto.length > 0 && (
+          <div className="mt-1 flex flex-col gap-0.5">
+            {sotto.map((x) => {
+              const xs = scelta?.fase === x.codice;
+              return (
+                <button key={x.codice} type="button" data-fase={x.codice} aria-pressed={xs} title={TITOLO_SOTTO(x.codice)}
+                  onClick={(e) => { e.stopPropagation(); onScegli(xs ? { fase: f.codice, tecnico: "" } : { fase: x.codice, tecnico: "" }); }}
+                  className={cn("flex items-center justify-between gap-1 rounded border px-1.5 text-left text-[10.5px] font-semibold leading-4 max-sm:min-h-8",
+                    xs ? "border-white bg-white text-primary" : sel ? "border-white/60 text-primary-foreground" : "bg-background text-foreground",
+                    !x.n && !xs && "opacity-60")}>
+                  <span className="truncate">{x.etichetta}</span><span className="tabular-nums">{x.n}</span></button>
+              );
+            })}
+          </div>
+        )}
+        {(f.tecnici || []).length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {f.tecnici.map((t) => {
+              const ts = attiva && scelta?.tecnico === t.tecnico;
+              return (
+                <button key={t.tecnico || "-"} type="button" data-tecnico={t.tecnico}
+                  onClick={(e) => { e.stopPropagation(); onScegli(ts ? { fase: f.codice, tecnico: "" } : { fase: f.codice, tecnico: t.tecnico }); }}
+                  className={cn("rounded-full border px-1.5 text-[10.5px] font-semibold leading-4 max-sm:min-h-8",
+                    ts ? "border-white bg-white text-primary" : sel ? "border-white/60 text-primary-foreground" : "bg-background text-foreground")}>
+                  {nomeTecnico(t.tecnico, tecnici) || "?"} {t.n}</button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     );
   };
 
-  // sotto la riga dei gruppi: tecnici e sotto-filtri della voce scelta (quelli non già in riga)
-  const dettSotto = madre ? (madre.sotto || []).filter((x) => !(inRiga[madre.codice] || []).includes(x.codice)) : [];
-  const dettTec = madre?.tecnici || [];
-  const visibili = gr.map((g) => ({ g, voci: g.voci.map((c) => per.get(c)).filter((f): f is FaseCruscotto => !!f)
-    .filter((f) => tutte || f.n > 0 || madre?.codice === f.codice) })).filter((x) => x.voci.length > 0);
+  // 16/11/2026: sotto-filtri e tecnici stanno DENTRO il riquadro (come prima del 15/11): niente riga di dettaglio sotto
+  const visibili = gr.map((g) => ({ g, voci: g.voci.map((c) => per.get(c)).filter((f): f is FaseCruscotto => !!f) }))
+    .filter((x) => x.voci.length > 0);
 
   return (
     <div className="space-y-1.5">
@@ -146,45 +149,18 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
         )}
       </div>
     )}
-    <div className="space-y-1 rounded-xl border bg-card px-2 py-1.5 shadow-sm" data-testid="cruscotto">
-      {visibili.map(({ g, voci }, i) => (
+    <div className="space-y-2 rounded-xl border bg-card p-2 shadow-sm" data-testid="cruscotto">
+      {visibili.map(({ g, voci }) => (
         <div key={g.codice} data-gruppo={g.codice}
-          className={cn("flex items-start gap-2", g.codice === "da_gestire" && "-mx-1 rounded-lg bg-red-50 px-1 dark:bg-red-950/30")}>
-          <span className={cn("w-[4.5rem] shrink-0 whitespace-nowrap pt-1 text-[10px] font-bold uppercase leading-tight tracking-wide",
+          className={cn("flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2", g.codice === "da_gestire" && "-mx-1 rounded-lg bg-red-50 px-1 py-1 dark:bg-red-950/30")}>
+          <span className={cn("shrink-0 whitespace-nowrap text-[11px] font-bold uppercase leading-tight tracking-wide sm:w-[5.5rem] sm:pt-2",
             g.codice === "da_gestire" ? "text-red-700 dark:text-red-300" : "text-muted-foreground")}>{g.titolo}</span>
           {/* su iPhone la riga scorre in orizzontale dentro il riquadro (la pagina no) */}
-          <div className="flex min-w-0 flex-1 gap-x-0.5 gap-y-1 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible">
-            {voci.map((f) => chip(f, g.codice))}
-            {/* «mostra tutte» in coda all'ultima riga: nessuna riga in più */}
-            {i === visibili.length - 1 && nZero > 0 && (
-              <button type="button" className="shrink-0 self-center whitespace-nowrap px-1 text-[11px] text-muted-foreground underline max-sm:min-h-9" onClick={() => cambiaTutte(!tutte)}>
-                {tutte ? "nascondi gli zeri" : `mostra tutte (+${nZero})`}</button>)}
+          <div className="flex min-w-0 flex-1 items-start gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible">
+            {voci.map((f) => riquadro(f, g.codice))}
           </div>
         </div>
       ))}
-      {madre && (dettSotto.length > 0 || dettTec.length > 0) && (
-        <div className="flex flex-wrap items-center gap-1 border-t pt-1 text-[11px]" data-testid="cruscotto-dettaglio">
-          <span className="font-semibold">{madre.etichetta}:</span>
-          {dettSotto.map((x) => {
-            const sel = scelta?.fase === x.codice;
-            return (
-              <button key={x.codice} type="button" data-fase={x.codice} aria-pressed={sel}
-                onClick={() => onScegli(sel ? { fase: madre.codice, tecnico: "" } : { fase: x.codice, tecnico: "" })}
-                className={cn("rounded-full border px-2 py-0.5 font-medium max-sm:min-h-9", sel ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted", !x.n && !sel && "opacity-60")}>
-                {x.etichetta} <span className="tabular-nums">{x.n}</span></button>
-            );
-          })}
-          {dettTec.map((t) => {
-            const sel = scelta?.tecnico === t.tecnico && scelta?.fase === madre.codice;
-            return (
-              <button key={t.tecnico || "-"} type="button" data-tecnico={t.tecnico}
-                onClick={() => onScegli(sel ? { fase: madre.codice, tecnico: "" } : { fase: madre.codice, tecnico: t.tecnico })}
-                className={cn("rounded-full border px-2 py-0.5 font-semibold max-sm:min-h-9", sel ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
-                👷 {nomeTecnico(t.tecnico, tecnici) || "?"} {t.n}</button>
-            );
-          })}
-        </div>
-      )}
     </div>
     </div>
   );
