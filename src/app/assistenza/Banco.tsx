@@ -89,6 +89,9 @@ export function Banco() {
     setCrRidottoPref(ridotto);
     try { localStorage.setItem("gl_cruscotto_ridotto", ridotto ? "1" : "0"); } catch { /* storage non disponibile */ }
   };
+  // 16/11/2026 sera (Christian: «il cruscotto è diventato immenso»): con una SCHEDA APERTA il cruscotto è una riga di
+  // contatori (clic = intero finché la scheda resta aperta); senza scheda aperta è intero, salvo «riduci il cruscotto»
+  const [crEspanso, setCrEspanso] = useState(false);
   const [tecniciCr, setTecniciCr] = useState<{ codice: string; nome: string }[]>([]);
   const [carichi, setCarichi] = useState<CaricoTecnico[]>([]);
   const faseLink = sp.get("fase");
@@ -273,8 +276,8 @@ export function Banco() {
       {/* 16/11/2026 (Christian: «ora devo fare mostra, poi mostra tutte le righe… come era prima era decisamente meglio»):
           il cruscotto resta SEMPRE intero, anche con una scheda aperta o una ricerca; si riduce solo se lo sceglie chi lo usa
           («riduci il cruscotto», ricordato su questo dispositivo) */}
-      {crRidottoPref ? (
-        <button type="button" onClick={() => cambiaCrPref(false)} aria-expanded={false} className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm hover:bg-muted/50">
+      {crRidottoPref || (aperta && !crEspanso) ? (
+        <button type="button" onClick={() => (aperta && !crRidottoPref ? setCrEspanso(true) : cambiaCrPref(false))} aria-expanded={false} className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground shadow-sm hover:bg-muted/50">
           <span className="font-semibold text-foreground">Cruscotto</span>
           {vociInEvidenza(cruscotto, gruppiCr).slice(0, 8).map((f) => <span key={f.codice} className={f.codice === "da_gestire" ? "font-semibold text-red-700 dark:text-red-300" : ""}>{f.etichetta} <b className="text-foreground">{f.n}</b></span>)}
           <span className="ml-auto underline">mostra</span>
@@ -282,7 +285,7 @@ export function Banco() {
       ) : (
       <>
       <div className="flex justify-end"><button type="button" aria-expanded className="min-h-8 text-xs text-muted-foreground underline"
-        onClick={() => cambiaCrPref(true)}>riduci il cruscotto</button></div>
+        onClick={() => (aperta ? setCrEspanso(false) : cambiaCrPref(true))}>riduci il cruscotto</button></div>
       <Cruscotto fasi={cruscotto} gruppi={gruppiCr} sottoInRiga={sottoInRiga} tecnici={tecniciCr} scelta={fase} carichi={carichi}
         onScegli={(x) => {
           setFase(x); setElenco(null); setQ("");
