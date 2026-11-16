@@ -71,7 +71,9 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
     const sel = attiva && scelta?.fase === f.codice && !scelta?.tecnico;
     const urgente = (DA_FARE.has(f.codice) || gruppo === "da_gestire") && f.n > 0;
     const ordineSotto = [...(inRiga[f.codice] || []), ...(f.sotto || []).map((x) => x.codice).filter((c) => !(inRiga[f.codice] || []).includes(c))];
-    const sotto = ordineSotto.map((c) => f.sotto?.find((x) => x.codice === c)).filter((x): x is NonNullable<typeof x> => !!x);
+    // 16/11/2026 sera: nei riquadri solo i sotto-filtri con schede (o quello scelto); quelli a zero allungavano il cruscotto
+    const sotto = ordineSotto.map((c) => f.sotto?.find((x) => x.codice === c))
+      .filter((x): x is NonNullable<typeof x> => !!x && (x.n > 0 || scelta?.fase === x.codice));
     // 16/11/2026 sera (Christian: «il cruscotto è diventato immenso, quasi ingestibile»): voce a zero = etichetta piccola
     if (!f.n && !attiva) return (
       <button key={f.codice} type="button" data-fase={f.codice} onClick={() => scegli(f.codice)} title={`Mostra solo: ${f.etichetta}`}
