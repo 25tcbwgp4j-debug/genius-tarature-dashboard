@@ -332,14 +332,9 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
   useEffect(() => {
     assProntoControlli(s.id).then((c) => {
       setCtl(c);
-      if (c.fuori_orario) {   // D7: fuori orario si propone da solo di programmarlo (si può tornare ad «Adesso»)
-        const d = new Date(c.fuori_orario.proposta);
-        q.setDataLibera(d.toLocaleDateString("sv-SE", { timeZone: "Europe/Rome" }));
-        q.setOraLibera("09:30");
-        q.setQuando("libero");
-      }
+      // 16/11/2026 (Christian, 63298): il pronto NON si propone mai programmato: di base parte ADESSO, anche a
+      // negozio chiuso. Programmarlo resta una scelta a mano (Oggi alle… · Domani alle… · Data e ora).
     }).catch(() => setCtlErr(true));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.id]);
   const duri = (ctl?.blocchi || []).filter((b) => b.codice !== "conferma" && b.codice !== "divergenza" && b.codice !== "importo");
   const serveConf = (ctl?.blocchi || []).some((b) => b.codice === "conferma");
@@ -416,7 +411,7 @@ export function DialogoPronto({ s, lavorazione, totale, onClose, onInvia, paypal
             </div>)}
           {ctl?.fuori_orario && (
             <div className="rounded-lg border border-sky-400 bg-sky-50 p-2.5 text-sm text-sky-950 dark:bg-sky-950/40 dark:text-sky-50">
-              🕘 Negozio chiuso adesso ({ctl.fuori_orario.motivo}): ho proposto di programmarlo per <b>{ctl.fuori_orario.etichetta}</b>. Per mandarlo subito scegli «Adesso».
+              🕘 Negozio chiuso adesso ({ctl.fuori_orario.motivo}): il pronto parte subito. Se preferisci, puoi programmarlo per <b>{ctl.fuori_orario.etichetta}</b> scegliendo «Domani alle…» o «Data e ora».
             </div>)}
           <div className="flex flex-wrap items-center gap-3">
             <Scelta valore={cons} opzioni={[["ritiro", "Ritiro in negozio"], ["spedizione", "Per corriere"]]} onChange={setCons} />
