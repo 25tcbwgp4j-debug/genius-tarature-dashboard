@@ -8,6 +8,7 @@ import { Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { cassaChiusuraFiscale, cassaChiusureFiscali, type ChiusuraRt, type RichiestaChiusura } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
+import { SceltaOperatore, type Operatore } from "@/components/Operatore";
 
 // formattatori creati una volta sola (04/10/2026: toLocaleString ne crea uno nuovo a ogni chiamata)
 const FMT_EUR = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", useGrouping: "always" });
@@ -24,7 +25,7 @@ function zDopo(chiusure: ChiusuraRt[], r?: RichiestaChiusura) {
   return chiusure.filter((c) => (c.ora || "") >= hhmm);
 }
 
-export function ChiusuraFiscale({ giorno, oggi, operatore, onFatta }: { giorno: string; oggi: boolean; operatore: string | null; onFatta: () => void }) {
+export function ChiusuraFiscale({ giorno, oggi, operatore, onFatta, onOperatore }: { giorno: string; oggi: boolean; operatore: string | null; onFatta: () => void; onOperatore?: (o: Operatore | "") => void }) {
   const [richieste, setRichieste] = useState<RichiestaChiusura[]>([]);
   const [chiusure, setChiusure] = useState<ChiusuraRt[]>([]);
   const [invio, setInvio] = useState(false);
@@ -119,6 +120,13 @@ export function ChiusuraFiscale({ giorno, oggi, operatore, onFatta }: { giorno: 
       {ultima && ultima.stato === "errore" && zFatte.length === 0 && (
         <div className="rounded-md border border-red-300 bg-red-50 px-2 py-1.5 text-xs text-red-800 dark:bg-red-950/30 dark:text-red-200">
           ❌ Ultima richiesta ({ora(ultima.created_at)}) non riuscita: {ultima.errore}
+        </div>
+      )}
+      {/* 16/11/2026 (Christian): pulsante bloccato senza operatore e la scelta era solo in «Aggiungi una riga»: ora è qui */}
+      {oggi && !operatore && (
+        <div className="space-y-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <div>Per la chiusura fiscale scegli chi la fa:</div>
+          {onOperatore && <SceltaOperatore value={(operatore || "") as Operatore | ""} onChange={onOperatore} compatto />}
         </div>
       )}
       {oggi && (
