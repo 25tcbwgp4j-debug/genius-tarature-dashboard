@@ -11,6 +11,7 @@
 // (V2.GRUPPI_CRUSCOTTO); senza, un gruppo unico con tutte le fasi.
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { faseMadre } from "@/lib/cruscotto-fase";
 import { nomeTecnico, type CaricoTecnico, type FaseCruscotto, type GruppoCruscotto } from "@/lib/assistenza";
 
 // fasi che chiedono un'azione: in evidenza quando non sono a zero
@@ -41,7 +42,7 @@ export function gruppiCruscotto(fasi: FaseCruscotto[], gruppi?: GruppoCruscotto[
 
 /** Nome leggibile di una fase scelta: «Pronti · Da spedire · pagati». */
 export function nomeFase(codice: string, fasi: FaseCruscotto[] | null, gruppi?: GruppoCruscotto[] | null): string {
-  const p = fasi?.find((f) => f.codice === codice || f.sotto?.some((x) => x.codice === codice));
+  const p = faseMadre(fasi, codice);
   if (!p) return codice;
   const x = p.sotto?.find((y) => y.codice === codice);
   const g = gruppiCruscotto(fasi || [], gruppi).find((y) => y.voci.includes(p.codice));
@@ -74,7 +75,7 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
   const inRiga = sottoInRiga || SOTTO_IN_RIGA_DEFAULT;
   const gr = gruppiCruscotto(fasi, gruppi);
   // la voce scelta (anche tramite un suo sotto-filtro)
-  const madre = !tecSel && scelta ? fasi.find((f) => f.codice === scelta.fase || f.sotto?.some((x) => x.codice === scelta.fase)) : undefined;
+  const madre = !tecSel && scelta ? faseMadre(fasi, scelta.fase) : undefined;
   const nZero = gr.reduce((t, g) => t + g.voci.filter((c) => !(per.get(c)?.n)).length, 0);
   const scegli = (codice: string) => onScegli(madre?.codice === codice && scelta?.fase === codice && !scelta?.tecnico ? null : { fase: codice, tecnico: "" });
 
