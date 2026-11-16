@@ -82,7 +82,7 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
       <div key={f.codice} role="button" tabIndex={0} data-fase={f.codice} aria-pressed={sel} title={sel ? `${f.etichetta} · clic di nuovo per togliere il filtro` : `Mostra solo: ${f.etichetta}`}
         onClick={() => scegli(f.codice)}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); scegli(f.codice); } }}
-        className={cn("shrink-0 cursor-pointer select-none rounded-lg border px-2 py-1 text-left transition-colors sm:max-w-[340px]",
+        className={cn("shrink-0 cursor-pointer select-none rounded-lg border px-2 py-1 text-left transition-colors sm:max-w-[640px]",
           sel ? "border-primary bg-primary text-primary-foreground shadow-sm"
             : attiva ? "border-primary ring-2 ring-primary/40 bg-card"
               : gruppo === "da_gestire" && f.n ? "border-red-400 bg-red-600 text-white hover:bg-red-700"
