@@ -126,7 +126,7 @@ export function RiepilogoScheda({ s, tecnici, onVai }: {
           <div className="mb-1.5 flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
             <span>3 · Accettato / consuntivo</span>{s.preventivo_esito && s.preventivo_esito !== "attesa" && <span className="normal-case">{s.preventivo_esito}</span>}</div>
           {s.lavorazione ? <div className="whitespace-pre-line text-sm font-medium">{s.lavorazione}</div>
-            : <div className="text-sm text-muted-foreground">{s.preventivo_esito === "accettato" ? "accettato: lavorazione non ancora scritta" : "non ancora accettato"}</div>}
+            : <div className="text-sm text-muted-foreground">{s.preventivo_esito === "accettato" ? "accettato: lavorazione non ancora scritta" : s.preventivo_esito === "rifiutato" ? "preventivo rifiutato: si restituisce senza intervento" : "non ancora accettato"}</div>}
           {s.totale_lavorazione != null && s.lavorazione && <div className="mt-1.5 text-base font-bold">Totale {eur(s.totale_lavorazione)}</div>}
         </button>
       </div>
