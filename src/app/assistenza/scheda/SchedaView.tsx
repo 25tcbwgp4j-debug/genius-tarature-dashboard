@@ -409,8 +409,10 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     trovaForza.current = true;
     return true;
   }
-  async function trova(az: "attivo" | "risolto") {
-    await azione("trova", { azione: az }, az === "attivo" ? "«Trova il mio» attivo: riparazione bloccata" : "«Trova il mio» risolto: si procede");
+  async function trova(az: "attivo" | "risolto" | "non_necessario") {
+    // 16/11/2026 (Christian, 63426): «non necessario» = attivo ma questa riparazione non passa da Apple → si procede lo stesso
+    if (az === "non_necessario" && !(await conferma({ titolo: "«Trova il mio» non necessario?", testo: "Sblocchi la riparazione senza che il cliente disattivi «Trova il mio». Va bene solo se questa riparazione NON passa da Apple (assistenza ufficiale / GSX): lì Apple la blocca comunque." }))) return;
+    await azione("trova", { azione: az }, az === "attivo" ? "«Trova il mio» attivo: riparazione bloccata" : az === "non_necessario" ? "«Trova il mio» non necessario: si procede" : "«Trova il mio» risolto: si procede");
   }
   async function riconsegna() {
     if (!s) return;
@@ -1081,7 +1083,7 @@ function trovaDopoFinita(s: Scheda): boolean {
 
 /** 26/10/2026 (Christian): in cima alla scheda, in chiaro: «Trova il mio» attivo (riparazione bloccata) e come è arrivato /
  *  come torna il dispositivo (corriere del cliente, nostro corriere, pony: NON si ritira a mano in negozio). */
-function BannerScheda({ s, ro, onTrova, onIstruzioni, onPreventivo }: { s: Scheda; ro: boolean; onTrova: (a: "attivo" | "risolto") => void; onIstruzioni: () => void; onPreventivo: () => void }) {
+function BannerScheda({ s, ro, onTrova, onIstruzioni, onPreventivo }: { s: Scheda; ro: boolean; onTrova: (a: "attivo" | "risolto" | "non_necessario") => void; onIstruzioni: () => void; onPreventivo: () => void }) {
   const chiusa = ["consegnato", "annullata"].includes(s.stato);
   const trovaAttivo = s.trova_il_mio === "attivo" || s.riparazione_stato === "disabilitare_trova";
   const bloccata = trovaAttivo && s.preventivo_stato === "accettato";   // prima si accetta il preventivo (63144)
@@ -1114,12 +1116,13 @@ function BannerScheda({ s, ro, onTrova, onIstruzioni, onPreventivo }: { s: Sched
             {!bloccata && <Button size="xs" variant="outline" onClick={onPreventivo} title="Scrive l'avviso nelle note del preventivo (va nel PDF)">Inserisci nel preventivo</Button>}
             <Button size="xs" variant="destructive" onClick={onIstruzioni}>Invia istruzioni (mail + WhatsApp)</Button>
             <Button size="xs" variant="outline" onClick={() => onTrova("risolto")}>Il cliente l&apos;ha fatto: si procede</Button>
+            <Button size="xs" variant="outline" onClick={() => onTrova("non_necessario")} title="Riparazione che non passa da Apple: si sblocca senza far disattivare «Trova il mio»">Non serve per questa riparazione: sblocca</Button>
           </span>}
         </div>
       )}
       {!trovaAttivo && !chiusa && !ro && (
         <div className="-my-1 text-right"><button type="button" className="text-[11px] text-muted-foreground underline" onClick={() => onTrova("attivo")}>
-          🔒 Segna «Trova il mio» attivo{s.trova_il_mio === "risolto" ? " (era stato risolto)" : ""}</button></div>
+          {s.trova_il_mio === "non_necessario" ? "ℹ️ «Trova il mio» attivo ma non necessario per questa riparazione · 🔒 Blocca di nuovo" : <>🔒 Segna «Trova il mio» attivo{s.trova_il_mio === "risolto" ? " (era stato risolto)" : ""}</>}</button></div>
       )}
       {ritiro && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-300 bg-white px-3 py-1.5 text-sm text-sky-950 dark:bg-sky-950/20 dark:text-sky-100">
