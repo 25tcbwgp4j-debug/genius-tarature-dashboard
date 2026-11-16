@@ -84,7 +84,7 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
               : attiva ? "bg-primary/10 ring-1 ring-primary"
                 : urgente ? "bg-amber-100 font-semibold text-amber-950 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-50"
                   : f.n ? "font-medium hover:bg-muted" : "text-muted-foreground/70 hover:bg-muted")}>
-          <span className="min-w-0 truncate">{pulita(f.etichetta)}</span>
+          <span className="min-w-0">{pulita(f.etichetta)}</span>
           <span className={cn("shrink-0 tabular-nums", f.n ? "text-base font-bold" : "text-sm")}>{f.n}</span>
         </button>
         {sotto.map((x) => {
@@ -94,7 +94,7 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
               onClick={() => onScegli(xs ? { fase: f.codice, tecnico: "" } : { fase: x.codice, tecnico: "" })}
               className={cn("flex w-full items-baseline justify-between gap-3 rounded-md py-0.5 pl-5 pr-2 text-left text-[12px] leading-tight max-sm:min-h-9",
                 xs ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
-              <span className="min-w-0 truncate">↳ {pulita(x.etichetta)}</span><span className="shrink-0 font-semibold tabular-nums">{x.n}</span></button>
+              <span className="min-w-0">↳ {pulita(x.etichetta)}</span><span className="shrink-0 font-semibold tabular-nums">{x.n}</span></button>
           );
         })}
         {(f.tecnici || []).length > 0 && f.n > 0 && (
@@ -162,7 +162,7 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
           })}
         </div>
       )}
-      <div className="grid gap-x-4 gap-y-3 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr]">
+      <div className="grid gap-x-4 gap-y-3 md:grid-cols-2 xl:grid-cols-[2.4fr_1.15fr_1.15fr_0.8fr]">
         {colonne.map(({ g, voci }) => {
           const lunga = voci.length > 8;
           return (
