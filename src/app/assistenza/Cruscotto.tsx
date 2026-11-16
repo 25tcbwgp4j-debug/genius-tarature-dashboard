@@ -63,58 +63,48 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
   const madre = !tecSel && scelta ? faseMadre(fasi, scelta.fase) : undefined;
   const scegli = (codice: string) => onScegli(madre?.codice === codice && scelta?.fase === codice && !scelta?.tecnico ? null : { fase: codice, tecnico: "" });
 
-  // 16/11/2026 (Christian: «il cruscotto era fondamentale ed è stato ridotto: ora devo fare mostra, poi mostra tutte le
-  // righe… come era prima era decisamente meglio»): di nuovo i RIQUADRI di prima (numero grande, nome intero, sotto-filtri e
-  // tecnici dentro il riquadro), divisi per gruppo, TUTTI visibili (le voci a zero restano, più chiare).
-  const riquadro = (f: FaseCruscotto, gruppo: string) => {
+  // 16/11/2026 sera (Christian: «fa veramente pietà, non si capisce nulla»): ELENCO A COLONNE, una per gruppo (Lavoro ·
+  // Preventivi · Pronti · Oggi). Ogni riga: nome a sinistra, numero allineato a destra; sotto-filtri rientrati sotto la
+  // riga; tecnici in piccolo. In evidenza (ambra) solo le righe che chiedono un'azione; a zero in grigio. «Da gestire» è
+  // una barra rossa in cima solo quando c'è qualcosa.
+  const pulita = (s: string) => s.replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, "");
+  const riga = (f: FaseCruscotto, gruppo: string) => {
     const attiva = madre?.codice === f.codice;
     const sel = attiva && scelta?.fase === f.codice && !scelta?.tecnico;
-    const urgente = (DA_FARE.has(f.codice) || gruppo === "da_gestire") && f.n > 0;
+    const urgente = DA_FARE.has(f.codice) && f.n > 0;
     const ordineSotto = [...(inRiga[f.codice] || []), ...(f.sotto || []).map((x) => x.codice).filter((c) => !(inRiga[f.codice] || []).includes(c))];
-    // 16/11/2026 sera: nei riquadri solo i sotto-filtri con schede (o quello scelto); quelli a zero allungavano il cruscotto
     const sotto = ordineSotto.map((c) => f.sotto?.find((x) => x.codice === c))
       .filter((x): x is NonNullable<typeof x> => !!x && (x.n > 0 || scelta?.fase === x.codice));
-    // 16/11/2026 sera (Christian: «il cruscotto è diventato immenso, quasi ingestibile»): voce a zero = etichetta piccola
-    if (!f.n && !attiva) return (
-      <button key={f.codice} type="button" data-fase={f.codice} onClick={() => scegli(f.codice)} title={`Mostra solo: ${f.etichetta}`}
-        className="shrink-0 self-center rounded-md border border-dashed px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/60">
-        <b className="tabular-nums">0</b> {f.etichetta}</button>
-    );
     return (
-      <div key={f.codice} role="button" tabIndex={0} data-fase={f.codice} aria-pressed={sel} title={sel ? `${f.etichetta} · clic di nuovo per togliere il filtro` : `Mostra solo: ${f.etichetta}`}
-        onClick={() => scegli(f.codice)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); scegli(f.codice); } }}
-        className={cn("shrink-0 cursor-pointer select-none rounded-lg border px-2 py-1 text-left transition-colors sm:max-w-[640px]",
-          sel ? "border-primary bg-primary text-primary-foreground shadow-sm"
-            : attiva ? "border-primary ring-2 ring-primary/40 bg-card"
-              : gruppo === "da_gestire" && f.n ? "border-red-400 bg-red-600 text-white hover:bg-red-700"
-                : urgente ? "border-amber-300 bg-amber-50 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/30"
-                  : f.n ? "bg-card hover:bg-muted/60" : "bg-card text-muted-foreground opacity-60 hover:opacity-100")}>
-        <div className="flex items-baseline gap-1.5 whitespace-nowrap"><span className="text-lg font-bold tabular-nums leading-tight">{f.n}</span><span className="text-[12px] font-semibold leading-tight">{f.etichetta}</span></div>
-        {sotto.length > 0 && (
-          <div className="mt-0.5 flex flex-wrap gap-1">
-            {sotto.map((x) => {
-              const xs = scelta?.fase === x.codice;
-              return (
-                <button key={x.codice} type="button" data-fase={x.codice} aria-pressed={xs} title={TITOLO_SOTTO(x.codice)}
-                  onClick={(e) => { e.stopPropagation(); onScegli(xs ? { fase: f.codice, tecnico: "" } : { fase: x.codice, tecnico: "" }); }}
-                  className={cn("flex items-center gap-1 whitespace-nowrap rounded border px-1.5 text-left text-[10.5px] font-semibold leading-4 max-sm:min-h-8",
-                    xs ? "border-white bg-white text-primary" : sel ? "border-white/60 text-primary-foreground" : "bg-background text-foreground",
-                    !x.n && !xs && "opacity-60")}>
-                  <span>{x.etichetta}</span><b className="tabular-nums">{x.n}</b></button>
-              );
-            })}
-          </div>
-        )}
-        {(f.tecnici || []).length > 0 && (
-          <div className="mt-0.5 flex flex-wrap gap-1">
+      <div key={f.codice} className="break-inside-avoid pb-0.5" data-gruppo-voce={gruppo}>
+        <button type="button" data-fase={f.codice} aria-pressed={sel} onClick={() => scegli(f.codice)}
+          title={sel ? `${f.etichetta} · clic di nuovo per togliere il filtro` : `Mostra solo: ${f.etichetta}`}
+          className={cn("flex w-full items-baseline justify-between gap-3 rounded-md px-2 py-1 text-left text-[13px] leading-tight transition-colors max-sm:min-h-10",
+            sel ? "bg-primary text-primary-foreground"
+              : attiva ? "bg-primary/10 ring-1 ring-primary"
+                : urgente ? "bg-amber-100 font-semibold text-amber-950 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-50"
+                  : f.n ? "font-medium hover:bg-muted" : "text-muted-foreground/70 hover:bg-muted")}>
+          <span className="min-w-0 truncate">{pulita(f.etichetta)}</span>
+          <span className={cn("shrink-0 tabular-nums", f.n ? "text-base font-bold" : "text-sm")}>{f.n}</span>
+        </button>
+        {sotto.map((x) => {
+          const xs = scelta?.fase === x.codice;
+          return (
+            <button key={x.codice} type="button" data-fase={x.codice} aria-pressed={xs} title={TITOLO_SOTTO(x.codice)}
+              onClick={() => onScegli(xs ? { fase: f.codice, tecnico: "" } : { fase: x.codice, tecnico: "" })}
+              className={cn("flex w-full items-baseline justify-between gap-3 rounded-md py-0.5 pl-5 pr-2 text-left text-[12px] leading-tight max-sm:min-h-9",
+                xs ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
+              <span className="min-w-0 truncate">↳ {pulita(x.etichetta)}</span><span className="shrink-0 font-semibold tabular-nums">{x.n}</span></button>
+          );
+        })}
+        {(f.tecnici || []).length > 0 && f.n > 0 && (
+          <div className="flex flex-wrap gap-1 py-0.5 pl-5 pr-2">
             {f.tecnici.map((t) => {
               const ts = attiva && scelta?.tecnico === t.tecnico;
               return (
                 <button key={t.tecnico || "-"} type="button" data-tecnico={t.tecnico}
-                  onClick={(e) => { e.stopPropagation(); onScegli(ts ? { fase: f.codice, tecnico: "" } : { fase: f.codice, tecnico: t.tecnico }); }}
-                  className={cn("rounded-full border px-1.5 text-[10.5px] font-semibold leading-4 max-sm:min-h-8",
-                    ts ? "border-white bg-white text-primary" : sel ? "border-white/60 text-primary-foreground" : "bg-background text-foreground")}>
+                  onClick={() => onScegli(ts ? { fase: f.codice, tecnico: "" } : { fase: f.codice, tecnico: t.tecnico })}
+                  className={cn("rounded-full border px-1.5 text-[11px] leading-4 max-sm:min-h-8", ts ? "border-primary bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground")}>
                   {nomeTecnico(t.tecnico, tecnici) || "?"} {t.n}</button>
               );
             })}
@@ -124,9 +114,11 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
     );
   };
 
-  // 16/11/2026: sotto-filtri e tecnici stanno DENTRO il riquadro (come prima del 15/11): niente riga di dettaglio sotto
   const visibili = gr.map((g) => ({ g, voci: g.voci.map((c) => per.get(c)).filter((f): f is FaseCruscotto => !!f) }))
     .filter((x) => x.voci.length > 0);
+  const daGestire = visibili.find((x) => x.g.codice === "da_gestire");
+  const colonne = visibili.filter((x) => x.g.codice !== "da_gestire");
+  const nGestire = daGestire ? daGestire.voci.reduce((a, f) => a + f.n, 0) : 0;
 
   return (
     <div className="space-y-1.5">
@@ -157,18 +149,33 @@ export function Cruscotto({ fasi, gruppi, sottoInRiga, tecnici, scelta, onScegli
         )}
       </div>
     )}
-    <div className="space-y-1 rounded-xl border bg-card p-1.5 shadow-sm" data-testid="cruscotto">
-      {visibili.map(({ g, voci }) => (
-        <div key={g.codice} data-gruppo={g.codice}
-          className={cn("flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2", g.codice === "da_gestire" && "-mx-1 rounded-lg bg-red-50 px-1 py-1 dark:bg-red-950/30")}>
-          <span className={cn("shrink-0 whitespace-nowrap text-[11px] font-bold uppercase leading-tight tracking-wide sm:w-[5.5rem] sm:pt-1.5",
-            g.codice === "da_gestire" ? "text-red-700 dark:text-red-300" : "text-muted-foreground")}>{g.titolo}</span>
-          {/* su iPhone la riga scorre in orizzontale dentro il riquadro (la pagina no) */}
-          <div className="flex min-w-0 flex-1 items-start gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible">
-            {voci.map((f) => riquadro(f, g.codice))}
-          </div>
+    <div className="rounded-xl border bg-card p-2 shadow-sm" data-testid="cruscotto">
+      {nGestire > 0 && daGestire && (
+        <div className="mb-2 flex flex-wrap gap-1.5" data-gruppo="da_gestire">
+          {daGestire.voci.filter((f) => f.n > 0).map((f) => {
+            const sel = madre?.codice === f.codice;
+            return (
+              <button key={f.codice} type="button" data-fase={f.codice} aria-pressed={sel} onClick={() => scegli(f.codice)}
+                className={cn("flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-bold text-white", sel ? "bg-red-900 ring-2 ring-red-400" : "bg-red-600 hover:bg-red-700")}>
+                <span className="text-lg tabular-nums">{f.n}</span>{pulita(f.etichetta).toUpperCase()}</button>
+            );
+          })}
         </div>
-      ))}
+      )}
+      <div className="grid gap-x-4 gap-y-3 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr]">
+        {colonne.map(({ g, voci }) => {
+          const lunga = voci.length > 8;
+          return (
+            <section key={g.codice} data-gruppo={g.codice} className={cn("min-w-0", lunga && "md:col-span-2 xl:col-span-1")}>
+              <h3 className="mb-1 flex items-baseline justify-between border-b px-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                <span>{g.titolo}</span></h3>
+              <div className={cn(lunga && "gap-x-3 sm:columns-2")}>
+                {voci.map((f) => riga(f, g.codice))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </div>
     </div>
   );
