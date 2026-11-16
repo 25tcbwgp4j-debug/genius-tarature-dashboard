@@ -903,7 +903,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           const daPagare = ["ritiro", "spedizione", "corriere_cliente"].includes(modo) && !s.pagata && s.saldo > 0 && !pagaFineMese(s);
           if (daPagare && !senzaIncasso) { toast.error(`Risulta ancora da pagare ${eur(s.saldo)}: incassa oppure spunta «Consegno senza incasso»`); return false; }
           // 15/11/2026 (piano 5.3): la consegna senza pagamento («forza») la conferma solo il titolare, con il motivo nel registro
-          return !!(await azione("consegna", { modo, ...(motivo ? { forza: true, forza_motivo: motivo } : {}) }, "Consegnata: scheda chiusa", eServeTitolare));
+          return !!(await azione("consegna", { modo, accessori_confermati: true, ...(motivo ? { forza: true, forza_motivo: motivo } : {}) }, "Consegnata: scheda chiusa", eServeTitolare));
         }} />}
       {dlg?.k === "richiesta" && <DialogoRichiesta sigla={s.sigla} onClose={() => setDlg(null)}
         onSalva={async (b) => !!(await azione("richiesta-cliente", b, "Richiesta del cliente registrata: arriva al tecnico"))} />}

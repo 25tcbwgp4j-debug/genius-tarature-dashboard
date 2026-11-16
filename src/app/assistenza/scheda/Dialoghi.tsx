@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { codiceErrore, dettaglioErrore, eServeTitolare, toastErrore } from "@/lib/errori";
 import { useChiaveIncasso } from "@/lib/useChiaveIncasso";
 import { headerIdempotenza } from "@/lib/idempotenza";
-import { assAnteprimaMail, assAzione, assProntoControlli, type ProntoControlli, assDocUrl, assStessoModello, CANALI_OK_SCRITTO, dataOra, eur, lordoPaypal, pagaFineMese, type DocPdf, type PaypalFee, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
+import { accessoriDaRiconsegnare, assAnteprimaMail, assAzione, assProntoControlli, type ProntoControlli, assDocUrl, assStessoModello, CANALI_OK_SCRITTO, dataOra, eur, lordoPaypal, pagaFineMese, type DocPdf, type PaypalFee, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
 import { blocchi, ipotesiDelBlocco, isActive, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, Pill, Scelta, area, campo } from "./ui";
@@ -571,6 +571,22 @@ export function DialogoSaltaPreventivo({ s, admin, onClose, onSalta }: { s: Sche
  *  arrivato) · 2) come esce il dispositivo · 3) foglio di riconsegna se il Mac ha OpenCore · 4) «Conferma consegna».
  *  Prima un clic su «Rottamato» o «Venduto» chiudeva subito la scheda e il saldo aperto era solo un avviso: ora la scelta
  *  si conferma, Rottamato/Venduto stanno a parte con una seconda conferma e senza incasso serve la spunta esplicita. */
+
+/** 16/11/2026 (Christian, 63392): «Riconsegnare anche: …» con la spunta obbligatoria, in consegna e spedizione. */
+export function AvvisoAccessori({ s, ok, setOk, cosa = "riconsegnati" }: { s: Scheda; ok: boolean; setOk: (v: boolean) => void; cosa?: string }) {
+  const acc = accessoriDaRiconsegnare(s);
+  if (!acc.length) return null;
+  return (
+    <div className="rounded-lg border-2 border-orange-500 bg-orange-50 p-3 text-orange-950 dark:bg-orange-950/40 dark:text-orange-50" data-testid="avviso-accessori">
+      <div className="text-base font-extrabold uppercase tracking-wide">🔌 Riconsegnare anche: {acc.join(", ")}</div>
+      <p className="text-xs opacity-80">Accessori lasciati dal cliente all&apos;ingresso: vanno restituiti insieme al dispositivo.</p>
+      <label className="mt-2 flex min-h-10 items-center gap-2 text-sm font-semibold">
+        <input type="checkbox" className="size-5" checked={ok} onChange={(e) => setOk(e.target.checked)} data-testid="spunta-accessori" />
+        Accessori messi / {cosa}
+      </label>
+    </div>);
+}
+
 export function DialogoConsegna({ s, admin = false, onClose, onConsegna, onScontrino, onFattura, onPagato, onStampaRiconsegna }: {
   s: Scheda; admin?: boolean; onClose: () => void;
   /** 15/11/2026 (piano 5.3): `motivo` = consegna senza pagamento confermata dal titolare (forza + forza_motivo) */
@@ -589,11 +605,14 @@ export function DialogoConsegna({ s, admin = false, onClose, onConsegna, onScont
   const [senzaIncasso, setSenzaIncasso] = useState(false);
   const [foglio, setFoglio] = useState(false);
   const [altri, setAltri] = useState(false);
+  const [accOk, setAccOk] = useState(false);
+  const conAccessori = accessoriDaRiconsegnare(s).length > 0;
   const serveIncasso = daPagare && ["ritiro", "spedizione", "corriere_cliente"].includes(modo);
   // 15/11/2026 (piano 5.3): senza incasso consegna solo il titolare, con il motivo
   const forzatura = (serveIncasso && senzaIncasso) || !!serveTitolare;
   const motivoOk = admin && motivo.trim().length >= MOTIVO_MIN;
-  const pronta = !!modo && (!serveIncasso || senzaIncasso) && (!forzatura || motivoOk) && (!onStampaRiconsegna || foglio || modo !== "ritiro");
+  const pronta = !!modo && (!serveIncasso || senzaIncasso) && (!forzatura || motivoOk) && (!onStampaRiconsegna || foglio || modo !== "ritiro")
+    && (!conAccessori || accOk);
   async function vai(m: string) {
     setBusy(true);
     try { if (await onConsegna(m, forzatura, forzatura && motivoOk ? motivo.trim() : undefined)) onClose(); }
@@ -640,6 +659,7 @@ export function DialogoConsegna({ s, admin = false, onClose, onConsegna, onScont
             ))}
           </div>
         </div>
+        {conAccessori && <AvvisoAccessori s={s} ok={accOk} setOk={setAccOk} cosa={modo === "ritiro" ? "riconsegnati al cliente" : "nel pacco"} />}
         {onStampaRiconsegna && (
           <div className="space-y-2">
             {passo(3, "Foglio di riconsegna (Mac con OpenCore)", foglio)}
@@ -693,6 +713,9 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
   const [avvisaMail, setAvvisaMail] = useState(true);
   const [avvisaWa, setAvvisaWa] = useState(!s.cliente_no_whatsapp);
   const [busy, setBusy] = useState(false);
+  // 16/11/2026 (Christian, 63392): nella riconsegna, accessori del cliente nel pacco (spunta obbligatoria)
+  const [accOk, setAccOk] = useState(false);
+  const accMancano = modo === "riconsegna" && accessoriDaRiconsegnare(s).length > 0 && !accOk;
   // 28/10/2026 (Christian): etichetta di riconsegna — il pacco parte OGGI (scheda chiusa) o un ALTRO GIORNO (resta aperta)
   const [parte, setParte] = useState<"" | "oggi" | "dopo">("");
   const [partenzaIl, setPartenzaIl] = useState("");
@@ -721,7 +744,7 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
     try {
       const r = await assAzione(s.id, "spedizione", { operatore, corriere, direzione: dir, indirizzo: ind, giorno_ritiro: giorno || undefined, test: inProva,
         prenota: dir === "riconsegna" ? prenotaDaNoi : undefined, stampa: inProva || dir === "ritiro" ? false : stampa, forza: nonPagata || undefined,
-        invia_mail: avvisaMail, invia_wa: avvisaWa,
+        invia_mail: avvisaMail, invia_wa: avvisaWa, ...(dir === "riconsegna" && accOk ? { accessori_confermati: true } : {}),
         ...(dir === "riconsegna" && !inProva ? { chiudi: parte === "oggi", partenza_il: parte === "dopo" && partenzaIl ? partenzaIl : undefined } : {}) });
       toast.success(`${r.corriere} ${r.test ? "(PROVA) " : ""}${r.tracking}${r.prn ? ` · ritiro ${r.prn}` : ""}${r.pickup_error ? ` · ERRORE ritiro: ${r.pickup_error}` : ""}` + (r.esito?.mail ? ` · mail ${r.esito.mail}` : "") + (r.esito?.whatsapp ? ` · WhatsApp ${r.esito.whatsapp}` : ""), { duration: 10000 });
       // 05/11/2026 (Christian): il ritiro non si stampa e non si apre: lo stampa il cliente, l'etichetta resta in scheda
@@ -740,7 +763,7 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
       piedi={<><Button variant="outline" onClick={onClose}>Annulla</Button>
         {modo === "cliente"
           ? <Button disabled={busy} onClick={async () => { setBusy(true); try { await onCorriereCliente(); } finally { setBusy(false); } }}>Segna: ritira il corriere del cliente</Button>
-          : <Button disabled={busy || !!ante?.mancanti.length || dhlBloccato || (corriere === "DHL" && !!ante && !ante.dhl_configurato)} onClick={crea}>
+          : <Button disabled={busy || accMancano || !!ante?.mancanti.length || dhlBloccato || (corriere === "DHL" && !!ante && !ante.dhl_configurato)} onClick={crea}>
             {busy ? <Loader2 className="animate-spin" /> : <Truck />}Crea etichetta {corriere}{inProva ? " (prova)" : ""}</Button>}</>}>
       <div className="space-y-3">
         <div className="grid gap-2 sm:grid-cols-3">
@@ -749,6 +772,7 @@ export function DialogoCorriere({ s, operatore, iniziale = "riconsegna", onClose
               <b className="block">{l}</b><span className="text-xs text-muted-foreground">{d}</span></button>
           ))}
         </div>
+        {modo !== "ritiro" && <AvvisoAccessori s={s} ok={accOk} setOk={setAccOk} cosa={modo === "cliente" ? "pronti per il corriere del cliente" : "nel pacco"} />}
         {modo === "cliente" ? (
           <p className="rounded-lg bg-muted/50 p-3 text-sm">Si annota sulla scheda che il dispositivo lo ritira il corriere del cliente. Quando passa a prenderlo: <b>Consegna → «Ritirato dal corriere del cliente»</b>. Prima del ritiro il pagamento deve essere arrivato.</p>
         ) : (

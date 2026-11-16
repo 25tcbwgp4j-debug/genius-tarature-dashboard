@@ -6,7 +6,7 @@
 // Solo lettura: per modificare si clicca il riquadro e si apre la sezione giusta.
 
 import { Mail, MapPin, Package, Phone, Smartphone, UserRound } from "lucide-react";
-import { ETICHETTA_STATO, STATI_RIPARAZIONE, nomeTecnico, type Scheda } from "@/lib/assistenza";
+import { ETICHETTA_STATO, STATI_RIPARAZIONE, accessoriDaRiconsegnare, nomeTecnico, type Scheda } from "@/lib/assistenza";
 import { Badge } from "./ui";
 
 const eur = (n: number | null | undefined) => `€ ${Number(n || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -86,7 +86,10 @@ export function RiepilogoScheda({ s, tecnici, onVai }: {
             <Voce k="Seriale"><span className="font-mono">{s.seriale || "—"}</span>{s.imei ? <span className="font-mono text-muted-foreground"> · IMEI {s.imei}</span> : null}</Voce>
             <Voce k="Garanzia Apple">{garanzia}</Voce>
             <Voce k="Configurazione">{g?.configurazione}</Voce>
-            <Voce k="Accessori">{s.accessori}</Voce>
+            {/* 16/11/2026 (Christian, 63392): accessori lasciati dal cliente, da riconsegnare insieme al dispositivo */}
+            <Voce k="Accessori lasciati dal cliente">{accessoriDaRiconsegnare(s).length
+              ? <span className="rounded bg-orange-100 px-1.5 py-0.5 font-bold text-orange-950 dark:bg-orange-900/50 dark:text-orange-50">🔌 {accessoriDaRiconsegnare(s).join(", ")} · da riconsegnare</span>
+              : <span className="text-muted-foreground">nessuno</span>}</Voce>
             {/* 16/11/2026 (Christian): la password si vede in chiaro: «è una delle prime cose che dobbiamo verificare» */}
             <Voce k="Password del dispositivo">{s.password_dispositivo ? <span className="select-all rounded bg-amber-100 px-1.5 py-0.5 font-mono text-base font-bold text-amber-950 dark:bg-amber-900/50 dark:text-amber-50">{s.password_dispositivo}</span> : <span className="text-amber-700">non indicata</span>}</Voce>
           </div>

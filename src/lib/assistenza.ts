@@ -391,3 +391,20 @@ export type ExScheda = {
   garanzia: { attiva: boolean; fino_al: string } | null;
   /** 13/11/2026: true = scheda con numero più alto (SUCCESSIVA), non una ex scheda */ successiva?: boolean;
 };
+
+
+/** 16/11/2026 (Christian, 63392): accessori lasciati dal cliente da RICONSEGNARE (alimentatore + campo «accessori»).
+ *  Stessa regola del backend (accessori_riconsegna.lista): «nessuno», «-», «no»… = nessun accessorio. */
+export function accessoriDaRiconsegnare(s: { accessori?: string | null; con_alimentatore?: boolean | null }): string[] {
+  const out: string[] = [];
+  if (s.con_alimentatore) out.push("ALIMENTATORE");
+  const nessuno = /^(nessun[oa]?|niente|no|nulla|n\.?\s*d\.?|-+|—|\/|solo (il )?dispositivo|senza accessori)$/i;
+  for (const pezzo of String(s.accessori || "").split(/[,;+\n·•|]|\s+e\s+/)) {
+    const x = pezzo.trim().replace(/^[\s.-]+|[\s.-]+$/g, "");
+    if (!x || nessuno.test(x)) continue;
+    const su = x.toUpperCase();
+    if (out.includes("ALIMENTATORE") && /^(L['’])?ALIMENTATORE$/.test(su)) continue;
+    if (!out.includes(su)) out.push(su);
+  }
+  return out;
+}

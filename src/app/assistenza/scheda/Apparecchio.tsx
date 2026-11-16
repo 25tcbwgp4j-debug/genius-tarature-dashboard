@@ -196,7 +196,7 @@ export function Apparecchio({ v, set, ro, famiglie = FAMIGLIE_DEFAULT, prodotti 
       </Campo>
 
       <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-        <Campo label="Accessori consegnati"><input className={campo} disabled={ro} value={v.accessori || ""} placeholder="es. nessuno · custodia · cavo" onChange={(e) => set("accessori", e.target.value)} /></Campo>
+        <Campo label="🔌 Accessori lasciati dal cliente (si riconsegnano con il dispositivo)"><input className={`${campo} ${v.accessori && !/^\s*(nessun[oa]?|no|-)\s*$/i.test(v.accessori) ? "border-orange-400 bg-orange-50 font-semibold dark:bg-orange-950/30" : ""}`} disabled={ro} value={v.accessori || ""} placeholder="es. nessuno · alimentatore · hard disk · cavo · custodia" onChange={(e) => set("accessori", e.target.value)} /></Campo>
         {nonApple && (
           <label className="flex h-9 items-center gap-2 rounded-md border px-3 text-sm" title="Per i computer Apple l'alimentatore non si prende mai">
             <input type="checkbox" className="size-4" disabled={ro} checked={!!v.con_alimentatore} onChange={(e) => set("con_alimentatore", e.target.checked)} />con alimentatore
