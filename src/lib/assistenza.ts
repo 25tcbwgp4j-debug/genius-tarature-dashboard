@@ -30,6 +30,7 @@ export interface SchedaBreve {
   /** 15/11/2026: ultimo cambiamento della scheda (giorni di fermo reali in «Schede ferme») */
   updated_at?: string | null;
   /** 15/11/2026 (Christian): segnata «DA GESTIRE» con la nota di gestione, chi e quando (migr. 216) */
+  gsx_aperta_il?: string | null; gsx_aperta_da?: string | null; gsx_riparazione_apple?: string | null;   // 16/11/2026: riparazione ufficiale aperta in GSX
   da_gestire?: boolean | null; nota_gestione?: string | null; da_gestire_il?: string | null; da_gestire_da?: string | null;
 }
 export type DatiCliente = "importanti" | "formattabile";

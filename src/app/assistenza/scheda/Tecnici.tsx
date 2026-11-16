@@ -4,6 +4,7 @@
 // Ricevuta → ASSEGNA IN VERIFICA (tecnico) → il tecnico scrive la VERIFICA e la CHIUDE → Da preventivare → … →
 // Accettato → ASSEGNA IN RIPARAZIONE (tecnico) → STATO RIPARAZIONE (attesa ricambi · aggiornamento al cliente ·
 // serve più tempo · da disabilitare «Trova il mio dispositivo» · finita) → Pronto.
+import { daAprireGsx } from "./GsxUfficiale";
 import { useState } from "react";
 import { CheckCircle2, ClipboardCheck, Loader2, UserCog, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -213,6 +214,7 @@ export function PannelloTecnici({ s, tecnici, ro, busy, onAssegnaVerifica, onChi
           {s.note_riparazione && <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-line rounded-md border p-2 text-xs">{s.note_riparazione.trim()}</p>}
           {!ro && inRiparazione && (
             <div className="mt-2 space-y-2">
+              {daAprireGsx(s) && <p className="text-xs font-medium text-red-700 dark:text-red-300">👑 Riparazione ufficiale Apple: prima Christian la apre in GSX (riquadro rosso in alto), poi si assegna al tecnico. Si può affidare subito solo a Bagnetti o a Christian.</p>}
               <Button size="sm" variant={s.tecnico_riparazione ? "outline" : "default"} disabled={busy} onClick={onAssegnaRiparazione}>
                 <Wrench />{s.tecnico_riparazione ? "Riassegna" : "Assegna in riparazione"}</Button>
               {s.tecnico_riparazione && GRUPPI_RIPARAZIONE.map((g) => (

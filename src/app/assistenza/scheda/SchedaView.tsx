@@ -40,6 +40,7 @@ import { InviiProgrammati } from "./InviiProgrammati";
 import { Lavorazione } from "./Lavorazione";
 import { Preventivo, type BozzaPreventivo } from "./Preventivo";
 import { DialogoAssegna, DialogoChiudiVerifica, DialogoStatoRiparazione, PannelloTecnici } from "./Tecnici";
+import { GsxUfficiale } from "./GsxUfficiale";
 import { NotificheScheda } from "../NotificheGestire";
 import { Badge, Campo, Modale, Pill, Sezione, area, campo } from "./ui";
 import { DialogoDuplica, nuovaChiave } from "./SchedaDoppia";
@@ -622,6 +623,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         </Modale>
       )}
       <DaRicordare key={s.id} s={s} ro={ro} operatore={operatore} onSalvata={async () => { await ricarica(); onCambiata(); }} />
+      {/* 16/11/2026 (Christian): riparazione ufficiale Apple → prima si apre in GSX, poi va al tecnico */}
+      <GsxUfficiale s={s} ro={ro} operatore={operatore || ""} onScheda={(x) => { setS(x); onCambiata(); }} />
       {/* 30/10/2026: preventivo e pronto programmati (come le Tarature): Invia subito · Modifica orario · Annulla, poi l'esito */}
       <InviiProgrammati key={`prog-${s.id}-${s.preventivo_prog_il}-${s.pronto_prog_il}`} s={s} ro={ro} operatore={operatore || ""} onScheda={(x) => { setS(x); onCambiata(); }} />
       {/* 28/10/2026 (Christian, 63251): WhatsApp NON consegnati — di solito il cellulare in scheda è sbagliato */}
