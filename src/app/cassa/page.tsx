@@ -35,6 +35,7 @@ import { oggiRoma } from "@/lib/date";
 import { toastErrore } from "@/lib/errori";
 import Link from "next/link";
 import { ivaMargine } from "@/app/fatturazione/util";
+import { puoAggiornare } from "@/lib/polling";   // 17/11/2026 DIGITALE-61: niente polling a scheda nascosta o di notte senza attività
 import {
   fetchAPI, cassaAnnulla, cassaGiornata, cassaRecupero, docDettaglio, docRitira, cassaFattura, cassaRiprova, cassaScontrini, cassaScontrino, magPerCodice, magProdotti, proformaSessioneStato,
   type PagamentoScontrino, type Prodotto, type RigaCassa, type Scontrino, PLU_RT_NOMI,
@@ -211,7 +212,7 @@ export default function CassaPage() {
     // gli scontrini finiscono nella cassa del giorno: se è già chiusa lo dico subito
     cassaGiornata(oggiRoma()).then((r) => setCassaChiusa(r.giornata.stato === "chiusa")).catch(() => undefined);
   }, [giornoLista, filtroAtt]);
-  useEffect(() => { ricarica(); const t = setInterval(ricarica, 10000); return () => clearInterval(t); }, [ricarica]);
+  useEffect(() => { ricarica(); const t = setInterval(() => { if (puoAggiornare()) ricarica(); }, 10000); return () => clearInterval(t); }, [ricarica]);
   useEffect(() => {
     if (q.trim().length < 2) { setTrovati([]); return; }
     const t = setTimeout(() => magProdotti(q.trim(), false, 12).then((r) => setTrovati(r.prodotti || [])).catch(() => undefined), 250);

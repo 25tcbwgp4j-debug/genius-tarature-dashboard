@@ -26,6 +26,7 @@ import { MessaggiTecnico } from "./MessaggiTecnico";
 import { NuovaScheda } from "./scheda/NuovaScheda";
 import { SchedaView } from "./scheda/SchedaView";
 import { Badge } from "./scheda/ui";
+import { puoAggiornare } from "@/lib/polling";   // 17/11/2026 DIGITALE-61: niente polling a scheda nascosta o di notte senza attività
 
 const STILE_RIP: Record<string, string> = {
   // 11/11/2026: stati nuovi — verde al lavoro, ambra in attesa
@@ -147,7 +148,7 @@ export function Banco() {
   // 26/10/2026: il cruscotto (e il banner «Da gestire adesso») si aggiorna da solo ogni minuto
   useEffect(() => {
     // 15/11/2026 (B-34): con la scheda nascosta non si chiede nulla
-    const t = setInterval(() => !document.hidden && assCruscotto().then((r) => { setCruscotto(r.fasi); setGruppiCr(r.gruppi || null); setSottoInRiga(r.sotto_in_riga || null); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); setNotifiche(r.notifiche || []); }).catch(() => undefined), 60000);
+    const t = setInterval(() => puoAggiornare() && assCruscotto().then((r) => { setCruscotto(r.fasi); setGruppiCr(r.gruppi || null); setSottoInRiga(r.sotto_in_riga || null); setCarichi(r.per_tecnico || []); setNRichieste(r.richieste_nuove || 0); setNovita(r.novita || []); setAvvisi(r.avvisi || []); setNotifiche(r.notifiche || []); }).catch(() => undefined), 60000);
     return () => clearInterval(t);
   }, []);
   // 13/11/2026: l'indirizzo comanda. Su /assistenza senza ?id (clic su «Schede assistenza» nel menu, oppure «Indietro»

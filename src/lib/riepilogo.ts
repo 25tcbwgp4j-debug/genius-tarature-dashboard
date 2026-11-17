@@ -5,6 +5,7 @@
 // Niente chiamate con la scheda nascosta; al ritorno sulla scheda (o al focus) si aggiorna subito.
 // Cambiando pagina non si richiede nulla se i dati hanno meno di 30 secondi.
 import { attivitaSalvata } from "@/lib/attivita";
+import { puoAggiornare } from "@/lib/polling";   // 17/11/2026 DIGITALE-61: niente polling a scheda nascosta o di notte senza attività
 
 export type VoceRiepilogo = "bonifici" | "stripe" | "richiamare" | "notifiche";
 type Ascoltatore = (dati: unknown) => void;
@@ -19,7 +20,7 @@ const inAttesa = new Set<VoceRiepilogo>();
 let attesaProgrammata = false;
 
 function giro(voci?: VoceRiepilogo[], forza = false): Promise<void> {
-  if (typeof document !== "undefined" && document.hidden && !forza) return Promise.resolve();
+  if (!puoAggiornare() && !forza) return Promise.resolve();
   const ora = Date.now();
   const daChiedere = (voci || [...ascoltatori.keys()]).filter((v) => (ascoltatori.get(v)?.size || 0) > 0
     && (forza || ora - (ultimi.get(v)?.quando || 0) >= FRESCO_MS));

@@ -5,6 +5,7 @@
 // mentre si sta scrivendo o con una finestra aperta: in quel caso mostra un avviso con «Aggiorna ora».
 
 import { useEffect, useState } from "react";
+import { puoAggiornare } from "@/lib/polling";   // 17/11/2026 DIGITALE-61: niente polling a scheda nascosta o di notte senza attività
 
 const MIA = process.env.NEXT_PUBLIC_BUILD_ID || "";
 
@@ -29,7 +30,7 @@ export function AggiornaVersione() {
         else setNuova(true);
       } catch { /* rete assente: si riprova al giro dopo */ }
     };
-    const t = setInterval(() => { if (!document.hidden) controlla(); }, 60_000);   // 15/11/2026 (B-34): niente a scheda nascosta
+    const t = setInterval(() => { if (puoAggiornare()) controlla(); }, 60_000);   // 15/11/2026 (B-34): niente a scheda nascosta
     const vis = () => { if (document.visibilityState === "visible") controlla(); };
     document.addEventListener("visibilitychange", vis);
     return () => { attiva = false; clearInterval(t); document.removeEventListener("visibilitychange", vis); };

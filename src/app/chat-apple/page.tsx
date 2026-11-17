@@ -17,6 +17,7 @@ import { COLORE_STATO, ETICHETTA_STATO, assSchedaCliente, assStaffChatDelNumero,
   type Anagrafica, type StaffContesto, type StaffDati } from "@/lib/assistenza";
 import { SchedaClienteModal } from "@/app/assistenza/scheda/Cliente";
 import { NuovaScheda } from "@/app/assistenza/scheda/NuovaScheda";
+import { puoAggiornare } from "@/lib/polling";   // 17/11/2026 DIGITALE-61: niente polling a scheda nascosta o di notte senza attività
 
 /** nomi dei numeri (gestionale o rubrica 334), caricati per l'elenco visibile */
 function useNomi(telefoni: string[]) {
@@ -70,7 +71,7 @@ function ChatStaff() {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<StaffMsg[] | null>(null);
-  useEffect(() => { const f = () => assStaffConversazioni(q).then((r) => setConv(r.conversazioni)).catch(toastErrore); f(); const t = setInterval(f, 15000); return () => clearInterval(t); }, [q]);
+  useEffect(() => { const f = () => assStaffConversazioni(q).then((r) => setConv(r.conversazioni)).catch(toastErrore); f(); const t = setInterval(() => { if (puoAggiornare()) f(); }, 15000); return () => clearInterval(t); }, [q]);
   useEffect(() => { if (sel) { setMsgs(null); assStaffMessaggi(sel).then((r) => setMsgs(r.messaggi)).catch(toastErrore); } }, [sel]);
   // 25/10/2026: aperta dalla scheda di assistenza («Chat WhatsApp») → si seleziona la chat di quel numero
   useEffect(() => {
@@ -80,7 +81,7 @@ function ChatStaff() {
   // 25/10/2026: risposte proposte dalla verifica periodica (ogni 10 minuti): chi aspetta va in cima
   const [proposte, setProposte] = useState<StaffProposta[]>([]);
   const caricaProposte = () => assStaffProposte().then((r) => setProposte(r.proposte)).catch(() => {});
-  useEffect(() => { caricaProposte(); const t = setInterval(caricaProposte, 15000); return () => clearInterval(t); }, []);
+  useEffect(() => { caricaProposte(); const t = setInterval(() => { if (puoAggiornare()) caricaProposte(); }, 15000); return () => clearInterval(t); }, []);
   const propDi = (chat: string) => proposte.find((p) => p.chat_id === chat);
   // 04/11/2026: sempre in ordine di tempo (prima le chat con proposta restavano in cima e nascondevano i clienti appena arrivati)
   const [soloAttesa, setSoloAttesa] = useState(false);
@@ -269,7 +270,7 @@ function ChatChatbot() {
   const [busy, setBusy] = useState(false);
 
   const caricaConv = () => listConversations({ search: q || undefined }).then((r) => setConv(r.conversations)).catch(toastErrore);
-  useEffect(() => { caricaConv(); const t = setInterval(caricaConv, 15000); return () => clearInterval(t); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { caricaConv(); const t = setInterval(() => { if (puoAggiornare()) caricaConv(); }, 15000); return () => clearInterval(t); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!sel) return;
     setMsgs(null);
