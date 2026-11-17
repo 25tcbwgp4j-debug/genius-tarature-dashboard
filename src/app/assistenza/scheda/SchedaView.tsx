@@ -18,7 +18,7 @@ import { codiceErrore, eServeTitolare, toastErrore } from "@/lib/errori";
 import type { RicambioAtteso } from "@/lib/assistenza";
 import { fetchAPI } from "@/lib/api";
 import {
-  assAzione, assDocUrl, assEtichettaUrl, assModifica, assScheda, assTrackUrl, dataOra, DOCUMENTI_PDF, eur, nomeTecnico, pagaFineMese, type ConfigAssistenza, type DocPdf, type Esito, type Scheda,
+  assAzione, assDocUrl, assEtichettaUrl, assModifica, assScheda, assTrackUrl, dataOra, documentoDaConvertire, DOCUMENTI_PDF, eur, nomeTecnico, pagaFineMese, type ConfigAssistenza, type DocPdf, type Esito, type Scheda,
 } from "@/lib/assistenza";
 import { BannerDati } from "./DatiCliente";
 import { blocchi, blocco, totaleConSpedizione, type EstimateLine } from "@/lib/assistenza-preventivo";
@@ -355,7 +355,14 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     } catch (e) { toastErrore(e); }
   }
   async function vendi(tipo: "fattura" | "proforma") {
-    const r = await azione("vendi", { tipo }, tipo === "fattura" ? "Fattura in BOZZA creata (non inviata allo SdI)" : "Pro forma creato");
+    // 17/11/2026 (63447): con un pro forma/ordine collegato e aperto la fattura nasce convertendo QUEL documento
+    const doc = tipo === "fattura" && s ? documentoDaConvertire(s) : null;
+    if (doc) {
+      if (sporca && !(await salva(true))) return;
+      toast.info(`Apro ${doc.proforma ? "il pro forma" : "l'ordine"} ${doc.sigla}: convertilo in fattura da lì`);
+      router.push(doc.url); return;
+    }
+    const r = await azione("vendi", { tipo }, tipo === "fattura" ? "Fattura pronta (in BOZZA, non inviata allo SdI)" : "Pro forma creato");
     if (r?.url) router.push(r.url);
   }
   // 15/11/2026 (piano 2.5): le azioni che mandano qualcosa al cliente o cambiano lo stato chiedono conferma con il

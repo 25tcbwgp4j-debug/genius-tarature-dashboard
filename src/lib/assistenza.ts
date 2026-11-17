@@ -75,7 +75,7 @@ export interface Scheda extends SchedaBreve {
   precedente: { id: string; sigla: string } | null; successiva: { id: string; sigla: string } | null;
   collegamenti: {
     scontrino?: { id: string; stato: string; totale: number; numero_rt?: string | null; data_rt?: string | null; pagamenti?: { importo: number; modalita: string }[] } | null;
-    fattura?: FatturaCollegata | null; documento?: { id: string; sigla: string; stato: string; totale: number } | null;
+    fattura?: FatturaCollegata | null; documento?: { id: string; tipo?: string; sigla: string; stato: string; totale: number } | null;
     /** 24/10/2026: altre fatture che citano la scheda, bonifici arrivati con la scheda in causale, come risulta pagata */
     altre_fatture?: FatturaCollegata[]; combinata?: { id: string; sigla: string; stato: string; prodotto: string | null; rif_cliente: string | null }[]; ex_schede?: ExScheda[]; /** 13/11/2026: doppio importo attivo per questa scheda (scheda o anagrafica) */ preventivo_imponibile?: boolean; preventivo_imponibile_cliente?: boolean; bonifici?: { id: string; data: string; importo: number; ordinante: string | null; causale: string | null; stato: string }[];
     pagamento?: { il: string | null; modo: string | null; fonte: string; rimborso?: { importo: number; note_credito: string } } | null;
@@ -407,4 +407,15 @@ export function accessoriDaRiconsegnare(s: { accessori?: string | null; con_alim
     if (!out.includes(su)) out.push(su);
   }
   return out;
+}
+
+/** 17/11/2026 (Christian, 63447 / PF 108/2026): pro forma o ordine collegato alla scheda e ancora APERTO → la fattura si fa
+ *  convertendo QUEL documento (stesse righe e stessa IVA, es. regime del margine), non con una fattura nuova dalla scheda. */
+export function documentoDaConvertire(s: Scheda): { id: string; sigla: string; url: string; proforma: boolean } | null {
+  const d = s.collegamenti?.documento;
+  if (!d || d.stato !== "aperto" || s.fattura_id) return null;
+  const proforma = d.tipo === "proforma" || d.sigla.startsWith("PF ");
+  const ordine = d.tipo === "ordine" || d.sigla.startsWith("ORD ");
+  if (!proforma && !ordine) return null;
+  return { id: d.id, sigla: d.sigla, url: proforma ? `/proforma?id=${d.id}` : `/ordini?id=${d.id}`, proforma };
 }

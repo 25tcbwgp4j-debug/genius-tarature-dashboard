@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { codiceErrore, dettaglioErrore, eServeTitolare, toastErrore } from "@/lib/errori";
 import { useChiaveIncasso } from "@/lib/useChiaveIncasso";
 import { headerIdempotenza } from "@/lib/idempotenza";
-import { accessoriDaRiconsegnare, assAnteprimaMail, assAzione, assProntoControlli, type ProntoControlli, assDocUrl, assStessoModello, CANALI_OK_SCRITTO, dataOra, eur, lordoPaypal, pagaFineMese, type DocPdf, type PaypalFee, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
+import { accessoriDaRiconsegnare, assAnteprimaMail, assAzione, assProntoControlli, type ProntoControlli, assDocUrl, assStessoModello, CANALI_OK_SCRITTO, dataOra, documentoDaConvertire, eur, lordoPaypal, pagaFineMese, type DocPdf, type PaypalFee, type Esito, type Scheda, type SchedaBreve } from "@/lib/assistenza";
 import { blocchi, ipotesiDelBlocco, isActive, parseEstimate, rowTotal, type EstimateLine } from "@/lib/assistenza-preventivo";
 import { copia } from "./Comunicazioni";
 import { Campo, Modale, Pill, Scelta, area, campo } from "./ui";
@@ -597,6 +597,8 @@ export function DialogoConsegna({ s, admin = false, onClose, onConsegna, onScont
   const [motivo, setMotivo] = useState("");
   const [serveTitolare, setServeTitolare] = useState<string | null>(null);
   const daPagare = !s.pagata && s.saldo > 0 && !pagaFineMese(s);
+  // 17/11/2026 (Christian, 63447): pro forma/ordine collegato e aperto → si apre QUELLO per convertirlo in fattura
+  const doc = documentoDaConvertire(s);
   const opz: [string, string, string][] = [
     ["ritiro", "Ritirato in negozio", "il cliente è passato a prenderlo"], ["spedizione", "Spedito con il nostro corriere", "etichetta UPS/DHL fatta da noi"],
     ["corriere_cliente", "Ritirato dal corriere del cliente", "il cliente ha mandato il suo corriere"]];
@@ -635,7 +637,11 @@ export function DialogoConsegna({ s, admin = false, onClose, onConsegna, onScont
             <p className="pl-8 text-sm">Da incassare: <b className="tabular-nums">{eur(s.saldo)}</b></p>
             <div className="flex flex-wrap gap-1.5 pl-8">
               {onScontrino && <Button size="sm" onClick={onScontrino} title="Apre la cassa con le righe della scheda; dopo lo scontrino torna qui">🧾 Scontrino</Button>}
-              {onFattura && <Button size="sm" variant="outline" onClick={onFattura} title="Fattura in bozza collegata alla scheda (non va allo SdI finché non la emetti)">Fattura</Button>}
+              {onFattura && (doc
+                ? <Button size="sm" variant="outline" onClick={onFattura} data-testid="apri-documento-collegato"
+                    title={`La scheda ha ${doc.proforma ? "il pro forma" : "l'ordine"} ${doc.sigla}: la fattura nasce convertendo quello (stesse righe e stessa IVA)`}>
+                    📄 Apri {doc.proforma ? "pro forma" : "ordine"} {doc.sigla} e converti in fattura</Button>
+                : <Button size="sm" variant="outline" onClick={onFattura} title="Fattura in bozza collegata alla scheda (non va allo SdI finché non la emetti)">Fattura</Button>)}
               {onPagato && <Button size="sm" variant="outline" onClick={onPagato} title="Bonifico, POS o PayPal già arrivati">Pagamento già arrivato</Button>}
             </div>
             <label className="ml-8 flex min-h-10 items-start gap-2 rounded-lg border-2 border-amber-400 bg-amber-50 p-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
