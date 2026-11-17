@@ -576,6 +576,24 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           {s.condizioni_cliente?.pagamento_mensile && <span className="inline-flex items-center rounded-full border border-sky-400 bg-sky-50 px-2.5 py-0.5 text-xs font-bold text-sky-900 dark:bg-sky-950/40 dark:text-sky-100">💶 Pagamento a fine mese</span>}
           {s.condizioni_cliente?.no_etichette && <span title={s.condizioni_cliente.no_etichette_nota || undefined} className="inline-flex items-center rounded-full border border-red-400 bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-900 dark:bg-red-950/40 dark:text-red-100">🏷️🚫 Niente etichette{s.condizioni_cliente.no_etichette_nota ? ` · ${s.condizioni_cliente.no_etichette_nota}` : ""}</span>}
         </div>)}
+      {/* 17/11/2026 (Christian): cliente straniero → mail, WhatsApp e PDF in italiano + inglese (vale anche per l'anagrafica) */}
+      <label className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${s.lingua_doppia_effettiva
+        ? "border-indigo-400 bg-indigo-50 font-semibold text-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-100"
+        : s.lingua_doppia_suggerita ? "border-amber-400 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-100" : "border-border text-muted-foreground"}`}
+        data-testid="lingua-doppia">
+        <input type="checkbox" className="h-4 w-4" disabled={ro || !!busy} checked={!!s.lingua_doppia_effettiva}
+          onChange={async (ev) => {
+            const on = ev.target.checked;
+            try {
+              setS(await assModifica(s.id, { lingua_doppia: on, operatore: operatore || null }));
+              toast.success(on ? "Comunicazioni in italiano + inglese (anche per le prossime schede del cliente)" : "Comunicazioni solo in italiano");
+              onCambiata();
+            } catch (e) { toastErrore(e); }
+          }} />
+        🇮🇹🇬🇧 Cliente straniero: comunicazioni IT + EN
+        {!s.lingua_doppia_effettiva && s.lingua_doppia_suggerita && <span className="text-xs">· numero o mail esteri: attivarla?</span>}
+        {s.lingua_doppia_effettiva && s.lingua_doppia == null && <span className="text-xs font-normal opacity-80">· dall&apos;anagrafica</span>}
+      </label>
       {/* 16/11/2026 (Christian): cliente, dispositivo e situazione SUBITO in vista, senza aprire Accettazione */}
       <RiepilogoScheda s={s} tecnici={tecnici} onVai={(d) => vaiA(d)} />
       {/* 11/11/2026 (Christian): DATI DEL CLIENTE in cima, molto evidenti (rosso = non formattare) */}
