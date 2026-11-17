@@ -204,7 +204,10 @@ export function PagaPos({ importo, descrizione, rifTipo, rifId, disabled, onPaga
             <DialogTitle>{pp ? "In attesa del pagamento PayPal…" : "In attesa del pagamento sul POS…"}</DialogTitle>
             <DialogDescription>
               {pp ? <>Il cliente inquadra il QR (o apre il link) e paga {eur(attesa?.importo || 0)} con PayPal: la conferma arriva da sola.</>
-                : modo === "lettore" ? <>{eur(attesa?.importo || 0)} inviati al <b>{attesa?.nome}</b>: il cliente avvicina o inserisce la carta sul terminale.</>
+                : modo === "lettore" ? <>{eur(attesa?.importo || 0)} inviati al <b>{attesa?.nome}</b>: il cliente avvicina o inserisce la carta sul terminale.
+                  {/* 17/11/2026: il gestionale invia l'importo in meno di 1 s; se il Solo è in sospensione impiega 20-30 s a
+                      riceverlo. Toccare lo schermo lo sveglia e l'importo compare subito. */}
+                  <span className="mt-1 block font-medium text-amber-700 dark:text-amber-400">Se l&apos;importo non compare sul POS, tocca lo schermo del POS (o premi il tasto laterale) per svegliarlo.</span></>
                 : <>Batti <b>{eur(attesa?.importo || 0)}</b> sul {attesa?.nome === "POS SumUp" ? "POS SumUp" : <b>{attesa?.nome}</b>}: la dashboard controlla le transazioni SumUp ogni 3 secondi e conferma da sola quando il pagamento risulta.</>}
             </DialogDescription>
           </DialogHeader>
