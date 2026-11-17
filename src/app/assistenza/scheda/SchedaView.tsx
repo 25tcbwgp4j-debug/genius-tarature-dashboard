@@ -626,6 +626,23 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
               title="Riporta la scheda a qualsiasi stato (anche indietro) o la chiude"><RotateCcw />Cambia stato</Button>)}
         </>}
         onGiaFatto={ro ? undefined : () => setDlg({ k: "chiudi_tutto" })} onRiconsegna={ro ? undefined : riconsegna} />
+      {/* 17/11/2026 (Christian): la VERIFICA del tecnico subito sotto la barra di avanzamento, senza scorrere fino giù.
+          Sola lettura: un clic porta alla sezione «Verifica e riparazione (tecnici)» per modificarla. */}
+      {(s.note_verifica || "").trim() ? (
+        <button type="button" onClick={() => vaiA("tecnici")} title="Vai alla sezione Verifica e riparazione per modificarla"
+          className="block w-full rounded-lg border-2 border-sky-300 bg-sky-50 px-3 py-2 text-left text-sm text-sky-950 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-100 dark:hover:bg-sky-950/50"
+          data-testid="verifica-in-alto">
+          <span className="block text-xs font-semibold uppercase tracking-wide text-sky-800 dark:text-sky-300">
+            🔎 Verifica{s.verifica_chiusa_da || s.tecnico_verifica ? ` · ${nomeTecnico(s.verifica_chiusa_da || s.tecnico_verifica, tecnici)}` : ""}{s.verifica_chiusa_il ? ` · ${dataOra(s.verifica_chiusa_il)}` : ""}</span>
+          <span className="block whitespace-pre-wrap break-words font-medium">{s.note_verifica}</span>
+        </button>
+      ) : !["consegnato", "annullata"].includes(st) && (
+        <button type="button" onClick={() => vaiA("tecnici")} title="Vai alla sezione Verifica e riparazione"
+          className="block w-full rounded-lg border border-dashed px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/50"
+          data-testid="verifica-in-alto-vuota">
+          🔎 <span className="text-xs font-semibold uppercase tracking-wide">Verifica</span>{s.tecnico_verifica ? ` · ${nomeTecnico(s.tecnico_verifica, tecnici)}` : ""} · non ancora scritta
+        </button>
+      )}
       {/* 27/10/2026 (Christian, 63228): messaggio di passaggio tra tecnici, in pop-up finché non lo si segna letto */}
       {s.passaggio && !s.passaggio.letto_il && !passaggioChiuso && (
         // 27/10/2026: la X lo chiude solo su questo computer (resta da leggere per il tecnico); «Ho letto» lo chiude per tutti
