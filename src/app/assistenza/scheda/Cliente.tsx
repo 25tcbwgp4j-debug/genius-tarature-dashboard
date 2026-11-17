@@ -150,6 +150,11 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
                 {f.no_etichette && <input className={`${campo} mt-1.5`} value={f.no_etichette_nota || ""} placeholder="nota (es. lo ha chiesto il titolare)"
                   onChange={(e) => set("no_etichette_nota", e.target.value)} />}
               </div>
+              {/* 17/11/2026 (Christian): cliente straniero → mail, WhatsApp e PDF delle schede in italiano + inglese (come la casella della scheda) */}
+              <div className="sm:col-span-3 rounded-md border border-indigo-200 bg-indigo-50/60 p-2 dark:border-indigo-900 dark:bg-indigo-950/20">
+                <label className="flex items-center gap-2 text-sm font-medium" data-testid="anagrafica-lingua-doppia"><input type="checkbox" className="size-4" checked={!!f.lingua_doppia}
+                  onChange={(e) => set("lingua_doppia", e.target.checked)} />🇮🇹🇬🇧 Cliente straniero: comunicazioni IT + EN (mail, WhatsApp e PDF delle schede, anche quelle aperte)</label>
+              </div>
             </div>
           </fieldset>
           {/* 15/11/2026 (piano 1.6): pagamento a fine mese — il PRONTO non chiede bonifico né «importo da saldare» */}
@@ -240,6 +245,7 @@ export function RiepilogoCliente({ a, nome, telefono, email }: { a: Anagrafica |
         {a?.vuole_fattura && <Pill tono="blu">vuole fattura</Pill>}
         {a?.no_whatsapp && <Pill tono="rosso">🚫 niente WhatsApp</Pill>}
         {a?.no_etichette && <Pill tono="rosso">🏷️🚫 niente etichette: nastro carta</Pill>}
+        {a?.lingua_doppia && <Pill tono="blu">🇮🇹🇬🇧 comunicazioni IT + EN</Pill>}
         {!a && <Pill tono="ambra">non collegato alla rubrica</Pill>}
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">

@@ -1173,6 +1173,8 @@ function BannerScheda({ s, ro, onTrova, onIstruzioni, onPreventivo }: { s: Sched
  *  per mail e WhatsApp, in qualsiasi stato della scheda, senza cambiare lo stato e senza rimandare la scheda. */
 function ComunicazioneCliente({ s, operatore, invia, togli }: { s: Scheda; operatore: string; invia: (b: Record<string, unknown>) => Promise<unknown>; togli: () => void }) {
   const [testo, setTesto] = useState("");
+  // 17/11/2026 (Christian): cliente straniero → testo in inglese facoltativo (vuoto = traduzione automatica)
+  const [testoEn, setTestoEn] = useState("");
   const [ricorda, setRicorda] = useState(true);
   // 26/10/2026 (Christian): insieme al testo si può mandare anche la scheda (preventivo, pronto, consuntivo…)
   const [documento, setDocumento] = useState("auto");
@@ -1186,9 +1188,9 @@ function ComunicazioneCliente({ s, operatore, invia, togli }: { s: Scheda; opera
     if (!operatore) { toast.error("Scegli l'operatore (in alto)"); return; }
     if (testo.trim().length < 3) { toast.error("Scrivi la comunicazione"); return; }
     const allegato = DOC.find(([k]) => k === documento)?.[1] || "";
-    if (!(await conferma({ titolo: "Inviare al cliente?", testo: `${mail ? "Per mail" : ""}${mail && wa ? " e " : ""}${wa ? "su WhatsApp" : ""}:\n\n«${testo.trim()}»\n\n${documento ? `Insieme a: ${allegato}` : "Solo il testo, senza scheda"}`, ok: "Invia al cliente" }))) return;
+    if (!(await conferma({ titolo: "Inviare al cliente?", testo: `${mail ? "Per mail" : ""}${mail && wa ? " e " : ""}${wa ? "su WhatsApp" : ""}:\n\n«${testo.trim()}»\n\n${s.lingua_doppia_effettiva ? (testoEn.trim() ? `\n\nIn inglese: «${testoEn.trim()}»` : "\n\nIn inglese: traduzione automatica") : ""}\n\n${documento ? `Insieme a: ${allegato}` : "Solo il testo, senza scheda"}`, ok: "Invia al cliente" }))) return;
     setBusy(true);
-    try { if (await invia({ testo: testo.trim(), invia_mail: mail, invia_wa: wa, ricorda, documento: documento || null })) { setInviata(testo.trim()); setTesto(""); } } finally { setBusy(false); }
+    try { if (await invia({ testo: testo.trim(), ...(s.lingua_doppia_effettiva && testoEn.trim() ? { testo_en: testoEn.trim() } : {}), invia_mail: mail, invia_wa: wa, ricorda, documento: documento || null })) { setInviata(testo.trim()); setTesto(""); setTestoEn(""); } } finally { setBusy(false); }
   }
   return (
     <div className="space-y-1.5 rounded-xl border-2 border-blue-200 bg-blue-50/60 p-2.5 dark:border-blue-900 dark:bg-blue-950/20">
@@ -1203,6 +1205,9 @@ function ComunicazioneCliente({ s, operatore, invia, togli }: { s: Scheda; opera
         </div>
       )}
       <textarea className={`${campo} min-h-[64px]`} placeholder="Es. Per procedere occorre che ci consegni l'alimentatore originale." value={testo} onChange={(e) => setTesto(e.target.value)} />
+      {s.lingua_doppia_effettiva && (
+        <textarea className={`${campo} min-h-[52px]`} data-testid="comunicazione-testo-en"
+          placeholder="🇬🇧 Testo in inglese (facoltativo): se resta vuoto si traduce in automatico" value={testoEn} onChange={(e) => setTestoEn(e.target.value)} />)}
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <label className="flex items-center gap-1.5"><input type="checkbox" checked={mail} disabled={!s.email} onChange={(e) => setMail(e.target.checked)} />mail{s.email ? ` (${s.email})` : " — manca"}</label>
         <label className="flex items-center gap-1.5"><input type="checkbox" checked={wa} disabled={!s.telefono} onChange={(e) => setWa(e.target.checked)} />WhatsApp{s.telefono ? ` (${s.telefono})` : " — manca"}</label>
