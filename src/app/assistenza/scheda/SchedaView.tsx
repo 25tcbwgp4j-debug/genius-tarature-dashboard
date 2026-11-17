@@ -93,6 +93,10 @@ function Linguette({ tab, setTab, info, fase }: { tab: Linguetta; setTab: (t: Li
     </div>
   );
 }
+/** 17/11/2026 (63448): la scheda risulta pagata (pagamento registrato, fattura pagata, scontrino o niente da pagare). */
+function pagataOra(x: Scheda): boolean {
+  return !!x.pagata || Number(x.saldo) <= 0;
+}
 /** 15/11/2026 (piano 2.5): menu «Altro…» per le azioni rare o pericolose (annulla scheda), lontano dalle abituali. */
 function MenuAltro({ children }: { children: React.ReactNode }) {
   const [aperto, setAperto] = useState(false);
@@ -222,6 +226,79 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   // Restano sempre disponibili fattura/pagamento/PDF/stampa/duplica (sono fuori da `ro`, come per gli operatori).
   const [riaperta, setRiaperta] = useState(false);
   const ro = s?.stato === "annullata" || (s?.stato === "consegnato" && (!admin || !riaperta));
+
+  // 17/11/2026 (Christian, 63448): «dopo il pagamento bisogna fare Cmd+R per far apparire la riconsegna».
+  // La scheda si leggeva UNA volta all'apertura: se il pagamento arrivava da un'altra pagina o finestra (cassa, pro forma
+  // convertito in fattura, fattura segnata pagata, POS confermato dopo) la barra restava su «da pagare» e al banco nessuno
+  // registrava la consegna. Ora la scheda si rilegge da sola:
+  //  - quando la finestra torna in primo piano (focus, visibilitychange, ritorno dalla cache «indietro» del browser);
+  //  - ogni 20 secondi mentre è PRONTO e ancora da pagare (solo con la finestra visibile);
+  //  - mai mentre si scrive (bozza non salvata), durante un'azione o con un dialogo aperto (tranne «Incassa e consegna»).
+  // Quando il pagamento risulta arrivato (anche al ritorno dalla cassa o dalla fattura) si apre da solo «Incassa e consegna»
+  // con il passo 1 già verde: resta solo da dire come esce il dispositivo.
+  const vivo = useRef<{ s: Scheda | null; sporca: boolean; dlg: Dialogo; busy: string; onCambiata: () => void }>({ s: null, sporca: false, dlg: null, busy: "", onCambiata });
+  useEffect(() => { vivo.current = { s, sporca, dlg, busy, onCambiata }; });
+  const ultimaLettura = useRef(0);
+  const firma = (x: Scheda) => JSON.stringify([x.updated_at, x.stato, x.pagata, x.saldo, x.fattura_id, x.scontrino_id,
+    x.avanzamento?.prossimo?.azione, x.avanzamento?.situazione?.titolo]);
+  const aggiornaInSilenzio = useCallback(async () => {
+    const libera = () => { const c = vivo.current; return !!c.s && !c.sporca && !c.busy && (!c.dlg || c.dlg.k === "consegna"); };
+    if (typeof document === "undefined" || document.hidden || !libera() || Date.now() - ultimaLettura.current < 3000) return;
+    ultimaLettura.current = Date.now();
+    try {
+      const x = await assScheda(id);
+      if (!libera() || x.id !== vivo.current.s?.id || firma(x) === firma(vivo.current.s!)) return;
+      setS(x);
+      vivo.current.onCambiata();
+    } catch { /* rete assente: si riprova al prossimo giro */ }
+  }, [id]);
+  const prontoDaPagare = !!s && s.stato === "pronto" && !pagataOra(s);
+  useEffect(() => {
+    const vis = () => { if (!document.hidden) aggiornaInSilenzio(); };
+    const show = (e: PageTransitionEvent) => { if (e.persisted) aggiornaInSilenzio(); };
+    window.addEventListener("focus", vis);
+    document.addEventListener("visibilitychange", vis);
+    window.addEventListener("pageshow", show);
+    const t = prontoDaPagare ? window.setInterval(aggiornaInSilenzio, 20_000) : undefined;
+    return () => {
+      window.removeEventListener("focus", vis);
+      document.removeEventListener("visibilitychange", vis);
+      window.removeEventListener("pageshow", show);
+      if (t) window.clearInterval(t);
+    };
+  }, [aggiornaInSilenzio, prontoDaPagare]);
+  // si esce dalla scheda PRONTA e da pagare (cassa, pro forma, fattura, altra pagina, ricarica) → al ritorno, se risulta
+  // pagata, si apre «Incassa e consegna» (segno nella sessione del browser, valido 6 ore)
+  const chiavePag = `gl-scheda-da-pagare-${id}`;
+  useEffect(() => {
+    const segna = () => { const x = vivo.current.s; if (x && x.stato === "pronto" && !pagataOra(x)) { try { sessionStorage.setItem(chiavePag, String(Date.now())); } catch { /* */ } } };
+    window.addEventListener("pagehide", segna);
+    return () => { window.removeEventListener("pagehide", segna); segna(); };
+  }, [chiavePag]);
+  const pagPrima = useRef<{ id: string; pagata: boolean } | null>(null);
+  const [chiediConsegna, setChiediConsegna] = useState(false);
+  useEffect(() => {
+    if (!s) return;
+    const ora = pagataOra(s);
+    const prima = pagPrima.current?.id === s.id ? pagPrima.current.pagata : null;
+    pagPrima.current = { id: s.id, pagata: ora };
+    let segno = false;
+    try { const m = Number(sessionStorage.getItem(chiavePag) || 0); segno = m > 0 && Date.now() - m < 6 * 3600_000; } catch { /* */ }
+    if (s.stato !== "pronto") { if (s.stato === "consegnato" || s.stato === "annullata") { try { sessionStorage.removeItem(chiavePag); } catch { /* */ } } return; }
+    if (ora && (prima === false || (prima === null && segno))) {
+      try { sessionStorage.removeItem(chiavePag); } catch { /* */ }
+      setChiediConsegna(true);
+    }
+  }, [s, chiavePag]);
+  useEffect(() => {
+    if (!chiediConsegna || !s || sporca || busy) return;
+    if (dlg && dlg.k !== "consegna") return;   // si apre appena si chiude l'altro dialogo (es. «Pagamento ricevuto»)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- richiesta di riconsegna consumata
+    setChiediConsegna(false);
+    if (s.stato !== "pronto" || ro) return;
+    toast.success(`Scheda ${s.sigla}: pagamento arrivato. Ora registra la riconsegna: come esce il dispositivo?`, { duration: 10000, id: `pagata-${s.id}` });
+    if (!dlg) setDlg({ k: "consegna" });
+  }, [chiediConsegna, s, dlg, sporca, busy, ro]);
 
   // bozza del preventivo dentro la bozza della scheda (aggiornamenti funzionali: più modifiche nello stesso clic)
   const setBz = useCallback((f: (bz: BozzaPreventivo) => BozzaPreventivo) => setB((x) => {
