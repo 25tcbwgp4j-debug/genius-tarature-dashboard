@@ -14,6 +14,7 @@ import {
 import { chiediTesto, conferma } from "@/components/Conferma";
 import { Button } from "@/components/ui/button";
 import { SceltaOperatore, type Operatore } from "@/components/Operatore";
+import { schedaPagata } from "@/components/DopoBonifico";
 import { codiceErrore, eServeTitolare, toastErrore } from "@/lib/errori";
 import type { RicambioAtteso } from "@/lib/assistenza";
 import { fetchAPI } from "@/lib/api";
@@ -271,7 +272,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
   // pagata, si apre «Incassa e consegna» (segno nella sessione del browser, valido 6 ore)
   const chiavePag = `gl-scheda-da-pagare-${id}`;
   useEffect(() => {
-    const segna = () => { const x = vivo.current.s; if (x && x.stato === "pronto" && !pagataOra(x)) { try { sessionStorage.setItem(chiavePag, String(Date.now())); } catch { /* */ } } };
+    // 18/11/2026 (Christian, 63320/63200): anche per le schede non PRONTO, purché non consegnate/annullate
+    const segna = () => { const x = vivo.current.s; if (x && x.stato !== "consegnato" && x.stato !== "annullata" && !pagataOra(x)) { try { sessionStorage.setItem(chiavePag, String(Date.now())); } catch { /* */ } } };
     window.addEventListener("pagehide", segna);
     return () => { window.removeEventListener("pagehide", segna); segna(); };
   }, [chiavePag]);
@@ -284,7 +286,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     pagPrima.current = { id: s.id, pagata: ora };
     let segno = false;
     try { const m = Number(sessionStorage.getItem(chiavePag) || 0); segno = m > 0 && Date.now() - m < 6 * 3600_000; } catch { /* */ }
-    if (s.stato !== "pronto") { if (s.stato === "consegnato" || s.stato === "annullata") { try { sessionStorage.removeItem(chiavePag); } catch { /* */ } } return; }
+    // 18/11/2026 (Christian, 63320/63200): la consegna si chiede anche per le schede non PRONTO (pagate al banco mentre
+    // erano ancora «in lavorazione»/«accettato»): basta che non siano già consegnate o annullate
+    if (s.stato === "consegnato" || s.stato === "annullata") { try { sessionStorage.removeItem(chiavePag); } catch { /* */ } return; }
     if (ora && (prima === false || (prima === null && segno))) {
       try { sessionStorage.removeItem(chiavePag); } catch { /* */ }
       setChiediConsegna(true);
@@ -295,7 +299,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
     if (dlg && dlg.k !== "consegna") return;   // si apre appena si chiude l'altro dialogo (es. «Pagamento ricevuto»)
     // eslint-disable-next-line react-hooks/set-state-in-effect -- richiesta di riconsegna consumata
     setChiediConsegna(false);
-    if (s.stato !== "pronto" || ro) return;
+    if (s.stato === "consegnato" || s.stato === "annullata" || ro) return;   // 18/11/2026 (63320/63200): non solo PRONTO
     toast.success(`Scheda ${s.sigla}: pagamento arrivato. Ora registra la riconsegna: come esce il dispositivo?`, { duration: 10000, id: `pagata-${s.id}` });
     if (!dlg) setDlg({ k: "consegna" });
   }, [chiediConsegna, s, dlg, sporca, busy, ro]);
@@ -1011,7 +1015,11 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         onRichiedi={async (body) => !!(await azione("richiesta-acconto", body, `Richiesta di acconto di ${eur(body.importo)} inviata`))}
         onScontrino={async (imp) => { if (sporca && !(await salva(true))) return; router.push(`/cassa?${new URLSearchParams({ scheda: s.id, acconto: imp.toFixed(2) })}`); }}
         onIncassato={async () => { setDlg(null); await ricarica(); onCambiata(); }} />}
-      {dlg?.k === "pagato" && <DialogoPagato s={s} onClose={() => setDlg(null)} onPagato={async (body, h) => !!(await azione("pagamento", body, "Pagamento registrato", [], h))} />}
+      {dlg?.k === "pagato" && <DialogoPagato s={s} onClose={() => setDlg(null)} onPagato={async (body, h) => {
+        const ok = !!(await azione("pagamento", body, "Pagamento registrato", [], h));
+        if (ok) schedaPagata(s.id);   // 18/11/2026 (Christian, 63320/63200): il pop-up globale si ricarica subito (forzato)
+        return ok;
+      }} />}
       {/* 15/11/2026 (piano 2.4): INCASSA E CONSEGNA in un flusso — con un saldo aperto si consegna solo con la spunta «senza incasso» */}
       {dlg?.k === "consegna" && <DialogoConsegna s={s} admin={admin} onClose={() => setDlg(null)}
         onScontrino={async () => { if (sporca && !(await salva(true))) return; router.push(`/cassa?scheda=${s.id}`); }}

@@ -13,10 +13,17 @@ import { Button } from "@/components/ui/button";
 import { SceltaOperatore, useOperatore } from "@/components/Operatore";
 import { fetchAPI } from "@/lib/api";
 import { toastErrore } from "@/lib/errori";
+import { puoAggiornare } from "@/lib/polling";
 
 export const EVENTO_DOPO_BONIFICO = "bonifici:dopo";
 /** Da chiamare dopo un abbinamento riuscito: la finestra si riapre con i dati aggiornati. */
 export function dopoBonifico() { window.setTimeout(() => window.dispatchEvent(new Event(EVENTO_DOPO_BONIFICO)), 1200); }
+// 18/11/2026 (Christian, 63320/63200): PAGATO registrato dalla scheda → il pop-up si ricarica subito (richiesta forzata).
+// La scheda appena pagata apre già da sola «Incassa e consegna»: per 2 minuti non si ripropone qui (niente doppia domanda);
+// se resta non consegnata ricompare al giro successivo.
+export const EVENTO_SCHEDA_PAGATA = "scheda:pagata";
+export function schedaPagata(id: string) { window.dispatchEvent(new CustomEvent(EVENTO_SCHEDA_PAGATA, { detail: { id } })); }
+const GESTITA_DALLA_SCHEDA_MS = 2 * 60 * 1000;
 
 type Passo = { scheda_id: string; sigla: string; cliente: string; stato: string; consegna: string; pagata: boolean; saldo: number;
   importo: number; azione: Azione; alternativa?: Azione; testo: string; fatto?: boolean };
@@ -25,7 +32,8 @@ type Voce = { incasso: { id: string; data: string; importo: number | string; ord
   documento_numero: string | null }; schede: Passo[]; da_fare: number };
 
 type Documento = { scheda_id: string; sigla: string; cliente: string; stato: string; consegna: string;
-  documento: { tipo: "fattura" | "scontrino"; numero: string | null; data: string | null; totale: number | string | null }; recensione: string | null };
+  // 18/11/2026 (63320/63200): «pagamento» = pagata (pulsante Pagato) senza fattura numerata né scontrino emesso
+  documento: { tipo: "fattura" | "scontrino" | "pagamento"; numero: string | null; data: string | null; totale: number | string | null; modo?: string | null }; recensione: string | null };
 
 const RIMANDA = "dopo_bonifico_rimandato";
 const SENZA = ["/login", "/forgot-password", "/reset-password"];
@@ -48,6 +56,7 @@ export function DopoBonifico() {
   const [operatore, setOperatore] = useOperatore();
 
   const ultimo = useRef(0);
+  const appenaPagate = useRef<Record<string, number>>({});
   const carica = useCallback((forza: boolean) => {
     if (SENZA.includes(path)) return;
     // 29/10/2026: al cambio pagina al massimo una richiesta al minuto (prima ogni navigazione chiamava il backend)
@@ -58,8 +67,10 @@ export function DopoBonifico() {
       fetchAPI("/api/assistenza/dopo-bonifici?giorni=3", undefined, false).catch(() => ({ bonifici: [] })),
       fetchAPI("/api/assistenza/dopo-documenti?giorni=3", undefined, false).catch(() => ({ schede: [] })),
     ]).then(([b, d]: [{ bonifici: Voce[] }, { schede: Documento[] }]) => {
-      setVoci(b.bonifici); setDocs(d.schede);
-      const n = b.bonifici.length + d.schede.length;
+      const ora = Date.now();
+      const schede = d.schede.filter((x) => !(ora - (appenaPagate.current[x.scheda_id] || 0) < GESTITA_DALLA_SCHEDA_MS));
+      setVoci(b.bonifici); setDocs(schede);
+      const n = b.bonifici.length + schede.length;
       let rimandato = 0;
       try { rimandato = Number(sessionStorage.getItem(RIMANDA) || 0); } catch { /* storage non disponibile */ }
       if (n && (forza || Date.now() - rimandato > 30 * 60 * 1000)) setAperto(true);
@@ -71,11 +82,24 @@ export function DopoBonifico() {
   useEffect(() => { carica(false); }, [carica]);
   useEffect(() => {
     const ev = () => carica(true);
+    const pagata = (e: Event) => {
+      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+      if (id) appenaPagate.current[id] = Date.now();
+      carica(true);
+    };
     window.addEventListener(EVENTO_DOPO_BONIFICO, ev);
-    return () => window.removeEventListener(EVENTO_DOPO_BONIFICO, ev);
+    window.addEventListener(EVENTO_SCHEDA_PAGATA, pagata);
+    return () => { window.removeEventListener(EVENTO_DOPO_BONIFICO, ev); window.removeEventListener(EVENTO_SCHEDA_PAGATA, pagata); };
     // solo all'avvio e sugli eventi: non a ogni cambio pagina
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // 18/11/2026 (Christian, 63320/63200): prima si ricontrollava SOLO al cambio pagina (scontrino o fattura fatti restando
+  // sulla stessa pagina → la domanda arrivava minuti dopo o mai). Ora un controllo al minuto, con la regola unica dei polling
+  // (niente a scheda nascosta o di notte senza attività). «Più tardi» resta valido 30 minuti.
+  useEffect(() => {
+    const t = window.setInterval(() => { if (puoAggiornare()) carica(false); }, 61 * 1000);
+    return () => window.clearInterval(t);
+  }, [carica]);
 
   function rimanda() {
     try { sessionStorage.setItem(RIMANDA, String(Date.now())); } catch { /* storage non disponibile */ }
@@ -131,12 +155,13 @@ export function DopoBonifico() {
   if (!aperto || (!voci.length && !docs.length)) return null;
   const n = voci.reduce((t, v) => t + v.da_fare, 0) + docs.length;
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-auto bg-black/40 p-3 sm:p-8" onClick={rimanda}>
+    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-auto bg-black/40 p-3 sm:p-8">
+      {/* 18/11/2026 (Christian, 63320/63200): un clic sullo sfondo NON rimanda più di 30 minuti: si chiude con ✕ o «Più tardi» */}
       <div className="w-full max-w-2xl rounded-xl bg-background shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b px-4 py-3">
           <Banknote className="size-5 text-emerald-600" />
           <div className="flex-1">
-            <div className="font-semibold">{voci.length ? "Bonifico arrivato: cosa fare adesso" : "Fattura o scontrino emesso: chiudo la scheda?"}</div>
+            <div className="font-semibold">{voci.length ? "Bonifico arrivato: cosa fare adesso" : "Pagata o documento emesso: chiudo la scheda?"}</div>
             <div className="text-xs text-muted-foreground">{n} {n === 1 ? "scheda aspetta" : "schede aspettano"} il passo successivo (avviso, spedizione o consegna)</div>
           </div>
           <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
@@ -146,7 +171,8 @@ export function DopoBonifico() {
           {docs.map((d) => (
             <div key={d.scheda_id} className="rounded-lg border">
               <div className="flex flex-wrap items-baseline gap-x-3 border-b bg-muted/40 px-3 py-2 text-sm">
-                <span className="font-semibold">{d.documento.tipo === "fattura" ? `Fattura ${d.documento.numero}` : `Scontrino ${d.documento.numero || ""}`}</span>
+                <span className="font-semibold">{d.documento.tipo === "fattura" ? `Fattura ${d.documento.numero}` : d.documento.tipo === "pagamento"
+                  ? `Pagata${d.documento.modo ? ` (${d.documento.modo})` : ""}` : `Scontrino ${d.documento.numero || ""}`}</span>
                 <span>{eur(d.documento.totale)}</span>
                 <a className="underline" href={`/assistenza?id=${d.scheda_id}`}>Scheda {d.sigla}</a> · {d.cliente}
               </div>

@@ -615,7 +615,17 @@ export function DialogoConsegna({ s, admin = false, onClose, onConsegna, onScont
   const motivoOk = admin && motivo.trim().length >= MOTIVO_MIN;
   const pronta = !!modo && (!serveIncasso || senzaIncasso) && (!forzatura || motivoOk) && (!onStampaRiconsegna || foglio || modo !== "ritiro")
     && (!conAccessori || accOk);
+  // 18/11/2026 (Christian, 63320/63200): la 63200 (DA SPEDIRE) è stata chiusa per errore «ritirato in negozio» al posto
+  // della 63320. Scheda da spedire + scelta «ritiro» → conferma esplicita con numero, cliente e modello in grande.
+  const daSpedire = s.consegna_modo === "spedizione" || (!s.consegna_modo && ["ar", "solo_ritorno"].includes(s.spedizione_tipo || ""));
   async function vai(m: string) {
+    if (m === "ritiro" && daSpedire) {
+      const cliente = [s.azienda, s.nominativo].filter(Boolean).join(" · ") || "cliente senza nome";
+      const modello = [s.prodotto, s.modello].filter(Boolean).join(" ") || "modello non indicato";
+      if (!(await conferma({ titolo: `Scheda ${s.sigla} era DA SPEDIRE: ritirata in negozio?`,
+        testo: `SCHEDA ${s.sigla}\nCLIENTE: ${cliente}\nMODELLO: ${modello}\n\nQuesta scheda era da spedire al cliente. Confermi che il cliente l'ha ritirata in negozio adesso? Controlla che sia la scheda giusta.`,
+        ok: `Sì, ${s.sigla} ritirata in negozio`, pericolo: true }))) return;
+    }
     setBusy(true);
     try { if (await onConsegna(m, forzatura, forzatura && motivoOk ? motivo.trim() : undefined)) onClose(); }
     catch (e) { if (eServeTitolare(e)) { setServeTitolare((e as Error).message); setSenzaIncasso(true); } else toastErrore(e); }
