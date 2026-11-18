@@ -1980,6 +1980,8 @@ export interface SpedPrecompilata {
   piva?: string; fonti?: string[];
   /** 09/10/2026: altri indirizzi noti dello stesso cliente (stessa P.IVA o nome), da scegliere con un clic */
   altri_indirizzi?: (SpedIndirizzo & { fonte: string })[];
+  /** 18/11/2026 (63386): il documento è di una scheda di assistenza → la spedizione si crea dalla scheda */
+  scheda?: { id: string; sigla: string } | null;
 }
 export const spedPrecompila = (l: LinkDocumento): Promise<SpedPrecompilata> => {
   const p = new URLSearchParams();

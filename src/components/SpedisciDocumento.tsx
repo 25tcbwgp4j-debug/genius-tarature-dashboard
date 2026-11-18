@@ -98,7 +98,16 @@ function FinestraSpedisci({ link, onChiudi, onFatta }: { link: LinkDocumento; on
   const chiudiRef = useRef(onChiudi);
   useEffect(() => { chiudiRef.current = onChiudi; });
   useEffect(() => {
-    spedPrecompila(JSON.parse(chiave)).then((p) => { setPre(p); setInd(p.controparte); setEmail(p.email); setRif(p.riferimento); setContenuto(p.contenuto); })
+    spedPrecompila(JSON.parse(chiave)).then((p) => {
+      // 18/11/2026 (Christian, 63386): documento di una SCHEDA → niente spedizione libera, si apre la spedizione della scheda
+      if (p.scheda?.id) {
+        toast.info(`Il documento è della scheda ${p.scheda.sigla}: la spedizione si crea dalla scheda`);
+        chiudiRef.current();
+        window.location.href = `/assistenza?id=${p.scheda.id}&az=spedisci`;
+        return;
+      }
+      setPre(p); setInd(p.controparte); setEmail(p.email); setRif(p.riferimento); setContenuto(p.contenuto);
+    })
       .catch((e) => { toastErrore(e); chiudiRef.current(); });
     spedStato().then(setStato).catch(() => undefined);
   }, [chiave]);
