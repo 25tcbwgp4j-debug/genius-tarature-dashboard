@@ -636,13 +636,13 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             <b>📌 DA GESTIRE</b> <span className="whitespace-pre-line">{s.nota_gestione}</span>
             <div className="text-xs opacity-80">Segnata{s.da_gestire_da ? ` da ${s.da_gestire_da}` : ""}{s.da_gestire_il ? ` il ${dataOra(s.da_gestire_il)}` : ""}</div>
           </div>
-          {admin && st !== "annullata" && <div className="flex flex-wrap gap-1">
+          {st !== "annullata" && <div className="flex flex-wrap gap-1">
             <Button size="sm" variant="outline" disabled={!!busy} onClick={notaGestione}>Modifica nota</Button>
-            <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700" disabled={!!busy} onClick={async () => {
+            {admin && <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700" disabled={!!busy} onClick={async () => {
               const esito = await chiediTesto({ titolo: `Scheda ${s.sigla} gestita?`, testo: `Nota: «${s.nota_gestione || ""}»\n\nLa scheda esce da «Da gestire». Nota ed esito restano nel registro.`,
                 etichetta: "Esito (facoltativo): cosa è stato fatto", segnaposto: "es. scritto al fornitore, reso autorizzato", ok: "✅ Gestita" });
               if (esito !== null) azione("da-gestire", { attivo: false, esito }, "Scheda gestita: tolta da «Da gestire»");
-            }}>✅ Gestita</Button>
+            }}>✅ Gestita</Button>}
           </div>}
         </div>)}
       {/* 30/10/2026 (Christian): notifiche da gestire della scheda, in alto finché non sono chiuse con l'esito */}
@@ -793,8 +793,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         {!ro && !["consegnato", "annullata"].includes(st) && !s.sola_lettura && (
           <Button size="sm" variant="outline" disabled={!!busy} onClick={() => setDlg({ k: "richiesta" })} title="Cosa chiede il cliente sul lavoro: arriva al tecnico e resta nelle note di riparazione"><NotebookPen />📝 Richiesta del cliente</Button>)}
         {/* 15/11/2026 (Christian): «Segna da gestire» con la nota (anche sulle consegnate: è un promemoria per il banco) */}
-        {/* 16/11/2026 (Christian): per ora solo il titolare */}
-        {admin && st !== "annullata" && !s.da_gestire && (
+        {/* 16/11/2026 (Christian): per ora solo il titolare · 19/11/2026 (Christian): anche gli operatori */}
+        {st !== "annullata" && !s.da_gestire && (
           <Button size="sm" variant="outline" className="border-red-300 text-red-800 hover:bg-red-50 dark:text-red-200 dark:hover:bg-red-950/40" disabled={!!busy} onClick={notaGestione}
             title="La scheda va nella voce «Da gestire» in cima al cruscotto, con la nota, finché qualcuno non la segna «Gestita». Al cliente non parte nulla."
             data-testid="segna-da-gestire">📌 Segna da gestire</Button>)}
