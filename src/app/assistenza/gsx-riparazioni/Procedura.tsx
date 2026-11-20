@@ -187,7 +187,7 @@ export function Procedura({ amb, info, sid, serialeIniziale, operatore, scorciat
   const difetti = (t: "CUST" | "TECH") => p.difetti.filter((d) => d.type === t);
   const cambiaDifetti = (t: "CUST" | "TECH", lista: Difetto[]) => set({ difetti: [...p.difetti.filter((d) => d.type !== t), ...lista] });
   const tecSel = tecnici.find((t) => t.id === p.tecnico);
-  const certOk = !tecSel || !prodotto || (prodotto.iphone ? tecSel.certificati.includes("iPhone") : prodotto.mac ? tecSel.certificati.includes("Mac") : true);
+  const certOk = amb === "uat" || !tecSel || !prodotto || (prodotto.iphone ? tecSel.certificati.includes("iPhone") : prodotto.mac ? tecSel.certificati.includes("Mac") : true);
 
   return (
     <div className="space-y-3" data-testid="gsx-procedura">
@@ -407,7 +407,7 @@ export function Procedura({ amb, info, sid, serialeIniziale, operatore, scorciat
               <p>Si salva prima la <b>bozza in GSX</b> (stato GX03 «Salvata per dopo», controllabile anche da GSX web), poi compare il riepilogo di Apple con i pulsanti per l&apos;invio.</p>
               <Button className="mt-2" disabled={!!busy || ro} onClick={salvaBozza}>{busy === "bozza" ? <Loader2 className="animate-spin" /> : <Save />}Verifica e salva la bozza</Button>
             </div>)}
-          {riep && <RiepilogoApple r={riep} rid={rid} amb={amb} />}
+          {riep && <RiepilogoApple r={riep} rid={rid} amb={amb} prezzi={Object.fromEntries(p.parti.map((x) => [x.number, x.prezzo ?? null]))} />}
           {esitoInvio && <MessaggiApple esito={esitoInvio} conferme={conferme} onConferma={(id, v) => setConferme((c) => ({ ...c, [id]: v }))} />}
           {riep && !inviata && (
             <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t bg-background/95 py-2 backdrop-blur">
@@ -443,10 +443,14 @@ function Riga({ k, v }: { k: string; v: React.ReactNode }) {
 }
 
 /** Il riepilogo come il pop-up «Riepilogo» di GSX: dispositivo, riparazione, parti e prezzi con copertura, note, opzioni. */
-export function RiepilogoApple({ r, rid, amb }: { r: Riepilogo; rid?: string; amb: Ambiente }) {
+export function RiepilogoApple({ r, rid, amb, prezzi }: { r: Riepilogo; rid?: string; amb: Ambiente; prezzi?: Record<string, number | null> }) {
   const d = r.dettaglio_apple;
-  const parti = d?.parti?.length ? d.parti.map((x) => ({ codice: x.codice, descrizione: x.descrizione, prezzo: x.prezzo, pagamento: x.a_pagamento,
-    copertura: x.copertura_opzione || x.copertura })) : r.parti.map((x) => { const id = r.idoneita?.parti.find((y) => y.codice === x.number);
+  // UAT 20/11: la BOZZA (GX03) non ha ancora prezzi né «a pagamento»: si usano l'idoneità Apple e il prezzo di sostituzione del ricambio
+  const idp = (c: string) => r.idoneita?.parti.find((y) => y.codice === c);
+  const parti = d?.parti?.length ? d.parti.map((x) => ({ codice: x.codice, descrizione: x.descrizione,
+    prezzo: x.prezzo ?? (idp(x.codice)?.a_pagamento ? prezzi?.[x.codice] ?? null : idp(x.codice) ? 0 : null),
+    pagamento: d.bozza ? (idp(x.codice)?.a_pagamento ?? x.a_pagamento) : x.a_pagamento,
+    copertura: x.copertura_opzione || x.copertura || idp(x.codice)?.copertura || null })) : r.parti.map((x) => { const id = r.idoneita?.parti.find((y) => y.codice === x.number);
     return { codice: x.number, descrizione: "", prezzo: null, pagamento: id?.a_pagamento ?? null, copertura: x.coverageOption || id?.copertura || null }; });
   const nota = (t: string) => r.note.find((n) => n.type === t)?.content;
   return (
@@ -477,7 +481,9 @@ export function RiepilogoApple({ r, rid, amb }: { r: Riepilogo; rid?: string; am
           <div key={i} className="flex flex-wrap items-center gap-2 text-sm"><b className="font-mono">{x.codice}</b><span className="min-w-0 flex-1">{x.descrizione}</span>
             <span className="text-xs">{x.copertura}</span><Pill tono={x.pagamento ? "ambra" : "verde"}>{x.pagamento === null ? "—" : x.pagamento ? "a pagamento" : "coperta"}</Pill>
             <b>{x.prezzo !== null && x.prezzo !== undefined ? euro(x.prezzo) : ""}</b></div>)) : <span className="text-sm">Nessuna parte</span>}
-        {d?.totale && <div className="mt-1 text-right text-sm">Totale Apple: <b>{euro(d.totale)}</b>{d.iva && d.iva !== "0.00" ? ` (IVA ${euro(d.iva)})` : ""}</div>}
+        {d?.bozza ? <div className="mt-1 text-right text-sm">Stima Apple (prezzo di sostituzione delle parti a pagamento): <b>{euro(parti.reduce((t, x) => t + (x.pagamento ? Number(x.prezzo) || 0 : 0), 0))}</b>
+          <span className="block text-[11px] text-muted-foreground">Il totale definitivo lo calcola Apple all&apos;invio.</span></div>
+          : d?.totale && <div className="mt-1 text-right text-sm">Totale Apple: <b>{euro(d.totale)}</b>{d.iva && d.iva !== "0.00" ? ` (IVA ${euro(d.iva)})` : ""}</div>}
       </Blocco>
       <Blocco t="Note">
         <Riga k="Cliente" v={nota("CUSTOMER_INTAKE_NOTES")} />
