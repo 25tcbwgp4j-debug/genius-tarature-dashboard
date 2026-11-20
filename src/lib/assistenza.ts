@@ -39,6 +39,8 @@ export interface Anagrafica { id: string; denominazione: string; piva?: string |
   referente?: string | null; indirizzo?: string | null; cap?: string | null; comune?: string | null; provincia?: string | null; paese?: string | null;
   sdi?: string | null; pec?: string | null; tipo_cliente?: "privato" | "azienda" | "rivenditore" | null; vuole_fattura?: boolean | null;
   cellulare?: string | null; cellulare_whatsapp?: string | null; email_contabilita?: string | null; email_altre?: string | null; email_cc?: string | null; no_whatsapp?: boolean | null; no_whatsapp_nota?: string | null; no_etichette?: boolean | null; no_etichette_nota?: string | null; lingua_doppia?: boolean | null;
+  /** 20/11/2026: id numerico della chat Telegram del cliente (le comunicazioni partono anche lì) */
+  telegram?: string | null;
   sped_presso?: string | null; sped_indirizzo?: string | null; sped_cap?: string | null; sped_comune?: string | null; sped_provincia?: string | null;
   note_cliente?: string | null; origine?: string | null; corriere_default?: string | null; pagamento_default?: string | null;
   telefoni_altri?: string | null; consegna_default?: string | null; ritiro_prenotazione?: boolean | null; ritorno_corriere?: string | null;
@@ -63,7 +65,7 @@ export interface Scheda extends SchedaBreve {
   /** 30/10/2026: notifiche da gestire APERTE della scheda */
   notifiche_gestire?: NotificaGestire[];
   dispositivi_aggiuntivi?: { n: number; descrizione: string; da?: string; il?: string; tolto_il?: string | null }[];
-  accessori: string | null; note: string | null; note_interne: string | null; trova_il_mio?: "attivo" | "risolto" | "non_necessario" | null; riconsegna_nota?: string | null; promemoria?: string | null; ricevuta_da_inviare?: boolean; cliente_no_whatsapp?: string | null; cliente_no_etichette?: string | null; lingua_doppia?: boolean | null; lingua_doppia_effettiva?: boolean; lingua_doppia_suggerita?: boolean; passaggio?: { da: string; a: string; testo: string; il: string; letto_il: string | null; letto_da: string | null } | null; comunicazione_cliente?: string | null; recensione_stato?: "inviata" | "non_inviare" | null; recensione_il?: string | null; pronto_prog_il?: string | null; pronto_prog_stato?: string | null; pronto_prog_esito?: string | null; pronto_prog_eseguito_il?: string | null; pronto_prog_da?: string | null;
+  accessori: string | null; note: string | null; note_interne: string | null; trova_il_mio?: "attivo" | "risolto" | "non_necessario" | null; riconsegna_nota?: string | null; promemoria?: string | null; ricevuta_da_inviare?: boolean; cliente_no_whatsapp?: string | null; cliente_telegram?: string | null; cliente_no_etichette?: string | null; lingua_doppia?: boolean | null; lingua_doppia_effettiva?: boolean; lingua_doppia_suggerita?: boolean; passaggio?: { da: string; a: string; testo: string; il: string; letto_il: string | null; letto_da: string | null } | null; comunicazione_cliente?: string | null; recensione_stato?: "inviata" | "non_inviare" | null; recensione_il?: string | null; pronto_prog_il?: string | null; pronto_prog_stato?: string | null; pronto_prog_esito?: string | null; pronto_prog_eseguito_il?: string | null; pronto_prog_da?: string | null;
   preventivo_prog_il?: string | null; preventivo_prog_stato?: string | null; preventivo_prog_esito?: string | null; preventivo_prog_eseguito_il?: string | null; preventivo_prog_da?: string | null; preventivo_prog_cambiato?: boolean;
   preventivo_prog_body?: { tipo?: string | null; nota?: string | null; invia_mail?: boolean; invia_wa?: boolean } | null; preventivo_righe: EstimateLine[]; preventivo_testo: string | null;
   lavorazione: string | null; esito: string | null; ricambi: string | null; pagamento_modo: string | null; pagamento_abituale?: string | null; operatore_accettazione: string | null;
@@ -124,7 +126,7 @@ export interface Situazione { titolo: string; dettaglio: string; chi: string; da
 export interface Avanzamento { passi: Passo[]; attuale: string | null; situazione?: Situazione;
   /** 26/10/2026: blocco «trova» = «Trova il mio» attivo; riconsegna = cosa si riconsegna davvero (es. solo l'hard disk) */
   prossimo: { azione?: string; testo?: string; blocco?: string; riconsegna?: string; avviso?: string; poi?: string; alternativa?: string } }
-export interface Comunicazione { id: string; tipo: string; canale: "mail" | "whatsapp"; descrizione: string; created_at: string; operatore: string | null;
+export interface Comunicazione { id: string; tipo: string; canale: "mail" | "whatsapp" | "telegram"; descrizione: string; created_at: string; operatore: string | null;
   esito: string | null; a: string | null; testo: string | null; link: string | null; oggetto: string | null }
 export interface VoceProposta { id: string; intervento: string; ipotesi: string | null; descrizione: string; prezzo: number | null; scontato_da: number | null;
   nota: string | null; da_verificare: boolean; fonte: string | null; modello: string | null; modello_chiave?: string | null; aggiornato_il: string | null; tipo_ricambio: string | null }
@@ -173,7 +175,7 @@ export interface Seriale { seriale: string; codice: string | null; modello: stri
   /** da dove viene il modello proposto: «scheda_precedente» (stesso seriale già passato) o «seriale» (decodifica) */
   fonte: "scheda_precedente" | "seriale" | null; fonte_testo: string; da_scheda: string | null; decodificato: string | null; famiglia_menu: string | null;
   prodotto_menu?: string | null; anno?: number | null }
-export interface Esito { programmato?: string; prova?: boolean; mail?: string; whatsapp?: string; whatsapp_testo?: string; whatsapp_link?: string | null;
+export interface Esito { programmato?: string; prova?: boolean; mail?: string; whatsapp?: string; telegram?: string; whatsapp_testo?: string; whatsapp_link?: string | null;
   /** 15/11/2026 (piano 5.4): scheda salvata PRONTO ma né mail né WhatsApp sono partiti */
   pronto_non_comunicato?: boolean }
 

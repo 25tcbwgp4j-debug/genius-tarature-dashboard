@@ -5,7 +5,7 @@
 // «Apri chat» (wa.me) — nessun invio automatico.
 import { useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, Copy, History, Mail, MessageCircle, MessagesSquare } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, History, Mail, MessageCircle, MessagesSquare, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { dataOra, FASI, type Comunicazione, type Scheda } from "@/lib/assistenza";
 import { Pill, Sezione } from "./ui";
@@ -16,6 +16,8 @@ export function copia(testo: string) {
 
 function esitoPill(c: Comunicazione) {
   if (c.esito === "inviata" || c.esito === "in_coda") return <Pill tono="verde">{c.canale === "mail" ? "inviata" : "in coda"}</Pill>;
+  if (c.esito === "consegnato") return <Pill tono="verde">consegnato</Pill>;
+  if (c.esito === "bloccato_destinatario") return <Pill tono="rosso">bloccato</Pill>;
   if (c.esito === "manuale") return <Pill tono="ambra">da mandare a mano</Pill>;
   if (c.esito === "saltata" || c.esito === "saltato") return <Pill>saltato</Pill>;
   if (c.esito === "errore") return <Pill tono="rosso">errore</Pill>;
@@ -33,13 +35,13 @@ export function Comunicazioni({ s }: { s: Scheda }) {
           {com.map((c) => (
             <div key={c.id} className="px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                {c.canale === "mail" ? <Mail className="size-4 text-muted-foreground" /> : <MessageCircle className="size-4 text-emerald-600" />}
-                <span className="font-medium">{c.canale === "mail" ? (c.oggetto || "Mail") : `WhatsApp${c.a ? ` a +${c.a}` : ""}`}</span>
+                {c.canale === "mail" ? <Mail className="size-4 text-muted-foreground" /> : c.canale === "telegram" ? <Send className="size-4 text-sky-600" /> : <MessageCircle className="size-4 text-emerald-600" />}
+                <span className="font-medium">{c.canale === "mail" ? (c.oggetto || "Mail") : c.canale === "telegram" ? `Telegram${c.a ? ` chat ${c.a}` : ""}` : `WhatsApp${c.a ? ` a +${c.a}` : ""}`}</span>
                 {esitoPill(c)}
                 <span className="ml-auto text-xs text-muted-foreground">{dataOra(c.created_at)}{c.operatore ? ` · ${c.operatore}` : ""}</span>
               </div>
               {c.canale === "mail" && c.a && <div className="text-xs text-muted-foreground">a {c.a}</div>}
-              {c.canale === "whatsapp" && c.testo && (
+              {c.canale !== "mail" && c.testo && (
                 <div className="mt-1">
                   <button type="button" className="flex items-center gap-1 text-xs text-muted-foreground" onClick={() => setAperti((x) => ({ ...x, [c.id]: !x[c.id] }))}>
                     {aperti[c.id] ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}testo</button>

@@ -143,6 +143,13 @@ export function SchedaClienteModal({ id, iniziale, onClose, onSalvato, onApriSch
                 {f.no_whatsapp && <input className={`${campo} mt-1.5`} value={f.no_whatsapp_nota || ""} placeholder="perché (es. usa il gruppo con noi)"
                   onChange={(e) => set("no_whatsapp_nota", e.target.value)} />}
               </div>
+              {/* 20/11/2026 (Christian, Carlo Totti): chat Telegram del cliente → preventivi, pronto, ricevute… partono anche su
+                  Telegram dall'account del negozio (AVA TECH), anche con «Niente WhatsApp». Solo l'ID NUMERICO (gli username si riassegnano). */}
+              <Campo label="Telegram (ID numerico della chat)" className="sm:col-span-3"
+                aiuto={f.telegram ? "Le comunicazioni delle schede partono ANCHE su Telegram dall'account del negozio (stesso testo del WhatsApp)" : "vuoto = niente Telegram · solo l'ID numerico (es. 241138582), non lo username"}>
+                <input className={campo} inputMode="numeric" value={f.telegram || ""} placeholder="es. 241138582"
+                  onChange={(e) => set("telegram", e.target.value.replace(/[^0-9]/g, ""))} />
+              </Campo>
               {/* 30/10/2026 (Christian, Archimedia/Zanella): niente etichette adesive sui dispositivi, solo nastro carta col numero */}
               <div className="sm:col-span-3 rounded-md border border-red-200 bg-red-50/60 p-2 dark:border-red-900 dark:bg-red-950/20">
                 <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" className="size-4" checked={!!f.no_etichette}
@@ -244,6 +251,7 @@ export function RiepilogoCliente({ a, nome, telefono, email }: { a: Anagrafica |
         {a && <PillTipo a={a} />}
         {a?.vuole_fattura && <Pill tono="blu">vuole fattura</Pill>}
         {a?.no_whatsapp && <Pill tono="rosso">🚫 niente WhatsApp</Pill>}
+        {a?.telegram && <Pill tono="blu">✈️ Telegram</Pill>}
         {a?.no_etichette && <Pill tono="rosso">🏷️🚫 niente etichette: nastro carta</Pill>}
         {a?.lingua_doppia && <Pill tono="blu">🇮🇹🇬🇧 comunicazioni IT + EN</Pill>}
         {!a && <Pill tono="ambra">non collegato alla rubrica</Pill>}

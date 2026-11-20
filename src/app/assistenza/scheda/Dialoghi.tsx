@@ -48,6 +48,7 @@ function Anteprima({ s, corpo }: { s: Scheda; corpo: Record<string, unknown> }) 
       <div className="rounded-lg border bg-emerald-50/40 p-2.5 text-sm dark:bg-emerald-950/20">
         <div className="mb-1 flex items-center gap-1.5 font-semibold"><MessageCircle className="size-3.5" />WhatsApp</div>
         <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{a.whatsapp}</pre>
+        {s.cliente_telegram && <div className="mt-1 text-[11px] font-medium text-sky-800 dark:text-sky-300">✈️ Lo stesso testo parte anche su Telegram (chat {s.cliente_telegram}){s.cliente_no_whatsapp ? ", anche se il cliente non vuole WhatsApp" : ""}.</div>}
         <div className="mt-1 text-[11px] text-muted-foreground">{s.prova ? "Scheda di prova: il WhatsApp non parte, resta da mandare a mano." : !s.wa_linea_attiva ? "Linea 334 in sola lettura: il WhatsApp non parte, resta da mandare a mano (Copia testo / Apri chat)." : "Parte dalla linea Apple 334 986 7400."}</div>
       </div>
     </div>
@@ -68,6 +69,7 @@ function EsitoInvio({ e }: { e: Esito }) {
       <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="size-4 text-emerald-600" />{e.programmato ? `Programmato: parte da solo il ${e.programmato}` : "Fatto"}</div>
       {e.mail && <div><Mail className="mr-1 inline size-3.5" />Mail: {e.mail}</div>}
       {e.whatsapp && <div><MessageCircle className="mr-1 inline size-3.5" />WhatsApp: {e.whatsapp}</div>}
+      {e.telegram && <div><Send className="mr-1 inline size-3.5" />Telegram: {e.telegram}</div>}
       {e.whatsapp_testo && e.whatsapp && !e.whatsapp.startsWith("in coda") && (
         <div className="flex flex-wrap gap-1.5">
           <Button size="sm" variant="outline" onClick={() => copia(e.whatsapp_testo || "")}><Copy />Copia testo</Button>

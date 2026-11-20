@@ -111,6 +111,7 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, o
             <div className="space-y-1">
               <div><Mail className="mr-1 inline size-4" />Ricevuta per mail: {es.mail || "—"}</div>
               <div><MessageCircle className="mr-1 inline size-4" />WhatsApp: {es.whatsapp || "—"}</div>
+              {es.telegram && <div>✈️ Telegram: {es.telegram}</div>}
               {es.whatsapp_testo && es.whatsapp && !es.whatsapp.startsWith("in coda") && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   <Button size="sm" variant="outline" onClick={() => copia(es.whatsapp_testo || "")}>Copia testo WhatsApp</Button>
