@@ -501,7 +501,8 @@ function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
   const router = useRouter();
   const [pre, setPre] = useState<BonPrecompilato | null>(null);
   const [operatore, setOperatore] = useOperatore();
-  const [sdi, setSdi] = useState(false);
+  // 20/11/2026 (Christian): la fattura del bonifico parte SUBITO allo SdI (prima restava in bozza: 4 fatture pagate mai emesse)
+  const [sdi, setSdi] = useState(true);
   const [busy, setBusy] = useState("");
   const [grande, setGrande] = useState(() => leggiCorreggi() !== id);
 
@@ -528,7 +529,7 @@ function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
     if (cf.esito === "eccedenza" && !window.confirm(`${cf.testo}\n\nConfermi l'incasso? L'eccedenza di ${eur(cf.eccedenza)} resta da gestire.`)) return;
     setBusy(azione);
     try {
-      const conSdi = sdi && (azione === "fattura" || azione === "ordine" || (azione === "quietanza" && p.tipo === "bozza"));
+      const conSdi = sdi && (azione === "fattura" || azione === "ordine" || p.tipo === "scheda" || (azione === "quietanza" && p.tipo === "bozza"));
       const r = await bonConferma(id, { operatore, azione, emetti: conSdi, crea_fattura: azione === "fattura" ? true : undefined });
       salvaCorreggi(null);
       if (r.scontrino) toast.success(`Scontrino di ${eur(r.scontrino.totale ?? pg.importo_da_registrare)} inviato al registratore, pagato con bonifico: il numero lo restituisce il registratore`, { duration: 10000 });
@@ -610,9 +611,9 @@ function ConfermaBonifico({ id, onFine }: { id: string; onFine: () => void }) {
 
         <SceltaOperatore value={operatore} onChange={setOperatore} compatto />
         {scontrino && <div className="text-xs text-muted-foreground">Scontrino: si batte sul registratore come pagamento elettronico (bonifico). Il numero dello scontrino lo restituisce il registratore: non va scritto a mano.</div>}
-        {fattura && (
+        {(fattura || p.tipo === "scheda") && (
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4" checked={sdi} onChange={(e) => setSdi(e.target.checked)} />
-            invia subito allo SdI (altrimenti la fattura resta in bozza da controllare)</label>
+            invia subito allo SdI (se togli la spunta la fattura resta in bozza da controllare)</label>
         )}
 
         <div className="flex flex-col gap-2">
