@@ -112,6 +112,7 @@ export const MENU_APPLE: Voce[] = [
   { href: "/assistenza/ricambi-da-ordinare", label: "Ricambi da ordinare", icon: ShoppingCart },
   { href: "/assistenza/voci", label: "Voci di preventivo", icon: ListChecks },
   { href: "/assistenza/gsx", label: "GSX Apple (seriale)", icon: Apple },
+  { href: "/assistenza/gsx-riparazioni", label: "Riparazioni Apple GSX", icon: Wrench },
   { href: "/assistenza/ricambi-gsx", label: "Ricambi GSX (costi)", icon: Wrench },
   { href: "/assistenza/prezzi-ufficiali", label: "Prezzi assistenza ufficiale", icon: Tags },
   { href: "/assistenza/magazzino-ricambi", label: "Magazzino ricambi (display, schede)", icon: Boxes },
