@@ -109,7 +109,7 @@ export function Procedura({ amb, info, sid, serialeIniziale, operatore, scorciat
       if (x.ricambio) setRicambi((r) => [x.ricambio!, ...x.alternative, ...r.filter((z) => z.codice !== x.ricambio!.codice)]);
       setIdon(null); setDomande(null); setRiep(null);
       toast.success(`${x.titolo}: ${x.difetto.nome}${x.ricambio ? ` · ricambio ${x.ricambio.codice}` : " · nessun ricambio trovato: sceglilo al passo 4"}${x.opzione_prezzo === "BAT" ? " · prezzo solo batteria" : ""}${x.copertura ? ` · copertura ${x.copertura}` : ""}`);
-      setPasso(x.scegli_difetto ? 1 : 2);
+      setPasso(1);   // 23/11/2026 (Christian, 63460): si apre sempre la DIAGNOSTICA, così si vede subito cliente + tecnico compilati
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
   useEffect(() => { if (scorciatoia && p.seriale && !avviata.current && tecnici.length) { avviata.current = true; Promise.resolve().then(() => applica(scorciatoia)); } });
