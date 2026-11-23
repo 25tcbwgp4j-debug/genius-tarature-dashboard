@@ -190,7 +190,9 @@ export function Procedura({ amb, info, sid, serialeIniziale, operatore, scorciat
   const difetti = (t: "CUST" | "TECH") => p.difetti.filter((d) => d.type === t);
   const cambiaDifetti = (t: "CUST" | "TECH", lista: Difetto[]) => set({ difetti: [...p.difetti.filter((d) => d.type !== t), ...lista] });
   const tecSel = tecnici.find((t) => t.id === p.tecnico);
-  const certOk = amb === "uat" || !tecSel || !prodotto || (prodotto.iphone ? tecSel.certificati.includes("iPhone") : prodotto.mac ? tecSel.certificati.includes("Mac") : true);
+  // 23/11/2026 (63460): anche in PROVA il tecnico conta (il tecnico di test Apple è certificato solo iPhone e Mac: un iPad dà TECHNICIAN_NOT_CERTIFIED)
+  const certOk = !tecSel || !prodotto || !tecSel.certificati.length || (prodotto.iphone ? tecSel.certificati.includes("iPhone") : prodotto.mac ? tecSel.certificati.includes("Mac")
+    : amb === "uat" ? false : true);
 
   return (
     <div className="space-y-3" data-testid="gsx-procedura">
@@ -203,6 +205,11 @@ export function Procedura({ amb, info, sid, serialeIniziale, operatore, scorciat
       {ro && <div className="rounded-lg border-2 border-red-500 bg-red-50 px-3 py-2 text-sm text-red-900 dark:bg-red-950/40 dark:text-red-100">
         🏭 PRODUZIONE bloccata: puoi leggere e preparare, ma bozza e invio sono fermi finché Christian non dà l&apos;ok. Usa 🧪 PROVA Apple.</div>}
       {idon && <MessaggiApple esito={idon} />}
+      {amb === "uat" && prodotto && !prodotto.iphone && !prodotto.mac && (
+        <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" data-testid="uat-non-certificato">
+          ⚠️ In PROVA Apple c&apos;è un solo tecnico di test, certificato solo per <b>iPhone e Mac</b>: con questo dispositivo Apple risponde
+          «tecnico non certificato». Per provare la procedura usa un seriale iPhone/Mac di prova; per questo dispositivo serve la PRODUZIONE.
+        </div>)}
 
       {passo === 0 && (
         <div className="space-y-3">
