@@ -5,16 +5,16 @@
 // Scorciatoie «Batteria iPhone» e «Display iPhone» (precompilano con i codici LETTI da Apple). Nessun codice Apple scritto a mano.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { BatteryCharging, CheckCircle2, ChevronLeft, ChevronRight, Loader2, Paperclip, Send, ShieldCheck, Smartphone, Trash2, Save } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, Paperclip, Send, ShieldCheck, Trash2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toastErrore } from "@/lib/errori";
 import { area, campo, Campo, Pill } from "../scheda/ui";
 import {
   ripAggiorna, ripAllegato, ripBozza, ripComponenti, ripDettaglio, ripDomande, ripIdoneita, ripInvia, ripModalitaRiparazione, ripProdotto,
-  ripProposta, ripRicambi, ripScheda, ripTecnici, risposteAlbero, domandeMancanti,
+  ripProposta, ripRicambi, ripScheda, ripScorciatoie, ripTecnici, risposteAlbero, domandeMancanti,
   type Ambiente, type Componente, type Dettaglio, type Difetto, type DomandeApple, type Esito, type Idoneita, type InfoAmbiente,
-  type Pratica, type Prodotto, type Ricambio, type Riepilogo, type Risposte, type Tecnico,
+  type Pratica, type Prodotto, type Ricambio, type Riepilogo, type Risposte, type Scorciatoia, type Tecnico,
 } from "@/lib/gsxRip";
 import { AlberoDomande, MessaggiApple, euro, dataOra, fileInBase64, tonoStato } from "./comuni";
 
@@ -34,8 +34,8 @@ const praticaVuota = (): Pratica => ({
   cliente: { nome: "", cognome: "", email: "", telefono: "", indirizzo: { via: "", citta: "", cap: "", provincia: "", paese: "ITA" } },
 });
 
-export function Procedura({ amb, info, sid, serialeIniziale, operatore, scorciatoia, onChiudi, onFatto }: {
-  amb: Ambiente; info: InfoAmbiente | null; sid?: string; serialeIniziale?: string; operatore?: string; scorciatoia?: string;
+export function Procedura({ amb, info, sid, serialeIniziale, operatore, scorciatoia, famiglia, onChiudi, onFatto }: {
+  amb: Ambiente; info: InfoAmbiente | null; sid?: string; serialeIniziale?: string; operatore?: string; scorciatoia?: string; famiglia?: string | null;
   onChiudi?: () => void; onFatto?: (rid: string) => void;
 }) {
   const [passo, setPasso] = useState(0);
@@ -56,6 +56,7 @@ export function Procedura({ amb, info, sid, serialeIniziale, operatore, scorciat
   const [dett, setDett] = useState<Dettaglio | null>(null);
   const [scelte, setScelte] = useState<{ codice: string; nome: string }[]>([]);
   const [compSel, setCompSel] = useState("");
+  const [rapide, setRapide] = useState<Scorciatoia[]>([]);
   const avviata = useRef(false);
   const set = (k: Partial<Pratica>) => setP((x) => ({ ...x, ...k }));
   const setCli = (k: Partial<Pratica["cliente"]>) => setP((x) => ({ ...x, cliente: { ...x.cliente, ...k } }));
@@ -87,6 +88,7 @@ export function Procedura({ amb, info, sid, serialeIniziale, operatore, scorciat
     try {
       const [pr, co] = await Promise.all([ripProdotto(s, amb), ripComponenti(s, amb)]);
       setProdotto(pr); setComponenti(co.componenti);
+      ripScorciatoie(famiglia || "", `${pr.famiglia || ""} ${pr.descrizione || ""}`).then((x) => setRapide(x.scorciatoie)).catch(() => {});
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }, [amb]);
   useEffect(() => { if (p.seriale) Promise.resolve().then(() => leggiProdotto(p.seriale)); }, [p.seriale, amb]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -98,15 +100,16 @@ export function Procedura({ amb, info, sid, serialeIniziale, operatore, scorciat
       const x = await ripProposta({ amb, s: p.seriale, scorciatoia: chiave, variante });
       if (!x.componente || !x.difetto) { toast.error("Apple non ha il componente/difetto atteso per questo modello: scegli a mano nel passo 2"); return; }
       const d = { componentCode: x.componente.codice, componentDescription: x.componente.nome, issueCode: x.difetto.codice, issueDescription: x.difetto.nome, reproducibility: "A" };
-      setScelte(chiave === "display_guasto" ? x.difetti_componente : []);
+      setScelte(x.scegli_difetto ? x.difetti_componente : []);
       setP((y) => ({ ...y, tipo: "CIN", difetti: [{ ...d, type: "CUST" }, { ...d, type: "TECH" }],
         parti: x.ricambio ? [{ number: x.ricambio.codice, descrizione: x.ricambio.descrizione, prezzo: x.ricambio.prezzo_sostituzione,
-          serializzato: x.ricambio.serializzato, ...(x.copertura ? { coverageOption: x.copertura } : {}) }] : [],
-        nota_cliente: y.nota_cliente || TESTI[chiave][0], nota_tecnico: y.nota_tecnico || TESTI[chiave][1] }));
+          serializzato: x.ricambio.serializzato, ...(x.copertura ? { coverageOption: x.copertura } : {}),
+          ...(x.opzione_prezzo ? { pricingOption: x.opzione_prezzo } : {}) }] : [],
+        nota_cliente: y.nota_cliente || x.nota_cliente || TESTI[chiave]?.[0] || "", nota_tecnico: y.nota_tecnico || x.nota_tecnico || TESTI[chiave]?.[1] || "" }));
       if (x.ricambio) setRicambi((r) => [x.ricambio!, ...x.alternative, ...r.filter((z) => z.codice !== x.ricambio!.codice)]);
       setIdon(null); setDomande(null); setRiep(null);
-      toast.success(`${x.titolo}: ${x.difetto.nome}${x.ricambio ? ` · ricambio ${x.ricambio.codice}` : " · nessun ricambio trovato"}${x.copertura ? ` · copertura ${x.copertura}` : ""}`);
-      setPasso(chiave === "display_guasto" ? 1 : 2);
+      toast.success(`${x.titolo}: ${x.difetto.nome}${x.ricambio ? ` · ricambio ${x.ricambio.codice}` : " · nessun ricambio trovato: sceglilo al passo 4"}${x.opzione_prezzo === "BAT" ? " · prezzo solo batteria" : ""}${x.copertura ? ` · copertura ${x.copertura}` : ""}`);
+      setPasso(x.scegli_difetto ? 1 : 2);
     } catch (e) { toastErrore(e); } finally { setBusy(""); }
   }
   useEffect(() => { if (scorciatoia && p.seriale && !avviata.current && tecnici.length) { avviata.current = true; Promise.resolve().then(() => applica(scorciatoia)); } });
@@ -203,15 +206,21 @@ export function Procedura({ amb, info, sid, serialeIniziale, operatore, scorciat
 
       {passo === 0 && (
         <div className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <div className="grid gap-2">
             <Campo label="Seriale / IMEI"><input className={campo} value={p.seriale} onChange={(e) => set({ seriale: e.target.value.toUpperCase().trim() })} onBlur={() => leggiProdotto(p.seriale)} /></Campo>
-            <div className="flex items-end gap-1.5">
-              <Button size="sm" variant="outline" disabled={!!busy} onClick={() => applica("batteria")}><BatteryCharging />Batteria iPhone</Button>
-              <Button size="sm" variant="outline" disabled={!!busy} onClick={() => applica("display_rotto")}><Smartphone />Display rotto</Button>
-              <Button size="sm" variant="outline" disabled={!!busy} onClick={() => applica("display_rotto", "singola")} title="Singola incrinatura">1 crepa</Button>
-              <Button size="sm" variant="outline" disabled={!!busy} onClick={() => applica("display_guasto")}>Display guasto</Button>
-            </div>
           </div>
+          {/* 23/11/2026 (Christian, 63500): TUTTI i tipi di riparazione della famiglia del dispositivo, non solo tre scorciatoie iPhone */}
+          {rapide.length > 0 && (
+            <div className="rounded-lg border bg-muted/30 p-2" data-testid="riparazioni-rapide">
+              <div className="mb-1 text-xs font-semibold">Tipo di riparazione — precompila difetto, ricambio e prezzo con i codici letti da Apple (poi si può cambiare tutto a mano)</div>
+              <div className="flex flex-wrap gap-1.5">
+                {rapide.map((r) => (
+                  <span key={r.chiave} className="flex gap-0.5">
+                    <Button size="sm" variant="outline" disabled={!!busy} onClick={() => applica(r.chiave)}>{r.titolo}</Button>
+                    {r.variante && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => applica(r.chiave, r.variante!)} title="Singola incrinatura sottile">1 crepa</Button>}
+                  </span>))}
+              </div>
+            </div>)}
           {busy === "prodotto" && <p className="text-sm text-muted-foreground"><Loader2 className="inline size-4 animate-spin" /> Leggo il dispositivo da Apple…</p>}
           {prodotto && (
             <div className="flex gap-3 rounded-lg border bg-muted/30 p-2 text-sm">

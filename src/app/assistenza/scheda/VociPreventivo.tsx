@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toastErrore } from "@/lib/errori";
-import { assProposte, eur, type Combo, type Proposte, type VoceProposta, type ApparecchioAttuale } from "@/lib/assistenza";
+import { assProposte, eur, type Combo, type Proposte, type RiferimentoPrezzi, type VoceProposta, type ApparecchioAttuale } from "@/lib/assistenza";
 import { cn } from "@/lib/utils";
 import { Pill, campo } from "./ui";
 
@@ -130,10 +130,11 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
                 {c.fonte === "prezzi_ufficiali" && <Pill tono="blu" title="Prezzi dalla pagina Prezzi ufficiali (GSX + regole del titolare)">prezzi ufficiali</Pill>}
                 {/* 12/11/2026: prezzi letti su GSX alla Decodifica della scheda (campo gsx), o confronto col listino */}
                 {c.fonte === "gsx" && <Pill tono="blu" title={`Prezzi calcolati dal costo Apple letto su GSX alla Decodifica${c.codice ? ` · ricambio ${c.codice}` : ""}`}>GSX{c.gsx_letto_il ? ` ${new Date(c.gsx_letto_il).toLocaleDateString("it-IT")}` : ""}</Pill>}
-                {c.nota_gsx && <Pill tono="ambra" title="Il prezzo del listino non coincide con il calcolo di oggi dal costo GSX: decidere quale vale">{c.nota_gsx}</Pill>}
+                {c.nota_gsx && !c.riferimento && <Pill tono="ambra" title="Il prezzo del listino non coincide con il calcolo di oggi dal costo GSX: decidere quale vale">{c.nota_gsx}</Pill>}
                 {c.fonte === "prezzi_ufficiali" && c.gsx_letto_il && !c.nota_gsx && <Pill tono="verde" title="Prezzo del listino uguale al calcolo dal costo GSX letto alla Decodifica">= GSX</Pill>}
                 {[c.fissa, c.uno, c.due, c.tre].some((v) => v?.da_verificare) && <Pill tono="ambra" title="Prezzi dello storico che non collimano: verificare su GSX">da verificare</Pill>}
               </div>
+              {c.riferimento && <Prezzi r={c.riferimento} pubblico={c.uno?.prezzo ?? c.due?.prezzo ?? null} />}
               <div className="space-y-1 text-[13px]">
                 {([["Fissa", c.fissa], ["1ª", c.uno], ["2ª", c.due], [c.fissa ? "Extra" : "3ª +", c.tre]] as const).map(([n, v]) => v && (
                   <div key={n} className="flex items-start gap-2">
@@ -199,6 +200,7 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
                 <div key={v.id} className="flex flex-wrap items-center gap-2 px-2.5 py-1.5 text-sm">
                   <span className="min-w-0 flex-1">{v.descrizione}{mostraModello && v.modello ? <span className="text-xs text-muted-foreground"> · {v.modello}</span> : null}</span>
                   {v.da_verificare && <Pill tono="ambra">da verificare</Pill>}
+                  {v.riferimento && <span className="w-full text-[11px] text-muted-foreground" data-testid="prezzi-voce">A noi {eur(v.riferimento.a_noi)} ({eur(v.riferimento.a_noi_netto)} + IVA){v.riferimento.apple != null ? ` · Apple al pubblico ${eur(v.riferimento.apple)}` : ""}{v.riferimento.gsx_ivato != null ? ` · GSX +10% ${eur(v.riferimento.gsx_ivato)}` : ""}</span>}
                   <b className="w-20 text-right tabular-nums">{v.prezzo != null ? eur(v.prezzo) : "—"}</b>
                   <span className="flex gap-1">
                     <Button size="xs" variant="outline" onClick={() => onVoce(v, "ipotesi")} title="Nuova ipotesi alternativa"><Plus />ipotesi</Button>
@@ -213,4 +215,20 @@ export function VociPreventivo({ idScheda, modelloScheda, attuale, chiave, accet
       )}
     </div>
   );
+}
+
+/** 23/11/2026 (Christian, 63500): i prezzi SEMPRE insieme — a noi (il più basso fra listino Apple al pubblico e GSX +10%),
+ *  quanto ci fattura il centro Apple (+ IVA), Apple al pubblico, GSX e il nostro prezzo al pubblico */
+function Prezzi({ r, pubblico }: { r: RiferimentoPrezzi; pubblico: number | null }) {
+  const cella = "rounded-md border px-1.5 py-1";
+  return (
+    <div className="mb-1.5 grid grid-cols-2 gap-1 text-[11px] sm:grid-cols-4" data-testid="prezzi-riferimento">
+      <div className={cn(cella, "border-emerald-300 bg-emerald-50 text-emerald-950 dark:bg-emerald-950/30 dark:text-emerald-100")}>
+        <div className="font-semibold">Prezzo a noi</div><b className="tabular-nums">{eur(r.a_noi)}</b>
+        <div className="opacity-80">{eur(r.a_noi_netto)} + IVA · da {r.a_noi_da === "apple" ? "listino Apple" : "GSX"}</div></div>
+      <div className={cella}><div className="font-semibold">Apple al pubblico</div><b className="tabular-nums">{r.apple != null ? eur(r.apple) : "—"}</b></div>
+      <div className={cella}><div className="font-semibold">GSX +10% (IVA incl.)</div><b className="tabular-nums">{r.gsx_ivato != null ? eur(r.gsx_ivato) : "—"}</b></div>
+      <div className={cn(cella, "border-primary/40 bg-primary/5")}><div className="font-semibold">Nostro al pubblico</div><b className="tabular-nums">{pubblico != null ? eur(pubblico) : "—"}</b>
+        {pubblico != null && <div className="opacity-80">margine {eur(Math.round((pubblico - r.a_noi) * 100) / 100)}</div>}</div>
+    </div>);
 }

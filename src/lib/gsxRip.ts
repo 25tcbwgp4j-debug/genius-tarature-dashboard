@@ -86,7 +86,13 @@ export const ripComponenti = (s: string, amb: Ambiente) => get<{ componenti: Com
 export const ripRicambi = (b: { amb: Ambiente; s: string; tipo?: string; difetti?: Difetto[]; testo?: string }) => post<{ ricambi: Ricambio[] }>("/ricambi", b);
 export const ripProposta = (b: { amb: Ambiente; s: string; scorciatoia: string; variante?: string }) =>
   post<{ titolo: string; componente: { codice: string; nome: string } | null; difetto: { codice: string; nome: string } | null; ricambio: Ricambio | null;
-    alternative: Ricambio[]; copertura: string | null; difetti_componente: { codice: string; nome: string }[] }>("/proposta", b);
+    alternative: Ricambio[]; copertura: string | null; difetti_componente: { codice: string; nome: string }[];
+    /** 23/11/2026: opzione di prezzo Apple del ricambio (BAT = programma batteria), unità intera, difetto da confermare, note pronte */
+    opzione_prezzo?: string | null; integrale?: boolean; scegli_difetto?: boolean; nota_cliente?: string; nota_tecnico?: string }>("/proposta", b);
+/** 23/11/2026 (Christian, 63500): i tipi di riparazione rapidi della famiglia del dispositivo (non solo le tre scorciatoie iPhone) */
+export type Scorciatoia = { chiave: string; titolo: string; integrale: boolean; variante: string | null };
+export const ripScorciatoie = (famiglia = "", descrizione = "") =>
+  get<{ gruppo: string; scorciatoie: Scorciatoia[] }>(`/scorciatoie?famiglia=${encodeURIComponent(famiglia)}&descrizione=${encodeURIComponent(descrizione)}`);
 export const ripScheda = (sid: string) => get<{ scheda: { id: string; sigla: string; seriale: string | null; modello: string | null; difetto: string | null; note: string | null;
   ricevuta_il: string | null; tecnico: string | null }; cliente: ClienteGsx; po: string; difetti_apple: { componentCode: string; componentDescription?: string; issueCode: string; issueDescription?: string; reproducibility?: string }[];
   riparazioni: RigaRiparazione[] }>(`/scheda/${sid}`);

@@ -129,12 +129,18 @@ export interface Avanzamento { passi: Passo[]; attuale: string | null; situazion
 export interface Comunicazione { id: string; tipo: string; canale: "mail" | "whatsapp" | "telegram"; descrizione: string; created_at: string; operatore: string | null;
   esito: string | null; a: string | null; testo: string | null; link: string | null; oggetto: string | null }
 export interface VoceProposta { id: string; intervento: string; ipotesi: string | null; descrizione: string; prezzo: number | null; scontato_da: number | null;
-  nota: string | null; da_verificare: boolean; fonte: string | null; modello: string | null; modello_chiave?: string | null; aggiornato_il: string | null; tipo_ricambio: string | null }
+  nota: string | null; da_verificare: boolean; fonte: string | null; modello: string | null; modello_chiave?: string | null; aggiornato_il: string | null; tipo_ricambio: string | null;
+  /** 23/11/2026: regola generale dei prezzi (listino Apple al pubblico + GSX): prezzo a noi, Apple, nostro al pubblico */
+  riferimento?: RiferimentoPrezzi | null; nota_prezzi?: string | null }
+/** 23/11/2026 (Christian, 63500): a_noi = il più basso fra Apple al pubblico e GSX +10% (IVA inclusa); a_noi_netto = quello che ci fattura il centro Apple */
+export interface RiferimentoPrezzi { apple: number | null; gsx: number | null; gsx_ivato: number | null; a_noi: number; a_noi_netto: number;
+  a_noi_da: "apple" | "gsx"; proposto: number; listino: number }
 export interface ModelloVoci { chiave: string; nome: string; anno: number | null; pollici: number | null; voci: number }
 /** COMBO «1ª + 2ª ipotesi abbinate» dello stesso intervento e modello (+ 3ª aggiungibile) — 05/10/2026 §10.2 */
 export interface Combo { fonte?: string;  modello_chiave: string | null; modello: string | null; intervento: string; etichetta: string;
   /** 12/11/2026: combo dai prezzi GSX letti alla Decodifica (fonte «gsx»), o nota di confronto sulla combo del listino */
   gsx_letto_il?: string | null; nota_gsx?: string | null; codice?: string | null; costo_gsx?: number | null;
+  riferimento?: RiferimentoPrezzi | null;
   uno: VoceProposta | null; due: VoceProposta | null; tre: VoceProposta | null;
   /** 04/11/2026 (Christian): aggiornamento OpenCore, voce fissa senza ipotesi (con «tre» come extra) */
   fissa?: VoceProposta | null;

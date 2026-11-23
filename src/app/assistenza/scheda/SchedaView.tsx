@@ -50,7 +50,7 @@ import { CampiAccettazioneOpencore, RiquadroOpencore } from "./OpenCore";
 
 type Bozza = Partial<Scheda>;
 type Dialogo = null | { k: "acconto"; inizio: "invia" | "incassa" } | { k: "invio"; tipo: TipoInvio } | { k: "chiudi_tutto" } | { k: "esito" } | { k: "pronto" } | { k: "pagato" } | { k: "consegna" } | { k: "corriere" } | { k: "stesso" } | { k: "cliente" }
-  | { k: "richiesta" } | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" } | { k: "stato_riparazione"; stato: string } | { k: "trova_dopo_preventivo" } | { k: "salta_preventivo" };
+  | { k: "richiesta" } | { k: "assegna_verifica" } | { k: "chiudi_verifica" } | { k: "assegna_riparazione" } | { k: "assegna_rimontaggio" } | { k: "cambia_stato" } | { k: "stato_riparazione"; stato: string } | { k: "trova_dopo_preventivo" } | { k: "trova_ostativo" } | { k: "salta_preventivo" };
 
 function bozzaPreventivo(m: Partial<Scheda>): BozzaPreventivo {
   return { righe: (m.preventivo_righe as EstimateLine[]) || [], diagnosi: m.preventivo?.diagnosi || "", note: m.preventivo?.note || "",
@@ -750,7 +750,7 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       {/* 16/11/2026 (Christian): riparazione ufficiale Apple → prima si apre in GSX, poi va al tecnico */}
       <GsxUfficiale s={s} ro={ro} operatore={operatore || ""} onScheda={(x) => { setS(x); onCambiata(); }} />
       {/* 20/11/2026 (G-14): apri e gestisci la riparazione Apple GSX dalla scheda (PROVA Apple / PRODUZIONE) */}
-      <GsxRiparazioniScheda key={`gsxrip-${s.id}`} sid={s.id} seriale={s.seriale || s.imei} ro={ro} operatore={operatore || ""} onCambiata={async () => { await ricarica(); onCambiata(); }} />
+      <GsxRiparazioniScheda key={`gsxrip-${s.id}`} sid={s.id} seriale={s.seriale || s.imei} famiglia={s.famiglia} descrizione={`${s.prodotto || ""} ${s.modello || ""}`} ro={ro} operatore={operatore || ""} onCambiata={async () => { await ricarica(); onCambiata(); }} />
       {/* 30/10/2026: preventivo e pronto programmati (come le Tarature): Invia subito · Modifica orario · Annulla, poi l'esito */}
       <InviiProgrammati key={`prog-${s.id}-${s.preventivo_prog_il}-${s.pronto_prog_il}`} s={s} ro={ro} operatore={operatore || ""} onScheda={(x) => { setS(x); onCambiata(); }} />
       {/* 28/10/2026 (Christian, 63251): WhatsApp NON consegnati — di solito il cellulare in scheda è sbagliato */}
@@ -879,7 +879,9 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         <Piega id="apparecchio" nome="Apparecchio e GSX" chiusa={!!chiuse.apparecchio} onApri={() => toggleSez("apparecchio")} riassunto={`${v("prodotto") || "—"} · ${v("modello") || ""} · S/N ${v("seriale") || "—"}`}>
         <Sezione titolo="Apparecchio" icona={<FileText />} sottotitolo={`accettato ${dataOra(s.fasi?.accettazione?.il || s.created_at)}${s.operatore_accettazione ? ` · ${s.operatore_accettazione}` : ""}`}>
           <Apparecchio v={appV} set={(k, val) => set(k as keyof Scheda, val)} ro={ro} famiglie={cfg?.famiglie} prodotti={cfg?.prodotti} idScheda={s.id} onApri={onApri}
-            operatore={operatore} onSchedaAggiornata={(n) => { setS(n); onCambiata(); }} onInserisci={inserisciDaGsx}
+            operatore={operatore} onSchedaAggiornata={(n) => { setS(n); onCambiata();
+              // 23/11/2026 (Christian, 63500): Apple dice «Trova il mio» ATTIVO → si chiede SUBITO se è ostativo per questa riparazione
+              if (n.gsx?.trova_verifica?.stato === "attivo" && !["non_necessario", "risolto"].includes(n.trova_il_mio || "") && !["consegnato", "annullata"].includes(n.stato)) setDlg({ k: "trova_ostativo" }); }} onInserisci={inserisciDaGsx}
             onTrova={() => trova("attivo")} trovaAttivo={s.trova_il_mio === "attivo" || s.riparazione_stato === "disabilitare_trova"} />
         </Sezione>
         </Piega>
@@ -995,6 +997,26 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
         if (r && (dlg.tipo === "preventivo" || dlg.tipo === "aggiornamento") && !body.programma_il && s.trova_il_mio === "attivo" && s.gsx?.trova_verifica?.stato === "attivo") trovaDopoInvio.current = true;   // 13/11: solo se lo conferma Apple
         return r ? (r.esito as Esito) : null;
       }} />}
+      {dlg?.k === "trova_ostativo" && (
+        <Modale titolo="🔒 «Trova il mio» è ATTIVO (verificato da Apple)" onClose={() => setDlg(null)} piedi={<>
+          <Button variant="outline" onClick={() => setDlg(null)}>Decido dopo</Button>
+          <Button variant="outline" disabled={!!busy} data-testid="trova-non-ostativo" onClick={async () => {
+            if (await azione("trova", { azione: "non_necessario" }, "«Trova il mio» non ostativo: si procede")) setDlg(null);
+          }}>No, non è ostativo: si procede</Button>
+          <Button variant="destructive" disabled={!!busy} data-testid="trova-ostativo" onClick={async () => {
+            if (await azione("trova", { azione: "invia" }, "«Trova il mio» ostativo: comunicazione inviata al cliente (mail + WhatsApp)")) setDlg(null);
+          }}>{busy && <Loader2 className="animate-spin" />}Sì, è ostativo: avvisa subito il cliente</Button>
+        </>}>
+          <div className="space-y-2 text-sm">
+            <p>Apple ha verificato adesso che su questo dispositivo <b>«Trova il mio» è attivo</b>{s.gsx?.trova_verifica?.messaggio ? <> («{s.gsx.trova_verifica.messaggio}»)</> : null}.</p>
+            <p><b>È ostativo per questa riparazione?</b></p>
+            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+              <li><b className="text-foreground">Sì</b>: riparazioni che passano da Apple (sostituzione integrale, programma batteria, garanzia, ricambi ufficiali GSX). Parte subito al cliente, per mail e WhatsApp, la comunicazione con le istruzioni per disattivarlo, e la riparazione resta bloccata finché non lo fa.</li>
+              <li><b className="text-foreground">No</b>: riparazioni fatte da noi senza Apple. La scheda prosegue e il cliente non riceve nulla.</li>
+            </ul>
+          </div>
+        </Modale>
+      )}
       {dlg?.k === "trova_dopo_preventivo" && (
         <Modale titolo="«Trova il mio» è attivo" onClose={() => setDlg(null)} piedi={<>
           <Button variant="outline" onClick={() => setDlg(null)}>Non ora</Button>
@@ -1246,13 +1268,13 @@ function BannerScheda({ s, ro, onTrova, onIstruzioni, onPreventivo }: { s: Sched
       {trovaAttivo && !chiusa && !finita && (
         <div className={`flex flex-wrap items-center gap-2 rounded-xl border-2 px-3 py-2 text-sm ${bloccata
           ? "border-red-400 bg-red-50 text-red-950 dark:bg-red-950/30 dark:text-red-100" : "border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"}`}>
-          <b>{bloccata ? "🔒 «TROVA IL MIO» ATTIVO — RIPARAZIONE BLOCCATA." : "🔒 «TROVA IL MIO» ATTIVO — da disattivare DOPO l'accettazione del preventivo."}</b>
+          <b>{bloccata ? "🔒 «TROVA IL MIO» ATTIVO — RIPARAZIONE BLOCCATA." : "🔒 «TROVA IL MIO» ATTIVO — è ostativo per questa riparazione?"}</b>
           <span>Il cliente deve abilitare la riparazione (Dov&apos;è → Riparazione o permuta) oppure rimuovere il dispositivo dall&apos;account.</span>
           {!ro && <span className="flex flex-wrap gap-1 sm:ml-auto">
             {!bloccata && <Button size="xs" variant="outline" onClick={onPreventivo} title="Scrive l'avviso nelle note del preventivo (va nel PDF)">Inserisci nel preventivo</Button>}
-            <Button size="xs" variant="destructive" onClick={onIstruzioni}>Invia istruzioni (mail + WhatsApp)</Button>
+            <Button size="xs" variant="destructive" onClick={onIstruzioni} title="Ostativo: parte al cliente la comunicazione con le istruzioni per disattivarlo">Sì, ostativo: avvisa il cliente (mail + WhatsApp)</Button>
+            <Button size="xs" variant="outline" onClick={() => onTrova("non_necessario")} title="Riparazione che non passa da Apple: si sblocca senza far disattivare «Trova il mio»">No, non ostativo: sblocca</Button>
             <Button size="xs" variant="outline" onClick={() => onTrova("risolto")}>Il cliente l&apos;ha fatto: si procede</Button>
-            <Button size="xs" variant="outline" onClick={() => onTrova("non_necessario")} title="Riparazione che non passa da Apple: si sblocca senza far disattivare «Trova il mio»">Non serve per questa riparazione: sblocca</Button>
           </span>}
         </div>
       )}
