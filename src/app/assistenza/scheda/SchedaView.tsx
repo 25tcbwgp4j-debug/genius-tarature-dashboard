@@ -639,11 +639,12 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
           </div>
           {st !== "annullata" && <div className="flex flex-wrap gap-1">
             <Button size="sm" variant="outline" disabled={!!busy} onClick={notaGestione}>Modifica nota</Button>
-            {admin && <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700" disabled={!!busy} onClick={async () => {
+            {/* 25/11/2026 (Christian): «Gestita» la possono premere tutti, non solo il titolare */}
+            <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700" disabled={!!busy} onClick={async () => {
               const esito = await chiediTesto({ titolo: `Scheda ${s.sigla} gestita?`, testo: `Nota: «${s.nota_gestione || ""}»\n\nLa scheda esce da «Da gestire». Nota ed esito restano nel registro.`,
                 etichetta: "Esito (facoltativo): cosa è stato fatto", segnaposto: "es. scritto al fornitore, reso autorizzato", ok: "✅ Gestita" });
               if (esito !== null) azione("da-gestire", { attivo: false, esito }, "Scheda gestita: tolta da «Da gestire»");
-            }}>✅ Gestita</Button>}
+            }}>✅ Gestita</Button>
           </div>}
         </div>)}
       {/* 30/10/2026 (Christian): notifiche da gestire della scheda, in alto finché non sono chiuse con l'esito */}
