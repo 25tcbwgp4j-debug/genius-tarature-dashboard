@@ -723,7 +723,13 @@ export default function SessionsPage() {
 
                   {/* Riga 2: meta-info */}
                   <p className="text-xs text-gray-500">
-                    {s.session_date ? String(s.session_date).slice(0, 10).split("-").reverse().join("/") : "—"} · {s.total_instruments || 0} strum. · {s.operator || "—"}
+                    {/* 26/11/2026 (Christian): nata provvisoria → prima la data in cui è diventata ufficiale, poi il P-xxx e quando era stata creata */}
+                    {s.session_number != null && s.provisional_number && (s as { numero_definitivo_at?: string | null }).numero_definitivo_at ? (
+                      <>
+                        <span className="font-medium text-gray-700">ufficiale dal {new Date((s as { numero_definitivo_at?: string }).numero_definitivo_at as string).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" })}</span>
+                        {" "}(era <span className="font-mono">{s.provisional_number}</span>{(s as { created_at?: string }).created_at ? `, creata il ${new Date((s as { created_at?: string }).created_at as string).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" })}` : ""})
+                      </>
+                    ) : (s.session_date ? String(s.session_date).slice(0, 10).split("-").reverse().join("/") : "—")} · {s.total_instruments || 0} strum. · {s.operator || "—"}
                   </p>
 
                   {/* Riga 3: notifiche inviate + RDT */}

@@ -589,6 +589,16 @@ export default function SessionDetail() {
       if (em && typeof em === "object" && em.error) {
         toast.error(`Email NON inviata: ${String(em.error).slice(0, 200)}`);
       }
+      // 26/11/2026 (sess. 298): invio SALTATO dal server (cliente «non contattare», sessione in attesa…) → si dice,
+      // prima usciva «inviata» anche se non era partito nulla
+      const saltato = res?.notifications?.skipped || res?.notifications?.error;
+      if (saltato && !(wa && typeof wa === "object" && wa.ok) && !(em && typeof em === "object" && !em.error)) {
+        const perche = saltato === "do_not_contact" ? "il cliente è segnato «non contattare» (toglilo dall'anagrafica o usa un altro canale)"
+          : saltato === "attesa_strumenti" ? "la sessione è in attesa strumenti" : String(saltato).slice(0, 200);
+        toast.error(`NON inviato: ${perche}`, { duration: 15000 });
+        await loadSession();
+        return;
+      }
       let detail = successMsg;
       if (wa && typeof wa === "object") {
         if (wa.ok) {
@@ -1552,7 +1562,11 @@ export default function SessionDetail() {
             <span className="text-gray-500">N. sessione:</span>
             <p className="font-mono">{session.session_number ?? (session.provisional_number ? `${session.provisional_number} (provvisorio)` : "—")}</p>
             {session.session_number != null && session.provisional_number && (
-              <p className="font-mono text-xs text-gray-400">era {session.provisional_number}</p>
+              <p className="text-xs text-gray-500">
+                {session.numero_definitivo_at ? `ufficiale dal ${new Date(session.numero_definitivo_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" })} · ` : ""}
+                era <span className="font-mono">{session.provisional_number}</span>
+                {session.created_at ? `, creata il ${new Date(session.created_at).toLocaleDateString("it-IT", { timeZone: "Europe/Rome" })}` : ""}
+              </p>
             )}
             <p className="font-mono text-xs text-gray-400">ID {session.id?.substring(0, 8)}</p>
           </div>
