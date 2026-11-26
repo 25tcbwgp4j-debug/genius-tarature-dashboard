@@ -521,7 +521,7 @@ function Pagina() {
             const scaduta = f.pagamento_stato !== "pagata" && f.scadenza && f.scadenza < oggiRoma();
             return (
               <button key={f.id} type="button" disabled={!!f.scontrino_archivio} onClick={() => setAperta(f.id)}
-                className="block w-full rounded-xl border bg-card p-3 text-left text-sm shadow-sm disabled:opacity-90">
+                className={`block w-full rounded-xl border p-3 text-left text-sm shadow-sm disabled:opacity-90 ${f.stato === "bozza" ? "border-orange-500 bg-orange-500/15" : "bg-card"}`}>
                 <div className="flex items-baseline gap-2">
                   <b>{f.numero || "bozza"}</b><span className="text-xs text-muted-foreground">{dataIt(f.data)}</span>
                   {f.tipo_documento !== "TD01" && <span className="text-xs text-muted-foreground">{TIPI_LABEL[f.tipo_documento] || f.tipo_documento}</span>}
@@ -560,14 +560,14 @@ function Pagina() {
                 const trovate = qRighe.trim() && f.righe_trovate?.length ? f.righe_trovate : null;
                 return (
                   <Fragment key={f.id}>
-                  <tr className={`${f.scontrino_archivio ? "bg-teal-500/5" : "cursor-pointer hover:bg-muted/50"} ${trovate ? "" : "border-b last:border-0"}`}
+                  <tr className={`${f.scontrino_archivio ? "bg-teal-500/5" : f.stato === "bozza" ? "cursor-pointer bg-orange-500/15 hover:bg-orange-500/25" : "cursor-pointer hover:bg-muted/50"} ${trovate ? "" : "border-b last:border-0"}`}
                     onClick={() => { if (!f.scontrino_archivio) setAperta(f.id); }}
                     title={f.scontrino_archivio ? "Scontrino (documento commerciale) emesso con SimplyFatt e trasmesso all'Agenzia delle Entrate — dettaglio nella scheda «Scontrini (archivio)»" : undefined}>
                     <td className="p-2" onClick={(e) => e.stopPropagation()}>
                       {!f.scontrino_archivio && <input type="checkbox" checked={!!sel[f.id]} onChange={(e) => setSel((p) => ({ ...p, [f.id]: e.target.checked }))} />}
                     </td>
                     <td className="p-2 font-medium">
-                      {f.numero || <span className="text-muted-foreground">bozza</span>}
+                      {f.numero || <span className="rounded bg-orange-500 px-1.5 py-0.5 text-xs font-semibold text-white">BOZZA</span>}
                       {f.tipo_documento !== "TD01" && <div className="text-xs text-muted-foreground">{TIPI_LABEL[f.tipo_documento] || f.tipo_documento}</div>}
                       {f.ambiente === "sandbox" && <span className="ml-1 rounded bg-orange-500/15 px-1 text-[10px] text-orange-700 dark:text-orange-300">PROVA</span>}
                       {tab === "ricevuta" && !f.vista_il && <span className="ml-1 rounded bg-red-600 px-1 text-[10px] font-semibold text-white" title="Arrivata dallo SdI, non ancora vista">NUOVA</span>}

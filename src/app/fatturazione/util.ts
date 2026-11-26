@@ -15,7 +15,7 @@ export const MODALITA_SOCIETA: Record<string, string[]> = {
 };
 
 export const STATI: Record<string, { label: string; cls: string }> = {
-  bozza: { label: "Bozza", cls: "bg-muted text-muted-foreground" },
+  bozza: { label: "BOZZA", cls: "bg-orange-500 text-white font-semibold" },   // 26/11/2026: le bozze devono saltare all'occhio
   in_invio: { label: "In invio allo SdI…", cls: "bg-sky-100 text-sky-800" },
   // modalità manuale (Gingy / Avantifiori senza fornitore SdI automatico): XML pronto da caricare a mano
   da_trasmettere: { label: "Da trasmettere (XML)", cls: "bg-orange-500/15 text-orange-800 dark:text-orange-300" },
