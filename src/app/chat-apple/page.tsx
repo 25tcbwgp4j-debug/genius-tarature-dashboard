@@ -37,16 +37,23 @@ function Etichetta({ n }: { n?: NomeNumero }) {
 const RE_EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
 
 /** Nome ed email scritti dal cliente: la prima riga «solo parole» (2-4 parole, lettere) e la prima email. */
-function datiCliente(msgs: ChatMessage[]): { nome: string | null; email: string | null } {
-  let nome: string | null = null, email: string | null = null;
+function datiCliente(msgs: ChatMessage[]): { nome: string | null; email: string | null; password: string | null } {
+  let nome: string | null = null, email: string | null = null, password: string | null = null;
+  let dopoEmail = false;
   for (const m of msgs) {
     if (m.direction !== "inbound" || !m.body) continue;
     const b = m.body.trim();
-    if (!email) { const e = b.match(RE_EMAIL); if (e) email = e[0].toLowerCase(); }
+    // 26/11/2026 (Christian, 63536): al banco il cliente scrive nome → email → password: la password va SEMPRE in scheda.
+    // «Password: X» / «Codice: X», oppure il messaggio di una sola parola subito dopo quello con l'email.
+    const pw = b.match(/^(?:password|pass|pwd|psw|codice(?: di sblocco)?|code)\s*[:=.]?\s*(\S+)$/i);
+    if (pw) password = pw[1];
+    else if (dopoEmail && !password && /^\S{3,40}$/.test(b) && !RE_EMAIL.test(b)) password = b;
+    dopoEmail = false;
+    if (!email) { const e = b.match(RE_EMAIL); if (e) { email = e[0].toLowerCase(); dopoEmail = true; } }
     if (!nome && /^[A-Za-zÀ-ÿ'’ ]{4,60}$/.test(b) && b.split(/\s+/).length >= 2 && b.split(/\s+/).length <= 4
       && !/ciao|salve|buongiorno|buonasera|grazie|info|prezzo|riparazione/i.test(b)) nome = b.replace(/\s+/g, " ");
   }
-  return { nome, email };
+  return { nome, email, password };
 }
 
 const ora = (s: string) => new Date(s).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -129,7 +136,7 @@ function ChatStaff() {
               </div>
               <Button size="sm" className="ml-auto" onClick={creaRichiesta}><UserPlus />Crea richiesta di assistenza</Button>
             </div>
-            <PannelloCliente key={c.chat_id} chat={c.chat_id} nomeChat={dati.nome || c.nome} emailChat={dati.email} />
+            <PannelloCliente key={c.chat_id} chat={c.chat_id} nomeChat={dati.nome || c.nome} emailChat={dati.email} passwordChat={dati.password} />
             <div className="flex-1 space-y-1.5 overflow-y-auto p-3">
               {!msgs ? <div className="text-center"><Loader2 className="inline animate-spin" /></div> : msgs.map((m) => (
                 <div key={m.id} className={`max-w-[75%] rounded-lg px-3 py-1.5 text-sm ${m.da_noi ? "ml-auto bg-emerald-100 dark:bg-emerald-900/40" : "bg-muted"}`}>
@@ -149,7 +156,7 @@ function ChatStaff() {
 
 /** 25/10/2026 (Christian): dalla chat WhatsApp 334 → cliente in rubrica e scheda di assistenza, con i dati scritti dal cliente.
  *  Mostra le schede del numero e le risposte ai preventivi da confermare (accetta / rifiuta lette dalla chat). */
-function PannelloCliente({ chat, nomeChat, emailChat }: { chat: string; nomeChat: string | null; emailChat: string | null }) {
+function PannelloCliente({ chat, nomeChat, emailChat, passwordChat }: { chat: string; nomeChat: string | null; emailChat: string | null; passwordChat?: string | null }) {
   const [ctx, setCtx] = useState<StaffContesto | null>(null);
   const [dati, setDati] = useState<StaffDati | null>(null);
   const [leggo, setLeggo] = useState(false);
@@ -221,12 +228,12 @@ function PannelloCliente({ chat, nomeChat, emailChat }: { chat: string; nomeChat
       {modale === "cliente" && <SchedaClienteModal id={cliente?.id || null} onClose={() => setModale(null)}
         iniziale={cliente ? undefined : {
           denominazione: nomeDa(dati), tipo_cliente: dati?.piva ? "azienda" : "privato", vuole_fattura: !!dati?.piva,
-          cellulare: tel, cellulare_whatsapp: tel, email: dati?.email || emailChat || "", pec: dati?.pec || "", piva: dati?.piva || "", cf: dati?.cf || "",
+          cellulare: tel ? `+${tel}` : "", cellulare_whatsapp: tel ? `+${tel}` : "", email: dati?.email || emailChat || "", pec: dati?.pec || "", piva: dati?.piva || "", cf: dati?.cf || "",
           sdi: dati?.sdi || "", indirizzo: dati?.indirizzo || "", cap: dati?.cap || "", comune: dati?.comune || "", provincia: dati?.provincia || "",
           referente: dati?.azienda ? [dati?.nome, dati?.cognome].filter(Boolean).join(" ") : "", telefoni_altri: dati?.telefono_altro || "" } as Partial<Anagrafica>}
         onSalvato={() => { toast.success("Cliente salvato: il numero WhatsApp è in rubrica"); setModale(null); carica(); }} />}
       {modale === "scheda" && <NuovaScheda cfg={null} operatore={operatore} setOperatore={setOperatore} onClose={() => setModale(null)}
-        iniziale={{ azienda: anag?.denominazione || nomeDa(dati), telefono: tel, email: anag?.email || dati?.email || emailChat || "", anagrafica: anag,
+        iniziale={{ azienda: anag?.denominazione || nomeDa(dati), telefono: tel ? `+${tel}` : "", password_dispositivo: dati?.password_dispositivo || passwordChat || undefined, email: anag?.email || dati?.email || emailChat || "", anagrafica: anag,
           prodotto: [dati?.prodotto, dati?.modello].filter(Boolean).join(" ") || undefined, seriale: dati?.seriale || dati?.imei || undefined,
           difetto: dati?.difetto || undefined, note: [dati?.accessori && `Accessori: ${dati.accessori}`, dati?.note].filter(Boolean).join(" · ") || undefined }}
         onCreata={() => { toast.success("Scheda creata"); setModale(null); carica(); }} />}

@@ -23,6 +23,8 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, o
   onApriEsistente?: (id: string) => void;
   /** 24/10/2026: scheda aperta da una richiesta WhatsApp: cliente e difetto già compilati */
   iniziale?: { azienda?: string; telefono?: string; email?: string; difetto?: string; prodotto?: string; seriale?: string;
+    /** 26/11/2026: password scritta dal cliente in chat (banco: nome → email → password) */
+    password_dispositivo?: string;
     /** 25/10/2026: scheda aperta dalla chat WhatsApp 334 con il cliente già in rubrica */
     anagrafica?: Anagrafica | null; note?: string };
 }) {
@@ -30,7 +32,8 @@ export function NuovaScheda({ cfg, operatore, setOperatore, onClose, onCreata, o
     { azienda: iniziale?.azienda || "", telefono: iniziale?.telefono || "", email: iniziale?.email || "", referente: "", indirizzo_spedizione: "", note: "" });
   const [anag, setAnag] = useState<Anagrafica | null>(null);
   const [schedaCli, setSchedaCli] = useState(false);
-  const [app, setApp] = useState<ValoriApparecchio>({ difetto: iniziale?.difetto || undefined, seriale: iniziale?.seriale || undefined, prodotto: iniziale?.prodotto || undefined });
+  const [app, setApp] = useState<ValoriApparecchio>({ difetto: iniziale?.difetto || undefined, seriale: iniziale?.seriale || undefined, prodotto: iniziale?.prodotto || undefined,
+    password_dispositivo: iniziale?.password_dispositivo || undefined });
   const [stampaA4, setStampaA4] = useState(false);       // SEMPRE spenta di default (Christian 04/10)
   const [stampaEt, setStampaEt] = useState(true);
   const [inArrivo, setInArrivo] = useState(false);
