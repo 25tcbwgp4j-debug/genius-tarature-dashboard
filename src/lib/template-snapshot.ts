@@ -17,8 +17,8 @@
  *                             -> "Rapporti di Taratura con riferibilita' ACCREDIA LAT per:"
  *   - session_delivered_paper "i certificati di taratura ACCREDIA e i Rapporti..."
  *                             -> "i Rapporti di Taratura (RdT) originali firmati..."
- * Inoltre gl_device_received / gl_ready_for_pickup hanno il placeholder mai risolto
- * "Via XXX, Roma": va messo l'indirizzo reale.
+ * gl_device_received / gl_ready_for_pickup (Via XXX, orari vecchi) e ordine_arrivato (lun-ven):
+ * il 26/11/2026 inviate a Meta le versioni _v2 (Viale Somalia 244/246/248, LUN-SAB 9:30-13:30 e 15:00-19:00).
  * Elenco completo e testi corretti in whatsapp_template_render.py.
  */
 
@@ -131,6 +131,23 @@ export const TEMPLATE_BODIES: Record<string, string> = {
     "🕐 Orari: Lun-Ven 10:00-19:00 · Sab 10:00-13:00\n" +
     "🎫 Ticket: #{{4}}\n" +
     "Porta un documento d'identità.",
+  gl_ready_for_pickup_v2:
+    "Ciao {{1}}, il tuo {{2}} è pronto per il ritiro.\n" +
+    "💶 Da saldare al ritiro: {{3}}€ IVA inclusa\n" +
+    "📍 Ritiro presso: Genius Lab, Viale Somalia 244/246/248, Roma\n" +
+    "🕐 Orari: LUN-SAB 9:30-13:30 e 15:00-19:00\n" +
+    "🎫 Ticket: #{{4}}\n" +
+    "Porta un documento d'identità.",
+  gl_device_received_v2:
+    "Ciao {{1}}, abbiamo ricevuto il tuo {{2}} presso Genius Lab.\n" +
+    "🎫 Ticket: #{{3}}\n" +
+    "Ti avvisiamo appena completata la diagnosi (24-48h lavorative).\n" +
+    "Per domande rispondi a questo messaggio.\n" +
+    "Genius Lab, Viale Somalia 244/246/248, Roma",
+  ordine_arrivato_v2:
+    "Buongiorno {{1}}, il suo ordine n. {{2}} relativo a {{3}} è arrivato presso Genius Lab, Viale Somalia 244/246/248, Roma. " +
+    "Può passare a ritirarlo LUN-SAB 9:30-13:30 e 15:00-19:00. Saldo da versare al ritiro: {{4}}. " +
+    "Per informazioni: 06 80074880.",
   gl_shipped:
     "Ciao {{1}}! 📦 Il tuo {{2}} è stato spedito.\n" +
     "🚚 Corriere: {{3}}\n" +
