@@ -676,13 +676,18 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
             const on = ev.target.checked;
             try {
               setS(await assModifica(s.id, { lingua_doppia: on, operatore: operatore || null }));
-              toast.success(on ? "Comunicazioni in italiano + inglese (anche per le prossime schede del cliente)" : "Comunicazioni solo in italiano");
+              toast.success(on ? "Comunicazioni in italiano + lingua del cliente (anche per le prossime schede)" : "Comunicazioni solo in italiano");
               onCambiata();
             } catch (e) { toastErrore(e); }
           }} />
-        🇮🇹🇬🇧 Cliente straniero: comunicazioni IT + EN
+        {/* 26/11/2026 (Christian): nazionalità dal prefisso internazionale del numero e lingua scelta in automatico */}
+        🌍 Cliente straniero: comunicazioni IT + {s.lingua_doppia_effettiva ? (s.cliente_lingua || "en").toUpperCase() : "lingua del cliente"}
+        {s.lingua_doppia_effettiva && s.cliente_lingua_nome && <span className="text-xs font-normal">(italiano + {s.cliente_lingua_nome})</span>}
+        {s.cliente_paese && s.cliente_paese !== "IT" && <span className="rounded-full border border-current px-2 py-0.5 text-xs font-bold" data-testid="cliente-paese">Numero: {s.cliente_paese_nome || s.cliente_paese}</span>}
         {!s.lingua_doppia_effettiva && s.lingua_doppia_suggerita && <span className="text-xs">· numero o mail esteri: attivarla?</span>}
-        {s.lingua_doppia_effettiva && s.lingua_doppia == null && <span className="text-xs font-normal opacity-80">· dall&apos;anagrafica</span>}
+        {s.lingua_doppia_effettiva && s.lingua_automatica && <span className="text-xs font-normal opacity-80">· attivata da sola dal prefisso del numero</span>}
+        {s.lingua_doppia_effettiva && s.lingua_doppia == null && !s.lingua_automatica && <span className="text-xs font-normal opacity-80">· dall&apos;anagrafica</span>}
+        {!s.lingua_doppia_effettiva && s.lingua_doppia === false && s.cliente_paese && s.cliente_paese !== "IT" && <span className="text-xs">· spenta a mano su questa scheda</span>}
       </label>
       {/* 16/11/2026 (Christian): cliente, dispositivo e situazione SUBITO in vista, senza aprire Accettazione */}
       <RiepilogoScheda s={s} tecnici={tecnici} onVai={(d) => vaiA(d)} />
