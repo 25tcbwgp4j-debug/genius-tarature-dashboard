@@ -1710,6 +1710,8 @@ export interface FestivitaProposta { giorno: string; nome: string; giorno_nome: 
 export interface VistaCalendario {
   oggi: StatoGiornoCal; prossimo_lavorativo: string; regole: RegolaCal[]; date: DataCal[]; festivita: FestivitaProposta[];
   motivi: Record<string, string>; sabato_sbloccato_oggi: boolean; domenica_sbloccata_oggi: boolean;
+  /** 26/11/2026: da questa data il sabato è aperto di default (Genius Lab LUN-SAB) */
+  sabato_aperto_dal?: string;
 }
 export interface DaChiudere { giornate: { giorno: string; nome: string; tipo: 'da_chiudere' | 'anomalia'; testo: string; elenco?: string[] }[]; prossimo_lavorativo: string; oggi: StatoGiornoCal }
 export async function calendarioCassa(): Promise<VistaCalendario> { return fetchAPI('/api/cassa/calendario'); }

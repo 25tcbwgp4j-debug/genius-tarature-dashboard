@@ -18,13 +18,13 @@ const SENZA = ["/login", "/forgot-password", "/reset-password"];
 const CANALE = "gl-chiamata-in-arrivo";
 const LUCCHETTO = "gl-chiamata-in-arrivo-capo";
 
-// orario di negozio (ora di Roma): lunedì-venerdì 9:00-19:30 (apertura 9:30-19:00, il sabato è chiuso) → controllo
+// orario di negozio (ora di Roma): lunedì-sabato 9:00-19:30 (apertura 9:30-19:00; dal 26/11/2026 aperti anche il sabato, domenica chiuso) → controllo
 // ogni 6 s; fuori orario ogni 60 s
 function inOrarioNegozio(): boolean {
   const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Rome", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })
     .formatToParts(new Date()).map((x) => [x.type, x.value]));
   const minuti = (Number(p.hour) % 24) * 60 + Number(p.minute);
-  return !["Sat", "Sun"].includes(p.weekday) && minuti >= 9 * 60 && minuti < 19 * 60 + 30;
+  return p.weekday !== "Sun" && minuti >= 9 * 60 && minuti < 19 * 60 + 30;
 }
 const STATI: Record<string, string> = { in_arrivo: "In arrivo", accettato: "Accettato", da_preventivare: "Da preventivare", preventivo_inviato: "Preventivo inviato", pronto: "Pronto", consegnato: "Consegnato", annullata: "Annullata" };
 const giorno = (d: string) => new Date(d).toLocaleDateString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "2-digit" });

@@ -2,7 +2,8 @@
 
 // GIORNI DI CHIUSURA della cassa del giorno (04/10/2026, richiesta di Christian).
 // Sabato e domenica sono chiusi di default: dopo la chiusura del venerdì la cassa passa al lunedì e il riporto dei
-// contanti va dal venerdì al lunedì. Qui il titolare (o l'operatore con la sua autorizzazione «calendario_cassa»):
+// contanti va dal venerdì al lunedì. 26/11/2026 (Christian): Genius Lab è aperto anche il SABATO (LUN-SAB) → dal
+// 28/11/2026 il sabato è lavorativo di default (sabato_aperto_dal); un singolo sabato si chiude con «Giorno festivo / chiuso». Qui il titolare (o l'operatore con la sua autorizzazione «calendario_cassa»):
 //  - sblocca i sabati / le domeniche, a tempo indeterminato o per un periodo (es. Natale), e li blocca di nuovo;
 //  - segna un giorno qualsiasi come festivo / chiuso / ferie / non lavorato (non si può se ci sono movimenti);
 //  - conferma le festività nazionali proposte (non si attivano da sole);
@@ -83,6 +84,15 @@ export function GiorniChiusura({ aperto, onChiudi, giornoIniziale, onCambiato }:
               <div className="grid gap-3 sm:grid-cols-2">
                 {([5, 6] as const).map((gs) => {
                   const rr = regole(gs);
+                  if (gs === 5 && v.sabato_aperto_dal) return (
+                    <div key={gs} className="space-y-2 rounded-lg border-2 border-emerald-400 p-3">
+                      <div className="flex items-center gap-2 font-medium"><Unlock className="size-4 text-emerald-700" />Sabati: aperti</div>
+                      <p className="text-sm text-muted-foreground">
+                        Genius Lab è aperto anche il sabato (LUN-SAB 9:30-13:30 e 15:00-19:00) dal {dataIt(v.sabato_aperto_dal)}.
+                        Per chiudere un singolo sabato usa «Giorno festivo / chiuso» qui sotto.
+                      </p>
+                    </div>
+                  );
                   return (
                     <div key={gs} className={`space-y-2 rounded-lg border-2 p-3 ${rr.length ? "border-emerald-400" : "border-slate-300"}`}>
                       <div className="flex items-center gap-2 font-medium first-letter:uppercase">

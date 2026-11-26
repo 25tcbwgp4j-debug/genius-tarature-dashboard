@@ -906,11 +906,11 @@ export function DialogoCambiaStato({ s, onClose, onConferma }: { s: Scheda; onCl
   );
 }
 
-/** Prossimo giorno lun-ven alle 9:30 (ora del computer del negozio = ora di Roma). */
+/** Prossimo giorno lun-sab alle 9:30 (ora del computer del negozio = ora di Roma). 26/11/2026: aperti anche il sabato. */
 function prossimoLavorativo930(): Date {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0) d.setDate(d.getDate() + 1);
   d.setHours(9, 30, 0, 0);
   return d;
 }
@@ -921,11 +921,11 @@ function prossimaMezzora(): string {
   const t = Math.min(Math.ceil((p[0] * 60 + p[1] + 30) / 30) * 30, 23 * 60 + 30);
   return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 }
-/** Orari del negozio: lun-ven 9:30-13:30 e 15:00-19:00. */
+/** Orari del negozio Genius: lun-sab 9:30-13:30 e 15:00-19:00 (dal 26/11/2026 aperti anche il sabato). */
 function inOrarioNegozio(data: string, ora: string): boolean {
   const [y, m, g] = data.split("-").map(Number);
   const wd = new Date(Date.UTC(y, m - 1, g)).getUTCDay();
-  if (wd === 0 || wd === 6) return false;
+  if (wd === 0) return false;
   const [h, mi] = ora.split(":").map(Number);
   const t = h * 60 + mi;
   return (t >= 570 && t <= 810) || (t >= 900 && t <= 1140);
@@ -965,7 +965,7 @@ export function QuandoInvio({ q, titolo, senzaAdesso, children }: { q: Quando; t
       {q.quando === "libero" && <><input type="date" className={`${campo} w-40`} value={q.dataLibera} onChange={(e) => q.setDataLibera(e.target.value)} />
         <input type="time" className={`${campo} w-28`} value={q.oraLibera} onChange={(e) => q.setOraLibera(e.target.value)} /></>}
       {q.passato && <span className="w-full text-xs font-medium text-red-700">L&apos;orario è già passato: scegline uno nel futuro{senzaAdesso ? "" : " (oppure «Adesso»)"}.</span>}
-      {!q.passato && q.fuoriOrario && <span className="w-full text-xs text-amber-700">Fuori dall&apos;orario del negozio (lun-ven 9:30-13:30 e 15:00-19:00): il cliente riceverà il messaggio a negozio chiuso.</span>}
+      {!q.passato && q.fuoriOrario && <span className="w-full text-xs text-amber-700">Fuori dall&apos;orario del negozio (lun-sab 9:30-13:30 e 15:00-19:00): il cliente riceverà il messaggio a negozio chiuso.</span>}
       {children}
     </div>
   );
