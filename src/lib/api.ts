@@ -543,7 +543,11 @@ export async function getProntoProgrammato(sessionId: string): Promise<StatoPron
   return fetchAPI(`/api/sessions/${sessionId}/pronto-programmato`);
 }
 /** quando: {data:"AAAA-MM-GG", ora:"HH:MM"} in ora di Roma, oppure {quando: ISO}. */
-export async function programmaPronto(sessionId: string, body: { canali: CanalePronto[]; data?: string; ora?: string; quando?: string; rimanda?: boolean }) {
+export async function programmaPronto(sessionId: string, body: {
+  canali: CanalePronto[]; data?: string; ora?: string; quando?: string; rimanda?: boolean;
+  /** «Pronto alla spedizione» programmato (26/11/2026): i testi dell'anteprima, anche modificati a mano */
+  testi?: { oggetto: string; testo_email: string; testo_whatsapp: string }; colli?: string; peso?: string; misure?: string;
+}) {
   return fetchAPI(`/api/sessions/${sessionId}/pronto-programmato`, { method: 'POST', body: JSON.stringify(body) });
 }
 // «Pronto alla spedizione»: chiedi etichetta (ritorno a carico del cliente, 08/10/2026) oppure
@@ -558,6 +562,9 @@ export interface EtichettaRitorno {
   colli: number | null; peso: number | null; misure: string | null;
   richiesta: { il: string; via: string | null } | null;
   oggetto: string; testo_email: string; testo_whatsapp: string;
+  /** per programmare l'invio (26/11/2026): prossimo giorno di apertura e programmazione già in attesa */
+  prossimo_lavorativo?: string | null;
+  programmato?: { quando: string; canali: CanalePronto[] } | null;
 }
 export async function getEtichettaRitorno(sessionId: string, q?: { colli?: string; peso?: string; misure?: string }): Promise<EtichettaRitorno> {
   const p = new URLSearchParams();

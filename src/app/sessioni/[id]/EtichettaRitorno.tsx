@@ -8,13 +8,17 @@
 // Al clic: anteprima con testi mail e WhatsApp modificabili + colli (default 1), peso indicativo, misure.
 // Invio solo dopo «Invia»; se non è pagata o mancano rapporti chiede conferma. Mail dalla casella tarature (CCN
 // d'archivio, firma tarature), WhatsApp sulla linea staff tarature (saltato se il cliente ha solo il fisso).
+// 26/11/2026 (Christian): come il pronto al ritiro, si può PROGRAMMARE a giorno e ora scelti («Quando lo invio?»):
+// i testi dell'anteprima, anche modificati a mano, partono all'ora scelta; il riquadro blu della sessione mostra
+// la programmazione con Modifica/Annulla.
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Mail, MessageCircle, Package, X } from "lucide-react";
+import { AlarmClock, Loader2, Mail, MessageCircle, Package, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { siSpedisce } from "@/lib/constants";
-import { getEtichettaRitorno, inviaEtichettaRitorno, type ApiError, type EtichettaRitorno as Dati } from "@/lib/api";
+import { oggiRoma, spostaGiorno } from "@/lib/date";
+import { getEtichettaRitorno, inviaEtichettaRitorno, programmaPronto, type ApiError, type EtichettaRitorno as Dati } from "@/lib/api";
 
 type Sess = Record<string, any>;  // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -23,6 +27,26 @@ function quando(iso: string) {
     return new Date(iso).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
   } catch { return iso; }
 }
+
+const TZ = "Europe/Rome";
+const oraRoma = () => new Date().toLocaleTimeString("it-IT", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+/** Prossima mezz'ora a Roma come «HH:MM» (proposta per «Oggi alle…»). */
+function prossimaMezzora(): string {
+  const p = oraRoma().split(":").map(Number);
+  const t = Math.min(Math.ceil((p[0] * 60 + p[1] + 30) / 30) * 30, 23 * 60 + 30);
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+/** Orari del negozio: lun-ven 9:30-13:30 e 15:00-19:00. */
+function inOrarioNegozio(data: string, ora: string): boolean {
+  const [y, m, g] = data.split("-").map(Number);
+  const wd = new Date(Date.UTC(y, m - 1, g)).getUTCDay();
+  if (wd === 0 || wd === 6) return false;
+  const [h, mi] = ora.split(":").map(Number);
+  const t = h * 60 + mi;
+  return (t >= 570 && t <= 810) || (t >= 900 && t <= 1140);
+}
+const giornoLungo = (data: string) => new Date(`${data}T12:00:00Z`).toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: TZ });
+type Quando = "adesso" | "oggi" | "domani" | "libero";
 
 export function EtichettaRitorno({ sessionId, session, onFatto }: { sessionId: string; session: Sess; onFatto?: () => void }) {
   const abilitato = siSpedisce(session);
@@ -38,6 +62,11 @@ export function EtichettaRitorno({ sessionId, session, onFatto }: { sessionId: s
   const [toccato, setToccato] = useState(false);   // testi modificati a mano: non si rigenerano cambiando colli/peso
   const [carico, setCarico] = useState(false);
   const [invio, setInvio] = useState(false);
+  const [scelta, setScelta] = useState<Quando>("adesso");
+  const [oraOggi, setOraOggi] = useState("");
+  const [oraDomani, setOraDomani] = useState("09:30");
+  const [dataLibera, setDataLibera] = useState("");
+  const [oraLibera, setOraLibera] = useState("09:30");
 
   async function apri() {
     setCarico(true);
@@ -53,6 +82,12 @@ export function EtichettaRitorno({ sessionId, session, onFatto }: { sessionId: s
       setColli(String(d.colli || 1)); setPeso(d.peso ? String(d.peso).replace(".", ",") : ""); setMisure(d.misure || "");
       setCanali({ email: !!d.destinatari.email, whatsapp: !!d.destinatari.whatsapp });
       setToccato(false);
+      // già programmato: si riapre sulla data e ora scelte allora, per spostarle
+      const pr = d.programmato?.quando ? new Date(d.programmato.quando) : null;
+      setScelta(pr ? "libero" : "adesso");
+      setOraOggi(prossimaMezzora()); setOraDomani("09:30");
+      setDataLibera(pr ? pr.toLocaleDateString("en-CA", { timeZone: TZ }) : (d.prossimo_lavorativo || spostaGiorno(oggiRoma(), 1)));
+      setOraLibera(pr ? pr.toLocaleTimeString("it-IT", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }) : "09:30");
     }
     setOggetto(d.oggetto); setTestoMail(d.testo_email); setTestoWa(d.testo_whatsapp);
   }
@@ -62,6 +97,33 @@ export function EtichettaRitorno({ sessionId, session, onFatto }: { sessionId: s
       riempi(await getEtichettaRitorno(sessionId, { colli, peso, misure }));
       setToccato(false);
     } catch (e) { toast.error((e as Error).message); }
+  }
+
+  const oggi = oggiRoma();
+  const domani = dati?.prossimo_lavorativo || spostaGiorno(oggi, 1);
+  const nomeDomani = domani === spostaGiorno(oggi, 1) ? "Domani" : giornoLungo(domani).split(" ")[0].replace(/^./, (x) => x.toUpperCase());
+  const qs: { data: string; ora: string } | null = scelta === "oggi" ? { data: oggi, ora: oraOggi }
+    : scelta === "domani" ? { data: domani, ora: oraDomani } : scelta === "libero" ? { data: dataLibera, ora: oraLibera } : null;
+  const passato = !!qs && !!qs.data && !!qs.ora && (qs.data < oggi || (qs.data === oggi && qs.ora <= oraRoma()));
+  const fuoriOrario = !!qs && !!qs.data && !!qs.ora && !inOrarioNegozio(qs.data, qs.ora);
+
+  async function programma() {
+    if (!dati || !qs) return;
+    const scelti = (["email", "whatsapp"] as const).filter((c) => canali[c]);
+    if (!scelti.length) { toast.error("Scegli almeno un canale"); return; }
+    if (!qs.data || !qs.ora) { toast.error("Scegli giorno e ora"); return; }
+    if (passato) { toast.error("L'orario scelto è già passato: scegline uno più avanti o usa «Adesso»"); return; }
+    const avv = dati.avvisi.length ? `\n\n⚠️ ${dati.avvisi.join("\n⚠️ ")}` : "";
+    const a = scelti.map((c) => c === "email" ? `mail a ${dati.destinatari.email}` : `WhatsApp a ${dati.destinatari.whatsapp}`).join(" e ");
+    if (!confirm(`Programmare il pronto alla spedizione per ${giornoLungo(qs.data)} alle ${qs.ora} via ${a}?${avv}`)) return;
+    setInvio(true);
+    try {
+      await programmaPronto(sessionId, { canali: [...scelti], data: qs.data, ora: qs.ora, rimanda: !!dati.pronto_inviato,
+        testi: { oggetto, testo_email: testoMail, testo_whatsapp: testoWa }, colli, peso, misure });
+      toast.success(`Pronto alla spedizione programmato: ${giornoLungo(qs.data)} alle ${qs.ora}`, { duration: 10000 });
+      setDati(null); onFatto?.();
+    } catch (e) { toast.error((e as Error).message, { duration: 10000 }); }
+    finally { setInvio(false); }
   }
 
   async function invia(conferma = false) {
@@ -118,7 +180,7 @@ export function EtichettaRitorno({ sessionId, session, onFatto }: { sessionId: s
             <div className="sticky top-0 flex items-start gap-2 border-b bg-white px-5 py-3">
               <div className="flex-1">
                 <h3 className="text-base font-semibold">{dati.variante === "etichetta" ? "Pronto alla spedizione – chiedi etichetta" : "Pronto alla spedizione – spediamo noi"}</h3>
-                <p className="text-xs text-gray-500">Anteprima: controlla e modifica i testi. Non parte nulla finché non premi «Invia».</p>
+                <p className="text-xs text-gray-500">Anteprima: controlla e modifica i testi, poi scegli in fondo quando inviarlo. Non parte nulla finché non premi il pulsante.</p>
               </div>
               <button type="button" title="Chiudi" onClick={() => setDati(null)} disabled={invio}><X className="size-5" /></button>
             </div>
@@ -130,6 +192,7 @@ export function EtichettaRitorno({ sessionId, session, onFatto }: { sessionId: s
                   {dati.pagata ? "Pagamento arrivato: il testo dice che spediamo oggi o domani." : "Pagamento non ancora arrivato: il testo dice che spediamo appena arriva, con importo, pro forma e dati del bonifico."}
                   {dati.pronto_inviato ? ` Pronto già mandato il ${quando(dati.pronto_inviato.il)} via ${dati.pronto_inviato.via}: stai per rimandarlo.` : ""}</p>
               )}
+              {dati.programmato && <p className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs">⏰ Già programmato per {quando(dati.programmato.quando)}: se lo riprogrammi sostituisci quell&apos;invio, se lo invii adesso lo annulli.</p>}
               {dati.variante === "etichetta" && <div className="flex flex-wrap items-end gap-2">
                 <label className="flex flex-col text-xs text-gray-600">Colli<input className={`${inp} w-16`} inputMode="numeric" value={colli} onChange={(e) => setColli(e.target.value.replace(/\D/g, ""))} /></label>
                 <label className="flex flex-col text-xs text-gray-600">Peso indicativo (kg)<input className={`${inp} w-24`} inputMode="decimal" placeholder="es. 5" value={peso} onChange={(e) => setPeso(e.target.value.replace(/[^\d,.]/g, ""))} /></label>
@@ -154,11 +217,37 @@ export function EtichettaRitorno({ sessionId, session, onFatto }: { sessionId: s
                 <textarea className="h-28 w-full rounded-md border p-2 font-mono text-xs" value={testoWa} disabled={!dati.destinatari.whatsapp} onChange={(e) => { setTestoWa(e.target.value); setToccato(true); }} />
               </div>
             </div>
-            <div className="sticky bottom-0 flex gap-2 border-t bg-gray-50 px-5 py-3">
-              <Button variant="outline" className="flex-1" disabled={invio} onClick={() => setDati(null)}>Annulla</Button>
-              <Button className="flex-1 bg-amber-700 text-white hover:bg-amber-800" disabled={invio || (!canali.email && !canali.whatsapp)} onClick={() => invia()}>
-                {invio ? <Loader2 className="size-4 animate-spin" /> : <Package className="size-4" />} Invia
-              </Button>
+            <div className="sticky bottom-0 space-y-2 border-t bg-gray-50 px-5 py-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="flex items-center gap-1 font-medium"><AlarmClock className="size-4 text-amber-700" /> Quando lo invio?</span>
+                {([["adesso", "Adesso"], ["oggi", "Oggi alle…"], ["domani", `${nomeDomani} alle…`], ["libero", "Data e ora a scelta"]] as [Quando, string][]).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => setScelta(k)}
+                    className={`rounded-md border px-2.5 py-1 text-xs ${scelta === k ? "border-amber-700 bg-amber-600 text-white" : "border-amber-300 bg-white hover:bg-amber-100"}`}>{label}</button>
+                ))}
+              </div>
+              {scelta !== "adesso" && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {scelta === "libero"
+                    ? <input type="date" className={inp} min={oggi} value={dataLibera} onChange={(e) => setDataLibera(e.target.value)} />
+                    : <span className="text-sm">{scelta === "oggi" ? "Oggi" : nomeDomani} ({giornoLungo(scelta === "oggi" ? oggi : domani)}) alle</span>}
+                  <input type="time" className={`${inp} w-28`} value={scelta === "oggi" ? oraOggi : scelta === "domani" ? oraDomani : oraLibera}
+                    onChange={(e) => (scelta === "oggi" ? setOraOggi : scelta === "domani" ? setOraDomani : setOraLibera)(e.target.value)} />
+                  <span className="text-gray-500">ora di Roma</span>
+                  {passato && <span className="text-red-700">⚠️ orario già passato</span>}
+                  {!passato && fuoriOrario && <span className="text-amber-700">⚠️ fuori dall&apos;orario del negozio (lun-ven 9:30-13:30, 15-19)</span>}
+                </div>
+              )}
+              {scelta !== "adesso" && dati.variante === "spediamo_noi" && !dati.pagata && (
+                <p className="text-[11px] text-gray-500">Se il pagamento arriva prima dell&apos;ora scelta, parte il testo aggiornato («pagamento ricevuto, spediamo oggi o domani») al posto di questo.</p>
+              )}
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" disabled={invio} onClick={() => setDati(null)}>Annulla</Button>
+                <Button className="flex-1 bg-amber-700 text-white hover:bg-amber-800" disabled={invio || (!canali.email && !canali.whatsapp) || (scelta !== "adesso" && passato)}
+                  onClick={() => (scelta === "adesso" ? invia() : programma())}>
+                  {invio ? <Loader2 className="size-4 animate-spin" /> : scelta === "adesso" ? <Package className="size-4" /> : <AlarmClock className="size-4" />}
+                  {scelta === "adesso" ? "Invia adesso" : qs?.data && qs?.ora ? `Programma per ${giornoLungo(qs.data)} alle ${qs.ora}` : "Programma l'invio"}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
