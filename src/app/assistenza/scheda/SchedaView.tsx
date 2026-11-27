@@ -445,6 +445,8 @@ export function SchedaView({ id, cfg, operatore, setOperatore, onApri, onCambiat
       router.push(doc.url); return;
     }
     const r = await azione("vendi", { tipo }, tipo === "fattura" ? "Fattura pronta (in BOZZA, non inviata allo SdI)" : "Pro forma creato");
+    // 27/11/2026 (63030): fattura collegata già emessa e parziale → il backend prepara la fattura di SALDO e lo dice
+    if (r?.saldo && r?.messaggio) toast.info(r.messaggio);
     if (r?.url) router.push(r.url);
   }
   // 15/11/2026 (piano 2.5): le azioni che mandano qualcosa al cliente o cambiano lo stato chiedono conferma con il
